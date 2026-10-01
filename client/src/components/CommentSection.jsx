@@ -1,0 +1,250 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../api/client.js';
+import { useAuth } from '../store/auth.jsx';
+import Avatar from './Avatar.jsx';
+
+function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
+    const { user, token } = useAuth();
+    const [replying, setReplying] = useState(false);
+    const [replyText, setReplyText] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [showReplies, setShowReplies] = useState(depth === 0);
+
+    const isMine = comment.author.id === user.id || user.role === 'ADMIN';
+    const maxDepth = 4;
+    const nextDepth = Math.min(depth + 1, maxDepth);
+
+    const sendReply = async () => {
+        if (!replyText.trim()) return;
+        setBusy(true);
+        try {
+            const c = await api(`/posts/${comment.postId}/comments`, {
+                method: 'POST',
+                token,
+                body: { content: replyText, parentId: comment.id },
+            });
+            onChanged?.(c, comment.id);
+            setReplyText('');
+            setReplying(false);
+            setShowReplies(true);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async () => {
+        if (!confirm('Удалить комментарий?')) return;
+        try {
+            await api(`/posts/comments/${comment.id}`, { method: 'DELETE', token });
+            onDeleted?.(comment.id);
+        } catch (e) {
+            alert(e.message);
+        }
+    };
+
+    const repliesCount = comment.replies?.length || 0;
+
+    return (
+        <div className={`${depth > 0 ? 'ml-8 md:ml-10 border-l border-white/10 pl-3' : ''}`}>
+            <div className="flex gap-2 py-2">
+                <Link to={`/app/u/${comment.author.username}`} className="shrink-0">
+                    <Avatar user={comment.author} size={32} />
+                </Link>
+                <div className="flex-1 min-w-0">
+                    <div className="bg-ink-700/60 rounded-2xl px-3 py-2">
+                        <div className="flex items-center gap-2 mb-0.5">
+                            <Link
+                                to={`/app/u/${comment.author.username}`}
+                                className="font-semibold text-sm hover:underline truncate"
+                            >
+                                {comment.author.fullName}
+                            </Link>
+                            <span className="text-[10px] text-white/30">
+                {new Date(comment.createdAt).toLocaleString('ru-RU', {
+                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                })}
+              </span>
+                        </div>
+                        <div className="text-sm whitespace-pre-wrap break-words">{comment.content}</div>
+                    </div>
+
+                    <div className="flex items-center gap-3 mt-1 px-1 text-xs text-white/50">
+                        <button
+                            onClick={() => setReplying((v) => !v)}
+                            className="hover:text-white"
+                        >
+                            Ответить
+                        </button>
+                        {isMine && (
+                            <button onClick={remove} className="hover:text-pink">
+                                Удалить
+                            </button>
+                        )}
+                        {repliesCount > 0 && (
+                            <button
+                                onClick={() => setShowReplies((v) => !v)}
+                                className="hover:text-white"
+                            >
+                                {showReplies ? 'Скрыть' : `Показать ответы (${repliesCount})`}
+                            </button>
+                        )}
+                    </div>
+
+                    {replying && (
+                        <div className="mt-2 flex gap-2">
+                            <input
+                                className="input !py-2 text-sm"
+                                placeholder={`Ответ ${comment.author.fullName}…`}
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        sendReply();
+                                    }
+                                }}
+                                autoFocus
+                            />
+                            <button
+                                onClick={sendReply}
+                                disabled={busy || !replyText.trim()}
+                                className="btn-primary !py-2 !px-3 text-sm shrink-0"
+                            >
+                                {busy ? '…' : '→'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {showReplies && repliesCount > 0 && (
+                <div>
+                    {comment.replies.map((r) => (
+                        <CommentItem
+                            key={r.id}
+                            comment={r}
+                            depth={nextDepth}
+                            onChanged={onChanged}
+                            onDeleted={onDeleted}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default function CommentSection({ postId, initialCount = 0 }) {
+    const { user, token } = useAuth();
+    const [comments, setComments] = useState([]);
+    const [text, setText] = useState('');
+    const [open, setOpen] = useState(initialCount > 0);
+    const [busy, setBusy] = useState(false);
+
+    const load = () => {
+        if (!token) return;
+        api(`/posts/${postId}/comments`, { token }).then(setComments).catch(() => {});
+    };
+
+    useEffect(() => { load(); }, [postId, token]);
+
+    const send = async () => {
+        if (!text.trim()) return;
+        setBusy(true);
+        try {
+            const c = await api(`/posts/${postId}/comments`, {
+                method: 'POST', token, body: { content: text },
+            });
+            setComments((prev) => [...prev, { ...c, replies: [] }]);
+            setText('');
+            setOpen(true);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const totalCount = (list) =>
+        list.reduce((s, c) => s + 1 + totalCount(c.replies || []), 0);
+
+    const count = totalCount(comments);
+
+    const handleAdded = (newComment, parentId) => {
+        setComments((prev) => {
+            const add = (list) =>
+                list.map((c) => {
+                    if (c.id === parentId) {
+                        return { ...c, replies: [...(c.replies || []), { ...newComment, replies: [] }] };
+                    }
+                    return { ...c, replies: add(c.replies || []) };
+                });
+            return add(prev);
+        });
+    };
+
+    const handleDeleted = (id) => {
+        const remove = (list) =>
+            list
+                .filter((c) => c.id !== id)
+                .map((c) => ({ ...c, replies: remove(c.replies || []) }));
+        setComments((prev) => remove(prev));
+    };
+
+    return (
+        <div className="mt-3 border-t border-white/5 pt-3">
+            <button
+                onClick={() => setOpen((v) => !v)}
+                className="text-sm text-white/60 hover:text-white"
+            >
+                💬 Комментарии{count > 0 ? ` (${count})` : ''} {open ? '▲' : '▼'}
+            </button>
+
+            {open && (
+                <div className="mt-3">
+                    {/* Комментарии */}
+                    {comments.length === 0 && (
+                        <div className="text-xs text-white/40 text-center py-3">
+                            Пока нет комментариев. Будьте первым!
+                        </div>
+                    )}
+                    {comments.map((c) => (
+                        <CommentItem
+                            key={c.id}
+                            comment={c}
+                            onChanged={handleAdded}
+                            onDeleted={handleDeleted}
+                        />
+                    ))}
+
+                    {/* Форма нового комментария */}
+                    <div className="flex gap-2 mt-3">
+                        <Avatar user={user} size={32} />
+                        <input
+                            className="input !py-2 text-sm"
+                            placeholder="Написать комментарий…"
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    send();
+                                }
+                            }}
+                        />
+                        <button
+                            onClick={send}
+                            disabled={busy || !text.trim()}
+                            className="btn-primary !py-2 !px-4 text-sm shrink-0"
+                        >
+                            {busy ? '…' : '→'}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

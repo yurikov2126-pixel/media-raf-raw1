@@ -1,0 +1,168 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────── Базовые переменные ─────────── */
+
+:root {
+    --brand-gradient: linear-gradient(135deg, #7C3AED 0%, #EC4899 50%, #06B6D4 100%);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+}
+
+html {
+    background-color: #08080F;
+    min-height: 100%;
+}
+
+html, body, #root {
+    height: 100%;
+}
+
+body {
+    background-color: transparent;
+    min-height: 100%;
+    @apply bg-ink-900 text-white font-display antialiased;
+}
+
+/*
+ * Фиксированный фон. position: fixed на псевдоэлементе —
+ * не скроллится вместе со страницей, стыки не появляются.
+ */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-color: #08080F;
+    background-image:
+            radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
+            radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
+            radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+#root {
+    position: relative;
+    z-index: 1;
+}
+
+/* Убираем «резиновый» оверскролл — на iOS он мешает в чате */
+html, body {
+    overscroll-behavior-y: none;
+}
+
+/* Автозум iOS не сработает при font-size ≥ 16px */
+@media (max-width: 767px) {
+    input,
+    textarea,
+    select {
+        font-size: 16px !important;
+        line-height: 1.4 !important;
+    }
+}
+
+/* ─────────── Экран чата ─────────── */
+
+/*
+ * Высота — динамическая (100dvh), учитывает адресную строку и клавиатуру.
+ * Отступы сверху/снизу — под чёлку и home indicator iPhone.
+ * Ничего не должно прокручиваться: скроллится только лента сообщений.
+ */
+.chat-screen {
+    height: 100vh;
+    height: 100dvh;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+    box-sizing: border-box;
+}
+
+/* ─────────── Утилиты safe-area ─────────── */
+
+.safe-top {
+    padding-top: var(--safe-top);
+}
+.safe-bottom {
+    padding-bottom: var(--safe-bottom);
+}
+
+/* ─────────── Компоненты ─────────── */
+
+@layer components {
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold
+        transition active:scale-[.97] disabled:opacity-50 disabled:cursor-not-allowed;
+    }
+    .btn-primary {
+        @apply btn text-white shadow-glow;
+        background-image: var(--brand-gradient);
+        background-size: 200% 200%;
+    }
+    .btn-primary:hover {
+        animation: gradient 3s ease infinite;
+    }
+    .btn-ghost {
+        @apply btn bg-ink-700 hover:bg-ink-600 text-white/90;
+    }
+    .card {
+        @apply rounded-3xl bg-ink-800/80 border border-white/5 backdrop-blur-xl;
+    }
+    .input {
+        @apply w-full rounded-2xl bg-ink-700/70 border border-white/5 px-4 py-3 text-white placeholder-white/40
+        outline-none focus:border-violet/60 focus:ring-2 focus:ring-violet/30 transition;
+    }
+    .chip {
+        @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide;
+    }
+}
+
+/* ─────────── Скроллбары ─────────── */
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    scrollbar-width: none;
+}
+
+/* ─────────── Мобильная навигация ─────────── */
+
+.pb-nav {
+    padding-bottom: calc(64px + var(--safe-bottom));
+}
+@media (min-width: 768px) {
+    .pb-nav {
+        padding-bottom: 0;
+    }
+}
+
+/* ─────────── Fallback для старых браузеров ─────────── */
+
+@supports not (background: radial-gradient(circle, red, blue)) {
+    body::before {
+        background-image: none;
+    }
+
+    /* Wiki */
+    .wiki-content { @apply text-white/85 leading-relaxed; }
+    .wiki-content h1 { @apply text-2xl md:text-3xl font-bold mt-6 mb-3 text-white; }
+    .wiki-content h2 { @apply text-xl md:text-2xl font-bold mt-6 mb-3 text-white; }
+    .wiki-content h3 { @apply text-lg md:text-xl font-bold mt-5 mb-2 text-white; }
+    .wiki-content h4 { @apply font-bold mt-4 mb-2 text-white; }
+    .wiki-content p { @apply my-3; }
+    .wiki-content ul { @apply list-disc pl-6 my-3 space-y-1; }
+    .wiki-content ol { @apply list-decimal pl-6 my-3 space-y-1; }
+    .wiki-content li { @apply marker:text-violet-soft; }
+    .wiki-content blockquote { @apply border-l-2 border-violet-soft pl-4 my-4 italic text-white/70; }
+    .wiki-content code { @apply px-1.5 py-0.5 rounded bg-black/40 text-cyan-soft text-sm font-mono; }
+    .wiki-content pre { @apply p-4 rounded-2xl bg-black/60 overflow-x-auto my-4; }
+    .wiki-content pre code { @apply bg-transparent p-0; }
+    .wiki-content a { @apply text-violet-soft hover:underline; }
+    .wiki-content strong { @apply text-white; }
+
+}
