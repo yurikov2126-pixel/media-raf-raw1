@@ -67,7 +67,9 @@ export default function Login() {
             {/* Форма */}
             <div className="flex items-center justify-center p-6">
                 <form onSubmit={submit} className="w-full max-w-md card p-8">
-                    <Link to="/" className="text-sm text-white/40 hover:text-white">← На главную</Link>
+                    {!user && (
+                        <Link to="/" className="text-sm text-white/40 hover:text-white">← На главную</Link>
+                    )}
                     <h2 className="text-3xl font-bold mt-4 mb-6">
                         {mode === 'login' ? 'Вход' : 'Регистрация'}
                     </h2>

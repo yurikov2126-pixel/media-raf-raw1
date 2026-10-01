@@ -27,7 +27,10 @@ export default defineConfig({
                 background_color: '#08080F',
                 display: 'standalone',
                 orientation: 'portrait',
-                start_url: '/',
+                // PWA всегда открывается сразу в защищённой части.
+                // Если пользователь не авторизован — Private из App.jsx
+                // сам редиректнет его на /login.
+                start_url: '/app',
                 scope: '/',
                 lang: 'ru',
                 icons: [
@@ -43,11 +46,13 @@ export default defineConfig({
                         type: 'image/png',
                         purpose: 'any',
                     },
+                    // Maskable — отдельный ресурс с safe zone 20 %.
+                    // Раньше maskable-иконкой служил icon-512.png, из-за чего
+                    // Android обрезал логотип по краям.
                     {
-                        // maskable — Android, иконка с запасом под обрезку
-                        src: 'icon-512.png',
-                        sizes: '512x512',
-                        type: 'image/png',
+                        src: 'icon-maskable.svg',
+                        sizes: 'any',
+                        type: 'image/svg+xml',
                         purpose: 'maskable',
                     },
                 ],

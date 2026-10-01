@@ -23,6 +23,17 @@ const Private = ({ children, roles }) => {
     return children;
 };
 
+/* Умный гейт для «/»:
+   - пока проверяется токен — показываем сплэш;
+   - если пользователь уже авторизован — сразу в /app;
+   - иначе — публичный лендинг. */
+function RootGate() {
+    const { user, loading } = useAuth();
+    if (loading) return <div className="p-10 text-center">Загрузка…</div>;
+    if (user) return <Navigate to="/app" replace />;
+    return <PageTransition><Landing /></PageTransition>;
+}
+
 function PageTransition({ children }) {
     return (
         <motion.div
@@ -42,10 +53,7 @@ function AnimatedRoutes() {
     return (
         <AnimatePresence mode="wait" initial={false}>
             <Routes location={location} key={location.pathname}>
-                <Route
-                    path="/"
-                    element={<PageTransition><Landing /></PageTransition>}
-                />
+                <Route path="/" element={<RootGate />} />
                 <Route
                     path="/login"
                     element={<PageTransition><Login /></PageTransition>}
