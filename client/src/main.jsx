@@ -21,3 +21,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </SettingsProvider>
     </BrowserRouter>
 );
+
+/*
+ * Снимаем inline-сплеш после того, как React отрисовал первый кадр.
+ * Двойной requestAnimationFrame гарантирует, что React 18 уже закоммитил
+ * первый рендер: <SplashScreen /> (или готовый контент) находится в DOM,
+ * и переход происходит без мигания.
+ */
+requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+        const inline = document.getElementById('mrr-splash-inline');
+        if (!inline) return;
+        inline.classList.add('mrr-splash--hidden');
+        window.setTimeout(() => inline.remove(), 400);
+    });
+});

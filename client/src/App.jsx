@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from './store/auth.jsx';
 import Layout from './components/Layout.jsx';
+import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Feed from './pages/Feed.jsx';
@@ -17,19 +18,21 @@ import WikiArticle from './pages/WikiArticle.jsx';
 
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
-    if (loading) return <div className="p-10 text-center">Загрузка…</div>;
+    const showSplash = useSplashGate(loading);
+    if (showSplash) return <SplashScreen />;
     if (!user) return <Navigate to="/login" replace />;
     if (roles && !roles.includes(user.role)) return <Navigate to="/app" replace />;
     return children;
 };
 
 /* Умный гейт для «/»:
-   - пока проверяется токен — показываем сплэш;
+   - пока проверяется токен ИЛИ в PWA идёт минимальная длительность сплеша — сплеш;
    - если пользователь уже авторизован — сразу в /app;
    - иначе — публичный лендинг. */
 function RootGate() {
     const { user, loading } = useAuth();
-    if (loading) return <div className="p-10 text-center">Загрузка…</div>;
+    const showSplash = useSplashGate(loading);
+    if (showSplash) return <SplashScreen />;
     if (user) return <Navigate to="/app" replace />;
     return <PageTransition><Landing /></PageTransition>;
 }
