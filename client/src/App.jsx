@@ -1,8 +1,9 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './store/auth.jsx';
+import { useNetwork } from './store/network.jsx';
 import Layout from './components/Layout.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
+import OfflineScreen from './components/OfflineScreen.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Feed from './pages/Feed.jsx';
@@ -18,111 +19,82 @@ import WikiArticle from './pages/WikiArticle.jsx';
 
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
+    const { isOffline } = useNetwork();
     const showSplash = useSplashGate(loading);
+
     if (showSplash) return <SplashScreen />;
+    if (isOffline && !user) return <OfflineScreen />;
     if (!user) return <Navigate to="/login" replace />;
     if (roles && !roles.includes(user.role)) return <Navigate to="/app" replace />;
     return children;
 };
 
-/* Умный гейт для «/»:
-   - пока проверяется токен ИЛИ в PWA идёт минимальная длительность сплеша — сплеш;
-   - если пользователь уже авторизован — сразу в /app;
-   - иначе — публичный лендинг. */
+/*
+ * Умный гейт для «/»:
+ *   - пока проверяется токен ИЛИ в PWA идёт минимальная длительность сплеша — сплеш;
+ *   - если есть сохранённый токен, но user не получен из-за сети — офлайн-экран;
+ *   - если пользователь авторизован — сразу в /app;
+ *   - иначе — публичный лендинг.
+ */
 function RootGate() {
-    const { user, loading } = useAuth();
+    const { user, loading, token } = useAuth();
+    const { isOffline } = useNetwork();
     const showSplash = useSplashGate(loading);
+
     if (showSplash) return <SplashScreen />;
+    if (isOffline && token && !user) return <OfflineScreen />;
     if (user) return <Navigate to="/app" replace />;
-    return <PageTransition><Landing /></PageTransition>;
+    return <div className="page-enter"><Landing /></div>;
 }
 
-function PageTransition({ children }) {
+/*
+ * Никакого AnimatePresence и exit-анимаций.
+ * Анимация появления — чисто CSS (.page-enter в styles/index.css).
+ * Старая страница размонтируется атомарно в одном коммите React,
+ * новая монтируется и проигрывает fade-in. В DOM всегда максимум
+ * одна страница — мерцать нечему.
+ */
+export default function App() {
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            style={{ minHeight: '100%' }}
-        >
-            {children}
-        </motion.div>
-    );
-}
+        <Routes>
+            <Route path="/" element={<RootGate />} />
+            <Route
+                path="/login"
+                element={<div className="page-enter"><Login /></div>}
+            />
+            <Route
+                path="/verify/:serial"
+                element={<div className="page-enter"><Verify /></div>}
+            />
 
-function AnimatedRoutes() {
-    const location = useLocation();
-    return (
-        <AnimatePresence mode="wait" initial={false}>
-            <Routes location={location} key={location.pathname}>
-                <Route path="/" element={<RootGate />} />
+            <Route
+                path="/app"
+                element={
+                    <Private>
+                        <Layout />
+                    </Private>
+                }
+            >
+                <Route index element={<Feed />} />
+                <Route path="u/:username" element={<Profile />} />
+                <Route path="chats" element={<Messenger />} />
+                <Route path="chats/:chatId" element={<Messenger />} />
+                <Route path="courses" element={<Courses />} />
+                <Route path="courses/:slug" element={<CourseView />} />
+                <Route path="wiki" element={<Wiki />} />
+                <Route path="wiki/:slug" element={<WikiArticle />} />
+                <Route path="certificates/:id" element={<Certificate />} />
                 <Route
-                    path="/login"
-                    element={<PageTransition><Login /></PageTransition>}
-                />
-                <Route
-                    path="/verify/:serial"
-                    element={<PageTransition><Verify /></PageTransition>}
-                />
-
-                <Route
-                    path="/app"
+                    path="admin"
                     element={
-                        <Private>
-                            <Layout />
+                        <Private roles={['ADMIN']}>
+                            <Admin />
                         </Private>
                     }
-                >
-                    <Route index element={<PageTransition><Feed /></PageTransition>} />
-                    <Route
-                        path="u/:username"
-                        element={<PageTransition><Profile /></PageTransition>}
-                    />
-                    <Route
-                        path="chats"
-                        element={<PageTransition><Messenger /></PageTransition>}
-                    />
-                    <Route
-                        path="chats/:chatId"
-                        element={<PageTransition><Messenger /></PageTransition>}
-                    />
-                    <Route
-                        path="courses"
-                        element={<PageTransition><Courses /></PageTransition>}
-                    />
-                    <Route
-                        path="courses/:slug"
-                        element={<PageTransition><CourseView /></PageTransition>}
-                    />
-                    <Route
-                        path="wiki"
-                        element={<PageTransition><Wiki /></PageTransition>}
-                    />
-                    <Route
-                        path="wiki/:slug"
-                        element={<PageTransition><WikiArticle /></PageTransition>}
-                    />
-                    <Route
-                        path="certificates/:id"
-                        element={<PageTransition><Certificate /></PageTransition>}
-                    />
-                    <Route
-                        path="admin"
-                        element={
-                            <Private roles={['ADMIN']}>
-                                <PageTransition><Admin /></PageTransition>
-                            </Private>
-                        }
-                    />
-                </Route>
+                />
+            </Route>
 
-                <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
-        </AnimatePresence>
+            <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
     );
-}
-
-export default function App() {
-    return <AnimatedRoutes />;
 }

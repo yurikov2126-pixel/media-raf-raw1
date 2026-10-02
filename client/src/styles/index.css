@@ -13,43 +13,47 @@
     --safe-right: env(safe-area-inset-right, 0px);
 }
 
-html {
-    background-color: #08080F;
-    min-height: 100%;
-}
-
-html, body, #root {
-    height: 100%;
-}
-
-body {
-    background-color: transparent;
-    min-height: 100%;
-    @apply bg-ink-900 text-white font-display antialiased;
-}
-
 /*
- * Фиксированный фон. position: fixed на псевдоэлементе —
- * не скроллится вместе со страницей, стыки не появляются.
+ * Фон-градиент на html.
+ * background-attachment: fixed крепит градиент ко вьюпорту, а не к
+ * высоте элемента, поэтому он дорисуется до края экрана даже если
+ * html окажется короче физической высоты (iOS standalone PWA).
  */
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
+html {
     background-color: #08080F;
     background-image:
             radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
             radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
             radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
     background-repeat: no-repeat;
-    background-size: cover;
+    background-size: 100% 100%;
+    background-attachment: fixed;
+    height: 100vh;
+    height: 100dvh;
+    height: 100lvh;
+    min-height: 100lvh;
+}
+
+body {
+    background-color: transparent;
+    min-height: 100vh;
+    min-height: 100lvh;
+    @apply bg-ink-900 text-white font-display antialiased;
 }
 
 #root {
     position: relative;
     z-index: 1;
+    background-color: #08080F;
+    background-image:
+            radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
+            radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
+            radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    background-attachment: fixed;
+    min-height: 100vh;
+    min-height: 100lvh;
 }
 
 /* Убираем «резиновый» оверскролл — на iOS он мешает в чате */
@@ -67,16 +71,29 @@ html, body {
     }
 }
 
+/* ─────────── Анимация появления страницы ─────────── */
+
+@keyframes pageEnter {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+    animation: pageEnter 180ms ease-out;
+    will-change: opacity, transform;
+    backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page-enter { animation: none; }
+}
+
 /* ─────────── Экран чата ─────────── */
 
-/*
- * Высота — динамическая (100dvh), учитывает адресную строку и клавиатуру.
- * Отступы сверху/снизу — под чёлку и home indicator iPhone.
- * Ничего не должно прокручиваться: скроллится только лента сообщений.
- */
 .chat-screen {
     height: 100vh;
     height: 100dvh;
+    height: 100lvh;
     padding-top: var(--safe-top);
     padding-bottom: var(--safe-bottom);
     box-sizing: border-box;
@@ -95,7 +112,13 @@ html, body {
 
 .mrr-splash {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: 100lvh;
     z-index: 9999;
     display: grid;
     place-items: center;
@@ -104,6 +127,9 @@ html, body {
             radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
             radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
             radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    background-attachment: fixed;
     transition: opacity .35s ease;
 }
 
@@ -142,6 +168,124 @@ html, body {
     .mrr-splash__logo { animation: none; }
 }
 
+/* ─────────── Network banner ─────────── */
+
+.mrr-netbanner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, rgba(236,72,153,.95), rgba(124,58,237,.95));
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    text-align: center;
+    box-shadow: 0 1px 12px rgba(0, 0, 0, .35);
+    animation: mrr-netbanner-in .25s ease-out;
+}
+
+.mrr-netbanner__dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, .7);
+    animation: mrr-netbanner-pulse 1.6s ease-out infinite;
+}
+
+@keyframes mrr-netbanner-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mrr-netbanner-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, .7); }
+    100% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+}
+
+/* ─────────── Offline screen ─────────── */
+
+.mrr-offline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: 100lvh;
+    z-index: 9998;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    padding-top: calc(24px + var(--safe-top));
+    padding-bottom: calc(24px + var(--safe-bottom));
+    box-sizing: border-box;
+    background-color: #08080F;
+    background-image:
+            radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
+            radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
+            radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    background-attachment: fixed;
+    text-align: center;
+}
+
+.mrr-offline__inner { max-width: 420px; width: 100%; }
+
+.mrr-offline__icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, .6);
+    filter: drop-shadow(0 0 30px rgba(236, 72, 153, .35));
+}
+
+.mrr-offline__title {
+    margin: 0 0 12px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.mrr-offline__text {
+    margin: 0 0 24px;
+    color: rgba(255, 255, 255, .6);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.mrr-offline__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 16px;
+    background-image: var(--brand-gradient);
+    background-size: 200% 200%;
+    color: #fff;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    box-shadow: 0 8px 30px rgba(124, 58, 237, .35);
+    transition: transform .15s ease, opacity .15s ease;
+}
+.mrr-offline__btn:hover  { transform: translateY(-1px); }
+.mrr-offline__btn:active { transform: scale(.97); }
+.mrr-offline__btn:disabled {
+    opacity: .7;
+    cursor: default;
+    transform: none;
+}
+
 /* ─────────── Компоненты ─────────── */
 
 @layer components {
@@ -163,6 +307,20 @@ html, body {
     .card {
         @apply rounded-3xl bg-ink-800/80 border border-white/5 backdrop-blur-xl;
     }
+    /*
+     * .card-flat — то же, что .card, но без backdrop-blur.
+     *
+     * backdrop-filter создаёт stacking context: любой absolute-элемент
+     * внутри карточки замыкается её границами и не может вылезти
+     * поверх соседних карточек. Из-за этого панель реакций на посте
+     * обрезалась следующим постом.
+     *
+     * Посты используют .card-flat — без blur. Фон чуть плотнее (90%),
+     * чтобы визуально компенсировать отсутствие размытия.
+     */
+    .card-flat {
+        @apply rounded-3xl bg-ink-800/90 border border-white/5;
+    }
     .input {
         @apply w-full rounded-2xl bg-ink-700/70 border border-white/5 px-4 py-3 text-white placeholder-white/40
         outline-none focus:border-violet/60 focus:ring-2 focus:ring-violet/30 transition;
@@ -170,6 +328,20 @@ html, body {
     .chip {
         @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide;
     }
+}
+
+/*
+ * Активный пост поднимается над соседями — на случай, если
+ * панель реакций выходит за границы карточки. :focus-within
+ * срабатывает при тапе по кнопкам внутри (мобильные),
+ * :hover — на десктопе.
+ */
+.post-stack {
+    position: relative;
+}
+.post-stack:hover,
+.post-stack:focus-within {
+    z-index: 5;
 }
 
 /* ─────────── Скроллбары ─────────── */
@@ -199,7 +371,6 @@ html, body {
         background-image: none;
     }
 
-    /* Wiki */
     .wiki-content { @apply text-white/85 leading-relaxed; }
     .wiki-content h1 { @apply text-2xl md:text-3xl font-bold mt-6 mb-3 text-white; }
     .wiki-content h2 { @apply text-xl md:text-2xl font-bold mt-6 mb-3 text-white; }
@@ -215,5 +386,4 @@ html, body {
     .wiki-content pre code { @apply bg-transparent p-0; }
     .wiki-content a { @apply text-violet-soft hover:underline; }
     .wiki-content strong { @apply text-white; }
-
 }

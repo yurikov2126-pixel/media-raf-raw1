@@ -14,14 +14,22 @@ import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
 
 /* ─── Утилиты для записи голосовых ─── */
 
+/*
+ * Opus в webm/ogg — лучший баланс качества и размера для голоса.
+ * Раньше первым кандидатом стоял audio/mp4 — на Chrome/Android это
+ * приводило к AAC с меньшим качеством и большим размером.
+ * mp4 оставлен как fallback для iOS Safari, где Opus в webm
+ * не поддерживается MediaRecorder'ом.
+ */
 function pickAudioMime() {
     if (typeof MediaRecorder === 'undefined') return null;
     const candidates = [
-        'audio/mp4',
-        'audio/mp4;codecs=mp4a.40.2',
         'audio/webm;codecs=opus',
         'audio/webm',
         'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
     ];
     for (const c of candidates) {
         try { if (MediaRecorder.isTypeSupported(c)) return c; } catch {}
@@ -238,12 +246,10 @@ export default function Messenger() {
         if (!el) return;
 
         if (needsInitialScroll.current && messages.length > 0) {
-            // Ждём кадр, чтобы DOM успел построиться
             requestAnimationFrame(() => {
                 if (firstUnreadId) {
                     const target = document.getElementById(`msg-${firstUnreadId}`);
                     if (target) {
-                        // Смещаем чуть выше, чтобы было видно контекст
                         el.scrollTop = Math.max(0, target.offsetTop - 40);
                         setHighlightId(firstUnreadId);
                         setTimeout(
@@ -254,8 +260,6 @@ export default function Messenger() {
                         el.scrollTop = el.scrollHeight;
                     }
                 } else {
-                    // Мгновенно в самый низ — без плавности, чтобы не было видно
-                    // предыдущих сообщений при открытии
                     el.scrollTop = el.scrollHeight;
                 }
             });
@@ -263,7 +267,6 @@ export default function Messenger() {
             return;
         }
 
-        // Новые сообщения во время просмотра — плавно вниз
         if (messages.length > 0 && !needsInitialScroll.current) {
             el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
         }
@@ -341,6 +344,11 @@ export default function Messenger() {
             return;
         }
         try {
+            /*
+             * 48 кГц / 16 бит / моно — стандарт для голоса.
+             * echoCancellation и noiseSuppression по умолчанию включены:
+             * убирают эхо и фоновый шум, но не портят тембр.
+             */
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -348,10 +356,16 @@ export default function Messenger() {
                     autoGainControl: true,
                     channelCount: 1,
                     sampleRate: 48000,
+                    sampleSize: 16,
                 },
             });
 
             const mimeType = pickAudioMime();
+            /*
+             * 128 kbps для Opus — прозрачное качество для голоса.
+             * На mp4/AAC этот параметр может игнорироваться Safari'ем,
+             * но там и так адекватный AAC.
+             */
             const opts = { audioBitsPerSecond: 128000 };
             if (mimeType) opts.mimeType = mimeType;
 

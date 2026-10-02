@@ -1,6 +1,10 @@
 /* eslint-disable no-undef */
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import {
+    precacheAndRoute,
+    cleanupOutdatedCaches,
+    createHandlerBoundToURL,
+} from 'workbox-precaching';
+import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkOnly, CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { clientsClaim } from 'workbox-core';
@@ -24,6 +28,21 @@ registerRoute(
     new CacheFirst({
         cacheName: 'uploads-v4',
         plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+    })
+);
+
+/* ─────────── SPA-навигация ───────────
+   Любой браузерный переход по клиентскому роуту (/, /login, /app/*,
+   /verify/*, /wiki/*) должен получать закешированный index.html,
+   даже когда сети нет. Без этого на холодном старте PWA без интернета
+   браузер покажет свою страницу-заглушку («нет соединения»),
+   и пользователь увидит именно её, а не наш OfflineScreen. */
+const navHandler = createHandlerBoundToURL('/index.html');
+registerRoute(
+    new NavigationRoute(navHandler, {
+        // /api и /uploads обслуживаются выше; на всякий случай
+        // исключаем их и здесь.
+        denylist: [/^\/api\//, /^\/uploads\//],
     })
 );
 

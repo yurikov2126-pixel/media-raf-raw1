@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
+import { NetworkProvider } from './store/network.jsx';
 import { AuthProvider } from './store/auth.jsx';
 import { SocketProvider } from './store/socket.jsx';
 import { NotificationsProvider } from './store/notifications.jsx';
@@ -10,15 +11,20 @@ import './styles/index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
-        <SettingsProvider>
-            <AuthProvider>
-                <SocketProvider>
-                    <NotificationsProvider>
-                        <App />
-                    </NotificationsProvider>
-                </SocketProvider>
-            </AuthProvider>
-        </SettingsProvider>
+        {/* NetworkProvider — снаружи остальных провайдеров:
+            его слушатели событий успевают подключиться до того,
+            как упадут первые запросы от Auth/Settings. */}
+        <NetworkProvider>
+            <SettingsProvider>
+                <AuthProvider>
+                    <SocketProvider>
+                        <NotificationsProvider>
+                            <App />
+                        </NotificationsProvider>
+                    </SocketProvider>
+                </AuthProvider>
+            </SettingsProvider>
+        </NetworkProvider>
     </BrowserRouter>
 );
 

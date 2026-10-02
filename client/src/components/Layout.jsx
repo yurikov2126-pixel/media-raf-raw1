@@ -1,10 +1,11 @@
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation, useOutlet, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth.jsx';
 import { useSettings } from '../store/settings.jsx';
 import MobileNav from './MobileNav.jsx';
 import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
+import NetworkBanner from './NetworkBanner.jsx';
 
 const FALLBACK_LINKS = [
     { to: '/app', label: 'Лента', end: true, icon: '🏠' },
@@ -18,10 +19,17 @@ export default function Layout() {
     const { brand, nav } = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
-    const isChatsRoute = location.pathname.startsWith('/app/chats');
 
+    /* useOutlet() возвращает уже резолвнутый элемент текущего
+       дочернего маршрута. Отдаём его в keyed-обёртку — при смене
+       pathname React атомарно размонтирует старую страницу и смонтирует
+       новую. Анимация появления — .page-enter (CSS). */
+    const outlet = useOutlet();
+
+    const isChatsRoute = location.pathname.startsWith('/app/chats');
     const links = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
     const SWIPE_ORDER = links.map((l) => l.to);
+    const isAdmin = user?.role === 'ADMIN';
 
     const handlePanEnd = (_e, info) => {
         if (info.pointerType !== 'touch') return;
@@ -75,10 +83,14 @@ export default function Layout() {
                     </NavLink>
                 ))}
 
-                {user?.role === 'ADMIN' && (
+                {isAdmin && (
                     <NavLink
                         to="/app/admin"
-                        className="flex items-center gap-3 px-4 py-3 rounded-2xl text-white/60 hover:bg-white/5"
+                        className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
+                            }`
+                        }
                     >
                         <span className="text-xl">⚙️</span>
                         <span className="font-semibold">Админка</span>
@@ -110,12 +122,8 @@ export default function Layout() {
                 </div>
             </aside>
 
-            {/* Контент */}
+            {/* motion.main — только для onPanEnd, без key/анимаций */}
             <motion.main
-                key={location.pathname.split('/').slice(0, 3).join('/')}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.18 }}
                 onPanEnd={handlePanEnd}
                 className={`flex-1 min-w-0 ${isChatsRoute ? '' : 'pb-20 md:pb-0 safe-top'}`}
             >
@@ -127,10 +135,33 @@ export default function Layout() {
                         >
                             {brand.logoText}
                         </div>
-                        <NotificationBell align="right" />
+
+                        <div className="flex items-center gap-1">
+                            {/* Кнопка админки — только для админов.
+                                На ПК эта же ссылка есть в сайдбаре, но на
+                                мобильных места мало, поэтому здесь —
+                                компактная иконка слева от колокольчика. */}
+                            {isAdmin && (
+                                <Link
+                                    to="/app/admin"
+                                    className="w-9 h-9 grid place-items-center rounded-full text-lg text-white/70 hover:text-white hover:bg-white/10 transition"
+                                    title="Админ-панель"
+                                    aria-label="Админ-панель"
+                                >
+                                    ⚙️
+                                </Link>
+                            )}
+                            <NotificationBell align="right" />
+                        </div>
                     </div>
                 )}
-                <Outlet />
+
+                <NetworkBanner />
+
+                {/* key={location.pathname} — атомарная замена страницы */}
+                <div key={location.pathname} className="page-enter">
+                    {outlet}
+                </div>
             </motion.main>
 
             <MobileNav links={links} user={user} />

@@ -9,6 +9,56 @@ import PostCard from '../components/PostCard.jsx';
 
 const DIR = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
+/* База для соцсетей. Значение может быть:
+   - username:  "@user"  или  "user"
+   - полный URL: "https://t.me/user"
+   В первом случае подставляем базу, во втором — используем как есть. */
+const SOCIAL_META = {
+    tg:   { label: 'Telegram',  icon: '✈️', base: 'https://t.me/' },
+    vk:   { label: 'VK',        icon: '🅥', base: 'https://vk.com/' },
+    inst: { label: 'Instagram', icon: '📷', base: 'https://instagram.com/' },
+};
+
+function buildSocialUrl(key, raw) {
+    const val = String(raw ?? '').trim();
+    if (!val) return null;
+
+    // Уже полный URL — оставляем как есть
+    if (/^https?:\/\//i.test(val)) return val;
+
+    const meta = SOCIAL_META[key];
+    if (!meta) return null;
+
+    // Убираем @ и ведущие слэши
+    const handle = val.replace(/^@/, '').replace(/^\/+/, '');
+    if (!handle) return null;
+
+    return meta.base + handle;
+}
+
+function SocialLink({ network, value }) {
+    const meta = SOCIAL_META[network];
+    if (!meta) return null;
+
+    const url = buildSocialUrl(network, value);
+    if (!url) return null;
+
+    const handle = String(value).replace(/^@/, '').replace(/^https?:\/\//i, '');
+
+    return (
+        <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="chip bg-white/5 hover:bg-white/10 transition !normal-case !tracking-normal !font-medium text-sm"
+            title={url}
+        >
+            <span aria-hidden="true">{meta.icon}</span>
+            <span className="truncate max-w-[180px]">{handle}</span>
+        </a>
+    );
+}
+
 export default function Profile() {
     const { username } = useParams();
     const { user: me, token } = useAuth();
@@ -68,6 +118,8 @@ export default function Profile() {
     const skills = (() => { try { return JSON.parse(profile.skills || '[]'); } catch { return []; } })();
     const socials = (() => { try { return JSON.parse(profile.socials || '{}'); } catch { return {}; } })();
 
+    const hasSocials = socials.tg || socials.vk || socials.inst;
+
     return (
         <div className="max-w-3xl mx-auto">
             <div className="relative h-44 md:h-60 overflow-hidden rounded-b-3xl">
@@ -105,16 +157,20 @@ export default function Profile() {
                 </div>
 
                 {profile.bio && <p className="mt-4 text-white/70 whitespace-pre-wrap">{profile.bio}</p>}
+
                 {skills.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
                         {skills.map((s) => <span key={s} className="chip bg-white/5">{s}</span>)}
                     </div>
                 )}
-                {(socials.tg || socials.vk || socials.inst) && (
-                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-white/50">
-                        {socials.tg && <span>Telegram: {socials.tg}</span>}
-                        {socials.vk && <span>VK: {socials.vk}</span>}
-                        {socials.inst && <span>Instagram: {socials.inst}</span>}
+
+                {/* Соцсети — кликабельные чипы, ведут на внешние сайты
+                    в новой вкладке. Принимают и @username, и полный URL. */}
+                {hasSocials && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {socials.tg   && <SocialLink network="tg"   value={socials.tg} />}
+                        {socials.vk   && <SocialLink network="vk"   value={socials.vk} />}
+                        {socials.inst && <SocialLink network="inst" value={socials.inst} />}
                     </div>
                 )}
 
@@ -131,8 +187,8 @@ export default function Profile() {
                     <div className="py-6 space-y-4">
                         {isMe && (
                             <div className="card p-4">
-                <textarea className="input resize-none" rows={3} placeholder="Что нового?"
-                          value={postText} onChange={(e) => setPostText(e.target.value)} />
+                                <textarea className="input resize-none" rows={3} placeholder="Что нового?"
+                                          value={postText} onChange={(e) => setPostText(e.target.value)} />
                                 {postImage && (
                                     <div className="relative mt-3 rounded-2xl overflow-hidden">
                                         <img src={postImage} alt="" className="w-full max-h-72 object-cover" />

@@ -1,5 +1,15 @@
 const BASE = import.meta.env.VITE_API || 'http://localhost:4000/api';
 
+/* ─────────── Каналы оповещения о состоянии сети ───────────
+   NetworkProvider слушает эти события и держит isOffline.
+   Оборачиваем в try/catch: событие может уйти до подписки. */
+function emitNetworkOk() {
+    try { window.dispatchEvent(new CustomEvent('mrr:network-ok')); } catch {}
+}
+function emitNetworkError() {
+    try { window.dispatchEvent(new CustomEvent('mrr:network-error')); } catch {}
+}
+
 export class ApiError extends Error {
     constructor(message, status, data) {
         super(message);
@@ -53,8 +63,14 @@ export async function api(path, { method = 'GET', body, token } = {}) {
         });
     } catch (networkError) {
         // fetch упал — сеть, CORS, отвал. Статуса нет.
+        // Даём знать NetworkProvider.
+        emitNetworkError();
         throw new ApiError(networkError.message || 'Сетевая ошибка', 0, null);
     }
+
+    // До сервера достучались — даже если ответ 4xx/5xx,
+    // это значит, что соединение есть.
+    emitNetworkOk();
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -72,8 +88,11 @@ async function uploadFormData(fd, token) {
             body: fd,
         });
     } catch (networkError) {
+        emitNetworkError();
         throw new ApiError(networkError.message || 'Сетевая ошибка', 0, null);
     }
+
+    emitNetworkOk();
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(data.error || 'Ошибка загрузки', res.status, data);
@@ -90,4 +109,28 @@ export async function uploadBlob(blob, filename, token) {
     const fd = new FormData();
     fd.append('file', blob, filename || `image-${Date.now()}.jpg`);
     return uploadFormData(fd, token);
+}
+
+/* ─────────── Ping ───────────
+   Используется NetworkProvider для периодической проверки связи.
+   Берём самый лёгкий публичный эндпоинт — /settings/public.
+   Успех = сервер ответил хоть что-то, включая 4xx/5xx.
+   Провал (throw) = сеть недоступна. */
+export async function ping(timeoutMs = 5000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        await fetch(`${BASE}/settings/public`, {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal,
+        });
+        emitNetworkOk();
+        return true;
+    } catch {
+        emitNetworkError();
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
 }

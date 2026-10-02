@@ -39,8 +39,16 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
 
     const commentCount = post._count?.comments ?? 0;
 
+    /*
+     * card-flat вместо card:
+     *  - без backdrop-blur → без stacking context → панель реакций
+     *    может вылезать за пределы карточки поверх соседей;
+     *  - пост обёрнут классом .post-stack, который поднимает
+     *    карточку над соседями при наведении/фокусе — вторая
+     *    страховка от перекрытия.
+     */
     return (
-        <article className="card p-5 relative">
+        <article className="card-flat p-5 post-stack">
             {canEdit && (
                 <div className="absolute top-4 right-4">
                     <button
@@ -78,12 +86,12 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
 
             {editing ? (
                 <div>
-          <textarea
-              className="input resize-none"
-              rows={3}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-          />
+                    <textarea
+                        className="input resize-none"
+                        rows={3}
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                    />
                     <div className="flex justify-end gap-2 mt-3">
                         <button
                             onClick={() => { setEditing(false); setText(post.content || ''); }}
