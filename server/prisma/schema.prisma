@@ -57,6 +57,9 @@ model Post {
   author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments  Comment[]
   reactions PostReaction[]
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
 }
 
 model Comment {

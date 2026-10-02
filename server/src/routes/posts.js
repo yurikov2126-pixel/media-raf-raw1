@@ -5,7 +5,72 @@ import { createNotification } from '../lib/notify.js';
 
 const router = Router();
 
-// ─── Создать пост ──────────────────────────────────────────
+/* ─────────── Лента (единый запрос + пагинация) ───────────
+   Один запрос вместо 16 (N+1): достаём посты сразу со всеми
+   авторами, реакциями и счётчиком комментариев.
+   Пагинация — по id (cursor-based), сортировка по createdAt desc. */
+router.get('/feed', auth, async (req, res) => {
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const cursor = req.query.cursor || null;
+
+    const posts = await prisma.post.findMany({
+        where: {
+            author: { isBanned: false },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        include: {
+            author: {
+                select: {
+                    id: true,
+                    fullName: true,
+                    username: true,
+                    avatar: true,
+                    direction: true,
+                },
+            },
+            reactions: { select: { emoji: true, userId: true } },
+            _count: { select: { comments: true } },
+        },
+    });
+
+    let nextCursor = null;
+    if (posts.length > limit) {
+        const extra = posts.pop();
+        nextCursor = extra.id;
+    }
+
+    const myId = req.user.id;
+    const items = posts.map((p) => {
+        const grouped = {};
+        for (const r of p.reactions) {
+            if (!grouped[r.emoji]) grouped[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
+            grouped[r.emoji].count++;
+            grouped[r.emoji].users.push(r.userId);
+        }
+        const myReactions = p.reactions
+            .filter((r) => r.userId === myId)
+            .map((r) => r.emoji);
+
+        return {
+            id: p.id,
+            content: p.content,
+            mediaUrl: p.mediaUrl,
+            mediaType: p.mediaType,
+            createdAt: p.createdAt,
+            editedAt: p.editedAt,
+            author: p.author,
+            reactions: Object.values(grouped),
+            myReactions,
+            _count: { comments: p._count.comments },
+        };
+    });
+
+    res.json({ items, nextCursor });
+});
+
+/* ─────────── Создать пост ─────────── */
 router.post('/', auth, async (req, res) => {
     const { content, mediaUrl, mediaType } = req.body;
     if (!content?.trim() && !mediaUrl) {
@@ -39,7 +104,7 @@ router.post('/', auth, async (req, res) => {
     res.json(post);
 });
 
-// ─── Редактировать пост ────────────────────────────────────
+/* ─────────── Редактировать пост ─────────── */
 router.patch('/:id', auth, async (req, res) => {
     const post = await prisma.post.findUnique({ where: { id: req.params.id } });
     if (!post) return res.status(404).json({ error: 'Пост не найден' });
@@ -54,7 +119,7 @@ router.patch('/:id', auth, async (req, res) => {
     res.json(updated);
 });
 
-// ─── Удалить пост ──────────────────────────────────────────
+/* ─────────── Удалить пост ─────────── */
 router.delete('/:id', auth, async (req, res) => {
     const post = await prisma.post.findUnique({ where: { id: req.params.id } });
     if (!post) return res.status(404).json({ error: 'Пост не найден' });
@@ -65,21 +130,23 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ ok: true });
 });
 
-// ─── Реакции на пост ──────────────────────────────────────
+/* ─────────── Реакции на пост ─────────── */
 router.get('/:id/reactions', auth, async (req, res) => {
     const reactions = await prisma.postReaction.findMany({
         where: { postId: req.params.id },
         select: { emoji: true, userId: true },
     });
 
-    // Собираем агрегат: { emoji: { count, users: [...] } }
     const grouped = {};
     for (const r of reactions) {
         if (!grouped[r.emoji]) grouped[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
         grouped[r.emoji].count++;
         grouped[r.emoji].users.push(r.userId);
     }
-    res.json({ reactions: Object.values(grouped), my: reactions.filter((r) => r.userId === req.user.id).map((r) => r.emoji) });
+    res.json({
+        reactions: Object.values(grouped),
+        my: reactions.filter((r) => r.userId === req.user.id).map((r) => r.emoji),
+    });
 });
 
 router.post('/:id/reactions', auth, async (req, res) => {
@@ -131,8 +198,7 @@ router.post('/:id/reactions', auth, async (req, res) => {
     });
 });
 
-// ─── Комментарии к посту ──────────────────────────────────
-// Возвращаем дерево (вложенность)
+/* ─────────── Комментарии к посту ─────────── */
 function buildTree(comments) {
     const byId = new Map();
     comments.forEach((c) => byId.set(c.id, { ...c, replies: [] }));
@@ -144,7 +210,6 @@ function buildTree(comments) {
             roots.push(c);
         }
     }
-    // сортировка: сначала старые
     const sortFn = (a, b) => new Date(a.createdAt) - new Date(b.createdAt);
     roots.sort(sortFn);
     for (const r of byId.values()) r.replies.sort(sortFn);
@@ -188,7 +253,6 @@ router.post('/:id/comments', auth, async (req, res) => {
         },
     });
 
-    // Уведомление автору поста или родительского комментария
     try {
         if (post.authorId !== req.user.id) {
             await createNotification(post.authorId, 'system', {

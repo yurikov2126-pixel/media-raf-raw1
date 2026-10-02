@@ -9,6 +9,7 @@ import Login from './pages/Login.jsx';
 import Feed from './pages/Feed.jsx';
 import Profile from './pages/Profile.jsx';
 import Messenger from './pages/Messenger.jsx';
+import Notifications from './pages/Notifications.jsx';
 import Courses from './pages/Courses.jsx';
 import CourseView from './pages/CourseView.jsx';
 import Admin from './pages/Admin.jsx';
@@ -29,13 +30,6 @@ const Private = ({ children, roles }) => {
     return children;
 };
 
-/*
- * Умный гейт для «/»:
- *   - пока проверяется токен ИЛИ в PWA идёт минимальная длительность сплеша — сплеш;
- *   - если есть сохранённый токен, но user не получен из-за сети — офлайн-экран;
- *   - если пользователь авторизован — сразу в /app;
- *   - иначе — публичный лендинг.
- */
 function RootGate() {
     const { user, loading, token } = useAuth();
     const { isOffline } = useNetwork();
@@ -47,25 +41,12 @@ function RootGate() {
     return <div className="page-enter"><Landing /></div>;
 }
 
-/*
- * Никакого AnimatePresence и exit-анимаций.
- * Анимация появления — чисто CSS (.page-enter в styles/index.css).
- * Старая страница размонтируется атомарно в одном коммите React,
- * новая монтируется и проигрывает fade-in. В DOM всегда максимум
- * одна страница — мерцать нечему.
- */
 export default function App() {
     return (
         <Routes>
             <Route path="/" element={<RootGate />} />
-            <Route
-                path="/login"
-                element={<div className="page-enter"><Login /></div>}
-            />
-            <Route
-                path="/verify/:serial"
-                element={<div className="page-enter"><Verify /></div>}
-            />
+            <Route path="/login" element={<div className="page-enter"><Login /></div>} />
+            <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
 
             <Route
                 path="/app"
@@ -79,6 +60,7 @@ export default function App() {
                 <Route path="u/:username" element={<Profile />} />
                 <Route path="chats" element={<Messenger />} />
                 <Route path="chats/:chatId" element={<Messenger />} />
+                <Route path="notifications" element={<Notifications />} />
                 <Route path="courses" element={<Courses />} />
                 <Route path="courses/:slug" element={<CourseView />} />
                 <Route path="wiki" element={<Wiki />} />

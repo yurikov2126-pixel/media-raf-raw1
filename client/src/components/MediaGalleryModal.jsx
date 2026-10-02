@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import ImageViewer from './ImageViewer.jsx';
 
 const TABS = [
     { v: 'image', l: '🖼️ Фото' },
@@ -88,9 +89,7 @@ export default function MediaGalleryModal({ chatId, onClose }) {
                         <div className="space-y-2">
                             {items.map((m) => (
                                 <div key={m.id} className="card p-3 flex items-center gap-3">
-                                    <div className="text-2xl">
-                                        {tab === 'voice' ? '🎤' : '📎'}
-                                    </div>
+                                    <div className="text-2xl">{tab === 'voice' ? '🎤' : '📎'}</div>
                                     <div className="flex-1 min-w-0">
                                         <div className="text-sm font-semibold truncate">
                                             {m.sender?.fullName || 'Пользователь'}
@@ -121,53 +120,6 @@ export default function MediaGalleryModal({ chatId, onClose }) {
                     onClose={() => setViewerIndex(null)}
                 />
             )}
-        </div>
-    );
-}
-
-function ImageViewer({ images, startIndex, onClose }) {
-    const [index, setIndex] = useState(startIndex);
-    useEffect(() => {
-        const onKey = (e) => {
-            if (e.key === 'Escape') onClose();
-            if (e.key === 'ArrowLeft') setIndex((i) => (i - 1 + images.length) % images.length);
-            if (e.key === 'ArrowRight') setIndex((i) => (i + 1) % images.length);
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [images.length, onClose]);
-    const prev = (e) => { e.stopPropagation(); setIndex((i) => (i - 1 + images.length) % images.length); };
-    const next = (e) => { e.stopPropagation(); setIndex((i) => (i + 1) % images.length); };
-    return (
-        <div
-            className="fixed inset-0 z-[120] bg-black/95 flex items-center justify-center"
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-        >
-            <button
-                onClick={onClose}
-                className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 grid place-items-center text-white text-xl"
-            >✕</button>
-            {images.length > 1 && (
-                <button
-                    onClick={prev}
-                    className="absolute left-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 grid place-items-center text-white text-2xl"
-                >‹</button>
-            )}
-            <img
-                src={images[index].url}
-                alt=""
-                className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl"
-                onClick={(e) => e.stopPropagation()}
-            />
-            {images.length > 1 && (
-                <button
-                    onClick={next}
-                    className="absolute right-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 grid place-items-center text-white text-2xl"
-                >›</button>
-            )}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
-                {index + 1} / {images.length}
-            </div>
         </div>
     );
 }

@@ -1,32 +1,70 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import PostCard from '../components/PostCard.jsx';
+
+const PAGE_SIZE = 20;
 
 export default function Feed() {
     const { user, token } = useAuth();
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [cursor, setCursor] = useState(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [error, setError] = useState('');
+    const sentinelRef = useRef(null);
 
-    const load = useCallback(() => {
+    /* Первичная загрузка */
+    const loadInitial = useCallback(async () => {
         if (!token) return;
         setLoading(true);
-        api('/users', { token })
-            .then(async (list) => {
-                const profiles = await Promise.all(
-                    list.slice(0, 15).map((u) => api(`/users/${u.username}`, { token }).catch(() => null))
-                );
-                const all = profiles
-                    .filter(Boolean)
-                    .flatMap((p) => (p.posts || []).map((post) => ({ post, author: p })));
-                all.sort((a, b) => new Date(b.post.createdAt) - new Date(a.post.createdAt));
-                setPosts(all);
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
+        setError('');
+        try {
+            const r = await api(`/posts/feed?limit=${PAGE_SIZE}`, { token });
+            setPosts(r.items);
+            setCursor(r.nextCursor);
+            setHasMore(!!r.nextCursor);
+        } catch (e) {
+            setError(e.message || 'Не удалось загрузить ленту');
+        } finally {
+            setLoading(false);
+        }
     }, [token]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        loadInitial();
+    }, [loadInitial]);
+
+    /* Подгрузка следующей страницы */
+    const loadMore = useCallback(async () => {
+        if (loadingMore || !hasMore || !cursor || !token) return;
+        setLoadingMore(true);
+        try {
+            const r = await api(`/posts/feed?limit=${PAGE_SIZE}&cursor=${cursor}`, { token });
+            setPosts((prev) => [...prev, ...r.items]);
+            setCursor(r.nextCursor);
+            setHasMore(!!r.nextCursor);
+        } catch (e) {
+            setError(e.message || 'Не удалось подгрузить');
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [cursor, hasMore, loadingMore, token]);
+
+    /* Infinite scroll: IntersectionObserver на сентинел внизу */
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!el) return;
+        const obs = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) loadMore();
+            },
+            { rootMargin: '400px' }
+        );
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, [loadMore]);
 
     return (
         <div className="p-5 md:p-10 max-w-3xl mx-auto">
@@ -37,23 +75,43 @@ export default function Feed() {
 
             {loading && <div className="card p-10 text-center text-white/40">Загрузка ленты…</div>}
 
-            {!loading && posts.length === 0 && (
+            {!loading && error && (
+                <div className="card p-6 text-center">
+                    <div className="text-pink mb-3">{error}</div>
+                    <button onClick={loadInitial} className="btn-ghost">Повторить</button>
+                </div>
+            )}
+
+            {!loading && !error && posts.length === 0 && (
                 <div className="card p-10 text-center text-white/40">
                     Пока нет публикаций. Создайте первую запись у себя в профиле.
                 </div>
             )}
 
             <div className="space-y-4">
-                {posts.map(({ post, author }) => (
+                {posts.map((post) => (
                     <PostCard
                         key={post.id}
                         post={post}
-                        author={author}
-                        onChanged={(u) => setPosts((prev) => prev.map((x) => x.post.id === u.id ? { ...x, post: u } : x))}
-                        onDeleted={(id) => setPosts((prev) => prev.filter((x) => x.post.id !== id))}
+                        author={post.author}
+                        onChanged={(u) =>
+                            setPosts((prev) => prev.map((x) => (x.id === u.id ? { ...x, ...u } : x)))
+                        }
+                        onDeleted={(id) => setPosts((prev) => prev.filter((x) => x.id !== id))}
                     />
                 ))}
             </div>
+
+            {/* Sentinel для infinite scroll */}
+            <div ref={sentinelRef} className="h-4" />
+
+            {loadingMore && (
+                <div className="text-center text-white/40 py-6 text-sm">Загружаем ещё…</div>
+            )}
+
+            {!hasMore && posts.length > 0 && (
+                <div className="text-center text-white/30 py-6 text-xs">Это всё 🌿</div>
+            )}
         </div>
     );
 }
