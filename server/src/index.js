@@ -21,6 +21,7 @@ import { initSocket } from './socket.js';
 import { setIo } from './lib/notify.js';
 import { startCron } from './lib/cron.js';
 import { prisma } from './lib/prisma.js';
+import reportsRouter from './routes/reports.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -33,6 +34,7 @@ setIo(io);
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+app.use('/api/reports', reportsRouter);
 
 /* ─────────── Публичные настройки ─────────── */
 const PUBLIC_SETTING_KEYS = [

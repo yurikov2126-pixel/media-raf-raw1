@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // было sqlite
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -43,6 +43,9 @@ model User {
   notifications Notification[]
   wikiArticles  WikiArticle[]
   pushSubs      PushSubscription[]
+
+  reportsMade     Report[] @relation("ReporterReports")
+  reportsResolved Report[] @relation("ResolverReports")
 }
 
 model Post {
@@ -133,6 +136,9 @@ model Message {
   replyTo   Message?   @relation("Reply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]  @relation("Reply")
   reactions Reaction[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
 }
 
 model Reaction {
@@ -165,6 +171,8 @@ model Course {
   lessons      Lesson[]
   enrollments  Enrollment[]
   certificates Certificate[]
+
+  @@index([published, createdAt])
 }
 
 model Lesson {
@@ -179,6 +187,8 @@ model Lesson {
   course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
   test     Test?
   progress LessonProgress[]
+
+  @@index([courseId, order])
 }
 
 model Test {
@@ -199,6 +209,8 @@ model Question {
   payload String @default("{}")
   points  Int    @default(1)
   test    Test   @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
 }
 
 model TestAttempt {
@@ -211,6 +223,8 @@ model TestAttempt {
   createdAt DateTime @default(now())
   test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, testId])
 }
 
 model Enrollment {
@@ -261,6 +275,9 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 model Setting {
@@ -328,4 +345,29 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/**
+ * ─────────── Модерация ───────────
+ */
+
+model Report {
+  id         String    @id @default(cuid())
+  reporterId String
+  targetType String // post | comment | message | user
+  targetId   String
+  reason     String // spam | abuse | illegal | other
+  comment    String?
+  status     String    @default("NEW") // NEW | IN_REVIEW | RESOLVED | REJECTED
+  resolvedBy String?
+  resolvedAt DateTime?
+  resolution String?
+  createdAt  DateTime  @default(now())
+
+  reporter User  @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolver User? @relation("ResolverReports", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId])
 }

@@ -12,7 +12,7 @@ import Messenger from './pages/Messenger.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Courses from './pages/Courses.jsx';
 import CourseView from './pages/CourseView.jsx';
-import Admin from './pages/Admin.jsx';
+import Admin from './pages/Admin/index.jsx';
 import Certificate from './pages/Certificate.jsx';
 import Verify from './pages/Verify.jsx';
 import Wiki from './pages/Wiki.jsx';

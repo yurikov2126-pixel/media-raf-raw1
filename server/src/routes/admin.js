@@ -41,6 +41,14 @@ import {
     exportSnapshot,
     listActions,
 } from '../lib/bulkActions.js';
+import { getServerInfo, cleanupPm2Logs, cleanupOldBackups } from '../lib/serverInfo.js';
+import {
+    listReports,
+    updateReport,
+    deleteReportedContent,
+    banReportedUser,
+    REPORT_META,
+} from '../lib/moderation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
@@ -1161,6 +1169,98 @@ router.post(
             tag: `admin-test-${Date.now()}`,
         });
         res.json(r);
+    })
+);
+
+/* ─────────── Информация о сервере ─────────── */
+
+router.get(
+    '/server/info',
+    safe(async (_req, res) => {
+        res.json(await getServerInfo());
+    })
+);
+
+router.post(
+    '/server/cleanup',
+    safe(async (req, res) => {
+        const { logs, backups, backupsDays } = req.body || {};
+        const result = {};
+        if (logs) result.logs = cleanupPm2Logs();
+        if (backups) result.backups = cleanupOldBackups(Number(backupsDays) || 30);
+        res.json(result);
+    })
+);
+
+/* ─────────── Модерация ─────────── */
+
+router.get(
+    '/reports',
+    safe(async (req, res) => {
+        const { status, targetType, page, limit } = req.query;
+        res.json(
+            await listReports({
+                status: status || undefined,
+                targetType: targetType || undefined,
+                page: Number(page) || 1,
+                limit: Number(limit) || 30,
+            })
+        );
+    })
+);
+
+router.get(
+    '/reports/meta',
+    safe(async (_req, res) => {
+        res.json({
+            targetTypes: REPORT_META.TARGET_TYPES,
+            reasons: REPORT_META.REASONS,
+            statuses: REPORT_META.STATUSES,
+        });
+    })
+);
+
+router.patch(
+    '/reports/:id',
+    safe(async (req, res) => {
+        const { status, resolution } = req.body;
+        const r = await updateReport({
+            id: req.params.id,
+            status,
+            resolution,
+            resolverId: req.user.id,
+        });
+        res.json(r);
+    })
+);
+
+router.post(
+    '/reports/:id/delete-content',
+    safe(async (req, res) => {
+        const r = await deleteReportedContent({
+            reportId: req.params.id,
+            resolverId: req.user.id,
+        });
+        res.json(r);
+    })
+);
+
+router.post(
+    '/reports/:id/ban-user',
+    safe(async (req, res) => {
+        const r = await banReportedUser({
+            reportId: req.params.id,
+            resolverId: req.user.id,
+        });
+        res.json(r);
+    })
+);
+
+router.delete(
+    '/reports/:id',
+    safe(async (req, res) => {
+        await prisma.report.delete({ where: { id: req.params.id } });
+        res.json({ ok: true });
     })
 );
 
