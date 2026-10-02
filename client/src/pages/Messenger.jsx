@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -14,13 +15,6 @@ import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
 
 /* ─── Утилиты для записи голосовых ─── */
 
-/*
- * Opus в webm/ogg — лучший баланс качества и размера для голоса.
- * Раньше первым кандидатом стоял audio/mp4 — на Chrome/Android это
- * приводило к AAC с меньшим качеством и большим размером.
- * mp4 оставлен как fallback для iOS Safari, где Opus в webm
- * не поддерживается MediaRecorder'ом.
- */
 function pickAudioMime() {
     if (typeof MediaRecorder === 'undefined') return null;
     const candidates = [
@@ -53,6 +47,8 @@ export default function Messenger() {
     const nav = useNavigate();
     const notifications = useNotifications();
 
+    const isChatRoom = !!chatId;
+
     const [chats, setChats] = useState([]);
     const [messages, setMessages] = useState([]);
     const [pinned, setPinned] = useState(null);
@@ -63,7 +59,10 @@ export default function Messenger() {
     const [forwarding, setForwarding] = useState(null);
     const [editing, setEditing] = useState(null);
     const [typingUsers, setTypingUsers] = useState([]);
+
     const [search, setSearch] = useState('');
+    const [searchOpen, setSearchOpen] = useState(false);
+
     const [uploading, setUploading] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(null);
     const [showMembers, setShowMembers] = useState(false);
@@ -73,10 +72,9 @@ export default function Messenger() {
     const [mentionQuery, setMentionQuery] = useState(null);
     const [chatMenu, setChatMenu] = useState(null);
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
-    const [panel, setPanel] = useState(null); // null | 'emoji' | 'stickers'
+    const [panel, setPanel] = useState(null);
     const [attachMenu, setAttachMenu] = useState(false);
 
-    // Голосовая запись
     const [recording, setRecording] = useState(false);
     const [recordingSec, setRecordingSec] = useState(0);
     const mediaRecorderRef = useRef(null);
@@ -89,7 +87,6 @@ export default function Messenger() {
     const fileRef = useRef(null);
     const mediaFileRef = useRef(null);
     const textareaRef = useRef(null);
-    // Флаг: нужен ли немедленный скролл вниз (при первой загрузке чата)
     const needsInitialScroll = useRef(false);
 
     const activeChat = chats.find((c) => c.id === chatId);
@@ -135,11 +132,9 @@ export default function Messenger() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token, chatId]);
 
-    /* Загрузка сообщений при смене чата */
     useEffect(() => {
         if (!chatId || !token) return;
 
-        // Сбрасываем предыдущее состояние и помечаем необходимость скролла
         setFirstUnreadId(null);
         needsInitialScroll.current = true;
 
@@ -161,7 +156,6 @@ export default function Messenger() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, token, socket]);
 
-    /* Socket.IO события */
     useEffect(() => {
         if (!socket) return;
 
@@ -234,13 +228,6 @@ export default function Messenger() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [socket, chatId, token, user.id]);
 
-    /*
-     * Скролл.
-     *  - На первой загрузке: если есть firstUnreadId — плавно к нему,
-     *    иначе мгновенно к самому низу (без анимации, чтобы пользователь
-     *    сразу видел последнее сообщение).
-     *  - При новых сообщениях: плавный скролл вниз.
-     */
     useEffect(() => {
         const el = scrollRef.current;
         if (!el) return;
@@ -272,7 +259,6 @@ export default function Messenger() {
         }
     }, [messages.length, firstUnreadId]);
 
-    /* Сброс меню при смене чата */
     useEffect(() => {
         setShowMembers(false);
         setContextMenu(null);
@@ -281,9 +267,10 @@ export default function Messenger() {
         setHeaderMenuOpen(false);
         setPanel(null);
         setAttachMenu(false);
+        setSearchOpen(false);
+        setSearch('');
     }, [chatId]);
 
-    /* ─── Отправка ─── */
     const send = () => {
         if (!text.trim() || !chatId) return;
         if (editing) {
@@ -337,18 +324,12 @@ export default function Messenger() {
     const sendVideo = (f) => sendFile(f, 'video');
     const sendDoc = (f) => sendFile(f, 'file');
 
-    /* ─── Голосовые ─── */
     const startRecording = async () => {
         if (!navigator.mediaDevices?.getUserMedia) {
             alert('Ваш браузер не поддерживает запись звука');
             return;
         }
         try {
-            /*
-             * 48 кГц / 16 бит / моно — стандарт для голоса.
-             * echoCancellation и noiseSuppression по умолчанию включены:
-             * убирают эхо и фоновый шум, но не портят тембр.
-             */
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -361,11 +342,6 @@ export default function Messenger() {
             });
 
             const mimeType = pickAudioMime();
-            /*
-             * 128 kbps для Opus — прозрачное качество для голоса.
-             * На mp4/AAC этот параметр может игнорироваться Safari'ем,
-             * но там и так адекватный AAC.
-             */
             const opts = { audioBitsPerSecond: 128000 };
             if (mimeType) opts.mimeType = mimeType;
 
@@ -373,7 +349,6 @@ export default function Messenger() {
             try {
                 mr = new MediaRecorder(stream, opts);
             } catch {
-                // Некоторые браузеры не принимают opts — пробуем без
                 mr = new MediaRecorder(stream);
             }
 
@@ -387,7 +362,7 @@ export default function Messenger() {
             mr.onstop = async () => {
                 stream.getTracks().forEach((t) => t.stop());
                 const blob = new Blob(recChunksRef.current, { type: recMimeRef.current });
-                if (blob.size < 1000) return; // пустая запись
+                if (blob.size < 1000) return;
                 const ext = extFromMime(recMimeRef.current);
                 const file = new File([blob], `voice-${Date.now()}.${ext}`, {
                     type: recMimeRef.current,
@@ -395,7 +370,6 @@ export default function Messenger() {
                 await sendFile(file, 'voice');
             };
 
-            // Собираем чанки раз в секунду — так надёжнее на iOS
             mr.start(1000);
             setRecording(true);
             setRecordingSec(0);
@@ -450,6 +424,15 @@ export default function Messenger() {
 
     const toggleReaction = (id, emoji) =>
         socket.emit('reaction:toggle', { messageId: id, emoji });
+
+    const toggleSearch = () => {
+        if (searchOpen) {
+            setSearch('');
+            setSearchOpen(false);
+        } else {
+            setSearchOpen(true);
+        }
+    };
 
     const doForward = (target) => {
         socket.emit('message:send', {
@@ -560,7 +543,19 @@ export default function Messenger() {
 
     return (
         <div
-            className="chat-screen h-screen flex overflow-hidden"
+            className={
+                isChatRoom
+                    ? 'fixed inset-0 md:left-64 z-40 flex overflow-hidden bg-ink-900'
+                    : 'flex'
+            }
+            style={
+                isChatRoom
+                    ? {
+                        paddingTop: 'env(safe-area-inset-top, 0px)',
+                        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                    }
+                    : undefined
+            }
             onClick={() => {
                 if (contextMenu) setContextMenu(null);
                 if (chatMenu) setChatMenu(null);
@@ -575,16 +570,44 @@ export default function Messenger() {
                 } md:w-80 w-full flex-col border-r border-white/5 bg-ink-800/50 min-h-0`}
             >
                 <div className="p-4 border-b border-white/5 shrink-0">
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-1">
                         <h2 className="text-xl font-bold">Чаты</h2>
+                        <button
+                            type="button"
+                            onClick={toggleSearch}
+                            className={`ml-auto btn-ghost !p-2 text-base ${
+                                searchOpen ? 'bg-white/10' : ''
+                            }`}
+                            title={searchOpen ? 'Закрыть поиск' : 'Поиск'}
+                            aria-label={searchOpen ? 'Закрыть поиск' : 'Поиск'}
+                            aria-expanded={searchOpen}
+                        >
+                            🔍
+                        </button>
                         <NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} />
                     </div>
-                    <input
-                        className="input"
-                        placeholder="Поиск…"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
+
+                    {searchOpen && (
+                        <div className="relative mt-3">
+                            <input
+                                autoFocus
+                                className="input pr-10"
+                                placeholder="Поиск…"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/60 text-xs transition"
+                                    aria-label="Очистить"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar min-h-0">
                     {filteredChats.map((c) => {
@@ -645,6 +668,11 @@ export default function Messenger() {
                             </div>
                         );
                     })}
+                    {filteredChats.length === 0 && search && (
+                        <div className="p-6 text-center text-white/30 text-sm">
+                            Ничего не найдено
+                        </div>
+                    )}
                 </div>
             </aside>
 
@@ -667,9 +695,12 @@ export default function Messenger() {
                             <button
                                 className="md:hidden btn-ghost !p-2"
                                 onClick={() => nav('/app/chats')}
+                                title="К списку чатов"
+                                aria-label="Назад к списку чатов"
                             >
                                 ←
                             </button>
+
                             <button
                                 onClick={() =>
                                     activeChat?.type === 'GROUP' && setShowMembers((v) => !v)
@@ -757,7 +788,6 @@ export default function Messenger() {
                             onJump={() => pinned && scrollToMessage(pinned.id)}
                         />
 
-                        {/* Прокручиваемая лента сообщений */}
                         <div
                             ref={scrollRef}
                             className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0"
@@ -790,7 +820,6 @@ export default function Messenger() {
                             ))}
                         </div>
 
-                        {/* Панель ввода */}
                         <div className="border-t border-white/5 p-2 md:p-3 space-y-2 shrink-0 bg-ink-900/95 backdrop-blur relative">
                             {replyTo && (
                                 <div className="flex items-center gap-2 bg-ink-700/60 rounded-2xl px-3 py-2 text-sm">
@@ -859,7 +888,6 @@ export default function Messenger() {
                                 </div>
                             ) : (
                                 <div className="flex items-end gap-1.5 md:gap-2">
-                                    {/* Вложения */}
                                     <div className="relative shrink-0">
                                         <button
                                             className="btn-ghost !p-2.5 md:!p-3 text-lg md:text-xl"
@@ -926,7 +954,6 @@ export default function Messenger() {
                                         }}
                                     />
 
-                                    {/* Эмодзи/стикеры */}
                                     <button
                                         className={`btn-ghost !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 ${
                                             panel ? 'bg-white/10' : ''
@@ -977,7 +1004,6 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {/* Панель эмодзи/стикеров */}
                             {panel && (
                                 <div
                                     className="card p-3 animate-pop"
@@ -1036,7 +1062,6 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {/* Автокомплит упоминаний */}
                             {mentionQuery && chatMembers.length > 0 && (
                                 <div className="absolute left-2 right-2 bottom-full mb-2">
                                     <MentionSuggest
@@ -1049,7 +1074,6 @@ export default function Messenger() {
                             )}
                         </div>
 
-                        {/* Панель участников */}
                         {showMembers && activeChat && (
                             <>
                                 <div
@@ -1084,8 +1108,8 @@ export default function Messenger() {
                                                         {m.fullName}
                                                         {m.role === 'admin' && (
                                                             <span className="ml-2 text-[10px] text-violet-soft uppercase">
-                                админ
-                              </span>
+                                                                админ
+                                                            </span>
                                                         )}
                                                     </div>
                                                     <div className="text-xs text-white/40 truncate">
@@ -1105,7 +1129,6 @@ export default function Messenger() {
                 )}
             </section>
 
-            {/* ───────── Контекстное меню сообщения ───────── */}
             {contextMenu &&
                 (() => {
                     const { actions, handler } = contextActions(contextMenu.message);
@@ -1141,7 +1164,6 @@ export default function Messenger() {
                     );
                 })()}
 
-            {/* ───────── Контекстное меню чата ───────── */}
             {chatMenu &&
                 (() => {
                     const c = chatMenu.chat;
@@ -1179,7 +1201,6 @@ export default function Messenger() {
                     );
                 })()}
 
-            {/* ───────── Модалка пересылки ───────── */}
             {forwarding && (
                 <div
                     className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4"
@@ -1207,8 +1228,8 @@ export default function Messenger() {
                                                 <Avatar user={other} size={36} />
                                             )}
                                             <span className="font-semibold">
-                        {c.type === 'GROUP' ? c.title : other?.fullName}
-                      </span>
+                                                {c.type === 'GROUP' ? c.title : other?.fullName}
+                                            </span>
                                         </button>
                                     );
                                 })}
@@ -1217,7 +1238,6 @@ export default function Messenger() {
                 </div>
             )}
 
-            {/* ───────── Просмотр изображений ───────── */}
             {viewerIndex !== null && imageMessages.length > 0 && (
                 <ImageViewer
                     images={imageMessages}
@@ -1226,7 +1246,6 @@ export default function Messenger() {
                 />
             )}
 
-            {/* ───────── Галерея медиа ───────── */}
             {showGallery && chatId && (
                 <MediaGalleryModal chatId={chatId} onClose={() => setShowGallery(false)} />
             )}
@@ -1451,7 +1470,6 @@ function MessageBubble({
                     })}
                 </div>
 
-                {/* Кнопки быстрого действия (только на десктопе при hover) */}
                 <div className="hidden md:group-hover:flex gap-1 mt-1">
                     <button
                         onClick={() => setShowReactions(!showReactions)}
@@ -1644,95 +1662,122 @@ function NewChatButton({ onCreated }) {
         onCreated(chat.id);
     };
 
+    /*
+     * Модалка рендерится через createPortal в document.body.
+     * Это устраняет любые проблемы с containing block (transform,
+     * will-change: transform и т. п.) у родительских элементов:
+     * fixed inset-0 гарантированно покрывает весь viewport,
+     * и тап по пустому месту всегда закрывает модалку.
+     */
+    const modal = open
+        ? createPortal(
+            <div
+                className="fixed inset-0 z-[100] bg-black/60 grid place-items-center p-4"
+                onClick={() => setOpen(false)}
+            >
+                <div
+                    className="card p-5 w-full max-w-md"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="font-bold text-lg">Новый чат</div>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            className="w-9 h-9 grid place-items-center rounded-full text-white/50 hover:text-white hover:bg-white/10 transition text-xl"
+                            title="Закрыть"
+                            aria-label="Закрыть"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div className="flex gap-2 mb-4">
+                        <button
+                            onClick={() => setTab('direct')}
+                            className={`chip ${
+                                tab === 'direct' ? 'bg-violet text-white' : 'bg-white/5'
+                            }`}
+                        >
+                            Личный
+                        </button>
+                        <button
+                            onClick={() => setTab('group')}
+                            className={`chip ${
+                                tab === 'group' ? 'bg-pink text-white' : 'bg-white/5'
+                            }`}
+                        >
+                            Группа
+                        </button>
+                    </div>
+                    {tab === 'group' && (
+                        <input
+                            className="input mb-3"
+                            placeholder="Название группы"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                        />
+                    )}
+                    <input
+                        className="input mb-3"
+                        placeholder="Поиск людей…"
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                    />
+                    <div className="max-h-72 overflow-y-auto">
+                        {users
+                            .filter((u) => u.id !== user.id)
+                            .map((u) => (
+                                <button
+                                    key={u.id}
+                                    onClick={() =>
+                                        tab === 'direct'
+                                            ? createDirect(u.id)
+                                            : setSelected((s) =>
+                                                s.includes(u.id)
+                                                    ? s.filter((x) => x !== u.id)
+                                                    : [...s, u.id]
+                                            )
+                                    }
+                                    className={`w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 ${
+                                        selected.includes(u.id) ? 'bg-violet/20' : ''
+                                    }`}
+                                >
+                                    <Avatar user={u} size={36} />
+                                    <div className="text-left flex-1">
+                                        <div className="font-semibold">{u.fullName}</div>
+                                        <div className="text-xs text-white/40">@{u.username}</div>
+                                    </div>
+                                    {tab === 'group' && selected.includes(u.id) && <span>✓</span>}
+                                </button>
+                            ))}
+                    </div>
+                    {tab === 'group' && (
+                        <button
+                            onClick={createGroup}
+                            disabled={!title || selected.length === 0}
+                            className="btn-primary w-full mt-4"
+                        >
+                            Создать группу
+                        </button>
+                    )}
+                </div>
+            </div>,
+            document.body
+        )
+        : null;
+
     return (
         <>
             <button
                 onClick={() => setOpen(true)}
-                className="ml-auto btn-ghost !p-2 text-sm"
+                className="btn-ghost !p-2 text-sm"
+                title="Новый чат"
+                aria-label="Новый чат"
             >
                 ＋
             </button>
-            {open && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4"
-                    onClick={() => setOpen(false)}
-                >
-                    <div
-                        className="card p-5 w-full max-w-md"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex gap-2 mb-4">
-                            <button
-                                onClick={() => setTab('direct')}
-                                className={`chip ${
-                                    tab === 'direct' ? 'bg-violet text-white' : 'bg-white/5'
-                                }`}
-                            >
-                                Личный
-                            </button>
-                            <button
-                                onClick={() => setTab('group')}
-                                className={`chip ${
-                                    tab === 'group' ? 'bg-pink text-white' : 'bg-white/5'
-                                }`}
-                            >
-                                Группа
-                            </button>
-                        </div>
-                        {tab === 'group' && (
-                            <input
-                                className="input mb-3"
-                                placeholder="Название группы"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                            />
-                        )}
-                        <input
-                            className="input mb-3"
-                            placeholder="Поиск людей…"
-                            value={q}
-                            onChange={(e) => setQ(e.target.value)}
-                        />
-                        <div className="max-h-72 overflow-y-auto">
-                            {users
-                                .filter((u) => u.id !== user.id)
-                                .map((u) => (
-                                    <button
-                                        key={u.id}
-                                        onClick={() =>
-                                            tab === 'direct'
-                                                ? createDirect(u.id)
-                                                : setSelected((s) =>
-                                                    s.includes(u.id)
-                                                        ? s.filter((x) => x !== u.id)
-                                                        : [...s, u.id]
-                                                )
-                                        }
-                                        className={`w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 ${
-                                            selected.includes(u.id) ? 'bg-violet/20' : ''
-                                        }`}
-                                    >
-                                        <Avatar user={u} size={36} />
-                                        <div className="text-left flex-1">
-                                            <div className="font-semibold">{u.fullName}</div>
-                                            <div className="text-xs text-white/40">@{u.username}</div>
-                                        </div>
-                                        {tab === 'group' && selected.includes(u.id) && <span>✓</span>}
-                                    </button>
-                                ))}
-                        </div>
-                        {tab === 'group' && (
-                            <button
-                                onClick={createGroup}
-                                disabled={!title || selected.length === 0}
-                                className="btn-primary w-full mt-4"
-                            >
-                                Создать группу
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
+            {modal}
         </>
     );
 }

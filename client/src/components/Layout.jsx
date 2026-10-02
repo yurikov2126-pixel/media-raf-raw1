@@ -19,14 +19,17 @@ export default function Layout() {
     const { brand, nav } = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
-
-    /* useOutlet() возвращает уже резолвнутый элемент текущего
-       дочернего маршрута. Отдаём его в keyed-обёртку — при смене
-       pathname React атомарно размонтирует старую страницу и смонтирует
-       новую. Анимация появления — .page-enter (CSS). */
     const outlet = useOutlet();
 
-    const isChatsRoute = location.pathname.startsWith('/app/chats');
+    /*
+     * isChatRoom === true ТОЛЬКО для конкретного чата /app/chats/<id>.
+     * Для списка /app/chats — false, и он ведёт себя как обычная
+     * страница: сверху мобильный хедер, снизу MobileNav.
+     *
+     * Регэксп: "/app/chats/" + хотя бы один непустой сегмент.
+     */
+    const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
+
     const links = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
     const SWIPE_ORDER = links.map((l) => l.to);
     const isAdmin = user?.role === 'ADMIN';
@@ -122,12 +125,21 @@ export default function Layout() {
                 </div>
             </aside>
 
-            {/* motion.main — только для onPanEnd, без key/анимаций */}
+            {/*
+              motion.main — простой flex-item без flex-col.
+              Для открытого чата main фактически перекрыт overlay'ем
+              Messenger'а (fixed inset-0), но сам Layout продолжает
+              рендериться под ним, чтобы сайдбар на ПК оставался виден.
+            */}
             <motion.main
                 onPanEnd={handlePanEnd}
-                className={`flex-1 min-w-0 ${isChatsRoute ? '' : 'pb-20 md:pb-0 safe-top'}`}
+                className="flex-1 min-w-0 pb-20 md:pb-0 safe-top"
             >
-                {!isChatsRoute && (
+                {/*
+                  Мобильный хедер рендерится на всех страницах,
+                  КРОМЕ открытого чата — там его перекрывает Messenger.
+                */}
+                {!isChatRoom && (
                     <div className="md:hidden sticky top-0 z-30 bg-ink-800/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 py-2">
                         <div
                             className="text-lg font-bold bg-clip-text text-transparent"
@@ -137,10 +149,6 @@ export default function Layout() {
                         </div>
 
                         <div className="flex items-center gap-1">
-                            {/* Кнопка админки — только для админов.
-                                На ПК эта же ссылка есть в сайдбаре, но на
-                                мобильных места мало, поэтому здесь —
-                                компактная иконка слева от колокольчика. */}
                             {isAdmin && (
                                 <Link
                                     to="/app/admin"
@@ -158,8 +166,17 @@ export default function Layout() {
 
                 <NetworkBanner />
 
-                {/* key={location.pathname} — атомарная замена страницы */}
-                <div key={location.pathname} className="page-enter">
+                {/*
+                  page-enter с transform — только для обычных страниц.
+                  Для открытого чата используем page-enter-fade (без
+                  transform) — иначе transform создаёт containing block
+                  и fixed-overlay Messenger'а позиционируется относительно
+                  этой обёртки, а не viewport'а.
+                */}
+                <div
+                    key={location.pathname}
+                    className={isChatRoom ? 'page-enter-fade' : 'page-enter'}
+                >
                     {outlet}
                 </div>
             </motion.main>

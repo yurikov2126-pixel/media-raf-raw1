@@ -4,9 +4,16 @@ import Avatar from './Avatar.jsx';
 export default function MobileNav({ links, user }) {
     const nav = useNavigate();
     const location = useLocation();
-    const isChatsRoute = location.pathname.startsWith('/app/chats');
 
-    if (isChatsRoute) return null;
+    /*
+     * Нижняя панель скрывается ТОЛЬКО в открытом чате
+     * (/app/chats/<id>) — там она перекрывается Messenger'ом.
+     *
+     * В списке чатов (/app/chats без id) панель показывается —
+     * как на любой другой странице платформы.
+     */
+    const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
+    if (isChatRoom) return null;
 
     return (
         <nav

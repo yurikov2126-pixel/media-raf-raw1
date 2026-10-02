@@ -13,12 +13,6 @@
     --safe-right: env(safe-area-inset-right, 0px);
 }
 
-/*
- * Фон-градиент на html.
- * background-attachment: fixed крепит градиент ко вьюпорту, а не к
- * высоте элемента, поэтому он дорисуется до края экрана даже если
- * html окажется короче физической высоты (iOS standalone PWA).
- */
 html {
     background-color: #08080F;
     background-image:
@@ -56,12 +50,10 @@ body {
     min-height: 100lvh;
 }
 
-/* Убираем «резиновый» оверскролл — на iOS он мешает в чате */
 html, body {
     overscroll-behavior-y: none;
 }
 
-/* Автозум iOS не сработает при font-size ≥ 16px */
 @media (max-width: 767px) {
     input,
     textarea,
@@ -73,15 +65,27 @@ html, body {
 
 /* ─────────── Анимация появления страницы ─────────── */
 
+/*
+ * ВАЖНО: без transform и без will-change: transform.
+ *
+ * Любой transform (или will-change: transform) превращает элемент
+ * в containing block для position: fixed потомков. Из-за этого
+ * fixed-модалки внутри страницы позиционировались относительно
+ * .page-enter, а не viewport'а — на мобильном и в PWA у модалки
+ * создания чата «отрезался» низ экрана, и тап по пустому месту
+ * не срабатывал.
+ *
+ * Оставляем только fade — визуально почти то же самое, но
+ * безопасно для fixed-модалок.
+ */
 @keyframes pageEnter {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 .page-enter {
     animation: pageEnter 180ms ease-out;
-    will-change: opacity, transform;
-    backface-visibility: hidden;
+    will-change: opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -138,9 +142,7 @@ html, body {
     pointer-events: none;
 }
 
-.mrr-splash__inner {
-    text-align: center;
-}
+.mrr-splash__inner { text-align: center; }
 
 .mrr-splash__logo {
     width: 140px;
@@ -307,17 +309,6 @@ html, body {
     .card {
         @apply rounded-3xl bg-ink-800/80 border border-white/5 backdrop-blur-xl;
     }
-    /*
-     * .card-flat — то же, что .card, но без backdrop-blur.
-     *
-     * backdrop-filter создаёт stacking context: любой absolute-элемент
-     * внутри карточки замыкается её границами и не может вылезти
-     * поверх соседних карточек. Из-за этого панель реакций на посте
-     * обрезалась следующим постом.
-     *
-     * Посты используют .card-flat — без blur. Фон чуть плотнее (90%),
-     * чтобы визуально компенсировать отсутствие размытия.
-     */
     .card-flat {
         @apply rounded-3xl bg-ink-800/90 border border-white/5;
     }
@@ -330,12 +321,6 @@ html, body {
     }
 }
 
-/*
- * Активный пост поднимается над соседями — на случай, если
- * панель реакций выходит за границы карточки. :focus-within
- * срабатывает при тапе по кнопкам внутри (мобильные),
- * :hover — на десктопе.
- */
 .post-stack {
     position: relative;
 }
