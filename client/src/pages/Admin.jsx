@@ -530,11 +530,11 @@ function AnalyticsTab({ token }) {
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-xs font-bold text-violet-soft">#{i + 1}</span>
                                         <span className="text-sm font-semibold truncate">
-                      {p.author.fullName}
-                    </span>
+                                            {p.author.fullName}
+                                        </span>
                                         <span className="text-[10px] text-white/40 ml-auto shrink-0">
-                      💬 {p.comments} · ❤️ {p.reactions}
-                    </span>
+                                            💬 {p.comments} · ❤️ {p.reactions}
+                                        </span>
                                     </div>
                                     <div className="text-xs text-white/60 line-clamp-2">
                                         {p.content || '(без текста)'}
@@ -699,9 +699,9 @@ function CoursesTab({ courses, setCourses, token, onEdit }) {
                                 {c._count?.certificates || 0} сертиф.
                                 {c.dripMode && (
                                     <span className="ml-2 text-violet-soft">
-                    · drip:
+                                        · drip:
                                         {c.dripMode === 'test' ? 'по тестам' : `кажд. ${c.dripInterval || 7} дн.`}
-                  </span>
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -1500,9 +1500,9 @@ function SearchSelect({ items, value, onChange, placeholder }) {
                     className="input w-full text-left flex items-center justify-between">
                 {selected ? (
                     <span className="truncate">
-            {selected.label}
+                        {selected.label}
                         {selected.sub && <span className="text-white/40 text-xs ml-2">{selected.sub}</span>}
-          </span>
+                    </span>
                 ) : (
                     <span className="text-white/40">{placeholder}</span>
                 )}
@@ -1718,8 +1718,8 @@ function BulkTab({ token, users, courses, onReload }) {
                     <div className="mb-4 text-sm bg-lime/10 border border-lime/30 rounded-xl p-4">
                         <div className="font-bold text-lime mb-1">✓ Операция выполнена</div>
                         <pre className="text-xs text-white/70 whitespace-pre-wrap">
-              {JSON.stringify(lastResult, null, 2)}
-            </pre>
+                            {JSON.stringify(lastResult, null, 2)}
+                        </pre>
                     </div>
                 )}
 
@@ -1827,8 +1827,8 @@ function BulkTab({ token, users, courses, onReload }) {
                                 <span className="chip bg-violet/20 text-violet-soft text-[10px]">{a.action}</span>
                                 <span className="text-white/60">{a.admin.fullName}</span>
                                 <span className="text-[10px] text-white/30">
-                  {new Date(a.createdAt).toLocaleString('ru-RU')}
-                </span>
+                                    {new Date(a.createdAt).toLocaleString('ru-RU')}
+                                </span>
                                 {a.affected > 0 && (
                                     <span className="chip bg-lime/20 text-lime text-[10px] ml-auto">+{a.affected}</span>
                                 )}
@@ -2280,8 +2280,8 @@ function WikiAdminTab({ token }) {
                                 {a.category && ` · ${a.category.title}`}
                                 {' · '}
                                 <span className={a.published ? 'text-lime' : 'text-orange-300'}>
-                  {a.published ? 'опубликована' : 'черновик'}
-                </span>
+                                    {a.published ? 'опубликована' : 'черновик'}
+                                </span>
                                 {' · '}
                                 👁 {a.views}
                             </div>
@@ -3009,52 +3009,96 @@ function CertificateEditor({ settings, update }) {
 
 function BackupsTab({ token }) {
     const [list, setList] = useState([]);
+    const [info, setInfo] = useState(null);
     const [busy, setBusy] = useState(false);
-    const [info, setInfo] = useState('');
-    const [error, setError] = useState('');
+    const [message, setMessage] = useState(null); // { type: 'ok' | 'err', text }
     const [downloading, setDownloading] = useState(null);
+    const [showCreate, setShowCreate] = useState(false);
+    const [restoreTarget, setRestoreTarget] = useState(null);
+    const [loadingInfo, setLoadingInfo] = useState(false);
 
-    const load = () =>
+    const loadList = () =>
         api('/admin/backups', { token }).then(setList).catch(() => {});
 
+    const loadInfo = async () => {
+        setLoadingInfo(true);
+        try {
+            const r = await api('/admin/maintenance/dbinfo', { token });
+            setInfo(r);
+        } catch {
+            setInfo(null);
+        } finally {
+            setLoadingInfo(false);
+        }
+    };
+
     useEffect(() => {
-        load();
+        loadList();
+        loadInfo();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
-    const create = async () => {
-        const label = prompt('Метка бэкапа (необязательно):', 'manual');
-        if (label === null) return;
-        setBusy(true); setError('');
+    const create = async (format) => {
+        setShowCreate(false);
+        setBusy(true);
+        setMessage(null);
         try {
-            const b = await api('/admin/backups', { method: 'POST', token, body: { label } });
-            setInfo(`Создан бэкап: ${b.filename}`);
-            await load();
-        } catch (e) { setError(e.message); }
-        finally { setBusy(false); }
+            const b = await api('/admin/backups', {
+                method: 'POST',
+                token,
+                body: { format },
+            });
+            setMessage({ type: 'ok', text: `Создан бэкап: ${b.filename}` });
+            await loadList();
+            await loadInfo();
+        } catch (e) {
+            setMessage({ type: 'err', text: e.message });
+        } finally {
+            setBusy(false);
+        }
     };
 
-    const restore = async (filename) => {
-        if (!confirm(`Восстановить базу из ${filename}?`)) return;
-        setBusy(true); setError(''); setInfo('');
+    const restore = async () => {
+        if (!restoreTarget) return;
+        setBusy(true);
+        setMessage(null);
         try {
-            const r = await api('/admin/backups/restore', { method: 'POST', token, body: { filename } });
-            setInfo(`Восстановлено из ${filename}. Рекомендуется перезапустить сервер.`);
-            await load();
-        } catch (e) { setError(e.message); }
-        finally { setBusy(false); }
+            const r = await api('/admin/backups/restore', {
+                method: 'POST',
+                token,
+                body: { filename: restoreTarget },
+            });
+            setMessage({
+                type: 'ok',
+                text: `Восстановлено из ${restoreTarget}. Страховочная копия: ${r.safetyBackup}. Перезапустите сервер.`,
+            });
+            setRestoreTarget(null);
+            await loadList();
+            await loadInfo();
+        } catch (e) {
+            setMessage({ type: 'err', text: e.message });
+        } finally {
+            setBusy(false);
+        }
     };
 
     const remove = async (filename) => {
         if (!confirm(`Удалить ${filename}?`)) return;
         try {
-            await api(`/admin/backups/${encodeURIComponent(filename)}`, { method: 'DELETE', token });
-            await load();
-        } catch (e) { alert(e.message); }
+            await api(`/admin/backups/${encodeURIComponent(filename)}`, {
+                method: 'DELETE',
+                token,
+            });
+            await loadList();
+            await loadInfo();
+        } catch (e) {
+            setMessage({ type: 'err', text: e.message });
+        }
     };
 
-    const downloadBackup = async (filename) => {
-        setDownloading(filename); setError('');
+    const download = async (filename) => {
+        setDownloading(filename);
+        setMessage(null);
         try {
             const base = import.meta.env.VITE_API || 'http://localhost:4000/api';
             const res = await fetch(
@@ -3065,61 +3109,287 @@ function BackupsTab({ token }) {
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = filename;
-            document.body.appendChild(a); a.click(); a.remove();
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
-            setInfo(`Скачано: ${filename}`);
-        } catch (e) { setError(e.message || 'Не удалось скачать'); }
-        finally { setDownloading(null); }
+            setMessage({ type: 'ok', text: `Скачано: ${filename}` });
+        } catch (e) {
+            setMessage({ type: 'err', text: e.message || 'Не удалось скачать' });
+        } finally {
+            setDownloading(null);
+        }
+    };
+
+    const vacuum = async () => {
+        if (!confirm('Выполнить VACUUM ANALYZE?\n\nОперация обновит статистику планировщика и освободит место от мёртвых строк. Не блокирует работу.')) return;
+        setBusy(true);
+        setMessage(null);
+        try {
+            await api('/admin/maintenance/vacuum', { method: 'POST', token });
+            setMessage({ type: 'ok', text: 'VACUUM ANALYZE выполнен' });
+            await loadInfo();
+        } catch (e) {
+            setMessage({ type: 'err', text: e.message });
+        } finally {
+            setBusy(false);
+        }
     };
 
     const fmtSize = (n) => {
+        if (!n && n !== 0) return '—';
         if (n < 1024) return `${n} B`;
         if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-        return `${(n / 1024 / 1024).toFixed(2)} MB`;
+        if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(2)} MB`;
+        return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
     };
+
+    const tools = info?.tools;
 
     return (
         <div className="space-y-4">
+            {/* ─── Информация о БД ─── */}
             <div className="card p-5">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                        <div className="font-bold text-lg">Резервное копирование</div>
-                        <div className="text-sm text-white/50 mt-1">Автобэкап в 03:00, хранение 30 дней.</div>
+                <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+                    <div className="min-w-0">
+                        <div className="font-bold text-lg">🐘 PostgreSQL</div>
+                        <div className="text-sm text-white/50 mt-1">
+                            {loadingInfo && !info
+                                ? 'Загрузка…'
+                                : info
+                                    ? `${info.version.split(' ').slice(0, 2).join(' ')}`
+                                    : 'Не удалось получить информацию'}
+                        </div>
                     </div>
-                    <button onClick={create} disabled={busy} className="btn-primary">
-                        {busy ? '…' : '＋ Создать бэкап'}
-                    </button>
+                    <div className="flex gap-2 shrink-0">
+                        <button onClick={loadInfo} disabled={loadingInfo} className="btn-ghost !py-2 text-sm">
+                            🔄 Обновить
+                        </button>
+                        <button onClick={vacuum} disabled={busy} className="btn-ghost !py-2 text-sm">
+                            🧹 VACUUM
+                        </button>
+                    </div>
                 </div>
-                {info && <div className="mt-3 text-sm text-lime bg-lime/10 rounded-xl p-3">{info}</div>}
-                {error && <div className="mt-3 text-sm text-pink bg-pink/10 rounded-xl p-3">{error}</div>}
-            </div>
 
-            <div className="card divide-y divide-white/5">
-                {list.length === 0 && (
-                    <div className="p-6 text-center text-white/40">Бэкапов пока нет</div>
-                )}
-                {list.map((b) => (
-                    <div key={b.filename} className="p-4 flex items-center gap-3 flex-wrap">
-                        <div className="text-2xl">{b.isSafety ? '🛟' : b.isAuto ? '⏰' : '📦'}</div>
-                        <div className="flex-1 min-w-[200px]">
-                            <div className="font-mono text-sm truncate">{b.filename}</div>
-                            <div className="text-xs text-white/40">
-                                {new Date(b.createdAt).toLocaleString('ru-RU')} · {fmtSize(b.size)}
+                {info && (
+                    <>
+                        <div className="grid sm:grid-cols-3 gap-3 mb-4">
+                            <div className="card p-3 bg-ink-700/50">
+                                <div className="text-xs text-white/40 uppercase tracking-wider">Размер БД</div>
+                                <div className="text-xl font-bold mt-1">{info.sizePretty}</div>
+                                <div className="text-[10px] text-white/30">{info.sizeBytes.toLocaleString('ru-RU')} байт</div>
+                            </div>
+                            <div className="card p-3 bg-ink-700/50">
+                                <div className="text-xs text-white/40 uppercase tracking-wider">Подключение</div>
+                                <div className="font-mono text-sm mt-1 truncate">
+                                    {info.user}@{info.host}:{info.port}
+                                </div>
+                                <div className="text-[10px] text-white/30 truncate">{info.database}</div>
+                            </div>
+                            <div className="card p-3 bg-ink-700/50">
+                                <div className="text-xs text-white/40 uppercase tracking-wider">Утилиты</div>
+                                <div className="text-xs mt-1 space-y-0.5">
+                                    <div className={tools?.pgDumpOk ? 'text-lime' : 'text-pink'}>
+                                        {tools?.pgDumpOk ? '✓' : '✗'} pg_dump
+                                    </div>
+                                    <div className={tools?.pgRestoreOk ? 'text-lime' : 'text-pink'}>
+                                        {tools?.pgRestoreOk ? '✓' : '✗'} pg_restore
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <button onClick={() => downloadBackup(b.filename)}
-                                disabled={downloading === b.filename}
-                                className="chip bg-white/5 hover:bg-white/10">
-                            {downloading === b.filename ? '⏳' : '⬇'}
-                        </button>
-                        <button onClick={() => restore(b.filename)} disabled={busy}
-                                className="chip bg-violet/30 hover:bg-violet/50">↺ Восстановить</button>
-                        <button onClick={() => remove(b.filename)}
-                                className="chip bg-white/5 hover:bg-pink/30">🗑️</button>
+
+                        {info.tables?.length > 0 && (
+                            <details>
+                                <summary className="text-xs text-white/40 cursor-pointer hover:text-white/60 select-none">
+                                    Таблицы: {info.tables.length} (нажмите для подробностей)
+                                </summary>
+                                <div className="mt-2 max-h-[280px] overflow-y-auto pr-1">
+                                    <div className="text-[11px] text-white/40 grid grid-cols-[1fr_60px_80px_80px] gap-2 px-2 py-1 uppercase tracking-wider">
+                                        <span>Таблица</span>
+                                        <span className="text-right">Строк</span>
+                                        <span className="text-right">Heap</span>
+                                        <span className="text-right">Всего</span>
+                                    </div>
+                                    {info.tables.map((t) => (
+                                        <div
+                                            key={t.name}
+                                            className="grid grid-cols-[1fr_60px_80px_80px] gap-2 px-2 py-1.5 text-xs rounded-lg hover:bg-white/5"
+                                        >
+                                            <span className="font-mono truncate">{t.name}</span>
+                                            <span className="text-right tabular-nums">
+                                                {t.liveRows.toLocaleString('ru-RU')}
+                                                {t.deadRows > 0 && (
+                                                    <span className="text-white/30 ml-1">+{t.deadRows}</span>
+                                                )}
+                                            </span>
+                                            <span className="text-right tabular-nums text-white/50">{fmtSize(t.heapBytes)}</span>
+                                            <span className="text-right tabular-nums">{fmtSize(t.totalBytes)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                        )}
+                    </>
+                )}
+
+                {tools && (!tools.pgDumpOk || !tools.pgRestoreOk) && (
+                    <div className="mt-3 text-xs text-pink bg-pink/10 rounded-xl p-3">
+                        <div className="font-bold mb-1">⚠ Утилиты PostgreSQL не найдены</div>
+                        <div className="text-white/60">
+                            Установите клиентские утилиты ({tools.pgDumpPath}), либо укажите путь через
+                            переменные окружения <code className="font-mono">MRR_PG_DUMP_PATH</code> и{' '}
+                            <code className="font-mono">MRR_PG_RESTORE_PATH</code>.
+                            Без них создание и восстановление бэкапов недоступны.
+                        </div>
                     </div>
-                ))}
+                )}
             </div>
+
+            {/* ─── Бэкапы ─── */}
+            <div className="card p-5">
+                <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+                    <div>
+                        <div className="font-bold text-lg">🗄️ Резервные копии</div>
+                        <div className="text-sm text-white/50 mt-1">
+                            Custom-формат (.dump) — для восстановления. Plain (.sql) — для просмотра и ручного залива.
+                        </div>
+                    </div>
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowCreate((v) => !v)}
+                            disabled={busy || (tools && !tools.pgDumpOk)}
+                            className="btn-primary"
+                        >
+                            {busy ? '…' : '＋ Создать бэкап'}
+                        </button>
+                        {showCreate && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setShowCreate(false)} />
+                                <div className="absolute right-0 top-full mt-1 z-20 card p-1 w-56">
+                                    <button
+                                        onClick={() => create('custom')}
+                                        className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5"
+                                    >
+                                        <div className="font-semibold">🗜️ Custom (.dump)</div>
+                                        <div className="text-xs text-white/40">Сжатый, для восстановления</div>
+                                    </button>
+                                    <button
+                                        onClick={() => create('plain')}
+                                        className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5"
+                                    >
+                                        <div className="font-semibold">📄 Plain (.sql)</div>
+                                        <div className="text-xs text-white/40">Текстовый, для просмотра</div>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {message && (
+                    <div
+                        className={`mb-3 text-sm rounded-xl p-3 ${
+                            message.type === 'ok'
+                                ? 'text-lime bg-lime/10 border border-lime/30'
+                                : 'text-pink bg-pink/10 border border-pink/30'
+                        }`}
+                    >
+                        {message.text}
+                    </div>
+                )}
+
+                <div className="divide-y divide-white/5 -mx-2">
+                    {list.length === 0 && (
+                        <div className="p-6 text-center text-white/40">Бэкапов пока нет</div>
+                    )}
+                    {list.map((b) => (
+                        <div key={b.filename} className="px-2 py-3 flex items-center gap-3 flex-wrap">
+                            <div className="text-2xl shrink-0">
+                                {b.isSafety ? '🛟' : b.isAuto ? '⏰' : b.format === 'plain' ? '📄' : '🗜️'}
+                            </div>
+                            <div className="flex-1 min-w-[200px]">
+                                <div className="font-mono text-sm truncate">{b.filename}</div>
+                                <div className="text-xs text-white/40">
+                                    {new Date(b.createdAt).toLocaleString('ru-RU')} · {fmtSize(b.size)}
+                                    {b.format === 'plain' && ' · текстовый, без восстановления'}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => download(b.filename)}
+                                disabled={downloading === b.filename}
+                                className="chip bg-white/5 hover:bg-white/10"
+                                title="Скачать"
+                            >
+                                {downloading === b.filename ? '⏳' : '⬇'}
+                            </button>
+                            <button
+                                onClick={() => setRestoreTarget(b.filename)}
+                                disabled={busy || !b.restorable}
+                                className={`chip ${
+                                    b.restorable
+                                        ? 'bg-violet/30 hover:bg-violet/50'
+                                        : 'bg-white/5 opacity-40 cursor-not-allowed'
+                                }`}
+                                title={b.restorable ? 'Восстановить из этого бэкапа' : 'Только .dump можно восстановить'}
+                            >
+                                ↺ Восстановить
+                            </button>
+                            <button
+                                onClick={() => remove(b.filename)}
+                                disabled={busy}
+                                className="chip bg-white/5 hover:bg-pink/30"
+                                title="Удалить"
+                            >
+                                🗑️
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* ─── Модалка подтверждения восстановления ─── */}
+            {restoreTarget && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid place-items-center p-4"
+                    onClick={() => !busy && setRestoreTarget(null)}
+                >
+                    <div
+                        className="card max-w-lg w-full p-5"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="text-2xl mb-2">⚠️</div>
+                        <h3 className="text-xl font-bold mb-3">Восстановить базу?</h3>
+                        <p className="text-sm text-white/70 mb-4">
+                            Текущее содержимое БД будет заменено данными из{' '}
+                            <span className="font-mono text-white">{restoreTarget}</span>.
+                            Перед восстановлением автоматически создаётся страховочная копия{' '}
+                            <span className="font-mono">pre-restore_*</span>.
+                        </p>
+                        <p className="text-sm text-orange-300 mb-4">
+                            После восстановления требуется перезапуск backend.
+                        </p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => setRestoreTarget(null)}
+                                disabled={busy}
+                                className="btn-ghost"
+                            >
+                                Отмена
+                            </button>
+                            <button
+                                onClick={restore}
+                                disabled={busy}
+                                className="btn-primary"
+                            >
+                                {busy ? 'Восстановление…' : '↺ Восстановить'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -3196,6 +3466,7 @@ function SettingsTab({ settings, setSettings, token }) {
         </div>
     );
 }
+
 /* ─────────── Push-админ ─────────── */
 
 function PushAdminTab({ token, users, courses }) {

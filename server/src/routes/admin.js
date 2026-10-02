@@ -11,9 +11,15 @@ import {
     createBackup,
     restoreBackup,
     deleteBackup,
+    checkPgTools,
 } from '../lib/backup.js';
 import { cleanupAfterUserDelete, getLiveChatStats } from '../lib/chatCleanup.js';
-import { scanDatabase, cleanupDatabase } from '../lib/dbMaintenance.js';
+import {
+    scanDatabase,
+    cleanupDatabase,
+    getDatabaseInfo,
+    runVacuumAnalyze,
+} from '../lib/dbMaintenance.js';
 import { getAnalytics } from '../lib/analytics.js';
 import {
     sendPushToAll,
@@ -94,6 +100,26 @@ router.post(
     '/maintenance/cleanup',
     safe(async (_req, res) => {
         res.json(await cleanupDatabase());
+    })
+);
+
+/* Информация о PostgreSQL: версия, размер, таблицы, доступность утилит */
+router.get(
+    '/maintenance/dbinfo',
+    safe(async (_req, res) => {
+        const info = await getDatabaseInfo();
+        const tools = checkPgTools();
+        res.json({ ...info, tools });
+    })
+);
+
+/* VACUUM ANALYZE — обновляет статистику планировщика, освобождает
+   место от мёртвых строк. Не блокирует чтение. */
+router.post(
+    '/maintenance/vacuum',
+    safe(async (_req, res) => {
+        await runVacuumAnalyze();
+        res.json({ ok: true, message: 'VACUUM ANALYZE выполнен' });
     })
 );
 
@@ -630,6 +656,7 @@ router.get(
 );
 
 /* ─────────── Бэкапы ─────────── */
+
 router.get(
     '/backups',
     safe(async (_req, res) => {
@@ -640,8 +667,10 @@ router.get(
 router.post(
     '/backups',
     safe(async (req, res) => {
-        const { label } = req.body || {};
-        res.json(createBackup(label));
+        const { label, format } = req.body || {};
+        const fmt = format === 'plain' ? 'plain' : 'custom';
+        const r = await createBackup(label, fmt);
+        res.json(r);
     })
 );
 
@@ -667,7 +696,7 @@ router.get(
     '/backups/:filename/download',
     safe(async (req, res) => {
         const safeName = path.basename(req.params.filename);
-        if (!safeName.endsWith('.db'))
+        if (!safeName.endsWith('.dump') && !safeName.endsWith('.sql'))
             return res.status(400).json({ error: 'Неверное имя файла' });
 
         const file = path.join(BACKUPS_DIR, safeName);

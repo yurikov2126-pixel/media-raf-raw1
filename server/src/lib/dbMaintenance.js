@@ -8,7 +8,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
 const UPLOADS_DIR = path.join(SERVER_ROOT, 'uploads');
 
-/* ─────────────────────── SCAN ─────────────────────── */
+/* ─────────────────────── SCAN ───────────────────────
+   В PostgreSQL с включёнными FK большинство «осиротевших» записей
+   физически не может существовать — их отсекают constraint'ы.
+   Но часть проверок сохраняет смысл:
+     - orphan chats (DIRECT с <2 участниками — это не FK, а бизнес-логика),
+     - duplicate direct chats,
+     - bad pinned refs (закреплён на сообщение из другого чата),
+     - bad reply refs (ответ на сообщение из другого чата),
+     - orphan files в /uploads/.
+   Остальные проверки оставлены для полноты картины — на всякий случай. */
 
 async function findOrphanChats() {
     const chats = await prisma.chat.findMany({
@@ -21,9 +30,9 @@ async function findOrphanChats() {
 
 async function findOrphanChatMembers() {
     const list = await prisma.$queryRawUnsafe(`
-        SELECT cm.id FROM ChatMember cm
-                              LEFT JOIN Chat c ON c.id = cm.chatId
-                              LEFT JOIN User u ON u.id = cm.userId
+        SELECT cm.id FROM "ChatMember" cm
+                              LEFT JOIN "Chat" c ON c.id = cm."chatId"
+                              LEFT JOIN "User" u ON u.id = cm."userId"
         WHERE c.id IS NULL OR u.id IS NULL
     `);
     return list.map((r) => r.id);
@@ -31,21 +40,21 @@ async function findOrphanChatMembers() {
 
 async function findOrphanMessages() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT m.id FROM Message m
-    LEFT JOIN Chat c ON c.id = m.chatId
-    LEFT JOIN User u ON u.id = m.senderId
-    WHERE c.id IS NULL OR u.id IS NULL
-  `);
+        SELECT m.id FROM "Message" m
+                             LEFT JOIN "Chat" c ON c.id = m."chatId"
+                             LEFT JOIN "User" u ON u.id = m."senderId"
+        WHERE c.id IS NULL OR u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanReactions() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT r.id FROM Reaction r
-    LEFT JOIN Message m ON m.id = r.messageId
-    LEFT JOIN User u ON u.id = r.userId
-    WHERE m.id IS NULL OR u.id IS NULL
-  `);
+        SELECT r.id FROM "Reaction" r
+                             LEFT JOIN "Message" m ON m.id = r."messageId"
+                             LEFT JOIN "User" u ON u.id = r."userId"
+        WHERE m.id IS NULL OR u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
@@ -67,37 +76,37 @@ async function findBadPinnedRefs() {
 
 async function findBadReplyRefs() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT m.id FROM Message m
-    LEFT JOIN Message r ON r.id = m.replyToId
-    WHERE m.replyToId IS NOT NULL
-      AND (r.id IS NULL OR r.chatId != m.chatId)
-  `);
+        SELECT m.id FROM "Message" m
+                             LEFT JOIN "Message" r ON r.id = m."replyToId"
+        WHERE m."replyToId" IS NOT NULL
+          AND (r.id IS NULL OR r."chatId" != m."chatId")
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanNotifications() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT n.id FROM Notification n
-    LEFT JOIN User u ON u.id = n.userId
-    WHERE u.id IS NULL
-  `);
+        SELECT n.id FROM "Notification" n
+                             LEFT JOIN "User" u ON u.id = n."userId"
+        WHERE u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanPosts() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT p.id FROM Post p
-    LEFT JOIN User u ON u.id = p.authorId
-    WHERE u.id IS NULL
-  `);
+        SELECT p.id FROM "Post" p
+                             LEFT JOIN "User" u ON u.id = p."authorId"
+        WHERE u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanEnrollments() {
     const list = await prisma.$queryRawUnsafe(`
-        SELECT e.id FROM Enrollment e
-                             LEFT JOIN User u ON u.id = e.userId
-                             LEFT JOIN Course c ON c.id = e.courseId
+        SELECT e.id FROM "Enrollment" e
+                             LEFT JOIN "User" u ON u.id = e."userId"
+                             LEFT JOIN "Course" c ON c.id = e."courseId"
         WHERE u.id IS NULL OR c.id IS NULL
     `);
     return list.map((r) => r.id);
@@ -105,38 +114,38 @@ async function findOrphanEnrollments() {
 
 async function findOrphanLessonProgress() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT lp.id FROM LessonProgress lp
-    LEFT JOIN User u ON u.id = lp.userId
-    LEFT JOIN Lesson l ON l.id = lp.lessonId
-    WHERE u.id IS NULL OR l.id IS NULL
-  `);
+        SELECT lp.id FROM "LessonProgress" lp
+                              LEFT JOIN "User" u ON u.id = lp."userId"
+                              LEFT JOIN "Lesson" l ON l.id = lp."lessonId"
+        WHERE u.id IS NULL OR l.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanTestAttempts() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT ta.id FROM TestAttempt ta
-    LEFT JOIN User u ON u.id = ta.userId
-    LEFT JOIN Test t ON t.id = ta.testId
-    WHERE u.id IS NULL OR t.id IS NULL
-  `);
+        SELECT ta.id FROM "TestAttempt" ta
+                              LEFT JOIN "User" u ON u.id = ta."userId"
+                              LEFT JOIN "Test" t ON t.id = ta."testId"
+        WHERE u.id IS NULL OR t.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanCertificates() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT ce.id FROM Certificate ce
-    LEFT JOIN User u ON u.id = ce.userId
-    LEFT JOIN Course c ON c.id = ce.courseId
-    WHERE u.id IS NULL OR c.id IS NULL
-  `);
+        SELECT ce.id FROM "Certificate" ce
+                              LEFT JOIN "User" u ON u.id = ce."userId"
+                              LEFT JOIN "Course" c ON c.id = ce."courseId"
+        WHERE u.id IS NULL OR c.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanQuestions() {
     const list = await prisma.$queryRawUnsafe(`
-        SELECT q.id FROM Question q
-                             LEFT JOIN Test t ON t.id = q.testId
+        SELECT q.id FROM "Question" q
+                             LEFT JOIN "Test" t ON t.id = q."testId"
         WHERE t.id IS NULL
     `);
     return list.map((r) => r.id);
@@ -144,68 +153,66 @@ async function findOrphanQuestions() {
 
 async function findOrphanTests() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT t.id FROM Test t
-    LEFT JOIN Lesson l ON l.id = t.lessonId
-    WHERE l.id IS NULL
-  `);
+        SELECT t.id FROM "Test" t
+                             LEFT JOIN "Lesson" l ON l.id = t."lessonId"
+        WHERE l.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanLessons() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT l.id FROM Lesson l
-    LEFT JOIN Course c ON c.id = l.courseId
-    WHERE c.id IS NULL
-  `);
+        SELECT l.id FROM "Lesson" l
+                             LEFT JOIN "Course" c ON c.id = l."courseId"
+        WHERE c.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanComments() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT c.id FROM Comment c
-    LEFT JOIN Post p ON p.id = c.postId
-    LEFT JOIN User u ON u.id = c.authorId
-    WHERE p.id IS NULL OR u.id IS NULL
-  `);
+        SELECT c.id FROM "Comment" c
+                             LEFT JOIN "Post" p ON p.id = c."postId"
+                             LEFT JOIN "User" u ON u.id = c."authorId"
+        WHERE p.id IS NULL OR u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findBadCommentParentRefs() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT c.id FROM Comment c
-    LEFT JOIN Comment p ON p.id = c.parentId
-    WHERE c.parentId IS NOT NULL AND p.id IS NULL
-  `);
+        SELECT c.id FROM "Comment" c
+                             LEFT JOIN "Comment" p ON p.id = c."parentId"
+        WHERE c."parentId" IS NOT NULL AND p.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
 async function findOrphanPostReactions() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT r.id FROM PostReaction r
-    LEFT JOIN Post p ON p.id = r.postId
-    LEFT JOIN User u ON u.id = r.userId
-    WHERE p.id IS NULL OR u.id IS NULL
-  `);
+        SELECT r.id FROM "PostReaction" r
+                             LEFT JOIN "Post" p ON p.id = r."postId"
+                             LEFT JOIN "User" u ON u.id = r."userId"
+        WHERE p.id IS NULL OR u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
-// Wiki-статьи с битой категорией
 async function findOrphanWikiArticles() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT a.id FROM WikiArticle a
-    LEFT JOIN WikiCategory c ON c.id = a.categoryId
-    WHERE a.categoryId IS NOT NULL AND c.id IS NULL
-  `);
+        SELECT a.id FROM "WikiArticle" a
+                             LEFT JOIN "WikiCategory" c ON c.id = a."categoryId"
+        WHERE a."categoryId" IS NOT NULL AND c.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
-// Push-подписки без пользователя
 async function findOrphanPushSubs() {
     const list = await prisma.$queryRawUnsafe(`
-    SELECT ps.id FROM PushSubscription ps
-    LEFT JOIN User u ON u.id = ps.userId
-    WHERE u.id IS NULL
-  `);
+        SELECT ps.id FROM "PushSubscription" ps
+                              LEFT JOIN "User" u ON u.id = ps."userId"
+        WHERE u.id IS NULL
+    `);
     return list.map((r) => r.id);
 }
 
@@ -495,4 +502,67 @@ export async function cleanupDatabase() {
     const scan = await scanDatabase();
 
     return { fixed, totalFixed, scan };
+}
+
+/* ─────────────────────── INFO ───────────────────────
+   Возвращает общую информацию о PostgreSQL: версию, размер БД,
+   размер каждой таблицы и число строк. Используется в админке. */
+
+export async function getDatabaseInfo() {
+    const [versionRow] = await prisma.$queryRawUnsafe(`SELECT version() AS v`);
+    const [sizeRow] = await prisma.$queryRawUnsafe(`
+        SELECT pg_size_pretty(pg_database_size(current_database())) AS pretty,
+               pg_database_size(current_database()) AS bytes
+    `);
+    const [connRow] = await prisma.$queryRawUnsafe(`
+        SELECT current_database() AS db,
+               current_user AS usr,
+               inet_server_addr()::text AS host,
+               inet_server_port() AS port
+    `);
+
+    /* Статистика по таблицам: размер, строки, индексы.
+       pg_stat_user_tables даёт n_live_tup (приблизительное число живых строк).
+       Для точного подсчёта пришлось бы сканировать каждую таблицу — медленно. */
+    const tables = await prisma.$queryRawUnsafe(`
+        SELECT
+            c.relname AS name,
+            pg_total_relation_size(c.oid) AS total_bytes,
+            pg_relation_size(c.oid) AS heap_bytes,
+            pg_indexes_size(c.oid) AS index_bytes,
+            COALESCE(s.n_live_tup, 0) AS live_rows,
+            COALESCE(s.n_dead_tup, 0) AS dead_rows
+        FROM pg_class c
+        LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+        WHERE c.relkind = 'r'
+          AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+        ORDER BY pg_total_relation_size(c.oid) DESC
+    `);
+
+    return {
+        version: versionRow?.v || '',
+        database: connRow?.db || '',
+        user: connRow?.usr || '',
+        host: connRow?.host || '',
+        port: connRow?.port || '',
+        sizeBytes: Number(sizeRow?.bytes || 0),
+        sizePretty: sizeRow?.pretty || '',
+        tables: tables.map((t) => ({
+            name: t.name,
+            liveRows: Number(t.live_rows || 0),
+            deadRows: Number(t.dead_rows || 0),
+            totalBytes: Number(t.total_bytes || 0),
+            heapBytes: Number(t.heap_bytes || 0),
+            indexBytes: Number(t.index_bytes || 0),
+        })),
+    };
+}
+
+/* VACUUM ANALYZE — пересобирает статистику планировщика,
+   освобождает место от «мёртвых» строк. Не блокирует чтение. */
+export async function runVacuumAnalyze() {
+    // VACUUM нельзя выполнять внутри транзакции — Prisma
+    // выполняет $executeRawUnsafe вне транзакции по умолчанию
+    await prisma.$executeRawUnsafe('VACUUM ANALYZE');
+    return { ok: true };
 }
