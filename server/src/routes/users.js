@@ -27,8 +27,8 @@ router.get('/', auth, async (req, res) => {
                 q
                     ? {
                         OR: [
-                            { fullName: { contains: q } },
-                            { username: { contains: q } },
+                            { fullName: { contains: q, mode: 'insensitive' } },
+                            { username: { contains: q, mode: 'insensitive' } },
                             { phone: { contains: q } },
                         ],
                     }
