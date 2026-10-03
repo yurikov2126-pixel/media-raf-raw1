@@ -20,6 +20,7 @@ import wikiRoutes from './routes/wiki.js';
 import { initSocket } from './socket.js';
 import { setIo } from './lib/notify.js';
 import { startCron } from './lib/cron.js';
+import { schedulePushCleanup } from './lib/pushCleanupCron.js';
 import { prisma } from './lib/prisma.js';
 import reportsRouter from './routes/reports.js';
 
@@ -123,6 +124,7 @@ process.on('uncaughtException', (err) => {
 /* ─────────── Запуск ─────────── */
 initSocket(io);
 startCron();
+schedulePushCleanup();
 
 server.listen(process.env.PORT || 4000, () =>
     console.log(`🚀 MEDIA-RAF-RAW API на http://localhost:${process.env.PORT || 4000}`)

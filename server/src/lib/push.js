@@ -55,7 +55,12 @@ export async function removeSubscription(endpoint) {
 
 /**
  * Отправляет пуш-уведомление на один endpoint.
- * Возвращает { ok, status } или { ok: false, gone: true } если подписка мертва.
+ *
+ * При успехе обновляет lastUsed — это критично для автоочистки
+ * неактивных подписок: если поле не обновлять, все живые подписки
+ * со временем попадут под критерий «неактивна N дней» и удалятся.
+ *
+ * Возвращает { ok, status } или { ok: false, gone: true } — если подписка мертва.
  */
 async function sendToSub(sub, payload) {
     try {
@@ -67,13 +72,22 @@ async function sendToSub(sub, payload) {
             JSON.stringify(payload),
             { TTL: 60 * 60 * 24 } // 24 часа
         );
+
+        // Подписка жива — обновляем отметку активности.
+        await prisma.pushSubscription
+            .update({
+                where: { id: sub.id },
+                data: { lastUsed: new Date() },
+            })
+            .catch(() => {});
+
         return { ok: true };
     } catch (e) {
         const status = e?.statusCode;
         // 404/410 — подписка больше не существует, удаляем
         if (status === 404 || status === 410) {
             await prisma.pushSubscription
-                .delete({ where: { endpoint: sub.endpoint } })
+                .delete({ where: { id: sub.id } })
                 .catch(() => {});
             return { ok: false, gone: true };
         }
@@ -101,14 +115,6 @@ export async function sendPushToUser(userId, payload) {
             else failed++;
         })
     );
-
-    // Обновляем lastUsed у активных
-    if (sent > 0) {
-        await prisma.pushSubscription.updateMany({
-            where: { userId },
-            data: { lastUsed: new Date() },
-        }).catch(() => {});
-    }
 
     return { sent, failed, gone };
 }

@@ -49,6 +49,10 @@ import {
     banReportedUser,
     REPORT_META,
 } from '../lib/moderation.js';
+import {
+    getPushCleanupSettings,
+    cleanupInactivePushSubscriptions,
+} from '../lib/pushCleanup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
@@ -96,6 +100,25 @@ router.get(
     })
 );
 
+/* ─────────── Информация о сервере ─────────── */
+router.get(
+    '/server/info',
+    safe(async (_req, res) => {
+        res.json(await getServerInfo());
+    })
+);
+
+router.post(
+    '/server/cleanup',
+    safe(async (req, res) => {
+        const { logs, backups, backupsDays } = req.body || {};
+        const result = {};
+        if (logs) result.logs = cleanupPm2Logs();
+        if (backups) result.backups = cleanupOldBackups(Number(backupsDays) || 30);
+        res.json(result);
+    })
+);
+
 /* ─────────── Обслуживание БД ─────────── */
 router.get(
     '/maintenance/scan',
@@ -111,7 +134,6 @@ router.post(
     })
 );
 
-/* Информация о PostgreSQL: версия, размер, таблицы, доступность утилит */
 router.get(
     '/maintenance/dbinfo',
     safe(async (_req, res) => {
@@ -121,8 +143,6 @@ router.get(
     })
 );
 
-/* VACUUM ANALYZE — обновляет статистику планировщика, освобождает
-   место от мёртвых строк. Не блокирует чтение. */
 router.post(
     '/maintenance/vacuum',
     safe(async (_req, res) => {
@@ -137,6 +157,77 @@ router.get(
     safe(async (req, res) => {
         const period = Math.max(7, Math.min(365, Number(req.query.period) || 30));
         res.json(await getAnalytics(period));
+    })
+);
+
+/* ─────────── Модерация жалоб ─────────── */
+router.get(
+    '/reports',
+    safe(async (req, res) => {
+        const { status, targetType, page, limit } = req.query;
+        res.json(
+            await listReports({
+                status: status || undefined,
+                targetType: targetType || undefined,
+                page: Number(page) || 1,
+                limit: Number(limit) || 30,
+            })
+        );
+    })
+);
+
+router.get(
+    '/reports/meta',
+    safe(async (_req, res) => {
+        res.json({
+            targetTypes: REPORT_META.TARGET_TYPES,
+            reasons: REPORT_META.REASONS,
+            statuses: REPORT_META.STATUSES,
+        });
+    })
+);
+
+router.patch(
+    '/reports/:id',
+    safe(async (req, res) => {
+        const { status, resolution } = req.body;
+        const r = await updateReport({
+            id: req.params.id,
+            status,
+            resolution,
+            resolverId: req.user.id,
+        });
+        res.json(r);
+    })
+);
+
+router.post(
+    '/reports/:id/delete-content',
+    safe(async (req, res) => {
+        const r = await deleteReportedContent({
+            reportId: req.params.id,
+            resolverId: req.user.id,
+        });
+        res.json(r);
+    })
+);
+
+router.post(
+    '/reports/:id/ban-user',
+    safe(async (req, res) => {
+        const r = await banReportedUser({
+            reportId: req.params.id,
+            resolverId: req.user.id,
+        });
+        res.json(r);
+    })
+);
+
+router.delete(
+    '/reports/:id',
+    safe(async (req, res) => {
+        await prisma.report.delete({ where: { id: req.params.id } });
+        res.json({ ok: true });
     })
 );
 
@@ -664,7 +755,6 @@ router.get(
 );
 
 /* ─────────── Бэкапы ─────────── */
-
 router.get(
     '/backups',
     safe(async (_req, res) => {
@@ -1172,95 +1262,128 @@ router.post(
     })
 );
 
-/* ─────────── Информация о сервере ─────────── */
+/* ─────────── Управление push-подписками ─────────── */
 
-router.get(
-    '/server/info',
-    safe(async (_req, res) => {
-        res.json(await getServerInfo());
-    })
-);
-
-router.post(
-    '/server/cleanup',
-    safe(async (req, res) => {
-        const { logs, backups, backupsDays } = req.body || {};
-        const result = {};
-        if (logs) result.logs = cleanupPm2Logs();
-        if (backups) result.backups = cleanupOldBackups(Number(backupsDays) || 30);
-        res.json(result);
-    })
-);
-
-/* ─────────── Модерация ─────────── */
-
-router.get(
-    '/reports',
-    safe(async (req, res) => {
-        const { status, targetType, page, limit } = req.query;
-        res.json(
-            await listReports({
-                status: status || undefined,
-                targetType: targetType || undefined,
-                page: Number(page) || 1,
-                limit: Number(limit) || 30,
-            })
-        );
-    })
-);
-
-router.get(
-    '/reports/meta',
-    safe(async (_req, res) => {
-        res.json({
-            targetTypes: REPORT_META.TARGET_TYPES,
-            reasons: REPORT_META.REASONS,
-            statuses: REPORT_META.STATUSES,
-        });
-    })
-);
-
-router.patch(
-    '/reports/:id',
-    safe(async (req, res) => {
-        const { status, resolution } = req.body;
-        const r = await updateReport({
-            id: req.params.id,
-            status,
-            resolution,
-            resolverId: req.user.id,
-        });
-        res.json(r);
-    })
-);
-
-router.post(
-    '/reports/:id/delete-content',
-    safe(async (req, res) => {
-        const r = await deleteReportedContent({
-            reportId: req.params.id,
-            resolverId: req.user.id,
-        });
-        res.json(r);
-    })
-);
-
-router.post(
-    '/reports/:id/ban-user',
-    safe(async (req, res) => {
-        const r = await banReportedUser({
-            reportId: req.params.id,
-            resolverId: req.user.id,
-        });
-        res.json(r);
-    })
-);
-
+/* Удалить одну подписку */
 router.delete(
-    '/reports/:id',
+    '/push/subscriptions/:id',
     safe(async (req, res) => {
-        await prisma.report.delete({ where: { id: req.params.id } });
+        const sub = await prisma.pushSubscription.findUnique({
+            where: { id: req.params.id },
+        });
+        if (!sub) return res.status(404).json({ error: 'Подписка не найдена' });
+
+        await prisma.pushSubscription.delete({ where: { id: sub.id } });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'push_subscription_delete',
+                payload: JSON.stringify({ subscriptionId: sub.id, userId: sub.userId }),
+                affected: 1,
+            },
+        }).catch(() => {});
+
         res.json({ ok: true });
+    })
+);
+
+/* Массовое удаление по списку id */
+router.post(
+    '/push/subscriptions/delete-many',
+    safe(async (req, res) => {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'Пустой список' });
+        }
+        const clean = ids.filter((x) => typeof x === 'string' && x.length > 0);
+        if (clean.length === 0) return res.status(400).json({ error: 'Нет валидных id' });
+
+        const result = await prisma.pushSubscription.deleteMany({
+            where: { id: { in: clean } },
+        });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'push_subscriptions_bulk_delete',
+                payload: JSON.stringify({ count: clean.length }),
+                affected: result.count,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true, deleted: result.count });
+    })
+);
+
+/* Удалить все подписки конкретного пользователя */
+router.delete(
+    '/push/subscriptions/user/:userId',
+    safe(async (req, res) => {
+        const { userId } = req.params;
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, fullName: true },
+        });
+        if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+        const result = await prisma.pushSubscription.deleteMany({
+            where: { userId },
+        });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'push_subscriptions_user_delete',
+                payload: JSON.stringify({ userId, fullName: user.fullName }),
+                affected: result.count,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true, deleted: result.count });
+    })
+);
+
+/* ─────────── Автоочистка неактивных push-подписок ─────────── */
+
+router.get(
+    '/push/cleanup-settings',
+    safe(async (_req, res) => {
+        try {
+            res.json(await getPushCleanupSettings());
+        } catch (e) {
+            console.error('[admin] cleanup-settings error:', e);
+            res.status(500).json({ error: e.message });
+        }
+    })
+);
+
+router.post(
+    '/push/cleanup-now',
+    safe(async (req, res) => {
+        const { dryRun } = req.body || {};
+        try {
+            const r = await cleanupInactivePushSubscriptions({
+                dryRun: !!dryRun,
+                trigger: 'manual-force',
+            });
+
+            if (!dryRun && r.deleted > 0) {
+                await prisma.adminAction.create({
+                    data: {
+                        adminId: req.user.id,
+                        action: 'push_subscriptions_cleanup',
+                        payload: JSON.stringify({ days: r.days, deleted: r.deleted }),
+                        affected: r.deleted,
+                    },
+                }).catch(() => {});
+            }
+
+            res.json(r);
+        } catch (e) {
+            console.error('[admin] cleanup-now error:', e);
+            res.status(500).json({ error: e.message });
+        }
     })
 );
 
