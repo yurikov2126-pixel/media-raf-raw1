@@ -57,6 +57,18 @@ export default function MessageBubble({
 
     const isMediaOnly = ['sticker', 'image', 'video'].includes(m.type);
 
+    /* Классы пузыря:
+       - mrr-own-bubble — на своих (градиент): гарантирует белый текст
+         в светлой теме (иначе глобальный overrides text-white делает
+         его тёмным и текст плохо виден на градиенте).
+       - mrr-other-bubble — на чужих: в светлой теме получает белый
+         фон с тенью и рамкой вместо серого bg-ink-700. */
+    const bubbleClass = isMediaOnly
+        ? 'bg-transparent !p-0'
+        : isOwn
+            ? 'text-white mrr-own-bubble'
+            : 'bg-ink-700 text-white mrr-other-bubble';
+
     return (
         <div
             id={`msg-${m.id}`}
@@ -90,13 +102,7 @@ export default function MessageBubble({
                     onTouchEnd={endLongPress}
                     onTouchCancel={endLongPress}
                     onContextMenu={onCtx}
-                    className={`relative rounded-2xl px-3 py-2 select-none ${
-                        isMediaOnly
-                            ? 'bg-transparent !p-0'
-                            : isOwn
-                                ? 'text-white'
-                                : 'bg-ink-700 text-white'
-                    }`}
+                    className={`relative rounded-2xl px-3 py-2 select-none ${bubbleClass}`}
                     style={
                         isOwn && !isMediaOnly
                             ? { background: 'var(--brand-gradient)' }

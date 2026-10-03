@@ -7,6 +7,7 @@ import ProfileEditor from '../components/ProfileEditor.jsx';
 import ImageCropper from '../components/ImageCropper.jsx';
 import PostCard from '../components/PostCard.jsx';
 import ReportButton from '../components/ReportButton.jsx';
+import usePostDraft from '../hooks/usePostDraft.js';
 import usePageMeta from '../hooks/usePageMeta.js';
 
 const DIR = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
@@ -53,7 +54,6 @@ export default function Profile() {
     const { user: me, token } = useAuth();
     const [profile, setProfile] = useState(null);
     const [tab, setTab] = useState('posts');
-    const [postText, setPostText] = useState('');
     const [postImage, setPostImage] = useState('');
     const [cropping, setCropping] = useState(null);
     const [uploadingImage, setUploadingImage] = useState(false);
@@ -63,13 +63,28 @@ export default function Profile() {
 
     const isMe = me.username === username;
 
+    // Черновик — только для своего профиля
+    const draft = usePostDraft(isMe ? me.id : null);
+    const postText = draft.text;
+    const setPostText = draft.setText;
+
     const load = () =>
         api(`/users/${username}`, { token })
             .then(setProfile)
             .catch(() => setProfile(null));
+
     useEffect(() => {
         load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [username, token]);
+
+    usePageMeta({
+        title: profile ? `${profile.fullName} (@${profile.username})` : 'Профиль',
+        description:
+            profile?.bio || 'Профиль студента медиацентра MEDIA·RAF·RAW',
+        image: profile?.avatar,
+        type: 'profile',
+    });
 
     const pickPostImage = (e) => {
         const file = e.target.files?.[0];
@@ -106,6 +121,7 @@ export default function Profile() {
             });
             setPostText('');
             setPostImage('');
+            draft.clear();
             load();
         } finally {
             setPublishing(false);
@@ -121,16 +137,9 @@ export default function Profile() {
         window.location.href = `/app/chats/${chat.id}`;
     };
 
-    usePageMeta({
-        title: profile
-            ? `${profile.fullName} (@${profile.username})`
-            : 'Профиль',
-        description: profile?.bio || 'Профиль студента медиацентра MEDIA·RAF·RAW',
-        image: profile?.avatar,
-        type: 'profile',
-    });
-
-    if (!profile) return <div className="p-10 text-center text-white/40">Загрузка…</div>;
+    if (!profile) {
+        return <div className="p-10 text-center text-white/40">Загрузка…</div>;
+    }
 
     const skills = (() => {
         try {
@@ -276,6 +285,20 @@ export default function Profile() {
                                     value={postText}
                                     onChange={(e) => setPostText(e.target.value)}
                                 />
+                                {draft.hasDraft && (
+                                    <div className="text-[11px] text-white/40 mt-1 flex items-center gap-1">
+                                        <span>💾</span>
+                                        <span>Черновик сохраняется автоматически</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => draft.clear()}
+                                            className="ml-auto text-white/30 hover:text-pink transition"
+                                            title="Очистить черновик"
+                                        >
+                                            Очистить
+                                        </button>
+                                    </div>
+                                )}
                                 {postImage && (
                                     <div className="relative mt-3 rounded-2xl overflow-hidden">
                                         <img
@@ -309,7 +332,10 @@ export default function Profile() {
                                     />
                                     <button
                                         onClick={publish}
-                                        disabled={publishing || (!postText.trim() && !postImage)}
+                                        disabled={
+                                            publishing ||
+                                            (!postText.trim() && !postImage)
+                                        }
                                         className="btn-primary !py-2"
                                     >
                                         {publishing ? '…' : 'Опубликовать'}
@@ -325,7 +351,9 @@ export default function Profile() {
                                 onChanged={(u) =>
                                     setProfile((pr) => ({
                                         ...pr,
-                                        posts: pr.posts.map((x) => (x.id === u.id ? u : x)),
+                                        posts: pr.posts.map((x) =>
+                                            x.id === u.id ? u : x
+                                        ),
                                     }))
                                 }
                                 onDeleted={(id) =>
@@ -337,7 +365,9 @@ export default function Profile() {
                             />
                         ))}
                         {(!profile.posts || profile.posts.length === 0) && (
-                            <p className="text-center text-white/30 py-8">Пока нет публикаций</p>
+                            <p className="text-center text-white/30 py-8">
+                                Пока нет публикаций
+                            </p>
                         )}
                     </div>
                 )}
@@ -346,7 +376,10 @@ export default function Profile() {
                     <div className="py-6 grid gap-3">
                         {profile.enrollments?.length ? (
                             profile.enrollments.map((e) => (
-                                <div key={e.id} className="card p-4 flex items-center gap-3">
+                                <div
+                                    key={e.id}
+                                    className="card p-4 flex items-center gap-3"
+                                >
                                     <div
                                         className="w-12 h-12 grid place-items-center rounded-xl"
                                         style={{ background: 'var(--brand-gradient)' }}
@@ -360,12 +393,16 @@ export default function Profile() {
                                         </div>
                                     </div>
                                     {e.completed && (
-                                        <span className="chip bg-lime/20 text-lime-soft">✓</span>
+                                        <span className="chip bg-lime/20 text-lime-soft">
+                                            ✓
+                                        </span>
                                     )}
                                 </div>
                             ))
                         ) : (
-                            <p className="text-center text-white/30 py-8">Нет активных курсов</p>
+                            <p className="text-center text-white/30 py-8">
+                                Нет активных курсов
+                            </p>
                         )}
                     </div>
                 )}
@@ -398,7 +435,9 @@ export default function Profile() {
                                 </Link>
                             ))
                         ) : (
-                            <p className="text-center text-white/30 py-8">Сертификатов пока нет</p>
+                            <p className="text-center text-white/30 py-8">
+                                Сертификатов пока нет
+                            </p>
                         )}
                     </div>
                 )}

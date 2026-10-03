@@ -5,6 +5,7 @@ import LandingEditor from './LandingEditor.jsx';
 import MenuEditor from './MenuEditor.jsx';
 import FooterEditor from './FooterEditor.jsx';
 import CertificateEditor from './CertificateEditor.jsx';
+import ThemeEditor from './ThemeEditor.jsx';
 
 const SUBS = [
     ['brand', '🎨 Брендинг'],
@@ -12,6 +13,7 @@ const SUBS = [
     ['menu', '🧭 Меню'],
     ['footer', '📄 Футер'],
     ['certificate', '🏆 Сертификаты'],
+    ['theme', '🌓 Тема'],
 ];
 
 export default function SiteDesign({ settings, setSettings, token, onSaved }) {
@@ -26,14 +28,18 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
     };
 
     const save = async () => {
-        setBusy(true); setError('');
+        setBusy(true);
+        setError('');
         try {
             await api('/admin/settings', { method: 'PUT', token, body: settings });
             setSaved(true);
             onSaved?.();
             setTimeout(() => setSaved(false), 2000);
-        } catch (e) { setError(e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     return (
@@ -41,7 +47,9 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
             <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
                 <div>
                     <div className="font-bold text-lg">🎨 Дизайн сайта</div>
-                    <div className="text-sm text-white/50 mt-1">Брендинг, лендинг, меню, футер, сертификаты.</div>
+                    <div className="text-sm text-white/50 mt-1">
+                        Брендинг, лендинг, меню, футер, сертификаты, тема.
+                    </div>
                 </div>
                 <button onClick={save} disabled={busy} className="btn-primary shrink-0">
                     {busy ? 'Сохранение…' : saved ? '✓ Сохранено' : '💾 Сохранить всё'}
@@ -52,7 +60,13 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
 
             <div className="flex gap-2 flex-wrap mb-4">
                 {SUBS.map(([v, l]) => (
-                    <button key={v} onClick={() => setSub(v)} className={`chip ${sub === v ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}>{l}</button>
+                    <button
+                        key={v}
+                        onClick={() => setSub(v)}
+                        className={`chip ${sub === v ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}
+                    >
+                        {l}
+                    </button>
                 ))}
             </div>
 
@@ -61,6 +75,7 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
             {sub === 'menu' && <MenuEditor settings={settings} update={update} />}
             {sub === 'footer' && <FooterEditor settings={settings} update={update} />}
             {sub === 'certificate' && <CertificateEditor settings={settings} update={update} />}
+            {sub === 'theme' && <ThemeEditor settings={settings} update={update} />}
         </div>
     );
 }

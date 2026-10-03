@@ -8,6 +8,7 @@ import MobileNav from './MobileNav.jsx';
 import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import NetworkBanner from './NetworkBanner.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 
 const FALLBACK_LINKS = [
     { to: '/app', label: 'Лента', end: true, icon: '🏠' },
@@ -29,7 +30,6 @@ export default function Layout() {
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     const isAdmin = user?.role === 'ADMIN';
 
-    /* Фильтруем ссылки навигации по включённым модулям */
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
     const links = rawLinks.filter((l) => {
         const key = moduleKeyForPath(l.to);
@@ -37,21 +37,14 @@ export default function Layout() {
     });
     const SWIPE_ORDER = links.map((l) => l.to);
 
-    /* Авто-редирект: если пользователь открыл отключённый модуль —
-       уводим на первый доступный. */
     useEffect(() => {
-        // Ждём загрузки состояния модулей
         if (Object.keys(modules).length === 0) return;
-
         const currentKey = moduleKeyForPath(location.pathname);
         if (!currentKey) return;
         if (isEnabled(currentKey)) return;
-
         const target = MODULE_ORDER.find((k) => isEnabled(k));
         if (target === 'feed') navigate('/app', { replace: true });
         else if (target) navigate(`/app/${target}`, { replace: true });
-        // Если включённых модулей нет вообще — оставляем как есть
-        // (защита от бесконечного цикла, такое состояние недоступно на сервере)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.pathname, modules]);
 
@@ -123,7 +116,10 @@ export default function Layout() {
 
                 <div className="mt-auto min-w-0">
                     <div className="flex items-center justify-between mb-2">
-                        <NotificationBell align="left" />
+                        <div className="flex items-center gap-1">
+                            <NotificationBell align="left" />
+                            <ThemeToggle />
+                        </div>
                         <button
                             onClick={logout}
                             className="text-xs text-white/40 hover:text-pink px-3"
@@ -160,6 +156,7 @@ export default function Layout() {
                         </div>
 
                         <div className="flex items-center gap-1">
+                            <ThemeToggle />
                             {isAdmin && (
                                 <Link
                                     to="/app/admin"

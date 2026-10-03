@@ -13,8 +13,10 @@ import MessageBubble from '../components/messenger/MessageBubble.jsx';
 import GroupAvatar from '../components/messenger/GroupAvatar.jsx';
 import NewChatButton from '../components/messenger/NewChatButton.jsx';
 import ReportButton from '../components/ReportButton.jsx';
-import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator.jsx';
+import usePullToRefresh from '../hooks/usePullToRefresh.js';
 import usePageMeta from '../hooks/usePageMeta.js';
+import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
 
 function pickAudioMime() {
     if (typeof MediaRecorder === 'undefined') return null;
@@ -36,6 +38,8 @@ function extFromMime(mime) {
     return 'audio';
 }
 
+const TYPING_TTL_MS = 3000;
+
 export default function Messenger() {
     const { chatId } = useParams();
     const { user, token } = useAuth();
@@ -55,7 +59,8 @@ export default function Messenger() {
     const [replyTo, setReplyTo] = useState(null);
     const [forwarding, setForwarding] = useState(null);
     const [editing, setEditing] = useState(null);
-    const [typingUsers, setTypingUsers] = useState([]);
+    const [typingUsers, setTypingUsers] = useState([]);       // для открытого чата
+    const [typingByChat, setTypingByChat] = useState({});     // для списка чатов
     const [search, setSearch] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -69,9 +74,6 @@ export default function Messenger() {
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
     const [panel, setPanel] = useState(null);
     const [attachMenu, setAttachMenu] = useState(false);
-
-    /* Жалоба. Открывается из контекстного меню (мобильные)
-       через externalOpen у ReportButton. */
     const [reportTarget, setReportTarget] = useState(null);
 
     const [recording, setRecording] = useState(false);
@@ -82,7 +84,9 @@ export default function Messenger() {
     const recTimerRef = useRef(null);
 
     const scrollRef = useRef(null);
+    const chatListScrollRef = useRef(null);
     const typingTimeout = useRef(null);
+    const typingClearTimers = useRef(new Map()); // key: chatId:userId
     const fileRef = useRef(null);
     const mediaFileRef = useRef(null);
     const textareaRef = useRef(null);
@@ -95,6 +99,13 @@ export default function Messenger() {
         const other = activeChat.members.find((m) => m.id !== user.id);
         return other?.fullName || 'Чат';
     }, [activeChat, user.id]);
+
+    usePageMeta({
+        title: chatTitle ? `💬 ${chatTitle}` : 'Чаты',
+        description: chatTitle
+            ? `Переписка с ${chatTitle}`
+            : 'Мессенджер MEDIA·RAF·RAW',
+    });
 
     const imageMessages = useMemo(
         () => messages.filter((m) => m.type === 'image' && !m.deletedAt)
@@ -165,8 +176,50 @@ export default function Messenger() {
             }));
         };
         const onTyping = ({ chatId: cid, userId: uid, isTyping }) => {
-            if (cid !== chatId || uid === user.id) return;
-            setTypingUsers((prev) => isTyping ? [...new Set([...prev, uid])] : prev.filter((x) => x !== uid));
+            if (uid === user.id) return;
+
+            // ─── Состояние для открытого чата ───
+            if (cid === chatId) {
+                setTypingUsers((prev) =>
+                    isTyping ? [...new Set([...prev, uid])] : prev.filter((x) => x !== uid)
+                );
+            }
+
+            // ─── Состояние для списка чатов ───
+            const key = `${cid}:${uid}`;
+            const timers = typingClearTimers.current;
+
+            if (isTyping) {
+                setTypingByChat((prev) => {
+                    const cur = new Set(prev[cid] || []);
+                    cur.add(uid);
+                    return { ...prev, [cid]: cur };
+                });
+                clearTimeout(timers.get(key));
+                const t = setTimeout(() => {
+                    setTypingByChat((prev) => {
+                        const cur = new Set(prev[cid] || []);
+                        cur.delete(uid);
+                        const next = { ...prev };
+                        if (cur.size === 0) delete next[cid];
+                        else next[cid] = cur;
+                        return next;
+                    });
+                    timers.delete(key);
+                }, TYPING_TTL_MS);
+                timers.set(key, t);
+            } else {
+                setTypingByChat((prev) => {
+                    const cur = new Set(prev[cid] || []);
+                    cur.delete(uid);
+                    const next = { ...prev };
+                    if (cur.size === 0) delete next[cid];
+                    else next[cid] = cur;
+                    return next;
+                });
+                clearTimeout(timers.get(key));
+                timers.delete(key);
+            }
         };
         const onPinned = ({ chatId: cid, message }) => { if (cid === chatId) setPinned(message); };
         const onChatDeleted = ({ chatId: cid }) => {
@@ -196,6 +249,15 @@ export default function Messenger() {
         };
     }, [socket, chatId, token, user.id]); // eslint-disable-line
 
+    // Очистка всех таймеров typing при размонтировании
+    useEffect(() => {
+        const timers = typingClearTimers.current;
+        return () => {
+            for (const t of timers.values()) clearTimeout(t);
+            timers.clear();
+        };
+    }, []);
+
     useEffect(() => {
         const el = scrollRef.current;
         if (!el) return;
@@ -221,7 +283,23 @@ export default function Messenger() {
         setChatMenu(null); setHeaderMenuOpen(false); setPanel(null);
         setAttachMenu(false); setSearchOpen(false); setSearch('');
         setReportTarget(null);
+        setTypingUsers([]);
     }, [chatId]);
+
+    /* Pull-to-refresh на списке чатов */
+    const { pull: chatPull, refreshing: chatRefreshing, threshold: chatThreshold } =
+        usePullToRefresh({
+            ref: chatListScrollRef,
+            onRefresh: async () => {
+                await new Promise((r) => {
+                    api('/chats', { token })
+                        .then(setChats)
+                        .catch(() => {})
+                        .finally(r);
+                });
+            },
+            disabled: !!chatId,
+        });
 
     const send = () => {
         if (!text.trim() || !chatId) return;
@@ -411,12 +489,16 @@ export default function Messenger() {
         ? isActiveGroupAdmin ? '🗑️ Удалить группу' : '🚪 Покинуть группу'
         : '🗑️ Удалить чат';
 
-    usePageMeta({
-        title: chatTitle ? `💬 ${chatTitle}` : 'Чаты',
-        description: chatTitle
-            ? `Переписка с ${chatTitle}`
-            : 'Мессенджер MEDIA·RAF·RAW',
-    });
+    /* Кто печатает в чате c? Возвращает имена через запятую или null. */
+    const whoIsTyping = (c) => {
+        const ids = typingByChat[c.id];
+        if (!ids || ids.size === 0) return null;
+        // В личных — «печатает…». В группах — «Вася печатает…»
+        if (c.type !== 'GROUP') return 'печатает…';
+        const member = c.members.find((m) => ids.has(m.id));
+        if (!member) return 'печатает…';
+        return `${member.fullName.split(' ')[0]} печатает…`;
+    };
 
     return (
         <div
@@ -466,11 +548,21 @@ export default function Messenger() {
                         </div>
                     )}
                 </div>
-                <div className="flex-1 overflow-y-auto no-scrollbar min-h-0">
+
+                <div
+                    ref={chatListScrollRef}
+                    className="flex-1 overflow-y-auto no-scrollbar min-h-0"
+                >
+                    <PullToRefreshIndicator
+                        pull={chatPull}
+                        refreshing={chatRefreshing}
+                        threshold={chatThreshold}
+                    />
                     {filteredChats.map((c) => {
                         const other = c.members.find((m) => m.id !== user.id);
                         const title = c.type === 'GROUP' ? c.title : other?.fullName;
                         const otherOnline = c.type !== 'GROUP' && other && onlineUsers.has(other.id);
+                        const typingText = whoIsTyping(c);
                         return (
                             <div
                                 key={c.id}
@@ -489,8 +581,15 @@ export default function Messenger() {
                                         : <Avatar user={other} size={46} online={otherOnline} />}
                                     <div className="flex-1 min-w-0 text-left">
                                         <div className="font-semibold truncate">{title}</div>
-                                        <div className="text-xs text-white/40 truncate">
-                                            {c.lastMessage?.type === 'sticker' ? '🎨 Стикер'
+                                        <div className={`text-xs truncate ${typingText ? 'text-violet-soft italic' : 'text-white/40'}`}>
+                                            {typingText ? (
+                                                <span className="inline-flex items-center gap-1">
+                                                    {typingText}
+                                                    <span className="mrr-typing-dots">
+                                                        <span>.</span><span>.</span><span>.</span>
+                                                    </span>
+                                                </span>
+                                            ) : c.lastMessage?.type === 'sticker' ? '🎨 Стикер'
                                                 : c.lastMessage?.type === 'image' ? '🖼️ Изображение'
                                                     : c.lastMessage?.type === 'video' ? '🎥 Видео'
                                                         : c.lastMessage?.type === 'voice' ? '🎤 Голосовое'
@@ -878,7 +977,6 @@ export default function Messenger() {
                 <MediaGalleryModal chatId={chatId} onClose={() => setShowGallery(false)} />
             )}
 
-            {/* Модалка жалобы — открывается из контекстного меню (мобильные) */}
             {reportTarget && (
                 <ReportButton
                     targetType={reportTarget.type}

@@ -3,9 +3,9 @@ import { resolveUrl } from '../api/client.js';
 
 const RATES = [1, 1.5, 2, 3, 4];
 const RATE_KEY = 'mrr_voice_rate';
+const PEAK_BUCKETS = 40;
+const MAX_RETRIES = 2;
 
-/* Глобальный указатель на текущий играющий <audio>.
-   При старте нового голосового предыдущий останавливается. */
 let currentlyPlaying = null;
 
 function fmtTime(sec) {
@@ -15,10 +15,8 @@ function fmtTime(sec) {
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/* Детерминированный waveform из строки src.
-   Один и тот же файл всегда даёт одну и ту же форму,
-   разные файлы — разную (не синусоида-заглушка, как раньше). */
-function makeBars(seedStr, count = 42) {
+/* Fallback: детерминированный waveform из URL. */
+function makeFallbackBars(seedStr, count = PEAK_BUCKETS) {
     let h = 2166136261 >>> 0;
     for (let i = 0; i < seedStr.length; i++) {
         h ^= seedStr.charCodeAt(i);
@@ -29,11 +27,30 @@ function makeBars(seedStr, count = 42) {
     for (let i = 0; i < count; i++) {
         s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
         const v = (s % 1000) / 1000;
-        // огибающая — форма «дышит» как речь, а не ровный шум
         const env = 0.35 + 0.65 * Math.sin((i / (count - 1)) * Math.PI);
         arr[i] = 0.14 + v * env * 0.86;
     }
     return arr;
+}
+
+/* Кэш peaks по URL. */
+const peaksCache = new Map();
+
+async function loadPeaks(url) {
+    if (peaksCache.has(url)) return peaksCache.get(url);
+    const promise = (async () => {
+        try {
+            const res = await fetch(`${url}.peaks.json`, { cache: 'force-cache' });
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) return null;
+            return data;
+        } catch {
+            return null;
+        }
+    })();
+    peaksCache.set(url, promise);
+    return promise;
 }
 
 function readStoredRate() {
@@ -59,20 +76,46 @@ export default function VoicePlayer({ src, isOwn }) {
     const [scrubPos, setScrubPos] = useState(0);
     const resumeAfterScrubRef = useRef(false);
 
-    const url = resolveUrl(src);
-    const bars = useMemo(() => makeBars(url), [url]);
+    /* Счётчик попыток загрузки — сбрасывается при успехе. */
+    const retriesRef = useRef(0);
+    const retryTimerRef = useRef(null);
 
-    /* Метаданные и события аудио */
+    const url = resolveUrl(src);
+
+    const fallbackBars = useMemo(() => makeFallbackBars(url), [url]);
+    const [realPeaks, setRealPeaks] = useState(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        loadPeaks(url).then((peaks) => {
+            if (!cancelled && peaks) setRealPeaks(peaks);
+        });
+        return () => { cancelled = true; };
+    }, [url]);
+
+    const bars = useMemo(() => {
+        if (realPeaks && realPeaks.length > 0) {
+            const max = Math.max(...realPeaks, 0.001);
+            return realPeaks.map((v) => 0.15 + (v / max) * 0.85);
+        }
+        return fallbackBars;
+    }, [realPeaks, fallbackBars]);
+
+    /* ─── Загрузка аудио + события ─── */
     useEffect(() => {
         const a = audioRef.current;
         if (!a) return;
 
+        // Сброс при смене URL
+        retriesRef.current = 0;
+        setError(false);
+
         const onLoaded = () => {
+            retriesRef.current = 0;
+            setError(false);
+
             let d = a.duration;
             if (!isFinite(d) || d <= 0) {
-                /* WebM из MediaRecorder часто имеет duration = Infinity,
-                   пока не сделаешь seek. Трюк: прыгаем далеко вперёд,
-                   ждём durationchange, сбрасываемся на 0. */
                 const onDur = () => {
                     if (isFinite(a.duration) && a.duration > 0) {
                         setDuration(a.duration);
@@ -85,7 +128,6 @@ export default function VoicePlayer({ src, isOwn }) {
             } else {
                 setDuration(d);
             }
-            setError(false);
         };
         const onEnd = () => {
             setPlaying(false);
@@ -94,8 +136,32 @@ export default function VoicePlayer({ src, isOwn }) {
             if (currentlyPlaying === a) currentlyPlaying = null;
         };
         const onErr = () => {
+            // Авто-retry: возможно, файл ещё не долетел до диска
+            if (retriesRef.current < MAX_RETRIES) {
+                retriesRef.current++;
+                const attempt = retriesRef.current;
+                const delay = 400 * attempt;
+
+                // Логируем — полезно для отладки
+                const err = a.error;
+                console.warn(
+                    `[VoicePlayer] ошибка загрузки, попытка ${attempt}/${MAX_RETRIES}`,
+                    err ? `code=${err.code}` : ''
+                );
+
+                clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = setTimeout(() => {
+                    // Кэш-бастинг, чтобы браузер точно перезапросил
+                    const sep = url.includes('?') ? '&' : '?';
+                    a.src = `${url}${sep}_r=${attempt}`;
+                    a.load();
+                }, delay);
+                return;
+            }
+            // Все попытки исчерпаны — показываем ошибку
             setError(true);
             setPlaying(false);
+            if (currentlyPlaying === a) currentlyPlaying = null;
         };
         const onPause = () => {
             setPlaying(false);
@@ -112,6 +178,7 @@ export default function VoicePlayer({ src, isOwn }) {
         a.playbackRate = rate;
 
         return () => {
+            clearTimeout(retryTimerRef.current);
             a.removeEventListener('loadedmetadata', onLoaded);
             a.removeEventListener('ended', onEnd);
             a.removeEventListener('error', onErr);
@@ -121,15 +188,12 @@ export default function VoicePlayer({ src, isOwn }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [url]);
 
-    /* Применение скорости + сохранение в localStorage */
     useEffect(() => {
         const a = audioRef.current;
         if (a) a.playbackRate = rate;
         try { localStorage.setItem(RATE_KEY, String(rate)); } catch {}
     }, [rate]);
 
-    /* Плавный прогресс через rAF. timeupdate слишком редко (4 Гц) —
-       полоска бы дёргалась. */
     useEffect(() => {
         if (!playing || scrubbing) return;
         let raf;
@@ -142,7 +206,6 @@ export default function VoicePlayer({ src, isOwn }) {
         return () => cancelAnimationFrame(raf);
     }, [playing, scrubbing]);
 
-    /* Останавливаем при размонтировании */
     useEffect(() => {
         return () => {
             const a = audioRef.current;
@@ -150,6 +213,7 @@ export default function VoicePlayer({ src, isOwn }) {
                 try { a.pause(); } catch {}
                 if (currentlyPlaying === a) currentlyPlaying = null;
             }
+            clearTimeout(retryTimerRef.current);
         };
     }, []);
 
@@ -164,7 +228,6 @@ export default function VoicePlayer({ src, isOwn }) {
             a.pause();
             return;
         }
-        // Автопауза предыдущего плеера
         if (currentlyPlaying && currentlyPlaying !== a) {
             try { currentlyPlaying.pause(); } catch {}
         }
@@ -180,7 +243,7 @@ export default function VoicePlayer({ src, isOwn }) {
         setRate(RATES[(i + 1) % RATES.length]);
     };
 
-    /* ─── Свайп-перемотка по waveform ─── */
+    /* ─── Свайп-перемотка ─── */
 
     const posFromClientX = (clientX) => {
         const el = waveformRef.current;
@@ -197,7 +260,6 @@ export default function VoicePlayer({ src, isOwn }) {
         try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
 
         const a = audioRef.current;
-        // Запоминаем, играло ли, чтобы возобновить после скраба
         resumeAfterScrubRef.current = !!(a && !a.paused);
         if (resumeAfterScrubRef.current) {
             try { a.pause(); } catch {}
@@ -260,11 +322,17 @@ export default function VoicePlayer({ src, isOwn }) {
                 isOwn ? 'bg-black/20' : 'bg-white/10'
             }`}
         >
+            {/*
+              Без crossOrigin: файлы отдаются с того же origin.
+              crossOrigin="anonymous" приводил к CORS-ошибке сразу после
+              отправки нового голосового (сервер не отдавал ACAO-заголовки)
+              и текст «ошибка» оставался до перезагрузки, пока файл не
+              осядет в HTTP-кэше.
+            */}
             <audio
                 ref={audioRef}
                 src={url}
                 preload="metadata"
-                crossOrigin="anonymous"
             />
 
             <button
@@ -290,7 +358,6 @@ export default function VoicePlayer({ src, isOwn }) {
                 )}
             </button>
 
-            {/* Waveform + время */}
             <div className="flex-1 min-w-0">
                 <div
                     ref={waveformRef}
@@ -322,7 +389,6 @@ export default function VoicePlayer({ src, isOwn }) {
                 </div>
             </div>
 
-            {/* Скорость воспроизведения */}
             <button
                 type="button"
                 onClick={cycleRate}

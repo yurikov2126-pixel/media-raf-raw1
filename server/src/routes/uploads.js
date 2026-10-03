@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
 import { auth } from '../middleware/auth.js';
+import { extractPeaks, peaksPathFor } from '../lib/audioPeaks.js';
 
 const storage = multer.diskStorage({
     destination: 'uploads/',
@@ -22,10 +23,11 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
     const fullPath = req.file.path;
     const isImage = req.file.mimetype.startsWith('image/');
+    const isAudio = req.file.mimetype.startsWith('audio/');
 
     try {
+        /* ─── Картинки: сжатие + поворот ─── */
         if (isImage) {
-            // Сжимаем: max 1920px по длинной стороне, JPEG q=85
             const buf = await fs.readFile(fullPath);
             const out = await sharp(buf)
                 .rotate()
@@ -38,7 +40,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
                 .jpeg({ quality: 85, progressive: true })
                 .toBuffer();
 
-            // Меняем расширение на .jpg
             const newPath = fullPath.replace(/\.(png|jpe?g|webp|gif|bmp|tiff?)$/i, '.jpg');
             if (newPath !== fullPath) {
                 await fs.unlink(fullPath).catch(() => {});
@@ -52,15 +53,41 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
             });
         }
 
-        // Не image — отдаём как есть
+        /* ─── Голосовые: генерируем waveform ─── */
+        if (isAudio) {
+            // Не блокируем ответ на генерацию peaks — она асинхронная
+            // и может занять несколько сот мс. Клиент подхватит файл
+            // peaks при следующем рендере VoicePlayer.
+            (async () => {
+                try {
+                    const peaks = await extractPeaks(fullPath, 40);
+                    if (peaks) {
+                        await fs.writeFile(
+                            peaksPathFor(fullPath),
+                            JSON.stringify(peaks)
+                        );
+                    }
+                } catch (e) {
+                    console.error('[uploads] peaks generation failed:', e);
+                }
+            })();
+
+            return res.json({
+                url: `/uploads/${req.file.filename}`,
+                type: req.file.mimetype,
+                size: req.file.size,
+                peaksPending: true,
+            });
+        }
+
+        /* ─── Остальные файлы ─── */
         res.json({
             url: `/uploads/${req.file.filename}`,
             type: req.file.mimetype,
             size: req.file.size,
         });
     } catch (e) {
-        console.error('[uploads] sharp error:', e);
-        // Если что-то пошло не так — возвращаем исходник
+        console.error('[uploads] error:', e);
         res.json({
             url: `/uploads/${req.file.filename}`,
             type: req.file.mimetype,

@@ -7,12 +7,13 @@ import PostReactions from './PostReactions.jsx';
 import CommentSection from './CommentSection.jsx';
 import ReportButton from './ReportButton.jsx';
 
-export default function PostCard({ post, author, onChanged, onDeleted }) {
+export default function PostCard({ post, author, onChanged, onDeleted, compact = false }) {
     const { user, token } = useAuth();
     const [editing, setEditing] = useState(false);
     const [text, setText] = useState(post.content || '');
     const [busy, setBusy] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [showComments, setShowComments] = useState(!compact);
 
     const isOwner = author?.id === user.id || post.authorId === user.id;
     const isAdmin = user.role === 'ADMIN';
@@ -47,13 +48,25 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
 
     const commentCount = post._count?.comments ?? 0;
 
+    const cardPadding = compact ? 'p-3' : 'p-5';
+    const avatarSize = compact ? 32 : 44;
+    const authorTextSize = compact ? 'text-sm' : 'text-base';
+    const contentClass = compact
+        ? 'whitespace-pre-wrap text-white/90 text-sm line-clamp-3'
+        : 'whitespace-pre-wrap text-white/90';
+    const mediaMaxH = compact ? 'max-h-48' : '';
+    const authorLinkMargin = compact ? 'mb-2' : 'mb-3';
+    const reactionsMargin = compact ? 'mt-1' : 'mt-3';
+
     return (
-        <article className="card-flat p-5 post-stack">
+        <article className={`card-flat ${cardPadding} post-stack relative`}>
+            {/* Меню поста */}
             {(canEdit || !isOwner) && (
-                <div className="absolute top-4 right-4">
+                <div className="absolute top-3 right-3 z-10">
                     <button
                         onClick={() => setMenuOpen((v) => !v)}
                         className="w-8 h-8 grid place-items-center rounded-full hover:bg-white/10 text-white/40"
+                        aria-label="Меню"
                     >
                         ⋯
                     </button>
@@ -86,33 +99,22 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
                                         </button>
                                     </>
                                 )}
-                                {!isOwner && (
-                                    <button
-                                        onClick={() => {
-                                            setMenuOpen(false);
-                                            // Открываем модалку жалобы через внешний триггер
-                                        }}
-                                        className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5"
-                                        as="div"
-                                    >
-                                        <span onClick={(e) => e.stopPropagation()}>
-                                            {/* Кнопка жалобы через собственный state */}
-                                        </span>
-                                    </button>
-                                )}
                             </div>
                         </>
                     )}
                 </div>
             )}
 
+            {/* Автор */}
             <Link
                 to={`/app/u/${author?.username}`}
-                className="flex items-center gap-3 mb-3 hover:opacity-80"
+                className={`flex items-center gap-3 ${authorLinkMargin} hover:opacity-80`}
             >
-                <Avatar user={author} size={44} />
-                <div className="min-w-0">
-                    <div className="font-semibold truncate">{author?.fullName || 'Автор'}</div>
+                <Avatar user={author} size={avatarSize} />
+                <div className="min-w-0 pr-8">
+                    <div className={`font-semibold truncate ${authorTextSize}`}>
+                        {author?.fullName || 'Автор'}
+                    </div>
                     <div className="text-xs text-white/40 truncate">
                         @{author?.username} · {new Date(post.createdAt).toLocaleString('ru-RU')}
                         {post.editedAt && <span className="ml-2 opacity-60">(изм.)</span>}
@@ -120,6 +122,7 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
                 </div>
             </Link>
 
+            {/* Контент */}
             {editing ? (
                 <div>
                     <textarea
@@ -144,25 +147,30 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
                     </div>
                 </div>
             ) : (
-                post.content && <p className="whitespace-pre-wrap text-white/90">{post.content}</p>
+                post.content && <p className={contentClass}>{post.content}</p>
             )}
 
+            {/* Медиа */}
             {post.mediaUrl && (
-                <div className="mt-3 rounded-2xl overflow-hidden">
+                <div className={`${compact ? 'mt-2' : 'mt-3'} rounded-2xl overflow-hidden`}>
                     <img
                         src={resolveUrl(post.mediaUrl)}
                         alt=""
-                        className="w-full object-cover"
+                        className={`w-full object-cover ${mediaMaxH}`}
                         loading="lazy"
                     />
                 </div>
             )}
 
-            <PostReactions
-                postId={post.id}
-                initial={{ reactions: post.reactions || [], my: [] }}
-            />
+            {/* Реакции */}
+            <div className={reactionsMargin}>
+                <PostReactions
+                    postId={post.id}
+                    initial={{ reactions: post.reactions || [], my: [] }}
+                />
+            </div>
 
+            {/* Жалоба — только на чужие */}
             {!isOwner && (
                 <div className="mt-2 flex justify-end">
                     <ReportButton
@@ -173,7 +181,26 @@ export default function PostCard({ post, author, onChanged, onDeleted }) {
                 </div>
             )}
 
-            <CommentSection postId={post.id} initialCount={commentCount} />
+            {/* Комментарии: в компактном режиме — по кнопке */}
+            {compact ? (
+                <>
+                    {!showComments && commentCount > 0 && (
+                        <button
+                            onClick={() => setShowComments(true)}
+                            className="mt-3 text-sm text-violet-soft hover:text-white transition"
+                        >
+                            💬 Показать комментарии ({commentCount})
+                        </button>
+                    )}
+                    {showComments && (
+                        <div className="mt-3">
+                            <CommentSection postId={post.id} initialCount={commentCount} />
+                        </div>
+                    )}
+                </>
+            ) : (
+                <CommentSection postId={post.id} initialCount={commentCount} />
+            )}
         </article>
     );
 }

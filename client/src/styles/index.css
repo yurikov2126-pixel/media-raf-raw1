@@ -3,7 +3,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─────────── Базовые переменные ─────────── */
+/* ═══════════════════════════════════════════════════════
+   ТЕМА — CSS-переменные
+   ═══════════════════════════════════════════════════════ */
 
 :root {
     --brand-gradient: linear-gradient(135deg, #7C3AED 0%, #EC4899 50%, #06B6D4 100%);
@@ -11,14 +13,60 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
+
+    --bg-base: #08080F;
+    --bg-elev-1: #0f0f18;
+    --bg-elev-2: #171728;
+    --bg-elev-3: #1e1e2e;
+    --bg-overlay: rgba(0, 0, 0, .6);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, .6);
+    --text-muted: rgba(255, 255, 255, .4);
+    --border-subtle: rgba(255, 255, 255, .05);
+    --border-strong: rgba(255, 255, 255, .1);
+
+    --card-bg: rgba(15, 15, 24, .8);
+    --card-flat-bg: rgba(15, 15, 24, .9);
+    --input-bg: rgba(23, 23, 40, .7);
+
+    --glow-1: rgba(124, 58, 237, .22);
+    --glow-2: rgba(236, 72, 153, .18);
+    --glow-3: rgba(6, 182, 212, .16);
+
+    color-scheme: dark;
 }
 
+[data-theme="light"] {
+    --bg-base: #f5f5f7;
+    --bg-elev-1: #ffffff;
+    --bg-elev-2: #eeeef1;
+    --bg-elev-3: #e5e5ea;
+    --bg-overlay: rgba(20, 20, 30, .35);
+    --text-primary: #0f0f14;
+    --text-secondary: rgba(15, 15, 20, .65);
+    --text-muted: rgba(15, 15, 20, .45);
+    --border-subtle: rgba(15, 15, 20, .07);
+    --border-strong: rgba(15, 15, 20, .12);
+
+    --card-bg: rgba(255, 255, 255, .9);
+    --card-flat-bg: #ffffff;
+    --input-bg: rgba(240, 240, 243, .8);
+
+    --glow-1: rgba(124, 58, 237, .09);
+    --glow-2: rgba(236, 72, 153, .06);
+    --glow-3: rgba(6, 182, 212, .05);
+
+    color-scheme: light;
+}
+
+/* ─────────── Базовые элементы ─────────── */
+
 html {
-    background-color: #08080F;
+    background-color: var(--bg-base);
     background-image:
-            radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
-            radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
-            radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
+            radial-gradient(60% 40% at 20% 0%, var(--glow-1), transparent 60%),
+            radial-gradient(50% 40% at 100% 20%, var(--glow-2), transparent 60%),
+            radial-gradient(50% 40% at 50% 100%, var(--glow-3), transparent 60%);
     background-repeat: no-repeat;
     background-size: 100% 100%;
     background-attachment: fixed;
@@ -26,26 +74,21 @@ html {
     height: 100dvh;
     height: 100lvh;
     min-height: 100lvh;
+    transition: background-color .2s ease;
 }
 
 body {
     background-color: transparent;
     min-height: 100vh;
     min-height: 100lvh;
-    @apply bg-ink-900 text-white font-display antialiased;
+    color: var(--text-primary);
+    @apply font-display antialiased;
 }
 
 #root {
     position: relative;
     z-index: 1;
-    background-color: #08080F;
-    background-image:
-            radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
-            radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
-            radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-    background-attachment: fixed;
+    background-color: transparent;
     min-height: 100vh;
     min-height: 100lvh;
 }
@@ -65,19 +108,6 @@ html, body {
 
 /* ─────────── Анимация появления страницы ─────────── */
 
-/*
- * ВАЖНО: без transform и без will-change: transform.
- *
- * Любой transform (или will-change: transform) превращает элемент
- * в containing block для position: fixed потомков. Из-за этого
- * fixed-модалки внутри страницы позиционировались относительно
- * .page-enter, а не viewport'а — на мобильном и в PWA у модалки
- * создания чата «отрезался» низ экрана, и тап по пустому месту
- * не срабатывал.
- *
- * Оставляем только fade — визуально почти то же самое, но
- * безопасно для fixed-модалок.
- */
 @keyframes pageEnter {
     from { opacity: 0; }
     to   { opacity: 1; }
@@ -103,23 +133,16 @@ html, body {
     box-sizing: border-box;
 }
 
-/* ─────────── Утилиты safe-area ─────────── */
+/* ─────────── Safe-area ─────────── */
 
-.safe-top {
-    padding-top: var(--safe-top);
-}
-.safe-bottom {
-    padding-bottom: var(--safe-bottom);
-}
+.safe-top { padding-top: var(--safe-top); }
+.safe-bottom { padding-bottom: var(--safe-bottom); }
 
 /* ─────────── Splash / preloader ─────────── */
 
 .mrr-splash {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     min-height: 100vh;
     min-height: 100dvh;
     min-height: 100lvh;
@@ -212,10 +235,7 @@ html, body {
 
 .mrr-offline {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     min-height: 100vh;
     min-height: 100dvh;
     min-height: 100lvh;
@@ -226,11 +246,11 @@ html, body {
     padding-top: calc(24px + var(--safe-top));
     padding-bottom: calc(24px + var(--safe-bottom));
     box-sizing: border-box;
-    background-color: #08080F;
+    background-color: var(--bg-base);
     background-image:
-            radial-gradient(60% 40% at 20% 0%, rgba(124,58,237,.22), transparent 60%),
-            radial-gradient(50% 40% at 100% 20%, rgba(236,72,153,.18), transparent 60%),
-            radial-gradient(50% 40% at 50% 100%, rgba(6,182,212,.16), transparent 60%);
+            radial-gradient(60% 40% at 20% 0%, var(--glow-1), transparent 60%),
+            radial-gradient(50% 40% at 100% 20%, var(--glow-2), transparent 60%),
+            radial-gradient(50% 40% at 50% 100%, var(--glow-3), transparent 60%);
     background-repeat: no-repeat;
     background-size: 100% 100%;
     background-attachment: fixed;
@@ -245,7 +265,7 @@ html, body {
     margin: 0 auto 20px;
     display: grid;
     place-items: center;
-    color: rgba(255, 255, 255, .6);
+    color: var(--text-secondary);
     filter: drop-shadow(0 0 30px rgba(236, 72, 153, .35));
 }
 
@@ -253,12 +273,12 @@ html, body {
     margin: 0 0 12px;
     font-size: 26px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-primary);
 }
 
 .mrr-offline__text {
     margin: 0 0 24px;
-    color: rgba(255, 255, 255, .6);
+    color: var(--text-secondary);
     font-size: 15px;
     line-height: 1.5;
 }
@@ -299,22 +319,38 @@ html, body {
         @apply btn text-white shadow-glow;
         background-image: var(--brand-gradient);
         background-size: 200% 200%;
+        color: #fff;
     }
     .btn-primary:hover {
         animation: gradient 3s ease infinite;
     }
     .btn-ghost {
-        @apply btn bg-ink-700 hover:bg-ink-600 text-white/90;
+        @apply btn text-white/90;
+        background-color: var(--bg-elev-2);
+    }
+    .btn-ghost:hover {
+        background-color: var(--bg-elev-3);
     }
     .card {
-        @apply rounded-3xl bg-ink-800/80 border border-white/5 backdrop-blur-xl;
+        @apply rounded-3xl border backdrop-blur-xl;
+        background-color: var(--card-bg);
+        border-color: var(--border-subtle);
     }
     .card-flat {
-        @apply rounded-3xl bg-ink-800/90 border border-white/5;
+        @apply rounded-3xl border;
+        background-color: var(--card-flat-bg);
+        border-color: var(--border-subtle);
     }
     .input {
-        @apply w-full rounded-2xl bg-ink-700/70 border border-white/5 px-4 py-3 text-white placeholder-white/40
-        outline-none focus:border-violet/60 focus:ring-2 focus:ring-violet/30 transition;
+        @apply w-full rounded-2xl border px-4 py-3 outline-none transition;
+        background-color: var(--input-bg);
+        border-color: var(--border-subtle);
+        color: var(--text-primary);
+    }
+    .input::placeholder { color: var(--text-muted); }
+    .input:focus {
+        border-color: rgba(124, 58, 237, .6);
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, .2);
     }
     .chip {
         @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide;
@@ -331,12 +367,8 @@ html, body {
 
 /* ─────────── Скроллбары ─────────── */
 
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
-}
-.no-scrollbar {
-    scrollbar-width: none;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
 
 /* ─────────── Мобильная навигация ─────────── */
 
@@ -344,31 +376,468 @@ html, body {
     padding-bottom: calc(64px + var(--safe-bottom));
 }
 @media (min-width: 768px) {
-    .pb-nav {
-        padding-bottom: 0;
-    }
+    .pb-nav { padding-bottom: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   LIGHT THEME OVERRIDES
+   ═══════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+    color-scheme: light;
+}
+
+/* Фоны палитры ink */
+[data-theme="light"] .bg-ink-900 { background-color: #f5f5f7 !important; }
+[data-theme="light"] .bg-ink-800 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-ink-700 { background-color: #eeeef1 !important; }
+[data-theme="light"] .bg-ink-600 { background-color: #e5e5ea !important; }
+
+[data-theme="light"] .bg-ink-900\/95 { background-color: rgba(245,245,247,.97) !important; }
+[data-theme="light"] .bg-ink-800\/95 { background-color: rgba(255,255,255,.97) !important; }
+[data-theme="light"] .bg-ink-800\/80 { background-color: rgba(255,255,255,.88) !important; }
+[data-theme="light"] .bg-ink-800\/70 { background-color: rgba(255,255,255,.78) !important; }
+[data-theme="light"] .bg-ink-800\/50 { background-color: rgba(255,255,255,.62) !important; }
+[data-theme="light"] .bg-ink-700\/70 { background-color: rgba(238,238,241,.8) !important; }
+[data-theme="light"] .bg-ink-700\/60 { background-color: rgba(238,238,241,.72) !important; }
+[data-theme="light"] .bg-ink-700\/50 { background-color: rgba(238,238,241,.65) !important; }
+[data-theme="light"] .bg-ink-700\/40 { background-color: rgba(238,238,241,.55) !important; }
+[data-theme="light"] .bg-ink-700\/90 { background-color: rgba(238,238,241,.92) !important; }
+
+/* Тексты white* → тёмные */
+[data-theme="light"] .text-white { color: #0f0f14 !important; }
+[data-theme="light"] .text-white\/90 { color: rgba(15,15,20,.92) !important; }
+[data-theme="light"] .text-white\/80 { color: rgba(15,15,20,.85) !important; }
+[data-theme="light"] .text-white\/70 { color: rgba(15,15,20,.75) !important; }
+[data-theme="light"] .text-white\/60 { color: rgba(15,15,20,.65) !important; }
+[data-theme="light"] .text-white\/50 { color: rgba(15,15,20,.55) !important; }
+[data-theme="light"] .text-white\/40 { color: rgba(15,15,20,.45) !important; }
+[data-theme="light"] .text-white\/30 { color: rgba(15,15,20,.35) !important; }
+[data-theme="light"] .text-white\/20 { color: rgba(15,15,20,.22) !important; }
+
+/* Фоны white/* → тёмные полупрозрачные */
+[data-theme="light"] .bg-white\/5 { background-color: rgba(15,15,20,.05) !important; }
+[data-theme="light"] .bg-white\/10 { background-color: rgba(15,15,20,.08) !important; }
+[data-theme="light"] .bg-white\/15 { background-color: rgba(15,15,20,.11) !important; }
+[data-theme="light"] .bg-white\/20 { background-color: rgba(15,15,20,.14) !important; }
+[data-theme="light"] .bg-white\/25 { background-color: rgba(15,15,20,.16) !important; }
+
+[data-theme="light"] .hover\:bg-white\/5:hover { background-color: rgba(15,15,20,.05) !important; }
+[data-theme="light"] .hover\:bg-white\/10:hover { background-color: rgba(15,15,20,.08) !important; }
+[data-theme="light"] .hover\:bg-white\/15:hover { background-color: rgba(15,15,20,.11) !important; }
+[data-theme="light"] .hover\:bg-white\/20:hover { background-color: rgba(15,15,20,.14) !important; }
+[data-theme="light"] .hover\:bg-ink-600:hover { background-color: #dcdce2 !important; }
+[data-theme="light"] .hover\:bg-ink-700\/90:hover { background-color: rgba(220,220,226,.92) !important; }
+
+/* Границы */
+[data-theme="light"] .border-white\/5 { border-color: rgba(15,15,20,.06) !important; }
+[data-theme="light"] .border-white\/10 { border-color: rgba(15,15,20,.12) !important; }
+[data-theme="light"] .border-white\/40 { border-color: rgba(15,15,20,.4) !important; }
+
+/* Исключения: цветной текст на цветном фоне всегда белый */
+[data-theme="light"] .btn-primary,
+[data-theme="light"] .btn-primary *,
+[data-theme="light"] .mrr-offline__btn {
+    color: #fff !important;
+}
+
+/* Активные чипы с фоном bg-violet / bg-pink / bg-cyan / bg-lime */
+[data-theme="light"] .bg-violet.text-white,
+[data-theme="light"] .bg-pink.text-white,
+[data-theme="light"] .bg-cyan.text-white,
+[data-theme="light"] .bg-lime.text-white,
+[data-theme="light"] .bg-violet .text-white,
+[data-theme="light"] .bg-pink .text-white {
+    color: #fff !important;
+}
+
+/* Мобильная навигация */
+[data-theme="light"] nav.md\:hidden {
+    background-color: rgba(255,255,255,.97) !important;
+    border-top-color: rgba(15,15,20,.08) !important;
+}
+
+/* Модалки и оверлеи */
+[data-theme="light"] .fixed.bg-black\/60,
+[data-theme="light"] .fixed.bg-black\/70,
+[data-theme="light"] .fixed.bg-black\/80,
+[data-theme="light"] .fixed.bg-black\/95 {
+    background-color: rgba(20, 20, 30, .4) !important;
+}
+
+/* Плейсхолдеры */
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+    color: rgba(15,15,20,.4) !important;
+}
+
+/* Чат: строка ввода */
+[data-theme="light"] .chat-screen {
+    background-color: #f5f5f7;
+}
+
+/* Тень под постом */
+[data-theme="light"] .post-stack {
+    box-shadow: 0 1px 3px rgba(15,15,20,.05);
+}
+
+/* ═══════════════════════════════════════════════════════
+   LIGHT THEME — MESSENGER
+   ═══════════════════════════════════════════════════════
+   Чужие пузыри (mrr-other-bubble): белый фон + тень + рамка,
+   чтобы не сливались с фоном #f5f5f7.
+   Свои пузыри (mrr-own-bubble): на градиенте, всегда белый текст
+   и светлые внутренние элементы (реакции, превью ответа).
+*/
+
+/* Чужие сообщения */
+[data-theme="light"] .mrr-other-bubble {
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(15,15,20,.06), 0 1px 3px rgba(15,15,20,.04);
+    border: 1px solid rgba(15,15,20,.06);
+}
+
+/* Свои сообщения (градиент) — белый текст независимо от глобального overrides */
+[data-theme="light"] .mrr-own-bubble,
+[data-theme="light"] .mrr-own-bubble.text-white {
+    color: #ffffff !important;
+}
+[data-theme="light"] .mrr-own-bubble .text-white { color: #ffffff !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/90 { color: rgba(255,255,255,.92) !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/80 { color: rgba(255,255,255,.85) !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/70 { color: rgba(255,255,255,.78) !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/60 { color: rgba(255,255,255,.68) !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/50 { color: rgba(255,255,255,.6) !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/40 { color: rgba(255,255,255,.5) !important; }
+[data-theme="light"] .mrr-own-bubble .text-white\/30 { color: rgba(255,255,255,.4) !important; }
+
+/* Внутренние светлые элементы на градиенте — оставляем белыми */
+[data-theme="light"] .mrr-own-bubble .bg-white\/10 { background-color: rgba(255,255,255,.15) !important; }
+[data-theme="light"] .mrr-own-bubble .bg-white\/15 { background-color: rgba(255,255,255,.2) !important; }
+[data-theme="light"] .mrr-own-bubble .bg-white\/20 { background-color: rgba(255,255,255,.22) !important; }
+[data-theme="light"] .mrr-own-bubble .bg-white\/25 { background-color: rgba(255,255,255,.25) !important; }
+[data-theme="light"] .mrr-own-bubble .border-white\/40 { border-color: rgba(255,255,255,.5) !important; }
+
+/* В чужих пузырях серые внутренние элементы — оставляем как есть */
+[data-theme="light"] .mrr-other-bubble .bg-white\/10 { background-color: rgba(15,15,20,.05) !important; }
+[data-theme="light"] .mrr-other-bubble .border-white\/40 { border-color: rgba(15,15,20,.25) !important; }
+
+/* Фон самого мессенджера в светлой теме — чуть темнее, чем base,
+   чтобы белые пузыри чужих сообщений были заметны */
+[data-theme="light"] .chat-screen,
+[data-theme="light"] .chat-screen.bg-ink-900 {
+    background-color: #ecedf1 !important;
+}
+
+/* Панель ввода и хедер чата — полупрозрачные белые */
+[data-theme="light"] .chat-screen header,
+[data-theme="light"] .chat-screen > section > div.border-t {
+    background-color: rgba(255,255,255,.85) !important;
+    backdrop-filter: blur(12px);
+}
+
+/* Время под сообщением — чуть заметнее */
+[data-theme="light"] .chat-screen .text-white\/30 {
+    color: rgba(15,15,20,.5) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   IMAGE VIEWER
+   ═══════════════════════════════════════════════════════
+   Просмотрщик фото работает поверх собственного тёмного фона
+   (rgba(0,0,0,α) — непрозрачность зависит от свайпа). Поэтому
+   все его элементы — кнопки, текст, подсказки — всегда светлые,
+   независимо от темы приложения. Отдельные классы .mrr-iv-*
+   гарантируют, что никакой Tailwind-override их не тронет.
+*/
+
+.mrr-iv {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+    -webkit-user-select: none;
+    animation: mrrIvPop 200ms ease-out;
+}
+
+@keyframes mrrIvPop {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ─── Шапка ─── */
+
+.mrr-iv__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    color: #ffffff;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.mrr-iv__counter {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.75);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ПК-кнопка «Закрыть · Esc» */
+.mrr-iv__close-desktop {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color .15s ease, transform .1s ease;
+}
+
+.mrr-iv__close-desktop:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+}
+
+.mrr-iv__close-desktop:active {
+    transform: scale(0.96);
+}
+
+.mrr-iv__close-x {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.mrr-iv__kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+/* Мобильная кнопка-крестик */
+.mrr-iv__close-mobile {
+    display: none;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background-color .15s ease, transform .1s ease;
+}
+
+.mrr-iv__close-mobile:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+}
+.mrr-iv__close-mobile:active {
+    transform: scale(0.94);
+}
+
+@media (max-width: 767px) {
+    .mrr-iv__close-desktop { display: none; }
+    .mrr-iv__close-mobile { display: inline-flex; }
+}
+
+/* ─── Сцена ─── */
+
+.mrr-iv__stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px 16px;
+    overflow: hidden;
+}
+
+@media (min-width: 768px) {
+    .mrr-iv__stage { padding: 0 48px 16px; }
+}
+
+.mrr-iv__img {
+    max-height: 100%;
+    max-width: 100%;
+    border-radius: 16px;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
+}
+
+/* ─── Навигационные стрелки ─── */
+
+.mrr-iv__nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color .15s ease, transform .1s ease;
+    z-index: 10;
+}
+
+.mrr-iv__nav:hover {
+    background-color: rgba(255, 255, 255, 0.24);
+}
+.mrr-iv__nav:active {
+    transform: translateY(-50%) scale(0.94);
+}
+
+.mrr-iv__nav--left  { left: 8px; }
+.mrr-iv__nav--right { right: 8px; }
+
+@media (min-width: 768px) {
+    .mrr-iv__nav { display: inline-flex; }
+    .mrr-iv__nav--left  { left: 16px; }
+    .mrr-iv__nav--right { right: 16px; }
+}
+
+/* ─── Точки-индикаторы ─── */
+
+.mrr-iv__dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.mrr-iv__dot {
+    height: 6px;
+    width: 6px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: width .2s ease, background-color .2s ease;
+}
+
+.mrr-iv__dot.is-active {
+    width: 24px;
+    background-color: #ffffff;
+}
+
+/* ─── Подсказка ─── */
+
+.mrr-iv__hint-wrap {
+    display: flex;
+    justify-content: center;
+    padding-bottom: 16px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .3s ease;
+    pointer-events: none;
+}
+
+.mrr-iv__hint-wrap.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mrr-iv__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 12px;
+}
+
+.mrr-iv__hint-mobile {
+    display: inline;
+}
+
+.mrr-iv__hint-desktop {
+    display: none;
+    align-items: center;
+    gap: 12px;
+}
+
+@media (min-width: 768px) {
+    .mrr-iv__hint-mobile { display: none; }
+    .mrr-iv__hint-desktop { display: inline-flex; }
+}
+
+.mrr-iv__hint-sep {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+
+/* ─────────── Анимация typing-точек в списке чатов ─────────── */
+
+.mrr-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    margin-left: 1px;
+}
+
+.mrr-typing-dots > span {
+    animation: mrr-typing-dot 1.4s infinite ease-in-out;
+    opacity: 0.3;
+}
+
+.mrr-typing-dots > span:nth-child(1) { animation-delay: 0s; }
+.mrr-typing-dots > span:nth-child(2) { animation-delay: 0.2s; }
+.mrr-typing-dots > span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes mrr-typing-dot {
+    0%, 60%, 100% { opacity: 0.3; }
+    30% { opacity: 1; }
 }
 
 /* ─────────── Fallback для старых браузеров ─────────── */
 
 @supports not (background: radial-gradient(circle, red, blue)) {
-    body::before {
+    html {
         background-image: none;
+        background-color: var(--bg-base);
     }
 
-    .wiki-content { @apply text-white/85 leading-relaxed; }
-    .wiki-content h1 { @apply text-2xl md:text-3xl font-bold mt-6 mb-3 text-white; }
-    .wiki-content h2 { @apply text-xl md:text-2xl font-bold mt-6 mb-3 text-white; }
-    .wiki-content h3 { @apply text-lg md:text-xl font-bold mt-5 mb-2 text-white; }
-    .wiki-content h4 { @apply font-bold mt-4 mb-2 text-white; }
+    .wiki-content { @apply leading-relaxed; color: var(--text-primary); }
+    .wiki-content h1 { @apply text-2xl md:text-3xl font-bold mt-6 mb-3; color: var(--text-primary); }
+    .wiki-content h2 { @apply text-xl md:text-2xl font-bold mt-6 mb-3; color: var(--text-primary); }
+    .wiki-content h3 { @apply text-lg md:text-xl font-bold mt-5 mb-2; color: var(--text-primary); }
+    .wiki-content h4 { @apply font-bold mt-4 mb-2; color: var(--text-primary); }
     .wiki-content p { @apply my-3; }
     .wiki-content ul { @apply list-disc pl-6 my-3 space-y-1; }
     .wiki-content ol { @apply list-decimal pl-6 my-3 space-y-1; }
-    .wiki-content li { @apply marker:text-violet-soft; }
-    .wiki-content blockquote { @apply border-l-2 border-violet-soft pl-4 my-4 italic text-white/70; }
-    .wiki-content code { @apply px-1.5 py-0.5 rounded bg-black/40 text-cyan-soft text-sm font-mono; }
-    .wiki-content pre { @apply p-4 rounded-2xl bg-black/60 overflow-x-auto my-4; }
-    .wiki-content pre code { @apply bg-transparent p-0; }
-    .wiki-content a { @apply text-violet-soft hover:underline; }
-    .wiki-content strong { @apply text-white; }
+    .wiki-content blockquote { @apply border-l-2 pl-4 my-4 italic; border-color: #A78BFA; color: var(--text-secondary); }
+    .wiki-content code { @apply px-1.5 py-0.5 rounded text-sm font-mono; background-color: rgba(0,0,0,.1); }
+    .wiki-content pre { @apply p-4 rounded-2xl overflow-x-auto my-4; background-color: rgba(0,0,0,.15); }
+    .wiki-content pre code { @apply p-0; background-color: transparent; }
+    .wiki-content a { @apply hover:underline; color: #8B5CF6; }
+    .wiki-content strong { color: var(--text-primary); }
 }
