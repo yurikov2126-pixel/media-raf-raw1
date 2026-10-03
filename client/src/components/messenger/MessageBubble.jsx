@@ -1,16 +1,14 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import Avatar from '../Avatar.jsx';
 import MessageText from '../MessageText.jsx';
 import VoicePlayer from '../VoicePlayer.jsx';
 import { resolveUrl } from '../../api/client.js';
-import { Sticker, QUICK_EMOJI } from '../../stickers/pack.jsx';
+import { Sticker } from '../../stickers/pack.jsx';
 
 export default function MessageBubble({
                                           m, isOwn, highlight, onlineSet,
-                                          onReply, onEdit, onDelete, onForward, onReact,
-                                          onOpenImage, onOpenProfile, onScrollToReply, onLongPress,
+                                          onOpenImage, onOpenProfile, onScrollToReply, onLongPress, onReact,
                                       }) {
-    const [showReactions, setShowReactions] = useState(false);
     const longPressTimer = useRef(null);
     const startPos = useRef(null);
 
@@ -35,7 +33,8 @@ export default function MessageBubble({
         if (
             Math.abs(touch.clientX - startPos.current.x) > 8 ||
             Math.abs(touch.clientY - startPos.current.y) > 8
-        ) clearTimeout(longPressTimer.current);
+        )
+            clearTimeout(longPressTimer.current);
     };
     const endLongPress = () => {
         clearTimeout(longPressTimer.current);
@@ -70,7 +69,11 @@ export default function MessageBubble({
                     <Avatar user={m.sender} size={34} online={onlineSet?.has(m.sender.id)} />
                 </button>
             )}
-            <div className={`max-w-[80%] md:max-w-[65%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col`}>
+            <div
+                className={`max-w-[80%] md:max-w-[65%] ${
+                    isOwn ? 'items-end' : 'items-start'
+                } flex flex-col`}
+            >
                 {!isOwn && (
                     <button
                         onClick={onOpenProfile}
@@ -81,19 +84,29 @@ export default function MessageBubble({
                 )}
 
                 <div
-                    onDoubleClick={() => onReact('❤️')}
+                    onDoubleClick={() => onReact?.('❤️')}
                     onTouchStart={startLongPress}
                     onTouchMove={moveLongPress}
                     onTouchEnd={endLongPress}
                     onTouchCancel={endLongPress}
                     onContextMenu={onCtx}
                     className={`relative rounded-2xl px-3 py-2 select-none ${
-                        isMediaOnly ? 'bg-transparent !p-0' : isOwn ? 'text-white' : 'bg-ink-700 text-white'
+                        isMediaOnly
+                            ? 'bg-transparent !p-0'
+                            : isOwn
+                                ? 'text-white'
+                                : 'bg-ink-700 text-white'
                     }`}
-                    style={isOwn && !isMediaOnly ? { background: 'var(--brand-gradient)' } : undefined}
+                    style={
+                        isOwn && !isMediaOnly
+                            ? { background: 'var(--brand-gradient)' }
+                            : undefined
+                    }
                 >
                     {forwarded && (
-                        <div className="text-xs opacity-70 mb-1 italic">↪ Переслано от {forwarded.fullName}</div>
+                        <div className="text-xs opacity-70 mb-1 italic">
+                            ↪ Переслано от {forwarded.fullName}
+                        </div>
                     )}
                     {m.replyTo && (
                         <button
@@ -102,10 +115,14 @@ export default function MessageBubble({
                         >
                             <div className="font-bold">{m.replyTo.sender?.fullName}</div>
                             <div className="truncate max-w-[200px]">
-                                {m.replyTo.type === 'image' ? '🖼️ Изображение'
-                                    : m.replyTo.type === 'video' ? '🎥 Видео'
-                                        : m.replyTo.type === 'voice' ? '🎤 Голосовое'
-                                            : m.replyTo.type === 'file' ? '📎 Файл'
+                                {m.replyTo.type === 'image'
+                                    ? '🖼️ Изображение'
+                                    : m.replyTo.type === 'video'
+                                        ? '🎥 Видео'
+                                        : m.replyTo.type === 'voice'
+                                            ? '🎤 Голосовое'
+                                            : m.replyTo.type === 'file'
+                                                ? '📎 Файл'
                                                 : m.replyTo.content}
                             </div>
                         </button>
@@ -167,7 +184,7 @@ export default function MessageBubble({
                             {Object.entries(grouped).map(([emoji, count]) => (
                                 <button
                                     key={emoji}
-                                    onClick={() => onReact(emoji)}
+                                    onClick={() => onReact?.(emoji)}
                                     className={`text-xs rounded-full px-2 py-0.5 ${
                                         isOwn ? 'bg-black/20' : 'bg-white/10'
                                     } hover:bg-white/20`}
@@ -180,35 +197,11 @@ export default function MessageBubble({
                 </div>
 
                 <div className="text-[10px] text-white/30 px-2 mt-1">
-                    {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(m.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                    })}
                 </div>
-
-                <div className="hidden md:group-hover:flex gap-1 mt-1">
-                    <button onClick={() => setShowReactions(!showReactions)} className="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10">😊</button>
-                    <button onClick={onReply} className="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10">↩</button>
-                    <button onClick={onForward} className="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10">↪</button>
-                    {isOwn && !m.deletedAt && m.type === 'text' && (
-                        <>
-                            <button onClick={onEdit} className="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10">✏️</button>
-                            <button onClick={onDelete} className="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10">🗑️</button>
-                        </>
-                    )}
-                    {isOwn && !m.deletedAt && m.type !== 'text' && (
-                        <button onClick={onDelete} className="text-xs px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10">🗑️</button>
-                    )}
-                </div>
-
-                {showReactions && (
-                    <div className="flex gap-1 mt-1 animate-pop">
-                        {QUICK_EMOJI.slice(0, 6).map((e) => (
-                            <button
-                                key={e}
-                                onClick={() => { onReact(e); setShowReactions(false); }}
-                                className="text-xl hover:scale-125 transition"
-                            >{e}</button>
-                        ))}
-                    </div>
-                )}
             </div>
         </div>
     );

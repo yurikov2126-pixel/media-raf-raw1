@@ -12,6 +12,7 @@ import ImageViewer from '../components/ImageViewer.jsx';
 import MessageBubble from '../components/messenger/MessageBubble.jsx';
 import GroupAvatar from '../components/messenger/GroupAvatar.jsx';
 import NewChatButton from '../components/messenger/NewChatButton.jsx';
+import ReportButton from '../components/ReportButton.jsx';
 import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
 
 function pickAudioMime() {
@@ -67,6 +68,10 @@ export default function Messenger() {
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
     const [panel, setPanel] = useState(null);
     const [attachMenu, setAttachMenu] = useState(false);
+
+    /* Жалоба. Открывается из контекстного меню (мобильные)
+       через externalOpen у ReportButton. */
+    const [reportTarget, setReportTarget] = useState(null);
 
     const [recording, setRecording] = useState(false);
     const [recordingSec, setRecordingSec] = useState(0);
@@ -214,6 +219,7 @@ export default function Messenger() {
         setShowMembers(false); setContextMenu(null); setMentionQuery(null);
         setChatMenu(null); setHeaderMenuOpen(false); setPanel(null);
         setAttachMenu(false); setSearchOpen(false); setSearch('');
+        setReportTarget(null);
     }, [chatId]);
 
     const send = () => {
@@ -368,6 +374,7 @@ export default function Messenger() {
             { id: 'copy', label: '📋 Копировать', only: m.type === 'text' },
             { id: 'forward', label: '↪ Переслать' },
             { id: 'pin', label: '📌 Закрепить', only: !m.deletedAt && canPin },
+            { id: 'report', label: '🚩 Пожаловаться', only: !isOwn && !m.deletedAt, danger: true },
             { id: 'edit', label: '✏️ Изменить', only: isOwn && m.type === 'text' && !m.deletedAt },
             { id: 'delete', label: '🗑️ Удалить', only: isOwn && !m.deletedAt, danger: true },
         ].filter((a) => a.only === undefined || a.only);
@@ -380,6 +387,7 @@ export default function Messenger() {
                 case 'copy': navigator.clipboard?.writeText(m.content); break;
                 case 'forward': setForwarding(m); break;
                 case 'pin': pinMessage(m); break;
+                case 'report': setReportTarget({ type: 'message', id: m.id }); break;
                 case 'edit': setEditing(m); setText(m.content); break;
                 case 'delete':
                     if (confirm('Удалить сообщение?'))
@@ -581,10 +589,6 @@ export default function Messenger() {
                                     isOwn={m.sender.id === user.id}
                                     highlight={highlightId === m.id}
                                     onlineSet={onlineUsers}
-                                    onReply={() => setReplyTo(m)}
-                                    onEdit={() => { setEditing(m); setText(m.content); }}
-                                    onDelete={() => socket.emit('message:delete', { messageId: m.id })}
-                                    onForward={() => setForwarding(m)}
                                     onReact={(emoji) => toggleReaction(m.id, emoji)}
                                     onOpenImage={() => openViewer(m.id)}
                                     onOpenProfile={() => goProfile(m.sender.username)}
@@ -864,6 +868,16 @@ export default function Messenger() {
 
             {showGallery && chatId && (
                 <MediaGalleryModal chatId={chatId} onClose={() => setShowGallery(false)} />
+            )}
+
+            {/* Модалка жалобы — открывается из контекстного меню (мобильные) */}
+            {reportTarget && (
+                <ReportButton
+                    targetType={reportTarget.type}
+                    targetId={reportTarget.id}
+                    externalOpen={true}
+                    onExternalClose={() => setReportTarget(null)}
+                />
             )}
         </div>
     );

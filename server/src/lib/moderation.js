@@ -4,7 +4,6 @@ const TARGET_TYPES = ['post', 'comment', 'message', 'user'];
 const REASONS = ['spam', 'abuse', 'illegal', 'other'];
 const STATUSES = ['NEW', 'IN_REVIEW', 'RESOLVED', 'REJECTED'];
 
-/* Проверяем, что цель существует. Возвращает объект или null. */
 async function resolveTarget(targetType, targetId) {
     switch (targetType) {
         case 'post':
@@ -32,25 +31,21 @@ async function resolveTarget(targetType, targetId) {
     }
 }
 
-/* Создание жалобы. */
 export async function createReport({ reporterId, targetType, targetId, reason, comment }) {
-    if (!TARGET_TYPES.includes(targetType)) {
-        throw new Error('Недопустимый тип объекта');
-    }
-    if (!REASONS.includes(reason)) {
-        throw new Error('Недопустимая причина');
-    }
+    if (!TARGET_TYPES.includes(targetType)) throw new Error('Недопустимый тип объекта');
+    if (!REASONS.includes(reason)) throw new Error('Недопустимая причина');
+
     const target = await resolveTarget(targetType, targetId);
     if (!target) throw new Error('Объект не найден');
 
-    // Запрет на жалобу самого на себя
     const targetOwnerId =
-        targetType === 'message' ? target.senderId : targetType === 'user' ? target.id : target.authorId;
-    if (targetOwnerId === reporterId) {
-        throw new Error('Нельзя жаловаться на собственный контент');
-    }
+        targetType === 'message'
+            ? target.senderId
+            : targetType === 'user'
+                ? target.id
+                : target.authorId;
+    if (targetOwnerId === reporterId) throw new Error('Нельзя жаловаться на собственный контент');
 
-    // Защита от дублей: одна жалоба на объект от пользователя за 24 часа
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const dup = await prisma.report.findFirst({
         where: { reporterId, targetType, targetId, createdAt: { gte: since } },
@@ -62,7 +57,6 @@ export async function createReport({ reporterId, targetType, targetId, reason, c
     });
 }
 
-/* Список жалоб с фильтрами. */
 export async function listReports({ status, targetType, page = 1, limit = 30 }) {
     const where = {};
     if (status && STATUSES.includes(status)) where.status = status;
@@ -82,7 +76,6 @@ export async function listReports({ status, targetType, page = 1, limit = 30 }) 
         prisma.report.count({ where }),
     ]);
 
-    // Подтягиваем объекты жалоб одним пакетом
     const byType = { post: [], comment: [], message: [], user: [] };
     for (const r of items) {
         if (byType[r.targetType]) byType[r.targetType].push(r.targetId);
@@ -129,13 +122,9 @@ export async function listReports({ status, targetType, page = 1, limit = 30 }) 
     return { items: enriched, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
-/* Обновление статуса жалобы. */
 export async function updateReport({ id, status, resolution, resolverId }) {
     if (!STATUSES.includes(status)) throw new Error('Недопустимый статус');
-    const data = {
-        status,
-        resolution: resolution || null,
-    };
+    const data = { status, resolution: resolution || null };
     if (status === 'RESOLVED' || status === 'REJECTED') {
         data.resolvedBy = resolverId;
         data.resolvedAt = new Date();
@@ -143,7 +132,6 @@ export async function updateReport({ id, status, resolution, resolverId }) {
     return prisma.report.update({ where: { id }, data });
 }
 
-/* Удаление объекта жалобы + закрытие всех связанных жалоб. */
 export async function deleteReportedContent({ reportId, resolverId }) {
     const report = await prisma.report.findUnique({ where: { id: reportId } });
     if (!report) throw new Error('Жалоба не найдена');
@@ -170,7 +158,6 @@ export async function deleteReportedContent({ reportId, resolverId }) {
                 break;
         }
 
-        // Закрываем все открытые жалобы на этот же объект
         await tx.report.updateMany({
             where: {
                 targetType: report.targetType,
@@ -189,7 +176,6 @@ export async function deleteReportedContent({ reportId, resolverId }) {
     return { ok: true };
 }
 
-/* Бан автора контента. */
 export async function banReportedUser({ reportId, resolverId }) {
     const report = await prisma.report.findUnique({ where: { id: reportId } });
     if (!report) throw new Error('Жалоба не найдена');
@@ -198,12 +184,127 @@ export async function banReportedUser({ reportId, resolverId }) {
     if (!target) throw new Error('Объект не найден');
 
     const userId =
-        report.targetType === 'message' ? target.senderId : report.targetType === 'user' ? target.id : target.authorId;
+        report.targetType === 'message'
+            ? target.senderId
+            : report.targetType === 'user'
+                ? target.id
+                : target.authorId;
     if (!userId) throw new Error('Не удалось определить автора');
 
     await prisma.user.update({ where: { id: userId }, data: { isBanned: true } });
-
     return { ok: true, userId };
+}
+
+/* ─────────── Автомодерация ───────────
+   Проверяет пороги из настроек и применяет авто-действие:
+   - >= deleteThreshold уникальных жалоб → удалить контент
+   - >= banThreshold уникальных жалоб → забанить автора
+
+   Приоритет: бан > удаление. Пороги читаются из Setting:
+     moderation_auto_action_enabled = 'true' | 'false'
+     moderation_auto_delete_threshold = '3'
+     moderation_auto_ban_threshold = '5'
+
+   Считаем УНИКАЛЬНЫХ жалобщиков (distinct reporterId), чтобы один
+   пользователь не мог «забанить» контент массовыми жалобами. */
+export async function applyAutoModeration({ report }) {
+    const settings = await prisma.setting.findMany({
+        where: {
+            key: {
+                in: [
+                    'moderation_auto_action_enabled',
+                    'moderation_auto_delete_threshold',
+                    'moderation_auto_ban_threshold',
+                ],
+            },
+        },
+    });
+    const map = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+
+    if (map.moderation_auto_action_enabled !== 'true') {
+        return { applied: false, reason: 'disabled' };
+    }
+
+    const deleteThreshold = Math.max(2, Number(map.moderation_auto_delete_threshold) || 3);
+    const banThreshold = Math.max(2, Number(map.moderation_auto_ban_threshold) || 5);
+
+    const uniqueReporters = await prisma.report.findMany({
+        where: {
+            targetType: report.targetType,
+            targetId: report.targetId,
+            status: { in: ['NEW', 'IN_REVIEW'] },
+        },
+        select: { reporterId: true },
+        distinct: ['reporterId'],
+    });
+    const reporterCount = uniqueReporters.length;
+
+    // Бан приоритетнее удаления
+    if (reporterCount >= banThreshold) {
+        const target = await resolveTarget(report.targetType, report.targetId);
+        if (!target) return { applied: false, reason: 'target-not-found', reporters: reporterCount };
+
+        const authorId =
+            report.targetType === 'message'
+                ? target.senderId
+                : report.targetType === 'user'
+                    ? target.id
+                    : target.authorId;
+
+        if (authorId) {
+            await prisma.user.update({ where: { id: authorId }, data: { isBanned: true } });
+            await prisma.report.updateMany({
+                where: {
+                    targetType: report.targetType,
+                    targetId: report.targetId,
+                    status: { in: ['NEW', 'IN_REVIEW'] },
+                },
+                data: {
+                    status: 'RESOLVED',
+                    resolution: `Автобан (${reporterCount} жалоб)`,
+                    resolvedAt: new Date(),
+                },
+            });
+            return { applied: true, action: 'ban', reporters: reporterCount, userId: authorId };
+        }
+    }
+
+    if (reporterCount >= deleteThreshold) {
+        await prisma.$transaction(async (tx) => {
+            switch (report.targetType) {
+                case 'post':
+                    await tx.post.delete({ where: { id: report.targetId } }).catch(() => {});
+                    break;
+                case 'comment':
+                    await tx.comment.delete({ where: { id: report.targetId } }).catch(() => {});
+                    break;
+                case 'message':
+                    await tx.message
+                        .update({ where: { id: report.targetId }, data: { deletedAt: new Date(), content: '' } })
+                        .catch(() => {});
+                    break;
+            }
+            await tx.report.updateMany({
+                where: {
+                    targetType: report.targetType,
+                    targetId: report.targetId,
+                    status: { in: ['NEW', 'IN_REVIEW'] },
+                },
+                data: {
+                    status: 'RESOLVED',
+                    resolution: `Автоудаление (${reporterCount} жалоб)`,
+                    resolvedAt: new Date(),
+                },
+            });
+        });
+        return { applied: true, action: 'delete', reporters: reporterCount };
+    }
+
+    return {
+        applied: false,
+        reporters: reporterCount,
+        thresholds: { deleteThreshold, banThreshold },
+    };
 }
 
 export const REPORT_META = { TARGET_TYPES, REASONS, STATUSES };

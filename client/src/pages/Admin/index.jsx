@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../store/auth.jsx';
 import { useSettings } from '../../store/settings.jsx';
+import { useNotifications } from '../../store/notifications.jsx';
 import { TABS } from './constants.js';
 
 import Dashboard from './tabs/Dashboard.jsx';
@@ -19,10 +21,17 @@ import WikiRoot from './tabs/Wiki/index.jsx';
 import BulkRoot from './tabs/Bulk/index.jsx';
 import SiteDesignRoot from './tabs/SiteDesign/index.jsx';
 
+const VALID_TABS = new Set(TABS.map(([k]) => k));
+
 export default function Admin() {
     const { token } = useAuth();
     const { reload: reloadSettings } = useSettings();
-    const [tab, setTab] = useState('dash');
+    const { items: notifications } = useNotifications();
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const rawTab = searchParams.get('tab') || 'dash';
+    const tab = VALID_TABS.has(rawTab) ? rawTab : 'dash';
+    const setTab = (t) => setSearchParams({ tab: t }, { replace: true });
 
     const [stats, setStats] = useState({});
     const [users, setUsers] = useState([]);
@@ -31,19 +40,37 @@ export default function Admin() {
     const [settings, setSettings] = useState({});
     const [openReports, setOpenReports] = useState(0);
 
+    const reloadReportsBadge = () => {
+        api('/admin/reports?status=NEW&limit=1', { token })
+            .then((r) => setOpenReports(r.total || 0))
+            .catch(() => {});
+    };
+
     const reloadAll = () => {
         api('/admin/stats', { token }).then(setStats).catch(() => {});
         api('/admin/users', { token }).then(setUsers).catch(() => {});
         api('/admin/courses', { token }).then(setCourses).catch(() => {});
         api('/admin/certificates', { token }).then(setCertificates).catch(() => {});
         api('/admin/settings', { token }).then(setSettings).catch(() => {});
-        api('/admin/reports?status=NEW&limit=1', { token })
-            .then((r) => setOpenReports(r.total || 0))
-            .catch(() => {});
+        reloadReportsBadge();
     };
 
     useEffect(() => {
         reloadAll();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token]);
+
+    // Обновляем badge при новых уведомлениях типа report
+    useEffect(() => {
+        const hasUnreadReport = notifications.some((n) => n.type === 'report' && !n.readAt);
+        if (hasUnreadReport) reloadReportsBadge();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [notifications]);
+
+    // Периодический рефреш badge — на случай, если уведомление потерялось
+    useEffect(() => {
+        const t = setInterval(reloadReportsBadge, 30000);
+        return () => clearInterval(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
@@ -77,7 +104,9 @@ export default function Admin() {
             {tab === 'analytics' && <Analytics token={token} />}
             {tab === 'moderation' && <Moderation token={token} onChanged={reloadAll} />}
             {tab === 'users' && <Users users={users} setUsers={setUsers} token={token} />}
-            {tab === 'courses' && <CoursesRoot courses={courses} setCourses={setCourses} token={token} />}
+            {tab === 'courses' && (
+                <CoursesRoot courses={courses} setCourses={setCourses} token={token} />
+            )}
             {tab === 'wiki' && <WikiRoot token={token} />}
             {tab === 'certificates' && (
                 <Certificates
@@ -90,7 +119,9 @@ export default function Admin() {
             )}
             {tab === 'broadcast' && <Broadcast token={token} users={users} courses={courses} />}
             {tab === 'push' && <Push token={token} users={users} courses={courses} />}
-            {tab === 'bulk' && <BulkRoot token={token} users={users} courses={courses} onReload={reloadAll} />}
+            {tab === 'bulk' && (
+                <BulkRoot token={token} users={users} courses={courses} onReload={reloadAll} />
+            )}
             {tab === 'site' && (
                 <SiteDesignRoot
                     settings={settings}
@@ -100,7 +131,9 @@ export default function Admin() {
                 />
             )}
             {tab === 'backups' && <Backups token={token} />}
-            {tab === 'settings' && <Settings settings={settings} setSettings={setSettings} token={token} />}
+            {tab === 'settings' && (
+                <Settings settings={settings} setSettings={setSettings} token={token} />
+            )}
         </div>
     );
 }

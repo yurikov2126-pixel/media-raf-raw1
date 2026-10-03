@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../store/notifications.jsx';
 
 const ICONS = {
-    message: '💬', mention: '📣', post: '📝', certificate: '🏆', system: '📢',
+    message: '💬',
+    mention: '📣',
+    post: '📝',
+    certificate: '🏆',
+    system: '📢',
+    report: '🚩',
 };
 
 const TITLES = {
@@ -12,11 +17,14 @@ const TITLES = {
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
     certificate: (p) => p.title || 'Получен сертификат',
     system: (p) => p.title || 'Сообщение от администрации',
+    report: (p) =>
+        `Жалоба на ${p.targetLabel || 'контент'} от ${p.reporterName || 'пользователя'}`,
 };
 
 const FILTERS = [
     { v: 'all', l: 'Все' },
     { v: 'unread', l: 'Непрочитанные' },
+    { v: 'report', l: '🚩 Жалобы' },
     { v: 'message', l: '💬 Сообщения' },
     { v: 'post', l: '📝 Посты' },
     { v: 'certificate', l: '🏆 Сертификаты' },
@@ -42,6 +50,7 @@ export default function Notifications() {
         if (n.type === 'message' || n.type === 'mention') nav(`/app/chats/${p.chatId}`);
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
+        else if (n.type === 'report') nav('/app/admin?tab=moderation');
     };
 
     return (
@@ -68,7 +77,9 @@ export default function Notifications() {
                         key={f.v}
                         onClick={() => setFilter(f.v)}
                         className={`chip shrink-0 ${filter === f.v ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}
-                    >{f.l}</button>
+                    >
+                        {f.l}
+                    </button>
                 ))}
             </div>
 
@@ -107,6 +118,14 @@ export default function Notifications() {
                             {n.type === 'system' && (
                                 <div className="text-xs text-white/50 truncate mt-0.5">{n.payload.message}</div>
                             )}
+                            {n.type === 'report' && (
+                                <div className="text-xs text-white/50 truncate mt-0.5">
+                                    Причина: {n.payload.reason}
+                                    {n.payload.autoAction && (
+                                        <span className="ml-2 text-pink">· авто: {n.payload.autoAction}</span>
+                                    )}
+                                </div>
+                            )}
                             <div className="text-[10px] text-white/30 mt-1">
                                 {new Date(n.createdAt).toLocaleString('ru-RU')}
                             </div>
@@ -116,7 +135,9 @@ export default function Notifications() {
                             onClick={(e) => { e.stopPropagation(); remove(n.id); }}
                             className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
                             title="Удалить"
-                        >✕</button>
+                        >
+                            ✕
+                        </button>
                     </div>
                 ))}
             </div>
