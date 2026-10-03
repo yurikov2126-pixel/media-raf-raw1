@@ -21,11 +21,11 @@ router.get('/unread-count', auth, async (req, res) => {
 });
 
 router.post('/read-all', auth, async (req, res) => {
-    await prisma.notification.updateMany({
+    const r = await prisma.notification.updateMany({
         where: { userId: req.user.id, readAt: null },
         data: { readAt: new Date() },
     });
-    res.json({ ok: true });
+    res.json({ ok: true, updated: r.count });
 });
 
 router.post('/:id/read', auth, async (req, res) => {
@@ -43,17 +43,45 @@ router.post('/read-chat/:chatId', auth, async (req, res) => {
     });
     const ids = list
         .filter((n) => {
-            try { return JSON.parse(n.payload || '{}').chatId === req.params.chatId; } catch { return false; }
+            try {
+                return JSON.parse(n.payload || '{}').chatId === req.params.chatId;
+            } catch {
+                return false;
+            }
         })
         .map((n) => n.id);
     if (ids.length) {
-        await prisma.notification.updateMany({ where: { id: { in: ids } }, data: { readAt: new Date() } });
+        await prisma.notification.updateMany({
+            where: { id: { in: ids } },
+            data: { readAt: new Date() },
+        });
     }
     res.json({ ok: true });
 });
 
+/* ─────────── Массовая очистка ─────────── */
+
+/* Удалить все ПРОЧИТАННЫЕ уведомления текущего пользователя */
+router.delete('/read', auth, async (req, res) => {
+    const r = await prisma.notification.deleteMany({
+        where: { userId: req.user.id, readAt: { not: null } },
+    });
+    res.json({ ok: true, deleted: r.count });
+});
+
+/* Удалить ВСЕ уведомления текущего пользователя */
+router.delete('/all', auth, async (req, res) => {
+    const r = await prisma.notification.deleteMany({
+        where: { userId: req.user.id },
+    });
+    res.json({ ok: true, deleted: r.count });
+});
+
+/* Удалить конкретное уведомление */
 router.delete('/:id', auth, async (req, res) => {
-    await prisma.notification.deleteMany({ where: { id: req.params.id, userId: req.user.id } });
+    await prisma.notification.deleteMany({
+        where: { id: req.params.id, userId: req.user.id },
+    });
     res.json({ ok: true });
 });
 

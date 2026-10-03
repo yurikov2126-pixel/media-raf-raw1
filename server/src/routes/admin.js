@@ -53,6 +53,10 @@ import {
     getPushCleanupSettings,
     cleanupInactivePushSubscriptions,
 } from '../lib/pushCleanup.js';
+import {
+    getNotifyCleanupSettings,
+    cleanupOldNotifications,
+} from '../lib/notifyCleanup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
@@ -1264,7 +1268,6 @@ router.post(
 
 /* ─────────── Управление push-подписками ─────────── */
 
-/* Удалить одну подписку */
 router.delete(
     '/push/subscriptions/:id',
     safe(async (req, res) => {
@@ -1288,7 +1291,6 @@ router.delete(
     })
 );
 
-/* Массовое удаление по списку id */
 router.post(
     '/push/subscriptions/delete-many',
     safe(async (req, res) => {
@@ -1316,7 +1318,6 @@ router.post(
     })
 );
 
-/* Удалить все подписки конкретного пользователя */
 router.delete(
     '/push/subscriptions/user/:userId',
     safe(async (req, res) => {
@@ -1382,6 +1383,49 @@ router.post(
             res.json(r);
         } catch (e) {
             console.error('[admin] cleanup-now error:', e);
+            res.status(500).json({ error: e.message });
+        }
+    })
+);
+
+/* ─────────── Автоочистка старых уведомлений ─────────── */
+
+router.get(
+    '/notifications/cleanup-settings',
+    safe(async (_req, res) => {
+        try {
+            res.json(await getNotifyCleanupSettings());
+        } catch (e) {
+            console.error('[admin] notify-cleanup-settings error:', e);
+            res.status(500).json({ error: e.message });
+        }
+    })
+);
+
+router.post(
+    '/notifications/cleanup-now',
+    safe(async (req, res) => {
+        const { dryRun } = req.body || {};
+        try {
+            const r = await cleanupOldNotifications({
+                dryRun: !!dryRun,
+                trigger: 'manual-force',
+            });
+
+            if (!dryRun && r.deleted > 0) {
+                await prisma.adminAction.create({
+                    data: {
+                        adminId: req.user.id,
+                        action: 'notifications_cleanup',
+                        payload: JSON.stringify({ days: r.days, deleted: r.deleted }),
+                        affected: r.deleted,
+                    },
+                }).catch(() => {});
+            }
+
+            res.json(r);
+        } catch (e) {
+            console.error('[admin] notify-cleanup-now error:', e);
             res.status(500).json({ error: e.message });
         }
     })

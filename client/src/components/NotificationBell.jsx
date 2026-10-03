@@ -32,13 +32,17 @@ const EDGE = 8;
 
 export default function NotificationBell({ align = 'right' }) {
     const {
-        items, unread, pushState,
-        enablePush, disablePush, markAllRead, markRead, remove,
+        items, unread, readCount, pushState,
+        enablePush, disablePush,
+        markAllRead, markRead, remove,
+        removeRead, removeAll,
     } = useNotifications();
     const [open, setOpen] = useState(false);
     const [pos, setPos] = useState(null);
     const [busy, setBusy] = useState(false);
     const [pushError, setPushError] = useState('');
+    const [confirm, setConfirm] = useState(null); // 'clearRead' | 'clearAll'
+    const [actionMsg, setActionMsg] = useState('');
     const btnRef = useRef(null);
     const panelRef = useRef(null);
     const nav = useNavigate();
@@ -94,7 +98,10 @@ export default function NotificationBell({ align = 'right' }) {
             setOpen(false);
         };
         const onKey = (e) => {
-            if (e.key === 'Escape') setOpen(false);
+            if (e.key === 'Escape') {
+                if (confirm) setConfirm(null);
+                else setOpen(false);
+            }
         };
         window.addEventListener('scroll', onScroll, true);
         window.addEventListener('keydown', onKey);
@@ -102,7 +109,7 @@ export default function NotificationBell({ align = 'right' }) {
             window.removeEventListener('scroll', onScroll, true);
             window.removeEventListener('keydown', onKey);
         };
-    }, [open]);
+    }, [open, confirm]);
 
     const handleEnable = async () => {
         setBusy(true);
@@ -119,8 +126,11 @@ export default function NotificationBell({ align = 'right' }) {
 
     const handleDisable = async () => {
         setBusy(true);
-        try { await disablePush(); }
-        finally { setBusy(false); }
+        try {
+            await disablePush();
+        } finally {
+            setBusy(false);
+        }
     };
 
     const handleClick = async (n) => {
@@ -130,6 +140,29 @@ export default function NotificationBell({ align = 'right' }) {
         else if (n.type === 'post') nav(`/app/u/${n.payload.authorUsername}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${n.payload.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
+    };
+
+    const flashMsg = (text) => {
+        setActionMsg(text);
+        setTimeout(() => setActionMsg(''), 2000);
+    };
+
+    const doClear = async () => {
+        setBusy(true);
+        try {
+            if (confirm === 'clearRead') {
+                const n = await removeRead();
+                flashMsg(n > 0 ? `Удалено: ${n}` : 'Нечего удалять');
+            } else if (confirm === 'clearAll') {
+                const n = await removeAll();
+                flashMsg(n > 0 ? `Удалено: ${n}` : 'Пусто');
+            }
+        } catch (e) {
+            flashMsg('Ошибка: ' + e.message);
+        } finally {
+            setBusy(false);
+            setConfirm(null);
+        }
     };
 
     const pushLabel = (() => {
@@ -163,30 +196,59 @@ export default function NotificationBell({ align = 'right' }) {
                 className="fixed z-[100] card p-0 overflow-hidden animate-pop flex flex-col"
                 style={style}
             >
+                {/* Шапка */}
                 <div className="px-4 py-3 border-b border-white/5 shrink-0">
-                    <div className="flex items-center justify-between gap-2">
-                        <div className="font-bold">Уведомления</div>
-                        <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="font-bold">
+                            Уведомления
+                            {items.length > 0 && (
+                                <span className="text-white/40 font-normal text-xs ml-2">
+                                    {items.length}
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setOpen(false)}
+                            className="w-7 h-7 grid place-items-center rounded-full text-white/40 hover:text-white hover:bg-white/10 transition"
+                            title="Закрыть"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    {/* Кнопки действий */}
+                    {items.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
                             {unread > 0 && (
                                 <button
                                     onClick={markAllRead}
-                                    className="text-xs text-violet-soft hover:text-white whitespace-nowrap"
+                                    className="chip bg-violet/20 hover:bg-violet/40 text-white text-[11px]"
+                                    title="Пометить все как прочитанные"
                                 >
-                                    Прочитать все
+                                    ✓ Прочитать все ({unread})
+                                </button>
+                            )}
+                            {readCount > 0 && (
+                                <button
+                                    onClick={() => setConfirm('clearRead')}
+                                    className="chip bg-white/5 hover:bg-white/10 text-white/70 text-[11px]"
+                                    title="Удалить только прочитанные"
+                                >
+                                    🧹 Очистить прочитанные ({readCount})
                                 </button>
                             )}
                             <button
-                                onClick={() => setOpen(false)}
-                                className="w-7 h-7 grid place-items-center rounded-full text-white/40 hover:text-white hover:bg-white/10 transition"
-                                title="Закрыть"
+                                onClick={() => setConfirm('clearAll')}
+                                className="chip bg-white/5 hover:bg-pink/30 text-white/70 text-[11px]"
+                                title="Удалить все уведомления"
                             >
-                                ✕
+                                🗑️ Очистить всё
                             </button>
                         </div>
-                    </div>
+                    )}
 
                     {pushLabel && (
-                        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                        <div className="mt-3 flex items-center justify-between gap-2 text-xs">
                             <span className="text-white/50 truncate">{pushLabel.text}</span>
                             {pushLabel.action && (
                                 <button
@@ -201,8 +263,12 @@ export default function NotificationBell({ align = 'right' }) {
                     )}
 
                     {pushError && <div className="mt-2 text-[11px] text-pink">{pushError}</div>}
+                    {actionMsg && (
+                        <div className="mt-2 text-[11px] text-lime">{actionMsg}</div>
+                    )}
                 </div>
 
+                {/* Список */}
                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                     {items.length === 0 && (
                         <div className="p-8 text-center text-white/40 text-sm">Пока пусто</div>
@@ -272,13 +338,56 @@ export default function NotificationBell({ align = 'right' }) {
                     ))}
                 </div>
 
+                {/* Футер */}
                 <Link
                     to="/app/notifications"
                     onClick={() => setOpen(false)}
                     className="shrink-0 block text-center px-4 py-3 border-t border-white/5 text-sm text-violet-soft hover:text-white hover:bg-white/5 transition"
                 >
-                    {items.length > 0 ? `Все уведомления (${items.length})` : 'Открыть страницу уведомлений'}
+                    {items.length > 0
+                        ? `Все уведомления (${items.length})`
+                        : 'Открыть страницу уведомлений'}
                 </Link>
+
+                {/* Подтверждение очистки */}
+                {confirm && (
+                    <div
+                        className="absolute inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-10"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="card p-5 max-w-sm w-full">
+                            <div className="text-2xl mb-2">
+                                {confirm === 'clearAll' ? '⚠️' : '🧹'}
+                            </div>
+                            <div className="font-bold text-lg mb-2">
+                                {confirm === 'clearAll'
+                                    ? 'Очистить все уведомления?'
+                                    : 'Очистить прочитанные?'}
+                            </div>
+                            <div className="text-sm text-white/60 mb-4">
+                                {confirm === 'clearAll'
+                                    ? `Будут удалены все ${items.length} уведомлений, включая непрочитанные. Действие необратимо.`
+                                    : `Будут удалены ${readCount} прочитанных уведомлений. Непрочитанные останутся.`}
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    onClick={() => setConfirm(null)}
+                                    disabled={busy}
+                                    className="btn-ghost"
+                                >
+                                    Отмена
+                                </button>
+                                <button
+                                    onClick={doClear}
+                                    disabled={busy}
+                                    className="btn-primary !bg-pink"
+                                >
+                                    {busy ? '…' : 'Удалить'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>,
             document.body
         )

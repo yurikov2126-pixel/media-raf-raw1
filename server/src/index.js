@@ -23,6 +23,7 @@ import { startCron } from './lib/cron.js';
 import { schedulePushCleanup } from './lib/pushCleanupCron.js';
 import { prisma } from './lib/prisma.js';
 import reportsRouter from './routes/reports.js';
+import { scheduleNotifyCleanup } from './lib/notifyCleanupCron.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -125,6 +126,7 @@ process.on('uncaughtException', (err) => {
 initSocket(io);
 startCron();
 schedulePushCleanup();
+scheduleNotifyCleanup();
 
 server.listen(process.env.PORT || 4000, () =>
     console.log(`🚀 MEDIA-RAF-RAW API на http://localhost:${process.env.PORT || 4000}`)
