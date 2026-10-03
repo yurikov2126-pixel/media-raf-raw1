@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 const TEMPLATES = {
     gradient: {
@@ -154,6 +155,14 @@ export default function Certificate() {
             setDownloading(false);
         }
     };
+
+    usePageMeta({
+        title: cert ? `🏆 ${cert.title}` : 'Сертификат',
+        description: cert
+            ? `${cert.user.fullName} — курс «${cert.course.title}». Серийный номер: ${cert.serial}.`
+            : 'Сертификат о прохождении курса',
+        type: 'article',
+    });
 
     if (error) return <div className="p-10 text-center text-pink">{error}</div>;
     if (!cert) return <div className="p-10 text-center text-white/40">Загрузка…</div>;

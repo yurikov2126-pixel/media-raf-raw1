@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../store/notifications.jsx';
 import ConfirmDialog from './Admin/components/ConfirmDialog.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 const ICONS = {
     message: '💬',
@@ -85,6 +86,11 @@ export default function Notifications() {
             setConfirm(null);
         }
     };
+
+    usePageMeta({
+        title: 'Уведомления',
+        description: 'Ваши уведомления на платформе MEDIA·RAF·RAW',
+    });
 
     return (
         <div className="max-w-3xl mx-auto p-5 md:p-8">

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { Sticker } from '../stickers/pack.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 function getEmbedUrl(url) {
     if (!url) return null;
@@ -48,6 +49,13 @@ export default function CourseView() {
             topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, [mobileView, activeLesson?.id]);
+
+    usePageMeta({
+        title: course ? `🎓 ${course.title}` : 'Курс',
+        description: course?.description || 'Курс медиацентра MEDIA·RAF·RAW',
+        image: course?.cover,
+        type: 'article',
+    });
 
     if (!course) {
         return <div className="p-10 text-center text-white/40">Загрузка…</div>;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import PostCard from '../components/PostCard.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 const PAGE_SIZE = 20;
 
@@ -65,6 +66,11 @@ export default function Feed() {
         obs.observe(el);
         return () => obs.disconnect();
     }, [loadMore]);
+
+    usePageMeta({
+        title: 'Лента',
+        description: 'Свежие публикации команды MEDIA·RAF·RAW',
+    });
 
     return (
         <div className="p-5 md:p-10 max-w-3xl mx-auto">

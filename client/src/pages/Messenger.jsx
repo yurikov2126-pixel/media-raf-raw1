@@ -14,6 +14,7 @@ import GroupAvatar from '../components/messenger/GroupAvatar.jsx';
 import NewChatButton from '../components/messenger/NewChatButton.jsx';
 import ReportButton from '../components/ReportButton.jsx';
 import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 function pickAudioMime() {
     if (typeof MediaRecorder === 'undefined') return null;
@@ -409,6 +410,13 @@ export default function Messenger() {
     const deleteLabel = isActiveGroup
         ? isActiveGroupAdmin ? '🗑️ Удалить группу' : '🚪 Покинуть группу'
         : '🗑️ Удалить чат';
+
+    usePageMeta({
+        title: chatTitle ? `💬 ${chatTitle}` : 'Чаты',
+        description: chatTitle
+            ? `Переписка с ${chatTitle}`
+            : 'Мессенджер MEDIA·RAF·RAW',
+    });
 
     return (
         <div

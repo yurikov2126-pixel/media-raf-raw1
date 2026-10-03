@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 export default function Wiki() {
     const { token } = useAuth();
@@ -65,6 +66,13 @@ export default function Wiki() {
             articles: v.list,
         }));
     }, [articles, activeCategory]);
+
+    usePageMeta({
+        title: activeCategory
+            ? (categories.find((c) => c.slug === activeCategory)?.title || 'ВикиМедиа')
+            : 'ВикиМедиа',
+        description: 'База знаний медиацентра: термины, приёмы, оборудование и правила.',
+    });
 
     return (
         <div className="p-4 md:p-10 max-w-6xl mx-auto">

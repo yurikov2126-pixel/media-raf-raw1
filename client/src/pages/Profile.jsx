@@ -7,6 +7,7 @@ import ProfileEditor from '../components/ProfileEditor.jsx';
 import ImageCropper from '../components/ImageCropper.jsx';
 import PostCard from '../components/PostCard.jsx';
 import ReportButton from '../components/ReportButton.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 const DIR = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
@@ -119,6 +120,15 @@ export default function Profile() {
         });
         window.location.href = `/app/chats/${chat.id}`;
     };
+
+    usePageMeta({
+        title: profile
+            ? `${profile.fullName} (@${profile.username})`
+            : 'Профиль',
+        description: profile?.bio || 'Профиль студента медиацентра MEDIA·RAF·RAW',
+        image: profile?.avatar,
+        type: 'profile',
+    });
 
     if (!profile) return <div className="p-10 text-center text-white/40">Загрузка…</div>;
 

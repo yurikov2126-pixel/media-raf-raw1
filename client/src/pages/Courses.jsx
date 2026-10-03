@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import usePageMeta from '../hooks/usePageMeta.js';
 
 const CATEGORY_LABEL = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
@@ -13,6 +14,11 @@ export default function Courses() {
     useEffect(() => { api('/courses', { token }).then(setCourses); }, [token]);
 
     const shown = filter === 'all' ? courses : courses.filter((c) => c.category === filter);
+
+    usePageMeta({
+        title: 'Обучение',
+        description: 'Курсы медиацентра: видео, фото, звук, радио. Прокачай скиллы и получи сертификат.',
+    });
 
     return (
         <div className="p-5 md:p-10 max-w-6xl mx-auto">
