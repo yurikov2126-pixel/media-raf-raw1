@@ -44,8 +44,9 @@ model User {
   wikiArticles  WikiArticle[]
   pushSubs      PushSubscription[]
 
-  reportsMade     Report[] @relation("ReporterReports")
-  reportsResolved Report[] @relation("ResolverReports")
+  reportsMade       Report[] @relation("ReporterReports")
+  reportsResolved   Report[] @relation("ResolverReports")
+  onboardingVersion Int      @default(0)
 }
 
 model Post {

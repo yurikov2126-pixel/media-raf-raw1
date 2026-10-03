@@ -4,6 +4,7 @@ import { useNetwork } from './store/network.jsx';
 import Layout from './components/Layout.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
+import OnboardingModal from './components/OnboardingModal.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Feed from './pages/Feed.jsx';
@@ -42,41 +43,48 @@ function RootGate() {
 }
 
 export default function App() {
-    return (
-        <Routes>
-            <Route path="/" element={<RootGate />} />
-            <Route path="/login" element={<div className="page-enter"><Login /></div>} />
-            <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
+    const { user } = useAuth();
 
-            <Route
-                path="/app"
-                element={
-                    <Private>
-                        <Layout />
-                    </Private>
-                }
-            >
-                <Route index element={<Feed />} />
-                <Route path="u/:username" element={<Profile />} />
-                <Route path="chats" element={<Messenger />} />
-                <Route path="chats/:chatId" element={<Messenger />} />
-                <Route path="notifications" element={<Notifications />} />
-                <Route path="courses" element={<Courses />} />
-                <Route path="courses/:slug" element={<CourseView />} />
-                <Route path="wiki" element={<Wiki />} />
-                <Route path="wiki/:slug" element={<WikiArticle />} />
-                <Route path="certificates/:id" element={<Certificate />} />
+    return (
+        <>
+            <Routes>
+                <Route path="/" element={<RootGate />} />
+                <Route path="/login" element={<div className="page-enter"><Login /></div>} />
+                <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
+
                 <Route
-                    path="admin"
+                    path="/app"
                     element={
-                        <Private roles={['ADMIN']}>
-                            <Admin />
+                        <Private>
+                            <Layout />
                         </Private>
                     }
-                />
-            </Route>
+                >
+                    <Route index element={<Feed />} />
+                    <Route path="u/:username" element={<Profile />} />
+                    <Route path="chats" element={<Messenger />} />
+                    <Route path="chats/:chatId" element={<Messenger />} />
+                    <Route path="notifications" element={<Notifications />} />
+                    <Route path="courses" element={<Courses />} />
+                    <Route path="courses/:slug" element={<CourseView />} />
+                    <Route path="wiki" element={<Wiki />} />
+                    <Route path="wiki/:slug" element={<WikiArticle />} />
+                    <Route path="certificates/:id" element={<Certificate />} />
+                    <Route
+                        path="admin"
+                        element={
+                            <Private roles={['ADMIN']}>
+                                <Admin />
+                            </Private>
+                        }
+                    />
+                </Route>
 
-            <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+                <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+
+            {/* Онбординг поверх всего — показывается только авторизованным */}
+            {user && <OnboardingModal />}
+        </>
     );
 }

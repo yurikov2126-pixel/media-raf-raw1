@@ -5,10 +5,19 @@ import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
 
 const router = Router();
-const DEFAULT_GROUP_TITLE = 'Команда MEDIA-RAF-RAW';
 
-const sign = (u) => jwt.sign({ id: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
-const publicUser = (u) => { const { passwordHash, ...rest } = u; return rest; };
+/* Обёртка для обработки ошибок в async-роутах.
+   Нужна, чтобы не писать try/catch в каждом обработчике. */
+const safe = (fn) => async (req, res, next) => {
+    try {
+        await fn(req, res, next);
+    } catch (e) {
+        console.error('[auth] error:', e);
+        res.status(500).json({ error: e.message || 'Внутренняя ошибка' });
+    }
+};
+
+/* ─── Утилиты ─── */
 
 function normalizePhone(raw) {
     const digits = String(raw || '').replace(/\D/g, '');
@@ -18,93 +27,163 @@ function normalizePhone(raw) {
     return null;
 }
 
-async function addToDefaultChat(userId) {
-    let chat = await prisma.chat.findFirst({
-        where: { type: 'GROUP', title: DEFAULT_GROUP_TITLE },
-    });
-    if (!chat) {
-        chat = await prisma.chat.create({
-            data: {
-                type: 'GROUP',
-                title: DEFAULT_GROUP_TITLE,
-                members: { create: [{ userId, role: 'member' }] },
-            },
-        });
-        return chat;
-    }
-    await prisma.chatMember.upsert({
-        where: { chatId_userId: { chatId: chat.id, userId } },
-        update: {},
-        create: { chatId: chat.id, userId, role: 'member' },
-    });
-    return chat;
+function signToken(user) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET не задан в .env');
+    return jwt.sign(
+        { id: user.id, role: user.role, username: user.username },
+        secret,
+        { expiresIn: '30d' }
+    );
 }
 
-router.post('/register', async (req, res) => {
-    const { phone, username, firstName, lastName, password, direction } = req.body;
+function hidePrivate(user) {
+    if (!user) return user;
+    const { passwordHash, ...rest } = user;
+    return rest;
+}
 
-    if (!phone || !username || !firstName || !lastName || !password) {
-        return res.status(400).json({ error: 'Заполните все обязательные поля' });
-    }
+/* ─── Регистрация ─── */
 
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-        return res.status(400).json({ error: 'Некорректный номер телефона' });
-    }
+router.post(
+    '/register',
+    safe(async (req, res) => {
+        const { firstName, lastName, phone, username, password, direction } = req.body;
 
-    const cleanUsername = String(username).replace(/^@/, '').trim().toLowerCase();
-    if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
-        return res.status(400).json({ error: 'Ник: 3–20 символов, латиница/цифры/_' });
-    }
+        if (!firstName?.trim() || !lastName?.trim())
+            return res.status(400).json({ error: 'Имя и фамилия обязательны' });
 
-    const exists = await prisma.user.findFirst({
-        where: { OR: [{ phone: normalized }, { username: cleanUsername }] },
-    });
-    if (exists) {
-        return res.status(409).json({ error: 'Телефон или ник уже заняты' });
-    }
+        if (!password || String(password).length < 6)
+            return res.status(400).json({ error: 'Пароль не короче 6 символов' });
 
-    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        const normPhone = normalizePhone(phone);
+        if (!normPhone)
+            return res.status(400).json({ error: 'Некорректный номер телефона' });
 
-    const user = await prisma.user.create({
-        data: {
-            phone: normalized,
-            username: cleanUsername,
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            fullName,
-            passwordHash: await bcrypt.hash(password, 10),
-            role: 'STUDENT',
-            direction: direction || null,
-        },
-    });
+        const cleanUsername = String(username || '').trim().replace(/^@/, '').toLowerCase();
+        if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername))
+            return res.status(400).json({
+                error: 'Ник: 3-20 символов, латиница, цифры и _',
+            });
 
-    try {
-        await addToDefaultChat(user.id);
-    } catch (e) {
-        console.error('addToDefaultChat failed:', e);
-    }
+        // Проверка занятости
+        const busyPhone = await prisma.user.findUnique({ where: { phone: normPhone } });
+        if (busyPhone) return res.status(409).json({ error: 'Телефон уже используется' });
 
-    res.json({ token: sign(user), user: publicUser(user) });
-});
+        const busyUsername = await prisma.user.findUnique({ where: { username: cleanUsername } });
+        if (busyUsername) return res.status(409).json({ error: 'Ник уже занят' });
 
-router.post('/login', async (req, res) => {
-    const { login, password } = req.body;
-    if (!login || !password) return res.status(401).json({ error: 'Введите логин и пароль' });
+        const allowedDirections = ['photo', 'video', 'radio', 'sound'];
+        const dir = allowedDirections.includes(direction) ? direction : 'photo';
 
-    const normalized = normalizePhone(login);
-    const or = [{ username: login }, { email: login }];
-    if (normalized) or.push({ phone: normalized });
+        const passwordHash = await bcrypt.hash(password, 10);
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
-    const user = await prisma.user.findFirst({ where: { OR: or } });
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-        return res.status(401).json({ error: 'Неверный логин или пароль' });
-    }
-    if (user.isBanned) return res.status(403).json({ error: 'Аккаунт заблокирован' });
+        const user = await prisma.user.create({
+            data: {
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                fullName,
+                phone: normPhone,
+                username: cleanUsername,
+                passwordHash,
+                direction: dir,
+                role: 'STUDENT',
+            },
+        });
 
-    res.json({ token: sign(user), user: publicUser(user) });
-});
+        const token = signToken(user);
+        res.json({ token, user: hidePrivate(user) });
+    })
+);
 
-router.get('/me', auth, (req, res) => res.json(publicUser(req.user)));
+/* ─── Вход ─── */
+
+router.post(
+    '/login',
+    safe(async (req, res) => {
+        const { login, password } = req.body;
+        if (!login?.trim() || !password)
+            return res.status(400).json({ error: 'Введите логин и пароль' });
+
+        const raw = String(login).trim().replace(/^@/, '');
+        const normPhone = normalizePhone(raw);
+
+        // Ищем по нескольким полям: username, phone, email
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { username: raw.toLowerCase() },
+                    ...(normPhone ? [{ phone: normPhone }] : []),
+                    { email: raw.toLowerCase() },
+                ],
+            },
+        });
+
+        if (!user) return res.status(401).json({ error: 'Неверный логин или пароль' });
+        if (user.isBanned) return res.status(403).json({ error: 'Аккаунт заблокирован' });
+
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) return res.status(401).json({ error: 'Неверный логин или пароль' });
+
+        // Обновляем lastSeen
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { lastSeen: new Date() },
+        }).catch(() => {});
+
+        const token = signToken(user);
+        res.json({ token, user: hidePrivate(user) });
+    })
+);
+
+/* ─── Текущий пользователь ─── */
+
+router.get(
+    '/me',
+    auth,
+    safe(async (req, res) => {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.id },
+        });
+        if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+        if (user.isBanned) return res.status(403).json({ error: 'Аккаунт заблокирован' });
+
+        // Обновляем lastSeen при каждом /me
+        prisma.user
+            .update({ where: { id: user.id }, data: { lastSeen: new Date() } })
+            .catch(() => {});
+
+        res.json(hidePrivate(user));
+    })
+);
+
+/* ─── Проверка занятости ника (для формы регистрации) ─── */
+
+router.get(
+    '/check-username',
+    safe(async (req, res) => {
+        const u = String(req.query.u || '').trim().replace(/^@/, '').toLowerCase();
+        if (!u || u.length < 3) return res.json({ available: false, reason: 'too-short' });
+        if (!/^[a-z0-9_]{3,20}$/.test(u))
+            return res.json({ available: false, reason: 'invalid-format' });
+
+        const busy = await prisma.user.findUnique({ where: { username: u } });
+        res.json({ available: !busy });
+    })
+);
+
+/* ─── Проверка занятости телефона ─── */
+
+router.get(
+    '/check-phone',
+    safe(async (req, res) => {
+        const norm = normalizePhone(req.query.p);
+        if (!norm) return res.json({ available: false, reason: 'invalid' });
+
+        const busy = await prisma.user.findUnique({ where: { phone: norm } });
+        res.json({ available: !busy });
+    })
+);
 
 export default router;

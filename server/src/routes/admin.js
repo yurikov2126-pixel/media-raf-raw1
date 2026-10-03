@@ -57,6 +57,8 @@ import {
     getNotifyCleanupSettings,
     cleanupOldNotifications,
 } from '../lib/notifyCleanup.js';
+import { MODULES, getModulesState, setModuleEnabled } from '../lib/modules.js';
+import { ONBOARDING_VERSION, ONBOARDING_STEPS } from '../lib/onboarding.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
@@ -1428,6 +1430,120 @@ router.post(
             console.error('[admin] notify-cleanup-now error:', e);
             res.status(500).json({ error: e.message });
         }
+    })
+);
+
+/* ─────────── Модули платформы ─────────── */
+
+router.get(
+    '/modules',
+    safe(async (_req, res) => {
+        const state = await getModulesState();
+        res.json({
+            modules: MODULES.map((m) => ({
+                key: m.key,
+                label: m.label,
+                icon: m.icon,
+                description: m.description,
+                enabled: state[m.key],
+            })),
+        });
+    })
+);
+
+router.put(
+    '/modules',
+    safe(async (req, res) => {
+        const { modules } = req.body;
+        if (!modules || typeof modules !== 'object') {
+            return res.status(400).json({ error: 'modules обязателен' });
+        }
+
+        const current = await getModulesState();
+        const next = { ...current, ...modules };
+        const anyEnabled = Object.values(next).some(Boolean);
+        if (!anyEnabled) {
+            return res.status(400).json({ error: 'Хотя бы один модуль должен быть включён' });
+        }
+
+        for (const [key, enabled] of Object.entries(modules)) {
+            await setModuleEnabled(key, !!enabled);
+        }
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'modules_update',
+                payload: JSON.stringify(modules),
+                affected: Object.keys(modules).length,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true });
+    })
+);
+
+/* ─────────── Онбординг ─────────── */
+
+router.get(
+    '/onboarding/info',
+    safe(async (_req, res) => {
+        const [needsOnboarding, completed, total] = await Promise.all([
+            prisma.user.count({ where: { onboardingVersion: { lt: ONBOARDING_VERSION } } }),
+            prisma.user.count({ where: { onboardingVersion: { gte: ONBOARDING_VERSION } } }),
+            prisma.user.count(),
+        ]);
+
+        res.json({
+            currentVersion: ONBOARDING_VERSION,
+            steps: ONBOARDING_STEPS,
+            stats: { needsOnboarding, completed, total },
+        });
+    })
+);
+
+router.post(
+    '/onboarding/reset-all',
+    safe(async (req, res) => {
+        const r = await prisma.user.updateMany({ data: { onboardingVersion: 0 } });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'onboarding_reset_all',
+                payload: JSON.stringify({}),
+                affected: r.count,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true, affected: r.count });
+    })
+);
+
+router.post(
+    '/onboarding/reset-user/:userId',
+    safe(async (req, res) => {
+        const user = await prisma.user.findUnique({
+            where: { id: req.params.userId },
+            select: { id: true, fullName: true },
+        });
+        if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { onboardingVersion: 0 },
+        });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'onboarding_reset_user',
+                payload: JSON.stringify({ userId: user.id, fullName: user.fullName }),
+                affected: 1,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true });
     })
 );
 

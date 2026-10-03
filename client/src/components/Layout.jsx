@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { NavLink, useNavigate, useLocation, useOutlet, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth.jsx';
 import { useSettings } from '../store/settings.jsx';
+import { useModules, moduleKeyForPath } from '../store/modules.jsx';
 import MobileNav from './MobileNav.jsx';
 import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
@@ -14,25 +16,44 @@ const FALLBACK_LINKS = [
     { to: '/app/wiki', label: 'Вики', icon: '📖' },
 ];
 
+const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
+
 export default function Layout() {
     const { user, logout } = useAuth();
     const { brand, nav } = useSettings();
+    const { modules, isEnabled } = useModules();
     const navigate = useNavigate();
     const location = useLocation();
     const outlet = useOutlet();
 
-    /*
-     * isChatRoom === true ТОЛЬКО для конкретного чата /app/chats/<id>.
-     * Для списка /app/chats — false, и он ведёт себя как обычная
-     * страница: сверху мобильный хедер, снизу MobileNav.
-     *
-     * Регэксп: "/app/chats/" + хотя бы один непустой сегмент.
-     */
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
-
-    const links = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
-    const SWIPE_ORDER = links.map((l) => l.to);
     const isAdmin = user?.role === 'ADMIN';
+
+    /* Фильтруем ссылки навигации по включённым модулям */
+    const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
+    const links = rawLinks.filter((l) => {
+        const key = moduleKeyForPath(l.to);
+        return !key || isEnabled(key);
+    });
+    const SWIPE_ORDER = links.map((l) => l.to);
+
+    /* Авто-редирект: если пользователь открыл отключённый модуль —
+       уводим на первый доступный. */
+    useEffect(() => {
+        // Ждём загрузки состояния модулей
+        if (Object.keys(modules).length === 0) return;
+
+        const currentKey = moduleKeyForPath(location.pathname);
+        if (!currentKey) return;
+        if (isEnabled(currentKey)) return;
+
+        const target = MODULE_ORDER.find((k) => isEnabled(k));
+        if (target === 'feed') navigate('/app', { replace: true });
+        else if (target) navigate(`/app/${target}`, { replace: true });
+        // Если включённых модулей нет вообще — оставляем как есть
+        // (защита от бесконечного цикла, такое состояние недоступно на сервере)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.pathname, modules]);
 
     const handlePanEnd = (_e, info) => {
         if (info.pointerType !== 'touch') return;
@@ -125,20 +146,10 @@ export default function Layout() {
                 </div>
             </aside>
 
-            {/*
-              motion.main — простой flex-item без flex-col.
-              Для открытого чата main фактически перекрыт overlay'ем
-              Messenger'а (fixed inset-0), но сам Layout продолжает
-              рендериться под ним, чтобы сайдбар на ПК оставался виден.
-            */}
             <motion.main
                 onPanEnd={handlePanEnd}
                 className="flex-1 min-w-0 pb-20 md:pb-0 safe-top"
             >
-                {/*
-                  Мобильный хедер рендерится на всех страницах,
-                  КРОМЕ открытого чата — там его перекрывает Messenger.
-                */}
                 {!isChatRoom && (
                     <div className="md:hidden sticky top-0 z-30 bg-ink-800/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 py-2">
                         <div
@@ -166,17 +177,7 @@ export default function Layout() {
 
                 <NetworkBanner />
 
-                {/*
-                  page-enter с transform — только для обычных страниц.
-                  Для открытого чата используем page-enter-fade (без
-                  transform) — иначе transform создаёт containing block
-                  и fixed-overlay Messenger'а позиционируется относительно
-                  этой обёртки, а не viewport'а.
-                */}
-                <div
-                    key={location.pathname}
-                    className={isChatRoom ? 'page-enter-fade' : 'page-enter'}
-                >
+                <div key={location.pathname} className="page-enter">
                     {outlet}
                 </div>
             </motion.main>

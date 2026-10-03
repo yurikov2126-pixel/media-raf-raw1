@@ -15,6 +15,7 @@ import Push from './tabs/Push.jsx';
 import Backups from './tabs/Backups.jsx';
 import Moderation from './tabs/Moderation.jsx';
 import Settings from './tabs/Settings.jsx';
+import Modules from './tabs/Modules.jsx';
 
 import CoursesRoot from './tabs/Courses/index.jsx';
 import WikiRoot from './tabs/Wiki/index.jsx';
@@ -60,14 +61,12 @@ export default function Admin() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
-    // Обновляем badge при новых уведомлениях типа report
     useEffect(() => {
         const hasUnreadReport = notifications.some((n) => n.type === 'report' && !n.readAt);
         if (hasUnreadReport) reloadReportsBadge();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [notifications]);
 
-    // Периодический рефреш badge — на случай, если уведомление потерялось
     useEffect(() => {
         const t = setInterval(reloadReportsBadge, 30000);
         return () => clearInterval(t);
@@ -130,6 +129,7 @@ export default function Admin() {
                     onSaved={() => reloadSettings()}
                 />
             )}
+            {tab === 'modules' && <Modules token={token} />}
             {tab === 'backups' && <Backups token={token} />}
             {tab === 'settings' && (
                 <Settings settings={settings} setSettings={setSettings} token={token} />

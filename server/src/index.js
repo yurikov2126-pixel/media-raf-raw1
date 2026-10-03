@@ -24,6 +24,8 @@ import { schedulePushCleanup } from './lib/pushCleanupCron.js';
 import { prisma } from './lib/prisma.js';
 import reportsRouter from './routes/reports.js';
 import { scheduleNotifyCleanup } from './lib/notifyCleanupCron.js';
+import modulesRouter from './routes/modules.js';
+import onboardingRouter from './routes/onboarding.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -109,6 +111,9 @@ app.use('/api/posts', postRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/wiki', wikiRoutes);
+app.use('/api/modules', modulesRouter);
+app.use('/api/onboarding', onboardingRouter);
+
 
 app.get('/api/health', (_req, res) =>
     res.json({ ok: true, service: 'MEDIA-RAF-RAW' })
