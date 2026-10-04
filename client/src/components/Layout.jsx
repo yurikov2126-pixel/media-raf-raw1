@@ -1,22 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useLocation, useOutlet, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth.jsx';
 import { useSettings } from '../store/settings.jsx';
 import { useModules, moduleKeyForPath } from '../store/modules.jsx';
+import { useGamification } from '../store/gamification.jsx';
+import { isAnyModalOpen, subscribeModalState } from '../lib/modalStack.js';
 import MobileNav from './MobileNav.jsx';
 import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import NetworkBanner from './NetworkBanner.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
-import { useGamification } from '../store/gamification.jsx';
 
 const FALLBACK_LINKS = [
     { to: '/app', label: 'Лента', end: true, icon: '🏠' },
     { to: '/app/chats', label: 'Чаты', icon: '💬' },
     { to: '/app/courses', label: 'Обучение', icon: '🎓' },
     { to: '/app/wiki', label: 'Вики', icon: '📖' },
-    { to: '/app/leaderboard', label: 'Рейтинг', icon: '🏆' },
 ];
 
 const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
@@ -25,9 +25,16 @@ export default function Layout() {
     const { user, logout } = useAuth();
     const { brand, nav } = useSettings();
     const { modules, isEnabled } = useModules();
+    const { enabled: gamifEnabled } = useGamification();
     const navigate = useNavigate();
     const location = useLocation();
     const outlet = useOutlet();
+
+    const [modalOpen, setModalOpen] = useState(() => isAnyModalOpen());
+
+    useEffect(() => {
+        return subscribeModalState(setModalOpen);
+    }, []);
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     const isAdmin = user?.role === 'ADMIN';
@@ -38,7 +45,6 @@ export default function Layout() {
         return !key || isEnabled(key);
     });
     const SWIPE_ORDER = links.map((l) => l.to);
-    const { enabled: gamifEnabled } = useGamification();
 
     useEffect(() => {
         if (Object.keys(modules).length === 0) return;
@@ -52,6 +58,9 @@ export default function Layout() {
     }, [location.pathname, modules]);
 
     const handlePanEnd = (_e, info) => {
+        // Не свайпаем, когда открыта любая модалка
+        if (modalOpen) return;
+
         if (info.pointerType !== 'touch') return;
         if (
             typeof window !== 'undefined' &&
@@ -102,6 +111,20 @@ export default function Layout() {
                         <span className="font-semibold">{l.label}</span>
                     </NavLink>
                 ))}
+
+                {gamifEnabled && (
+                    <NavLink
+                        to="/app/leaderboard"
+                        className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
+                            }`
+                        }
+                    >
+                        <span className="text-xl">🏆</span>
+                        <span className="font-semibold">Рейтинг</span>
+                    </NavLink>
+                )}
 
                 {isAdmin && (
                     <NavLink

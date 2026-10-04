@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, uploadBlob } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import { pushModal } from '../lib/modalStack.js';
 import Avatar from './Avatar.jsx';
 import ImageCropper from './ImageCropper.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
@@ -55,6 +57,33 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
 
     const avatarRef = useRef(null);
     const coverRef = useRef(null);
+
+    /* Регистрируем в стеке модалок */
+    useEffect(() => {
+        if (!open) return;
+        const release = pushModal();
+        return release;
+    }, [open]);
+
+    /* Блокируем скролл body, пока модалка открыта */
+    useEffect(() => {
+        if (!open) return;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, [open]);
+
+    /* Закрытие по Escape */
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e) => {
+            if (e.key === 'Escape' && !saving) onClose();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [open, saving, onClose]);
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
     const setPhone = (e) => {
@@ -130,28 +159,52 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
 
     if (!open) return null;
 
-    return (
-        <>
+    const modal = createPortal(
+        <div
+            className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm grid place-items-center"
+            style={{
+                /* Без touch-action: none — клики должны работать на всех
+                   устройствах. Свайп-навигацию отключаем на уровне Layout. */
+                overscrollBehavior: 'contain',
+                overflow: 'hidden',
+                paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
+                paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)',
+                paddingLeft: 'max(env(safe-area-inset-left, 0px), 8px)',
+                paddingRight: 'max(env(safe-area-inset-right, 0px), 8px)',
+            }}
+            onClick={(e) => {
+                if (e.target === e.currentTarget && !saving) onClose();
+            }}
+        >
             <div
-                className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm overflow-y-auto p-3 md:p-6"
-                onClick={onClose}
+                className="
+                    flex flex-col w-full h-full
+                    md:w-auto md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-3xl md:border
+                    bg-ink-900 md:bg-ink-800/80 border-white/10 md:backdrop-blur-xl
+                    md:shadow-2xl md:shadow-black/50
+                    min-w-0 max-w-full overflow-hidden
+                "
+                onClick={(e) => e.stopPropagation()}
             >
-                <div
-                    className="card max-w-2xl mx-auto my-6 p-5 md:p-6"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="flex items-center justify-between mb-5">
-                        <h2 className="text-2xl font-bold">Редактирование профиля</h2>
-                        <button
-                            onClick={onClose}
-                            className="text-white/40 hover:text-white text-xl"
-                        >
-                            ✕
-                        </button>
-                    </div>
+                {/* ─── Шапка ─── */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-4 md:px-6 py-3 md:py-4 border-b border-white/5">
+                    <h2 className="text-lg md:text-2xl font-bold truncate pr-2">
+                        Редактирование профиля
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="w-10 h-10 shrink-0 grid place-items-center rounded-full text-white/50 hover:text-white hover:bg-white/10 transition text-xl disabled:opacity-40"
+                        aria-label="Закрыть"
+                    >
+                        ✕
+                    </button>
+                </div>
 
+                {/* ─── Скроллируемая часть ─── */}
+                <div className="flex-1 overflow-y-auto overscroll-contain px-4 md:px-6 py-4 md:py-6 space-y-5">
                     {/* Обложка */}
-                    <div className="mb-5">
+                    <div>
                         <label className="text-xs text-white/40 uppercase tracking-wider mb-2 block">
                             Обложка
                         </label>
@@ -176,18 +229,18 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                                 ref={coverRef}
                                 type="file"
                                 accept="image/*"
-                                hidden
+                                style={{ display: 'none' }}
                                 onChange={pickFile('cover')}
                             />
                         </div>
                     </div>
 
                     {/* Аватар */}
-                    <div className="mb-5 flex items-center gap-4">
-                        <div className="rounded-full ring-4 ring-ink-700">
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <div className="rounded-full ring-4 ring-ink-700 shrink-0">
                             <Avatar user={{ ...user, avatar: form.avatar }} size={88} />
                         </div>
-                        <div>
+                        <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 type="button"
                                 onClick={() => avatarRef.current?.click()}
@@ -200,14 +253,14 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                                 ref={avatarRef}
                                 type="file"
                                 accept="image/*"
-                                hidden
+                                style={{ display: 'none' }}
                                 onChange={pickFile('avatar')}
                             />
                             {form.avatar && (
                                 <button
                                     type="button"
                                     onClick={() => setForm((f) => ({ ...f, avatar: '' }))}
-                                    className="ml-2 text-xs text-white/40 hover:text-pink"
+                                    className="text-xs text-white/40 hover:text-pink"
                                 >
                                     Убрать
                                 </button>
@@ -216,32 +269,24 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                     </div>
 
                     {/* Поля */}
-                    <div className="grid md:grid-cols-2 gap-3">
-                        <div>
+                    <div className="grid md:grid-cols-2 gap-3 min-w-0">
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">Имя *</label>
-                            <input
-                                className="input"
-                                value={form.firstName}
-                                onChange={set('firstName')}
-                            />
+                            <input className="input" value={form.firstName} onChange={set('firstName')} />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">Фамилия *</label>
-                            <input
-                                className="input"
-                                value={form.lastName}
-                                onChange={set('lastName')}
-                            />
+                            <input className="input" value={form.lastName} onChange={set('lastName')} />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-2 min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">Телефон *</label>
                             <div className="flex">
-                <span className="input !rounded-r-none !w-14 grid place-items-center text-white/60">
-                  +7
-                </span>
+                                <span className="input !rounded-r-none !w-14 grid place-items-center text-white/60 shrink-0">
+                                    +7
+                                </span>
                                 <input
-                                    className="input !rounded-l-none flex-1"
+                                    className="input !rounded-l-none flex-1 min-w-0"
                                     inputMode="tel"
                                     placeholder="999 123-45-67"
                                     value={form.phoneTail}
@@ -250,7 +295,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             </div>
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">
                                 Дата рождения
                             </label>
@@ -262,7 +307,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             />
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">
                                 Направление
                             </label>
@@ -276,7 +321,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             </select>
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">Группа</label>
                             <input
                                 className="input"
@@ -286,7 +331,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             />
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">Город</label>
                             <input
                                 className="input"
@@ -296,7 +341,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-2 min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">О себе</label>
                             <textarea
                                 rows={3}
@@ -306,7 +351,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             />
                         </div>
 
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-2 min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">
                                 Навыки (через запятую)
                             </label>
@@ -318,7 +363,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                             />
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">Telegram</label>
                             <input
                                 className="input"
@@ -329,7 +374,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                                 }
                             />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <label className="text-xs text-white/40 uppercase mb-1 block">VK</label>
                             <input
                                 className="input"
@@ -343,7 +388,7 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                     </div>
 
                     {/* Безопасность */}
-                    <div className="mt-6 pt-5 border-t border-white/10">
+                    <div className="pt-5 border-t border-white/10">
                         <div className="text-xs text-white/40 uppercase tracking-wider mb-2">
                             Безопасность
                         </div>
@@ -356,20 +401,35 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                         </button>
                     </div>
 
-                    {error && <p className="text-pink text-sm mt-4">{error}</p>}
+                    {error && <p className="text-pink text-sm">{error}</p>}
+                </div>
 
-                    <div className="flex gap-3 justify-end mt-6">
-                        <button onClick={onClose} className="btn-ghost">
-                            Отмена
-                        </button>
-                        <button onClick={save} disabled={saving} className="btn-primary">
-                            {saving ? 'Сохранение…' : 'Сохранить'}
-                        </button>
-                    </div>
+                {/* ─── Футер с кнопками ─── */}
+                <div className="shrink-0 flex gap-3 px-4 md:px-6 py-3 md:py-4 border-t border-white/5 bg-ink-900/95 md:bg-ink-800/40">
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="btn-ghost flex-1 md:flex-none md:min-w-[120px]"
+                    >
+                        Отмена
+                    </button>
+                    <button
+                        onClick={save}
+                        disabled={saving}
+                        className="btn-primary flex-1 md:flex-none md:min-w-[140px]"
+                    >
+                        {saving ? 'Сохранение…' : 'Сохранить'}
+                    </button>
                 </div>
             </div>
+        </div>,
+        document.body
+    );
 
-            {/* Кропперы */}
+    return (
+        <>
+            {modal}
+
             {cropping?.kind === 'avatar' && (
                 <ImageCropper
                     file={cropping.file}
@@ -393,7 +453,6 @@ export default function ProfileEditor({ open, onClose, onSaved }) {
                 />
             )}
 
-            {/* Модалка смены пароля — рендерится ТОЛЬКО когда open */}
             {passwordOpen && (
                 <ChangePasswordModal
                     mode="self"

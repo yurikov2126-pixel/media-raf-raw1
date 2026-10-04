@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Cropper from 'react-easy-crop';
+import { pushModal } from '../lib/modalStack.js';
 
 export function getCroppedBlob(imageSrc, cropPixels, outputSize) {
     return new Promise((resolve, reject) => {
@@ -45,6 +47,23 @@ export default function ImageCropper({
         return () => URL.revokeObjectURL(url);
     }, [file]);
 
+    /* Регистрируем в стеке модалок */
+    useEffect(() => {
+        if (!src) return;
+        const release = pushModal();
+        return release;
+    }, [src]);
+
+    /* Escape */
+    useEffect(() => {
+        if (!src) return;
+        const onKey = (e) => {
+            if (e.key === 'Escape' && !busy) onCancel();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [src, busy, onCancel]);
+
     const onCropComplete = useCallback((_area, areaPixels) => {
         setPixels(areaPixels);
     }, []);
@@ -67,32 +86,65 @@ export default function ImageCropper({
 
     if (!src) return null;
 
-    return (
+    const modal = createPortal(
         <div
-            className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[220] bg-black/85 backdrop-blur-sm grid place-items-center"
+            style={{
+                overscrollBehavior: 'contain',
+                overflow: 'hidden',
+                paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
+                paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)',
+                paddingLeft: 'max(env(safe-area-inset-left, 0px), 8px)',
+                paddingRight: 'max(env(safe-area-inset-right, 0px), 8px)',
+            }}
+            onClick={(e) => {
+                if (e.target === e.currentTarget && !busy) onCancel();
+            }}
         >
-            <div className="card max-w-xl w-full p-4" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-3">
-                    <div className="font-bold">{title || 'Обрезка изображения'}</div>
-                    <button onClick={onCancel} className="text-white/40 hover:text-white text-xl">✕</button>
+            <div
+                className="
+                    flex flex-col w-full h-full
+                    md:w-auto md:h-auto md:max-w-xl md:rounded-3xl md:border
+                    bg-ink-900 md:bg-ink-800/90 border-white/10 md:backdrop-blur-xl
+                    md:shadow-2xl md:shadow-black/50
+                    min-w-0 max-w-full overflow-hidden
+                "
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Шапка */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-4 md:px-5 py-3 border-b border-white/5">
+                    <div className="font-bold truncate pr-2">
+                        {title || 'Обрезка изображения'}
+                    </div>
+                    <button
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="w-10 h-10 shrink-0 grid place-items-center rounded-full text-white/50 hover:text-white hover:bg-white/10 transition text-xl disabled:opacity-40"
+                        aria-label="Закрыть"
+                    >
+                        ✕
+                    </button>
                 </div>
 
-                <div className="relative w-full h-[340px] md:h-[400px] bg-black rounded-2xl overflow-hidden">
-                    <Cropper
-                        image={src}
-                        crop={crop}
-                        zoom={zoom}
-                        aspect={aspect}
-                        onCropChange={setCrop}
-                        onZoomChange={setZoom}
-                        onCropComplete={onCropComplete}
-                        showGrid
-                        restrictPosition
-                    />
+                {/* Область кроппера — гибкая высота */}
+                <div className="flex-1 min-h-0 px-3 py-3 md:px-5 md:py-4 flex">
+                    <div className="relative w-full min-h-[220px] bg-black rounded-2xl overflow-hidden flex-1">
+                        <Cropper
+                            image={src}
+                            crop={crop}
+                            zoom={zoom}
+                            aspect={aspect}
+                            onCropChange={setCrop}
+                            onZoomChange={setZoom}
+                            onCropComplete={onCropComplete}
+                            showGrid
+                            restrictPosition
+                        />
+                    </div>
                 </div>
 
-                <div className="mt-3 flex items-center gap-3">
+                {/* Масштаб */}
+                <div className="shrink-0 px-4 md:px-5 pb-3 flex items-center gap-3">
                     <span className="text-xs text-white/40 shrink-0">Масштаб</span>
                     <input
                         type="range" min={1} max={4} step={0.01}
@@ -100,16 +152,32 @@ export default function ImageCropper({
                         onChange={(e) => setZoom(Number(e.target.value))}
                         className="flex-1 accent-violet"
                     />
-                    <span className="text-xs text-white/40 w-10 text-right">{zoom.toFixed(1)}×</span>
+                    <span className="text-xs text-white/40 w-10 text-right tabular-nums">
+                        {zoom.toFixed(1)}×
+                    </span>
                 </div>
 
-                <div className="flex gap-3 justify-end mt-4">
-                    <button onClick={onCancel} className="btn-ghost">Отмена</button>
-                    <button onClick={confirm} disabled={busy} className="btn-primary">
+                {/* Футер с кнопками */}
+                <div className="shrink-0 flex gap-3 px-4 md:px-5 py-3 border-t border-white/5 bg-ink-900/95 md:bg-ink-800/40">
+                    <button
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="btn-ghost flex-1 md:flex-none md:min-w-[120px]"
+                    >
+                        Отмена
+                    </button>
+                    <button
+                        onClick={confirm}
+                        disabled={busy}
+                        className="btn-primary flex-1 md:flex-none md:min-w-[140px]"
+                    >
                         {busy ? 'Обработка…' : 'Готово'}
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
+
+    return modal;
 }

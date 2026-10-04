@@ -1,263 +1,188 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import Cropper from 'react-easy-crop';
 
-const SWIPE_X_THRESHOLD = 60;
-const SWIPE_VELOCITY = 0.3;
-const SWIPE_Y_THRESHOLD = 100;
-const CLOSE_VELOCITY = 0.6;
-const AXIS_LOCK_PX = 12;
-const MAX_BACKDROP_DRAG = 1;
+export function getCroppedBlob(imageSrc, cropPixels, outputSize) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = outputSize.width;
+            canvas.height = outputSize.height;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(
+                image,
+                cropPixels.x, cropPixels.y, cropPixels.width, cropPixels.height,
+                0, 0, outputSize.width, outputSize.height
+            );
+            canvas.toBlob(
+                (blob) => (blob ? resolve(blob) : reject(new Error('Не удалось создать изображение'))),
+                'image/jpeg',
+                0.92
+            );
+        };
+        image.onerror = () => reject(new Error('Не удалось загрузить изображение'));
+        image.src = imageSrc;
+    });
+}
 
-export default function ImageViewer({ images, startIndex = 0, onClose }) {
-    const [index, setIndex] = useState(startIndex);
-    const [dragX, setDragX] = useState(0);
-    const [dragY, setDragY] = useState(0);
-    const [dragging, setDragging] = useState(false);
-    const [closing, setClosing] = useState(false);
-    const [showHint, setShowHint] = useState(true);
-
-    const startXRef = useRef(null);
-    const startYRef = useRef(null);
-    const startTimeRef = useRef(0);
-    const axisRef = useRef(null);
+export default function ImageCropper({
+                                         file, aspect, outputWidth, outputHeight, title,
+                                         onCancel, onDone,
+                                     }) {
+    const [src, setSrc] = useState(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [pixels, setPixels] = useState(null);
+    const [busy, setBusy] = useState(false);
 
     useEffect(() => {
-        setShowHint(true);
-        const t = setTimeout(() => setShowHint(false), 2500);
-        return () => clearTimeout(t);
-    }, [index]);
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        setSrc(url);
+        return () => URL.revokeObjectURL(url);
+    }, [file]);
 
+    /* Escape */
     useEffect(() => {
+        if (!src) return;
         const onKey = (e) => {
-            if (closing) return;
-            if (e.key === 'Escape') closeWithAnimation(0);
-            if (e.key === 'ArrowLeft')
-                setIndex((i) => (i - 1 + images.length) % images.length);
-            if (e.key === 'ArrowRight')
-                setIndex((i) => (i + 1) % images.length);
+            if (e.key === 'Escape' && !busy) onCancel();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [images.length, closing]);
+    }, [src, busy, onCancel]);
 
-    const prev = (e) => {
-        e?.stopPropagation();
-        setIndex((i) => (i - 1 + images.length) % images.length);
-    };
-    const next = (e) => {
-        e?.stopPropagation();
-        setIndex((i) => (i + 1) % images.length);
-    };
+    const onCropComplete = useCallback((_area, areaPixels) => {
+        setPixels(areaPixels);
+    }, []);
 
-    const closeWithAnimation = (direction) => {
-        if (closing) return;
-        setClosing(true);
-        setDragY(direction > 0 ? 600 : -600);
-        setDragX(0);
-        setTimeout(() => onClose?.(), 200);
-    };
-
-    /* ─── Жесты ─── */
-
-    const onTouchStart = (e) => {
-        if (closing) return;
-        if (e.touches.length !== 1) return;
-        startXRef.current = e.touches[0].clientX;
-        startYRef.current = e.touches[0].clientY;
-        startTimeRef.current = performance.now();
-        axisRef.current = null;
-        setDragging(true);
-    };
-
-    const onTouchMove = (e) => {
-        if (!dragging || closing) return;
-        if (e.touches.length !== 1) return;
-        if (startXRef.current === null || startYRef.current === null) return;
-
-        const dx = e.touches[0].clientX - startXRef.current;
-        const dy = e.touches[0].clientY - startYRef.current;
-
-        if (!axisRef.current) {
-            if (Math.abs(dx) < AXIS_LOCK_PX && Math.abs(dy) < AXIS_LOCK_PX) return;
-            axisRef.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-            setShowHint(false);
-        }
-
-        if (axisRef.current === 'x') {
-            if (images.length <= 1) return;
-            const isEdge =
-                (dx > 0 && index === 0) || (dx < 0 && index === images.length - 1);
-            setDragX(isEdge ? dx * 0.35 : dx);
-        } else if (axisRef.current === 'y') {
-            const limited = Math.max(0, dy);
-            const eased = limited < 300 ? limited : 300 + (limited - 300) * 0.4;
-            setDragY(eased);
-            if (e.cancelable) e.preventDefault();
+    const confirm = async () => {
+        if (!pixels) return;
+        setBusy(true);
+        try {
+            const blob = await getCroppedBlob(src, pixels, {
+                width: outputWidth,
+                height: outputHeight,
+            });
+            onDone(blob);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            setBusy(false);
         }
     };
 
-    const onTouchEnd = () => {
-        if (!dragging || closing) {
-            setDragging(false);
-            return;
-        }
+    if (!src) return null;
 
-        const dt = Math.max(1, performance.now() - startTimeRef.current);
-        const axis = axisRef.current;
-
-        if (axis === 'x') {
-            const velocity = Math.abs(dragX) / dt;
-            const fast = velocity > SWIPE_VELOCITY && Math.abs(dragX) > 20;
-            const far = Math.abs(dragX) > SWIPE_X_THRESHOLD;
-            if ((far || fast) && dragX < 0 && index < images.length - 1) next();
-            else if ((far || fast) && dragX > 0 && index > 0) prev();
-        } else if (axis === 'y') {
-            const velocity = dragY / dt;
-            const far = dragY > SWIPE_Y_THRESHOLD;
-            const fast = velocity > CLOSE_VELOCITY && dragY > 40;
-            if (far || fast) {
-                closeWithAnimation(1);
-                return;
-            }
-        }
-
-        setDragX(0);
-        setDragY(0);
-        setDragging(false);
-        axisRef.current = null;
-        startXRef.current = null;
-        startYRef.current = null;
-    };
-
-    if (!images.length) return null;
-    const current = images[index];
-
-    const backdropOpacity = closing
-        ? 0
-        : Math.max(MAX_BACKDROP_DRAG - dragY / 600, 0.35);
-
-    const scale = 1 - Math.min(0.25, dragY / 1200);
-
-    const transition = dragging
-        ? 'none'
-        : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out';
-
-    return (
+    const modal = createPortal(
         <div
-            className="mrr-iv"
+            className="fixed inset-0 z-[220] bg-black/85 backdrop-blur-sm grid place-items-center"
             style={{
-                backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
-                transition: dragging ? 'none' : 'background-color 220ms ease-out',
+                touchAction: 'none',
+                overscrollBehavior: 'contain',
+                overflow: 'hidden',
+                paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
+                paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)',
+                paddingLeft: 'max(env(safe-area-inset-left, 0px), 8px)',
+                paddingRight: 'max(env(safe-area-inset-right, 0px), 8px)',
             }}
-            onClick={onClose}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onTouchCancel={onTouchEnd}
+            onClick={(e) => {
+                if (e.target === e.currentTarget && !busy) onCancel();
+            }}
         >
-            {/* ─── Шапка ─── */}
-            <div className="mrr-iv__header" onClick={(e) => e.stopPropagation()}>
-                <div className="mrr-iv__counter">
-                    {index + 1} / {images.length}
-                </div>
-
-                {/* ПК: большая кнопка «Закрыть · Esc» */}
-                <button
-                    onClick={onClose}
-                    className="mrr-iv__close-desktop"
-                    aria-label="Закрыть просмотрщик"
-                    title="Закрыть (Esc)"
-                >
-                    <span className="mrr-iv__close-x">✕</span>
-                    <span>Закрыть</span>
-                    <span className="mrr-iv__kbd">Esc</span>
-                </button>
-
-                {/* Мобильные: компактный крестик */}
-                <button
-                    onClick={onClose}
-                    className="mrr-iv__close-mobile"
-                    aria-label="Закрыть"
-                >
-                    ✕
-                </button>
-            </div>
-
-            {/* ─── Основная область ─── */}
-            <div className="mrr-iv__stage" onClick={(e) => e.stopPropagation()}>
-                {images.length > 1 && (
-                    <button
-                        onClick={prev}
-                        className="mrr-iv__nav mrr-iv__nav--left"
-                        aria-label="Предыдущее"
-                    >
-                        ‹
-                    </button>
-                )}
-
-                <img
-                    src={current.url}
-                    alt=""
-                    draggable={false}
-                    className="mrr-iv__img"
-                    style={{
-                        transform: `translate(${dragX}px, ${dragY}px) scale(${scale})`,
-                        transition,
-                        opacity: closing ? 0 : 1,
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                />
-
-                {images.length > 1 && (
-                    <button
-                        onClick={next}
-                        className="mrr-iv__nav mrr-iv__nav--right"
-                        aria-label="Следующее"
-                    >
-                        ›
-                    </button>
-                )}
-            </div>
-
-            {/* ─── Точки-индикаторы ─── */}
-            {images.length > 1 && images.length <= 12 && !closing && (
-                <div
-                    className="mrr-iv__dots"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {images.map((_, i) => (
-                        <button
-                            key={i}
-                            onClick={() => setIndex(i)}
-                            className={`mrr-iv__dot ${i === index ? 'is-active' : ''}`}
-                            aria-label={`Перейти к ${i + 1}`}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {/* ─── Подсказка ─── */}
             <div
-                className={`mrr-iv__hint-wrap ${
-                    showHint && !dragging && !closing ? 'is-visible' : ''
-                }`}
+                className="
+                    flex flex-col w-full h-full
+                    md:w-auto md:h-auto md:max-w-xl md:rounded-3xl md:border
+                    bg-ink-900 md:bg-ink-800/90 border-white/10 md:backdrop-blur-xl
+                    md:shadow-2xl md:shadow-black/50
+                    min-w-0 max-w-full overflow-hidden
+                "
+                style={{
+                    /* ВАЖНО: внутри кроппера нужны pan-жесты для управления
+                       зумом/позицией — но только внутри самой области Cropper.
+                       На карточке разрешаем pan-y, чтобы можно было скроллить
+                       внешние элементы, а сам Cropper навешивает свои обработчики. */
+                    touchAction: 'manipulation',
+                }}
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="mrr-iv__hint">
-                    <span className="mrr-iv__hint-mobile">
-                        ↕ Свайп вниз — закрыть · ←→ — листать
-                    </span>
-                    <span className="mrr-iv__hint-desktop">
-                        <span>
-                            <span className="mrr-iv__kbd">←→</span> листать
-                        </span>
-                        <span className="mrr-iv__hint-sep">·</span>
-                        <span>
-                            <span className="mrr-iv__kbd">Esc</span> закрыть
-                        </span>
+                {/* Шапка */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-4 md:px-5 py-3 border-b border-white/5">
+                    <div className="font-bold truncate pr-2">
+                        {title || 'Обрезка изображения'}
+                    </div>
+                    <button
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="w-10 h-10 shrink-0 grid place-items-center rounded-full text-white/50 hover:text-white hover:bg-white/10 transition text-xl disabled:opacity-40"
+                        aria-label="Закрыть"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                {/* Область кроппера — гибкая высота.
+                    Здесь touch-action: auto — react-easy-crop сам управляет
+                    жестами внутри этого блока (пинч, драг). */}
+                <div
+                    className="flex-1 min-h-0 px-3 py-3 md:px-5 md:py-4 flex"
+                    style={{ touchAction: 'auto' }}
+                >
+                    <div className="relative w-full min-h-[220px] bg-black rounded-2xl overflow-hidden flex-1">
+                        <Cropper
+                            image={src}
+                            crop={crop}
+                            zoom={zoom}
+                            aspect={aspect}
+                            onCropChange={setCrop}
+                            onZoomChange={setZoom}
+                            onCropComplete={onCropComplete}
+                            showGrid
+                            restrictPosition
+                        />
+                    </div>
+                </div>
+
+                {/* Масштаб */}
+                <div className="shrink-0 px-4 md:px-5 pb-3 flex items-center gap-3">
+                    <span className="text-xs text-white/40 shrink-0">Масштаб</span>
+                    <input
+                        type="range" min={1} max={4} step={0.01}
+                        value={zoom}
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="flex-1 accent-violet"
+                    />
+                    <span className="text-xs text-white/40 w-10 text-right tabular-nums">
+                        {zoom.toFixed(1)}×
                     </span>
                 </div>
+
+                {/* Футер с кнопками */}
+                <div className="shrink-0 flex gap-3 px-4 md:px-5 py-3 border-t border-white/5 bg-ink-900/95 md:bg-ink-800/40">
+                    <button
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="btn-ghost flex-1 md:flex-none md:min-w-[120px]"
+                    >
+                        Отмена
+                    </button>
+                    <button
+                        onClick={confirm}
+                        disabled={busy}
+                        className="btn-primary flex-1 md:flex-none md:min-w-[140px]"
+                    >
+                        {busy ? 'Обработка…' : 'Готово'}
+                    </button>
+                </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
+
+    return modal;
 }

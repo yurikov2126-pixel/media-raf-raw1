@@ -18,10 +18,25 @@ import usePageMeta from '../hooks/usePageMeta.js';
 const DIR = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
 const SOCIAL_META = {
-    tg: { label: 'Telegram', icon: '✈️', base: 'https://t.me/' },
-    vk: { label: 'VK', icon: '🅥', base: 'https://vk.com/' },
-    inst: { label: 'Instagram', icon: '📷', base: 'https://instagram.com/' },
+    tg:   { label: 'Telegram',  icon: 'tg',  base: 'https://t.me/' },
+    vk:   { label: 'VK',        icon: '🅥',  base: 'https://vk.com/' },
+    inst: { label: 'Instagram', icon: '📷',  base: 'https://instagram.com/' },
 };
+
+function TelegramIcon() {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="currentColor"
+            aria-hidden="true"
+            style={{ display: 'block' }}
+        >
+            <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" />
+        </svg>
+    );
+}
 
 function buildSocialUrl(key, raw) {
     const val = String(raw ?? '').trim();
@@ -40,15 +55,27 @@ function SocialLink({ network, value }) {
     const url = buildSocialUrl(network, value);
     if (!url) return null;
     const handle = String(value).replace(/^@/, '').replace(/^https?:\/\//i, '');
+
+    const iconNode = meta.icon === 'tg'
+        ? (
+            <span
+                className="inline-grid place-items-center w-5 h-5 rounded-full shrink-0"
+                style={{ background: 'linear-gradient(135deg, #29A9EB 0%, #1E96D1 100%)', color: '#fff' }}
+            >
+                <TelegramIcon />
+            </span>
+        )
+        : <span aria-hidden="true">{meta.icon}</span>;
+
     return (
         <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
             className="chip bg-white/5 hover:bg-white/10 transition !normal-case !tracking-normal !font-medium text-sm"
-            title={url}
+            title={`${meta.label}: ${url}`}
         >
-            <span aria-hidden="true">{meta.icon}</span>
+            {iconNode}
             <span className="truncate max-w-[180px]">{handle}</span>
         </a>
     );
@@ -136,7 +163,6 @@ export default function Profile() {
             setPostImage('');
             draft.clear();
             load();
-            // Обновляем данные геймификации
             gamifStore.reload?.();
             gamifStore.reloadQuests?.();
         } finally {
@@ -166,8 +192,6 @@ export default function Profile() {
 
     const hasSocials = socials.tg || socials.vk || socials.inst;
 
-    /* Квесты берём из глобального store (они приватные).
-       Но если это не мой профиль — таб не рендерим вообще. */
     const showQuestsTab = isMe && gamifStore.enabled && gamifStore.questsEnabled;
 
     return (
@@ -189,22 +213,15 @@ export default function Profile() {
             </div>
 
             <div className="px-5 md:px-8 pb-10 -mt-14 relative z-10">
+                {/* ─── Ряд: аватар + кнопки ───
+                    Имя вынесено из этого ряда в отдельный блок ниже,
+                    чтобы при длинных именах и наличии значка уровня
+                    текст не заезжал на обложку. */}
                 <div className="flex items-end gap-4 flex-wrap">
-                    <div className="rounded-full ring-4 ring-ink-900 bg-ink-900">
+                    <div className="rounded-full ring-4 ring-ink-900 bg-ink-900 shrink-0">
                         <Avatar user={profile} size={112} />
                     </div>
-                    <div className="flex-1 min-w-[180px] pb-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-2xl md:text-3xl font-bold break-words">
-                                {profile.fullName}
-                            </div>
-                            {gamif?.stats && (
-                                <LevelBadge level={gamif.stats.level} size="md" />
-                            )}
-                        </div>
-                        <div className="text-white/50">@{profile.username}</div>
-                    </div>
-                    <div className="pb-1 flex gap-2">
+                    <div className="ml-auto flex gap-2 pb-2">
                         {isMe ? (
                             <button
                                 onClick={() => setEditorOpen(true)}
@@ -226,6 +243,18 @@ export default function Profile() {
                             </>
                         )}
                     </div>
+                </div>
+
+                {/* ─── Имя + уровень ниже обложки ─── */}
+                <div className="mt-4">
+                    <div className="text-2xl md:text-3xl font-bold break-words leading-tight">
+                        {profile.fullName}
+                    </div>
+                    {gamif?.stats && gamifStore.enabled && (
+                        <div className="mt-2">
+                            <LevelBadge level={gamif.stats.level} size="md" />
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
