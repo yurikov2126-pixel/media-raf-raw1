@@ -821,23 +821,134 @@ html, body {
 /* ─────────── Fallback для старых браузеров ─────────── */
 
 @supports not (background: radial-gradient(circle, red, blue)) {
-    html {
+    body::before {
         background-image: none;
-        background-color: var(--bg-base);
     }
-
-    .wiki-content { @apply leading-relaxed; color: var(--text-primary); }
-    .wiki-content h1 { @apply text-2xl md:text-3xl font-bold mt-6 mb-3; color: var(--text-primary); }
-    .wiki-content h2 { @apply text-xl md:text-2xl font-bold mt-6 mb-3; color: var(--text-primary); }
-    .wiki-content h3 { @apply text-lg md:text-xl font-bold mt-5 mb-2; color: var(--text-primary); }
-    .wiki-content h4 { @apply font-bold mt-4 mb-2; color: var(--text-primary); }
-    .wiki-content p { @apply my-3; }
-    .wiki-content ul { @apply list-disc pl-6 my-3 space-y-1; }
-    .wiki-content ol { @apply list-decimal pl-6 my-3 space-y-1; }
-    .wiki-content blockquote { @apply border-l-2 pl-4 my-4 italic; border-color: #A78BFA; color: var(--text-secondary); }
-    .wiki-content code { @apply px-1.5 py-0.5 rounded text-sm font-mono; background-color: rgba(0,0,0,.1); }
-    .wiki-content pre { @apply p-4 rounded-2xl overflow-x-auto my-4; background-color: rgba(0,0,0,.15); }
-    .wiki-content pre code { @apply p-0; background-color: transparent; }
-    .wiki-content a { @apply hover:underline; color: #8B5CF6; }
-    .wiki-content strong { color: var(--text-primary); }
 }
+
+/* ─────────── Стили Markdown-контента ─────────── */
+
+/* Общие стили для урока, статьи Wiki и любого текста,
+   отрендеренного через <MarkdownView />. */
+.mrr-md-content {
+    color: rgba(255, 255, 255, .85);
+    line-height: 1.7;
+    word-break: break-word;
+}
+
+.mrr-md-content > *:first-child { margin-top: 0; }
+.mrr-md-content > *:last-child { margin-bottom: 0; }
+
+.mrr-md-content h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 2rem 0 1rem;
+    line-height: 1.25;
+}
+.mrr-md-content h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 1.75rem 0 .85rem;
+    line-height: 1.3;
+    padding-bottom: .35rem;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.mrr-md-content h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 1.4rem 0 .6rem;
+    line-height: 1.35;
+}
+.mrr-md-content h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 1.2rem 0 .5rem;
+}
+.mrr-md-content h5,
+.mrr-md-content h6 {
+    font-size: .95rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, .9);
+    margin: 1rem 0 .4rem;
+}
+
+.mrr-md-content p {
+    margin: .85rem 0;
+}
+
+.mrr-md-content strong {
+    color: #fff;
+    font-weight: 700;
+}
+
+.mrr-md-content em {
+    color: rgba(255, 255, 255, .95);
+    font-style: italic;
+}
+
+.mrr-md-content a {
+    color: #A78BFA;
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(167, 139, 250, .4);
+}
+.mrr-md-content a:hover {
+    color: #fff;
+    border-bottom-color: rgba(255, 255, 255, .6);
+}
+
+.mrr-md-content ul {
+    list-style: disc;
+    padding-left: 1.5rem;
+    margin: .75rem 0;
+}
+.mrr-md-content ol {
+    list-style: decimal;
+    padding-left: 1.5rem;
+    margin: .75rem 0;
+}
+.mrr-md-content li {
+    margin: .3rem 0;
+}
+.mrr-md-content li::marker {
+    color: #A78BFA;
+}
+
+.mrr-md-content blockquote {
+    border-left: 3px solid #A78BFA;
+    padding: .5rem 1rem;
+    margin: 1rem 0;
+    background-color: rgba(167, 139, 250, .06);
+    border-radius: 0 .5rem .5rem 0;
+    color: rgba(255, 255, 255, .8);
+    font-style: italic;
+}
+.mrr-md-content blockquote p {
+    margin: .35rem 0;
+}
+
+.mrr-md-content hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, .1);
+    margin: 1.75rem 0;
+}
+
+/* Светлая тема */
+[data-theme="light"] .mrr-md-content { color: rgba(15, 15, 20, .85); }
+[data-theme="light"] .mrr-md-content h1,
+[data-theme="light"] .mrr-md-content h2,
+[data-theme="light"] .mrr-md-content h3,
+[data-theme="light"] .mrr-md-content h4,
+[data-theme="light"] .mrr-md-content h5,
+[data-theme="light"] .mrr-md-content h6 { color: #0f0f14; }
+[data-theme="light"] .mrr-md-content h2 { border-bottom-color: rgba(15, 15, 20, .1); }
+[data-theme="light"] .mrr-md-content strong { color: #0f0f14; }
+[data-theme="light"] .mrr-md-content em { color: rgba(15, 15, 20, .95); }
+[data-theme="light"] .mrr-md-content a { color: #7C3AED; border-bottom-color: rgba(124, 58, 237, .3); }
+[data-theme="light"] .mrr-md-content a:hover { color: #0f0f14; }
+[data-theme="light"] .mrr-md-content blockquote { color: rgba(15, 15, 20, .8); }
+[data-theme="light"] .mrr-md-content hr { border-top-color: rgba(15, 15, 20, .1); }
+

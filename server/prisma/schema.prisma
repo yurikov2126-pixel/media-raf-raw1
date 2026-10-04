@@ -61,6 +61,13 @@ model User {
   achievements UserAchievement[]
   xpLog        XpLog[]
   dailyQuests  DailyQuest[]
+
+  // Курсы: практики и ДЗ
+  supervisedPracticals PracticalWork[]       @relation("PracticalSupervisor")
+  practicalSubmissions PracticalSubmission[] @relation("PracticalSubmitter")
+  practicalReviews     PracticalSubmission[] @relation("PracticalReviewer")
+  homeworkSubmissions  HomeworkSubmission[]  @relation("HomeworkSubmitter")
+  homeworkReviews      HomeworkSubmission[]  @relation("HomeworkReviewer")
 }
 
 model Post {
@@ -183,6 +190,7 @@ model Course {
   lessons      Lesson[]
   enrollments  Enrollment[]
   certificates Certificate[]
+  practicals   PracticalWork[]
 }
 
 model Lesson {
@@ -194,9 +202,19 @@ model Lesson {
   order    Int     @default(0)
   duration Int     @default(0)
 
+  // Если у урока есть практика — следующий урок не откроется,
+  // пока практика не будет одобрена руководителем.
+  requiresPractical Boolean @default(false)
+
   course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
   test     Test?
   progress LessonProgress[]
+
+  // Практическое занятие с руководителем (1:1)
+  practical PracticalWork?
+
+  // Домашнее задание (1:1) — не блокирует прогресс, висит плашкой
+  homework Homework?
 }
 
 model Test {
@@ -502,4 +520,97 @@ model Achievement {
   updatedAt   DateTime @updatedAt
 
   @@index([active])
+}
+
+/**
+ * ─────────── Практические занятия ───────────
+ */
+
+model PracticalWork {
+  id           String    @id @default(cuid())
+  lessonId     String    @unique
+  courseId     String
+  topic        String // Тема занятия
+  description  String // Что делать на занятии
+  location     String? // Аудитория / онлайн
+  scheduledAt  DateTime? // Дата и время занятия
+  durationMin  Int       @default(90)
+  supervisorId String? // Руководитель (MENTOR/ADMIN)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lesson      Lesson                @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  course      Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  supervisor  User?                 @relation("PracticalSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  submissions PracticalSubmission[]
+
+  @@index([courseId])
+  @@index([scheduledAt])
+  @@index([supervisorId])
+}
+
+model PracticalSubmission {
+  id          String    @id @default(cuid())
+  practicalId String
+  userId      String
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  note        String? // Комментарий студента
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  feedback    String? // Комментарий руководителя
+  grade       Int? // 1..5
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  practical PracticalWork @relation(fields: [practicalId], references: [id], onDelete: Cascade)
+  user      User          @relation("PracticalSubmitter", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer  User?         @relation("PracticalReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@unique([practicalId, userId])
+  @@index([status])
+  @@index([userId])
+  @@index([reviewedBy])
+}
+
+/**
+ * ─────────── Домашние задания ───────────
+ */
+
+model Homework {
+  id            String   @id @default(cuid())
+  lessonId      String   @unique
+  title         String
+  description   String
+  maxFiles      Int      @default(3)
+  maxFileSizeMb Int      @default(50)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  submissions HomeworkSubmission[]
+}
+
+model HomeworkSubmission {
+  id         String    @id @default(cuid())
+  homeworkId String
+  userId     String
+  text       String? // Текстовый ответ
+  link       String? // Ссылка (например, на облако)
+  files      String    @default("[]") // JSON: [{url, name, type, size}]
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedBy String?
+  reviewedAt DateTime?
+  feedback   String?
+  grade      Int?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  user     User     @relation("HomeworkSubmitter", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User?    @relation("HomeworkReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@unique([homeworkId, userId])
+  @@index([status])
+  @@index([userId])
+  @@index([reviewedBy])
 }

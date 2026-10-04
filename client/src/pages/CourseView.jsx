@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { Sticker } from '../stickers/pack.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
+import MarkdownView from '../components/MarkdownView.jsx';
 
 function getEmbedUrl(url) {
     if (!url) return null;
@@ -310,9 +311,10 @@ export default function CourseView() {
                                 />
                             ) : null}
 
-                            <div className="whitespace-pre-wrap text-white/85 text-sm md:text-base leading-relaxed mb-6">
-                                {activeLesson.content}
-                            </div>
+                            <MarkdownView
+                                text={activeLesson.content}
+                                className="text-white/85 text-sm md:text-base leading-relaxed mb-6"
+                            />
 
                             {/* Кнопки урока */}
                             <div className="flex flex-wrap gap-2 mb-2">

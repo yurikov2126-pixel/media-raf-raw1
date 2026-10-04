@@ -8,6 +8,7 @@ import {
     onTestFailed,
     onCertificateEarned,
 } from '../lib/gamification.js';
+import { getLessonStatuses, computeAccess } from '../lib/courseLogic.js';
 
 const router = Router();
 
@@ -36,9 +37,7 @@ async function issueCertificateIfNeeded(userId, courseId) {
             userId,
             courseId,
             serial: makeSerial(),
-            title:
-                course.certificateTitle ||
-                `Сертификат о прохождении курса «${course.title}»`,
+            title: course.certificateTitle || `Сертификат о прохождении курса «${course.title}»`,
             description: course.certificateDescription || null,
             template: 'gradient',
         },
@@ -55,11 +54,7 @@ async function issueCertificateIfNeeded(userId, courseId) {
 
 function scoreQuestion(question, userAnswer) {
     const p = (() => {
-        try {
-            return JSON.parse(question.payload || '{}');
-        } catch {
-            return {};
-        }
+        try { return JSON.parse(question.payload || '{}'); } catch { return {}; }
     })();
     const type = question.type || 'single';
     const max = question.points;
@@ -87,8 +82,7 @@ function scoreQuestion(question, userAnswer) {
         case 'text': {
             const ua = String(userAnswer ?? '').trim();
             const ca = String(p.answer ?? '').trim();
-            if (p.caseSensitive ? ua === ca : ua.toLowerCase() === ca.toLowerCase())
-                gained = max;
+            if (p.caseSensitive ? ua === ca : ua.toLowerCase() === ca.toLowerCase()) gained = max;
             break;
         }
         case 'order': {
@@ -103,11 +97,7 @@ function scoreQuestion(question, userAnswer) {
 
 function sanitizePayload(question) {
     const p = (() => {
-        try {
-            return JSON.parse(question.payload || '{}');
-        } catch {
-            return {};
-        }
+        try { return JSON.parse(question.payload || '{}'); } catch { return {}; }
     })();
     const safe = { ...p };
     delete safe.correct;
@@ -116,63 +106,7 @@ function sanitizePayload(question) {
     return JSON.stringify(safe);
 }
 
-/**
- * Вычисляет доступность урока с учётом drip.
- */
-function computeLessonAccess({ course, lesson, enrollment, completedLessonIds }) {
-    if (!course.dripMode) return { unlocked: true, unlockAt: null, reason: null };
-
-    const sorted = [...course.lessons].sort((a, b) => a.order - b.order);
-    const idx = sorted.findIndex((l) => l.id === lesson.id);
-    if (idx <= 0) return { unlocked: true, unlockAt: null, reason: null };
-
-    if (course.dripMode === 'test') {
-        for (let i = 0; i < idx; i++) {
-            if (!completedLessonIds.has(sorted[i].id)) {
-                return { unlocked: false, unlockAt: null, reason: 'Пройдите предыдущие уроки' };
-            }
-        }
-        return { unlocked: true, unlockAt: null, reason: null };
-    }
-
-    if (course.dripMode === 'schedule') {
-        const interval = course.dripInterval || 7;
-        const start = enrollment?.createdAt ? new Date(enrollment.createdAt) : new Date();
-        const unlockAt = new Date(start.getTime() + idx * interval * 24 * 60 * 60 * 1000);
-        const now = new Date();
-        if (now < unlockAt) {
-            return {
-                unlocked: false,
-                unlockAt,
-                reason: `Откроется ${unlockAt.toLocaleDateString('ru-RU')}`,
-            };
-        }
-        return { unlocked: true, unlockAt, reason: null };
-    }
-
-    return { unlocked: true, unlockAt: null, reason: null };
-}
-
-// Считает пройденные уроки пользователя в конкретном курсе
-async function countCompletedInCourse(userId, courseId) {
-    return prisma.lessonProgress.count({
-        where: {
-            userId,
-            completed: true,
-            lesson: { courseId },
-        },
-    });
-}
-
-// Считает пройденные уроки пользователя во всех курсах (для computeLessonAccess)
-async function getCompletedLessonIds(userId) {
-    const rows = await prisma.lessonProgress.findMany({
-        where: { userId, completed: true },
-        select: { lessonId: true },
-    });
-    return new Set(rows.map((r) => r.lessonId));
-}
-
+/* ─────────── Список курсов ─────────── */
 router.get('/', auth, async (req, res) => {
     const courses = await prisma.course.findMany({
         where: { published: true },
@@ -180,6 +114,7 @@ router.get('/', auth, async (req, res) => {
             lessons: { select: { id: true } },
             _count: { select: { enrollments: true } },
         },
+        orderBy: { createdAt: 'asc' },
     });
     const myEnrollments = await prisma.enrollment.findMany({
         where: { userId: req.user.id },
@@ -193,13 +128,37 @@ router.get('/', auth, async (req, res) => {
     );
 });
 
+/* ─────────── Конкретный курс ─────────── */
 router.get('/:slug', auth, async (req, res) => {
     const course = await prisma.course.findUnique({
         where: { slug: req.params.slug },
         include: {
             lessons: {
                 orderBy: { order: 'asc' },
-                include: { test: { include: { questions: true } } },
+                include: {
+                    test: { include: { questions: true } },
+                    practical: {
+                        include: {
+                            supervisor: { select: { id: true, fullName: true, username: true, avatar: true } },
+                            submissions: {
+                                where: { userId: req.user.id },
+                                include: {
+                                    reviewer: { select: { id: true, fullName: true, username: true } },
+                                },
+                            },
+                        },
+                    },
+                    homework: {
+                        include: {
+                            submissions: {
+                                where: { userId: req.user.id },
+                                include: {
+                                    reviewer: { select: { id: true, fullName: true, username: true } },
+                                },
+                            },
+                        },
+                    },
+                },
             },
         },
     });
@@ -208,38 +167,54 @@ router.get('/:slug', auth, async (req, res) => {
     const enrollment = await prisma.enrollment.findUnique({
         where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
     });
-    const progress = await prisma.lessonProgress.findMany({
-        where: { userId: req.user.id },
-    });
     const certificate = await prisma.certificate.findUnique({
         where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
     });
 
-    const completedLessonIds = new Set(
-        progress.filter((p) => p.completed).map((p) => p.lessonId)
-    );
+    // Админские разблокировки (для этого пользователя)
+    const overrides = await prisma.lessonProgress.findMany({
+        where: {
+            userId: req.user.id,
+            lesson: { courseId: course.id },
+        },
+        select: { lessonId: true },
+    });
+    const overrideSet = new Set(overrides.map((o) => o.lessonId));
 
-    const lessons = course.lessons.map((l) => {
-        const access = computeLessonAccess({
+    // Статусы и доступ
+    const statuses = await getLessonStatuses(req.user.id, course.id);
+
+    const lessons = course.lessons.map((l, i) => {
+        const s = statuses[i];
+        const access = computeAccess({
+            statuses,
+            index: i,
             course,
-            lesson: l,
             enrollment,
-            completedLessonIds,
+            unlockOverrides: overrideSet,
         });
+
+        // Чистим ответы теста от правильных вариантов
+        const safeTest = l.test
+            ? {
+                ...l.test,
+                questions: l.test.questions.map((q) => ({
+                    ...q,
+                    payload: sanitizePayload(q),
+                })),
+            }
+            : null;
+
         return {
             ...l,
-            test: l.test
-                ? {
-                    ...l.test,
-                    questions: l.test.questions.map((q) => ({
-                        ...q,
-                        payload: sanitizePayload(q),
-                    })),
-                }
-                : null,
+            test: safeTest,
             unlocked: access.unlocked,
             unlockAt: access.unlockAt,
             lockReason: access.reason,
+            theoryPassed: s.theoryPassed,
+            practicalPassed: s.practicalPassed,
+            homeworkPassed: s.homeworkPassed,
+            fullyCompleted: s.fullyCompleted,
         };
     });
 
@@ -247,11 +222,11 @@ router.get('/:slug', auth, async (req, res) => {
         ...course,
         lessons,
         enrolled: !!enrollment,
-        progress,
         certificate,
     });
 });
 
+/* ─────────── Запись на курс ─────────── */
 router.post('/:id/enroll', auth, async (req, res) => {
     const enrollment = await prisma.enrollment.upsert({
         where: { userId_courseId: { userId: req.user.id, courseId: req.params.id } },
@@ -261,20 +236,36 @@ router.post('/:id/enroll', auth, async (req, res) => {
     res.json(enrollment);
 });
 
-// ─── Отметить урок пройденным ────────────────────────────────
-// НЕ разрешаем, если у урока есть тест — урок закрывается только через прохождение теста.
+/* ─────────── Прогресс по курсу ─────────── */
+async function recalcProgress(userId, courseId) {
+    const statuses = await getLessonStatuses(userId, courseId);
+    const total = statuses.length;
+    // Прогресс учитывает ТОЛЬКО theory + practical (ДЗ не блокирует)
+    const done = statuses.filter(
+        (s) => s.theoryPassed && s.practicalPassed
+    ).length;
+    const progress = total === 0 ? 0 : Math.round((done / total) * 100);
+
+    await prisma.enrollment.update({
+        where: { userId_courseId: { userId, courseId } },
+        data: { progress, completed: progress === 100 },
+    });
+
+    return progress;
+}
+
+/* ─────────── Отметить урок пройденным (без теста) ─────────── */
 router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
     try {
         const lesson = await prisma.lesson.findUnique({
             where: { id: req.params.lessonId },
             include: {
-                course: { include: { lessons: true } },
+                course: true,
                 test: { select: { id: true } },
             },
         });
         if (!lesson) return res.status(404).json({ error: 'Урок не найден' });
 
-        // Защита: если у урока есть тест, эту кнопку использовать нельзя
         if (lesson.test) {
             return res.status(400).json({
                 error: 'Урок содержит тест. Пройдите тестирование, чтобы завершить урок.',
@@ -282,29 +273,14 @@ router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
         }
 
         const enrollment = await prisma.enrollment.findUnique({
-            where: {
-                userId_courseId: { userId: req.user.id, courseId: lesson.courseId },
-            },
+            where: { userId_courseId: { userId: req.user.id, courseId: lesson.courseId } },
         });
         if (!enrollment) return res.status(403).json({ error: 'Не записаны на курс' });
 
-        const completedLessonIds = await getCompletedLessonIds(req.user.id);
-
-        const access = computeLessonAccess({
-            course: lesson.course,
-            lesson,
-            enrollment,
-            completedLessonIds,
-        });
-        if (!access.unlocked) {
-            return res.status(403).json({ error: access.reason || 'Урок пока недоступен' });
-        }
-
-        // Проверяем, не был ли урок уже пройден — чтобы не начислить XP дважды
-        const existingProgress = await prisma.lessonProgress.findUnique({
+        const existing = await prisma.lessonProgress.findUnique({
             where: { userId_lessonId: { userId: req.user.id, lessonId: lesson.id } },
         });
-        const wasAlreadyCompleted = existingProgress?.completed === true;
+        const wasAlready = existing?.completed === true;
 
         await prisma.lessonProgress.upsert({
             where: { userId_lessonId: { userId: req.user.id, lessonId: lesson.id } },
@@ -312,39 +288,24 @@ router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
             create: { userId: req.user.id, lessonId: lesson.id, completed: true },
         });
 
-        const total = await prisma.lesson.count({ where: { courseId: lesson.courseId } });
-        const done = await countCompletedInCourse(req.user.id, lesson.courseId);
-        const progress = Math.round((done / total) * 100);
-
-        await prisma.enrollment.update({
-            where: {
-                userId_courseId: { userId: req.user.id, courseId: lesson.courseId },
-            },
-            data: { progress, completed: progress === 100 },
-        });
+        const progress = await recalcProgress(req.user.id, lesson.courseId);
 
         let certificate = null;
-        let wasCertificateNew = false;
+        let wasCertNew = false;
         if (progress === 100) {
-            const beforeCert = await prisma.certificate.findUnique({
-                where: {
-                    userId_courseId: {
-                        userId: req.user.id,
-                        courseId: lesson.courseId,
-                    },
-                },
+            const before = await prisma.certificate.findUnique({
+                where: { userId_courseId: { userId: req.user.id, courseId: lesson.courseId } },
             });
             certificate = await issueCertificateIfNeeded(req.user.id, lesson.courseId);
-            wasCertificateNew = !beforeCert && !!certificate;
+            wasCertNew = !before && !!certificate;
         }
 
-        // ─── Геймификация (не блокирует ответ) ───
-        if (!wasAlreadyCompleted) {
+        if (!wasAlready) {
             onLessonCompleted(req.user.id, lesson.id).catch((e) =>
                 console.error('[courses] gamif lesson:', e)
             );
         }
-        if (wasCertificateNew && certificate) {
+        if (wasCertNew && certificate) {
             onCertificateEarned(req.user.id, certificate.id).catch((e) =>
                 console.error('[courses] gamif cert:', e)
             );
@@ -357,7 +318,7 @@ router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
     }
 });
 
-// ─── Отправка теста ─────────────────────────────────────────
+/* ─────────── Отправка теста ─────────── */
 router.post('/tests/:testId/submit', auth, async (req, res) => {
     try {
         const { answers } = req.body;
@@ -365,32 +326,15 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
             where: { id: req.params.testId },
             include: {
                 questions: true,
-                lesson: { include: { course: { include: { lessons: true } } } },
+                lesson: { include: { course: true } },
             },
         });
         if (!test) return res.status(404).json({ error: 'Тест не найден' });
 
         const enrollment = await prisma.enrollment.findUnique({
-            where: {
-                userId_courseId: {
-                    userId: req.user.id,
-                    courseId: test.lesson.courseId,
-                },
-            },
+            where: { userId_courseId: { userId: req.user.id, courseId: test.lesson.courseId } },
         });
         if (!enrollment) return res.status(403).json({ error: 'Не записаны на курс' });
-
-        const completedLessonIds = await getCompletedLessonIds(req.user.id);
-
-        const access = computeLessonAccess({
-            course: test.lesson.course,
-            lesson: test.lesson,
-            enrollment,
-            completedLessonIds,
-        });
-        if (!access.unlocked) {
-            return res.status(403).json({ error: access.reason || 'Урок пока недоступен' });
-        }
 
         let gained = 0;
         let max = 0;
@@ -429,64 +373,44 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
         });
 
         let certificate = null;
-        let wasCertificateNew = false;
+        let wasCertNew = false;
 
         if (passed) {
-            // Проверяем, был ли урок уже пройден — чтобы не задвоить XP
-            const existingProgress = await prisma.lessonProgress.findUnique({
-                where: {
-                    userId_lessonId: { userId: req.user.id, lessonId: test.lessonId },
-                },
+            const existing = await prisma.lessonProgress.findUnique({
+                where: { userId_lessonId: { userId: req.user.id, lessonId: test.lessonId } },
             });
-            const wasAlreadyCompleted = existingProgress?.completed === true;
+            const wasAlready = existing?.completed === true;
 
-            // Урок автоматически помечается пройденным
             await prisma.lessonProgress.upsert({
-                where: {
-                    userId_lessonId: { userId: req.user.id, lessonId: test.lessonId },
-                },
+                where: { userId_lessonId: { userId: req.user.id, lessonId: test.lessonId } },
                 update: { completed: true },
-                create: {
-                    userId: req.user.id,
-                    lessonId: test.lessonId,
-                    completed: true,
-                },
+                create: { userId: req.user.id, lessonId: test.lessonId, completed: true },
             });
 
-            const courseId = test.lesson.courseId;
-            const total = await prisma.lesson.count({ where: { courseId } });
-            const done = await countCompletedInCourse(req.user.id, courseId);
-            const progress = Math.round((done / total) * 100);
-
-            await prisma.enrollment.update({
-                where: { userId_courseId: { userId: req.user.id, courseId } },
-                data: { progress, completed: progress === 100 },
-            });
+            const progress = await recalcProgress(req.user.id, test.lesson.courseId);
 
             if (progress === 100) {
-                const beforeCert = await prisma.certificate.findUnique({
-                    where: { userId_courseId: { userId: req.user.id, courseId } },
+                const before = await prisma.certificate.findUnique({
+                    where: { userId_courseId: { userId: req.user.id, courseId: test.lesson.courseId } },
                 });
-                certificate = await issueCertificateIfNeeded(req.user.id, courseId);
-                wasCertificateNew = !beforeCert && !!certificate;
+                certificate = await issueCertificateIfNeeded(req.user.id, test.lesson.courseId);
+                wasCertNew = !before && !!certificate;
             }
 
-            // ─── Геймификация: XP за тест + за урок (если впервые) + за сертификат ───
             onTestPassed(req.user.id, test.id, percent).catch((e) =>
                 console.error('[courses] gamif test pass:', e)
             );
-            if (!wasAlreadyCompleted) {
+            if (!wasAlready) {
                 onLessonCompleted(req.user.id, test.lessonId).catch((e) =>
                     console.error('[courses] gamif lesson:', e)
                 );
             }
-            if (wasCertificateNew && certificate) {
+            if (wasCertNew && certificate) {
                 onCertificateEarned(req.user.id, certificate.id).catch((e) =>
                     console.error('[courses] gamif cert:', e)
                 );
             }
         } else {
-            // Штраф за провал теста
             onTestFailed(req.user.id, test.id, percent).catch((e) =>
                 console.error('[courses] gamif test fail:', e)
             );
@@ -505,6 +429,7 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
     }
 });
 
+/* ─────────── Сертификат ─────────── */
 router.get('/certificates/:id', auth, async (req, res) => {
     const cert = await prisma.certificate.findUnique({
         where: { id: req.params.id },

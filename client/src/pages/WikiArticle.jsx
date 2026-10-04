@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
+import MarkdownView from '../components/MarkdownView.jsx';
 
 export default function WikiArticle() {
     const { slug } = useParams();
@@ -95,7 +96,7 @@ export default function WikiArticle() {
             )}
 
             <article className="card p-5 md:p-7">
-                <MarkdownView text={article.content} />
+                <MarkdownView text={article.content} className="text-white/85 leading-relaxed" />
             </article>
 
             {article.related?.length > 0 && (

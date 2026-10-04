@@ -31,6 +31,8 @@ import publicMetaRouter from './routes/publicMeta.js';
 import { schedulePasswordResetCleanup } from './lib/passwordResetCron.js';
 import gamificationRouter from './routes/gamification.js';
 import { scheduleInactivityCharge } from './lib/gamificationCron.js';
+import practicalsRouter from './routes/practicals.js';
+import homeworkRouter from './routes/homework.js';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +148,8 @@ app.use('/api/wiki', wikiRoutes);
 app.use('/api/modules', modulesRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/api/gamification', gamificationRouter);
+app.use('/api/practicals', practicalsRouter);
+app.use('/api/homework', homeworkRouter);
 
 app.get('/api/health', (_req, res) =>
     res.json({ ok: true, service: 'MEDIA-RAF-RAW' })
