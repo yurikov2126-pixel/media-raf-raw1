@@ -2,11 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, uploadBlob } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import { useGamification } from '../store/gamification.jsx';
 import Avatar from '../components/Avatar.jsx';
 import ProfileEditor from '../components/ProfileEditor.jsx';
 import ImageCropper from '../components/ImageCropper.jsx';
 import PostCard from '../components/PostCard.jsx';
 import ReportButton from '../components/ReportButton.jsx';
+import LevelBadge from '../components/LevelBadge.jsx';
+import XpProgressBar from '../components/XpProgressBar.jsx';
+import AchievementCard from '../components/AchievementCard.jsx';
+import QuestCard from '../components/QuestCard.jsx';
 import usePostDraft from '../hooks/usePostDraft.js';
 import usePageMeta from '../hooks/usePageMeta.js';
 
@@ -52,6 +57,8 @@ function SocialLink({ network, value }) {
 export default function Profile() {
     const { username } = useParams();
     const { user: me, token } = useAuth();
+    const gamifStore = useGamification();
+
     const [profile, setProfile] = useState(null);
     const [tab, setTab] = useState('posts');
     const [postImage, setPostImage] = useState('');
@@ -59,11 +66,11 @@ export default function Profile() {
     const [uploadingImage, setUploadingImage] = useState(false);
     const [publishing, setPublishing] = useState(false);
     const [editorOpen, setEditorOpen] = useState(false);
+    const [gamif, setGamif] = useState(null);
     const fileRef = useRef(null);
 
     const isMe = me.username === username;
 
-    // Черновик — только для своего профиля
     const draft = usePostDraft(isMe ? me.id : null);
     const postText = draft.text;
     const setPostText = draft.setText;
@@ -78,10 +85,16 @@ export default function Profile() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [username, token]);
 
+    useEffect(() => {
+        if (!token || !profile) return;
+        api(`/gamification/user/${username}`, { token })
+            .then(setGamif)
+            .catch(() => setGamif(null));
+    }, [username, token, profile]);
+
     usePageMeta({
         title: profile ? `${profile.fullName} (@${profile.username})` : 'Профиль',
-        description:
-            profile?.bio || 'Профиль студента медиацентра MEDIA·RAF·RAW',
+        description: profile?.bio || 'Профиль студента медиацентра MEDIA·RAF·RAW',
         image: profile?.avatar,
         type: 'profile',
     });
@@ -123,6 +136,9 @@ export default function Profile() {
             setPostImage('');
             draft.clear();
             load();
+            // Обновляем данные геймификации
+            gamifStore.reload?.();
+            gamifStore.reloadQuests?.();
         } finally {
             setPublishing(false);
         }
@@ -142,21 +158,17 @@ export default function Profile() {
     }
 
     const skills = (() => {
-        try {
-            return JSON.parse(profile.skills || '[]');
-        } catch {
-            return [];
-        }
+        try { return JSON.parse(profile.skills || '[]'); } catch { return []; }
     })();
     const socials = (() => {
-        try {
-            return JSON.parse(profile.socials || '{}');
-        } catch {
-            return {};
-        }
+        try { return JSON.parse(profile.socials || '{}'); } catch { return {}; }
     })();
 
     const hasSocials = socials.tg || socials.vk || socials.inst;
+
+    /* Квесты берём из глобального store (они приватные).
+       Но если это не мой профиль — таб не рендерим вообще. */
+    const showQuestsTab = isMe && gamifStore.enabled && gamifStore.questsEnabled;
 
     return (
         <div className="max-w-3xl mx-auto">
@@ -182,8 +194,13 @@ export default function Profile() {
                         <Avatar user={profile} size={112} />
                     </div>
                     <div className="flex-1 min-w-[180px] pb-1">
-                        <div className="text-2xl md:text-3xl font-bold break-words">
-                            {profile.fullName}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="text-2xl md:text-3xl font-bold break-words">
+                                {profile.fullName}
+                            </div>
+                            {gamif?.stats && (
+                                <LevelBadge level={gamif.stats.level} size="md" />
+                            )}
                         </div>
                         <div className="text-white/50">@{profile.username}</div>
                     </div>
@@ -254,16 +271,54 @@ export default function Profile() {
                     </div>
                 )}
 
-                <div className="mt-6 border-b border-white/10 flex gap-4">
+                {/* ─── XP-карточка ─── */}
+                {gamif?.stats && gamifStore.enabled && (
+                    <div className="mt-5 card p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3">
+                                <div className="text-3xl">⚡</div>
+                                <div>
+                                    <div className="font-bold text-lg">{gamif.stats.xp} XP</div>
+                                    <div className="text-xs text-white/50">
+                                        Уровень {gamif.stats.level}
+                                        {gamif.stats.streakCurrent > 0 && (
+                                            <>
+                                                {' · '}
+                                                🔥 {gamif.stats.streakCurrent}
+                                                {gamif.stats.streakBest > gamif.stats.streakCurrent
+                                                    ? ` (рекорд ${gamif.stats.streakBest})`
+                                                    : ''}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {gamifStore.leaderboardEnabled !== false && (
+                                <Link
+                                    to="/app/leaderboard"
+                                    className="chip bg-white/5 hover:bg-white/10 text-xs"
+                                >
+                                    🏆 Рейтинг
+                                </Link>
+                            )}
+                        </div>
+                        <XpProgressBar progress={gamif.progress} />
+                    </div>
+                )}
+
+                {/* ─── Табы ─── */}
+                <div className="mt-6 border-b border-white/10 flex gap-4 overflow-x-auto no-scrollbar">
                     {[
                         ['posts', 'Публикации'],
                         ['courses', 'Курсы'],
                         ['certificates', 'Сертификаты'],
+                        ...(showQuestsTab ? [['quests', '⚔️ Квесты']] : []),
+                        ...(gamif?.stats && gamifStore.enabled ? [['achievements', '🏆 Достижения']] : []),
                     ].map(([k, l]) => (
                         <button
                             key={k}
                             onClick={() => setTab(k)}
-                            className={`pb-3 -mb-px border-b-2 ${
+                            className={`pb-3 -mb-px border-b-2 whitespace-nowrap ${
                                 tab === k
                                     ? 'border-violet text-white'
                                     : 'border-transparent text-white/40'
@@ -293,7 +348,6 @@ export default function Profile() {
                                             type="button"
                                             onClick={() => draft.clear()}
                                             className="ml-auto text-white/30 hover:text-pink transition"
-                                            title="Очистить черновик"
                                         >
                                             Очистить
                                         </button>
@@ -332,10 +386,7 @@ export default function Profile() {
                                     />
                                     <button
                                         onClick={publish}
-                                        disabled={
-                                            publishing ||
-                                            (!postText.trim() && !postImage)
-                                        }
+                                        disabled={publishing || (!postText.trim() && !postImage)}
                                         className="btn-primary !py-2"
                                     >
                                         {publishing ? '…' : 'Опубликовать'}
@@ -351,9 +402,7 @@ export default function Profile() {
                                 onChanged={(u) =>
                                     setProfile((pr) => ({
                                         ...pr,
-                                        posts: pr.posts.map((x) =>
-                                            x.id === u.id ? u : x
-                                        ),
+                                        posts: pr.posts.map((x) => (x.id === u.id ? u : x)),
                                     }))
                                 }
                                 onDeleted={(id) =>
@@ -393,16 +442,12 @@ export default function Profile() {
                                         </div>
                                     </div>
                                     {e.completed && (
-                                        <span className="chip bg-lime/20 text-lime-soft">
-                                            ✓
-                                        </span>
+                                        <span className="chip bg-lime/20 text-lime-soft">✓</span>
                                     )}
                                 </div>
                             ))
                         ) : (
-                            <p className="text-center text-white/30 py-8">
-                                Нет активных курсов
-                            </p>
+                            <p className="text-center text-white/30 py-8">Нет активных курсов</p>
                         )}
                     </div>
                 )}
@@ -440,6 +485,61 @@ export default function Profile() {
                             </p>
                         )}
                     </div>
+                )}
+
+                {tab === 'quests' && showQuestsTab && (
+                    <div className="py-6">
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                            <div>
+                                <div className="text-lg font-bold">Ежедневные квесты</div>
+                                <div className="text-sm text-white/50">
+                                    Обновляются каждый день
+                                </div>
+                            </div>
+                            <div className="chip bg-violet/20 text-violet-soft text-xs">
+                                {gamifStore.quests.filter((q) => q.completed).length} / {gamifStore.quests.length} выполнено
+                            </div>
+                        </div>
+                        {gamifStore.quests.length === 0 && (
+                            <div className="card p-6 text-center text-white/40">
+                                Загрузка квестов…
+                            </div>
+                        )}
+                        {gamifStore.quests.length > 0 && (
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                {gamifStore.quests.map((q) => (
+                                    <QuestCard key={q.id} quest={q} typeMeta={gamifStore.questTypeMeta} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {tab === 'achievements' && gamif && (
+                    <div className="py-6">
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                            <div>
+                                <div className="text-lg font-bold">Достижения</div>
+                                <div className="text-sm text-white/50">
+                                    Открыто {gamif.achievements.filter((a) => a.unlocked).length} из {gamif.achievements.length}
+                                </div>
+                            </div>
+                            {gamif.stats.streakCurrent > 0 && (
+                                <div className="chip bg-orange-500/20 text-orange-300">
+                                    🔥 Серия {gamif.stats.streakCurrent} дн.
+                                </div>
+                            )}
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                            {gamif.achievements.map((a) => (
+                                <AchievementCard key={a.id} achievement={a} />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {tab === 'achievements' && !gamif && (
+                    <div className="py-10 text-center text-white/40">Загрузка…</div>
                 )}
             </div>
 

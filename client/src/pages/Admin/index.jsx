@@ -16,6 +16,8 @@ import Backups from './tabs/Backups.jsx';
 import Moderation from './tabs/Moderation.jsx';
 import Settings from './tabs/Settings.jsx';
 import Modules from './tabs/Modules.jsx';
+import Gamification from './tabs/Gamification.jsx';
+import PasswordResets from './tabs/PasswordResets.jsx';
 
 import CoursesRoot from './tabs/Courses/index.jsx';
 import WikiRoot from './tabs/Wiki/index.jsx';
@@ -40,10 +42,17 @@ export default function Admin() {
     const [certificates, setCertificates] = useState([]);
     const [settings, setSettings] = useState({});
     const [openReports, setOpenReports] = useState(0);
+    const [pendingResets, setPendingResets] = useState(0);
 
     const reloadReportsBadge = () => {
         api('/admin/reports?status=NEW&limit=1', { token })
             .then((r) => setOpenReports(r.total || 0))
+            .catch(() => {});
+    };
+
+    const reloadResetsBadge = () => {
+        api('/admin/password-resets?status=PENDING', { token })
+            .then((r) => setPendingResets(r.stats?.pending || 0))
             .catch(() => {});
     };
 
@@ -54,6 +63,7 @@ export default function Admin() {
         api('/admin/certificates', { token }).then(setCertificates).catch(() => {});
         api('/admin/settings', { token }).then(setSettings).catch(() => {});
         reloadReportsBadge();
+        reloadResetsBadge();
     };
 
     useEffect(() => {
@@ -62,13 +72,22 @@ export default function Admin() {
     }, [token]);
 
     useEffect(() => {
-        const hasUnreadReport = notifications.some((n) => n.type === 'report' && !n.readAt);
+        const hasUnreadReport = notifications.some(
+            (n) => n.type === 'report' && !n.readAt
+        );
+        const hasUnreadReset = notifications.some(
+            (n) => n.type === 'password_reset' && !n.readAt
+        );
         if (hasUnreadReport) reloadReportsBadge();
+        if (hasUnreadReset) reloadResetsBadge();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [notifications]);
 
     useEffect(() => {
-        const t = setInterval(reloadReportsBadge, 30000);
+        const t = setInterval(() => {
+            reloadReportsBadge();
+            reloadResetsBadge();
+        }, 30000);
         return () => clearInterval(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
@@ -79,13 +98,17 @@ export default function Admin() {
 
             <div className="flex gap-2 mb-6 flex-wrap">
                 {TABS.map(([k, l, i]) => {
-                    const badge = k === 'moderation' && openReports > 0 ? openReports : null;
+                    let badge = null;
+                    if (k === 'moderation' && openReports > 0) badge = openReports;
+                    if (k === 'password-resets' && pendingResets > 0) badge = pendingResets;
                     return (
                         <button
                             key={k}
                             onClick={() => setTab(k)}
                             className={`chip relative ${
-                                tab === k ? 'bg-violet text-white' : 'bg-white/5 text-white/60'
+                                tab === k
+                                    ? 'bg-violet text-white'
+                                    : 'bg-white/5 text-white/60'
                             }`}
                         >
                             {i} {l}
@@ -99,12 +122,22 @@ export default function Admin() {
                 })}
             </div>
 
-            {tab === 'dash' && <Dashboard stats={stats} token={token} onReload={reloadAll} />}
+            {tab === 'dash' && (
+                <Dashboard stats={stats} token={token} onReload={reloadAll} />
+            )}
             {tab === 'analytics' && <Analytics token={token} />}
-            {tab === 'moderation' && <Moderation token={token} onChanged={reloadAll} />}
-            {tab === 'users' && <Users users={users} setUsers={setUsers} token={token} />}
+            {tab === 'moderation' && (
+                <Moderation token={token} onChanged={reloadAll} />
+            )}
+            {tab === 'users' && (
+                <Users users={users} setUsers={setUsers} token={token} />
+            )}
             {tab === 'courses' && (
-                <CoursesRoot courses={courses} setCourses={setCourses} token={token} />
+                <CoursesRoot
+                    courses={courses}
+                    setCourses={setCourses}
+                    token={token}
+                />
             )}
             {tab === 'wiki' && <WikiRoot token={token} />}
             {tab === 'certificates' && (
@@ -116,10 +149,19 @@ export default function Admin() {
                     token={token}
                 />
             )}
-            {tab === 'broadcast' && <Broadcast token={token} users={users} courses={courses} />}
-            {tab === 'push' && <Push token={token} users={users} courses={courses} />}
+            {tab === 'broadcast' && (
+                <Broadcast token={token} users={users} courses={courses} />
+            )}
+            {tab === 'push' && (
+                <Push token={token} users={users} courses={courses} />
+            )}
             {tab === 'bulk' && (
-                <BulkRoot token={token} users={users} courses={courses} onReload={reloadAll} />
+                <BulkRoot
+                    token={token}
+                    users={users}
+                    courses={courses}
+                    onReload={reloadAll}
+                />
             )}
             {tab === 'site' && (
                 <SiteDesignRoot
@@ -130,9 +172,15 @@ export default function Admin() {
                 />
             )}
             {tab === 'modules' && <Modules token={token} />}
+            {tab === 'gamification' && <Gamification token={token} />}
             {tab === 'backups' && <Backups token={token} />}
+            {tab === 'password-resets' && <PasswordResets token={token} />}
             {tab === 'settings' && (
-                <Settings settings={settings} setSettings={setSettings} token={token} />
+                <Settings
+                    settings={settings}
+                    setSettings={setSettings}
+                    token={token}
+                />
             )}
         </div>
     );

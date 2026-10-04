@@ -5,6 +5,7 @@ import Layout from './components/Layout.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
 import OnboardingModal from './components/OnboardingModal.jsx';
+import AchievementToast from './components/AchievementToast.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Feed from './pages/Feed.jsx';
@@ -13,6 +14,7 @@ import Messenger from './pages/Messenger.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Courses from './pages/Courses.jsx';
 import CourseView from './pages/CourseView.jsx';
+import Leaderboard from './pages/Leaderboard.jsx';
 import Admin from './pages/Admin/index.jsx';
 import Certificate from './pages/Certificate.jsx';
 import Verify from './pages/Verify.jsx';
@@ -49,8 +51,14 @@ export default function App() {
         <>
             <Routes>
                 <Route path="/" element={<RootGate />} />
-                <Route path="/login" element={<div className="page-enter"><Login /></div>} />
-                <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
+                <Route
+                    path="/login"
+                    element={<div className="page-enter"><Login /></div>}
+                />
+                <Route
+                    path="/verify/:serial"
+                    element={<div className="page-enter"><Verify /></div>}
+                />
 
                 <Route
                     path="/app"
@@ -67,6 +75,7 @@ export default function App() {
                     <Route path="notifications" element={<Notifications />} />
                     <Route path="courses" element={<Courses />} />
                     <Route path="courses/:slug" element={<CourseView />} />
+                    <Route path="leaderboard" element={<Leaderboard />} />
                     <Route path="wiki" element={<Wiki />} />
                     <Route path="wiki/:slug" element={<WikiArticle />} />
                     <Route path="certificates/:id" element={<Certificate />} />
@@ -83,8 +92,9 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/" />} />
             </Routes>
 
-            {/* Онбординг поверх всего — показывается только авторизованным */}
+            {/* Онбординг и попапы достижений — поверх всего, только для авторизованных */}
             {user && <OnboardingModal />}
+            {user && <AchievementToast />}
         </>
     );
 }

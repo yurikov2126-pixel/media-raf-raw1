@@ -30,6 +30,11 @@ model User {
   lastSeen     DateTime?
   createdAt    DateTime  @default(now())
 
+  // Онбординг и инвалидация токенов
+  onboardingVersion Int       @default(0)
+  passwordChangedAt DateTime?
+
+  // Базовые связи
   posts         Post[]
   comments      Comment[]
   postReactions PostReaction[]
@@ -44,9 +49,18 @@ model User {
   wikiArticles  WikiArticle[]
   pushSubs      PushSubscription[]
 
-  reportsMade       Report[] @relation("ReporterReports")
-  reportsResolved   Report[] @relation("ResolverReports")
-  onboardingVersion Int      @default(0)
+  // Модерация
+  reportsMade     Report[] @relation("ReporterReports")
+  reportsResolved Report[] @relation("ResolverReports")
+
+  // Восстановление пароля
+  passwordResetRequests PasswordResetRequest[]
+
+  // Геймификация
+  stats        UserStats?
+  achievements UserAchievement[]
+  xpLog        XpLog[]
+  dailyQuests  DailyQuest[]
 }
 
 model Post {
@@ -137,9 +151,6 @@ model Message {
   replyTo   Message?   @relation("Reply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]  @relation("Reply")
   reactions Reaction[]
-
-  @@index([chatId, createdAt])
-  @@index([senderId])
 }
 
 model Reaction {
@@ -172,8 +183,6 @@ model Course {
   lessons      Lesson[]
   enrollments  Enrollment[]
   certificates Certificate[]
-
-  @@index([published, createdAt])
 }
 
 model Lesson {
@@ -188,8 +197,6 @@ model Lesson {
   course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
   test     Test?
   progress LessonProgress[]
-
-  @@index([courseId, order])
 }
 
 model Test {
@@ -210,8 +217,6 @@ model Question {
   payload String @default("{}")
   points  Int    @default(1)
   test    Test   @relation(fields: [testId], references: [id], onDelete: Cascade)
-
-  @@index([testId])
 }
 
 model TestAttempt {
@@ -224,8 +229,6 @@ model TestAttempt {
   createdAt DateTime @default(now())
   test      Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, testId])
 }
 
 model Enrollment {
@@ -278,7 +281,6 @@ model Notification {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
-  @@index([userId, createdAt])
 }
 
 model Setting {
@@ -349,7 +351,7 @@ model PushSubscription {
 }
 
 /**
- * ─────────── Модерация ───────────
+ * ─────────── Модерация жалоб ───────────
  */
 
 model Report {
@@ -371,4 +373,133 @@ model Report {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@index([reporterId])
+}
+
+/**
+ * ─────────── Восстановление пароля ───────────
+ */
+
+model PasswordResetRequest {
+  id     String @id @default(cuid())
+  userId String
+  status String @default("PENDING") // PENDING | CODE_ISSUED | COMPLETED | REJECTED | EXPIRED
+
+  codeHash    String?
+  codeExpires DateTime?
+  attempts    Int       @default(0)
+
+  issuedBy String?
+  issuedAt DateTime?
+  usedAt   DateTime?
+
+  rejectedBy String?
+  rejectedAt DateTime?
+  note       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+/**
+ * ─────────── Геймификация ───────────
+ */
+
+model UserStats {
+  userId               String   @id
+  xp                   Int      @default(0)
+  level                Int      @default(1)
+  streakCurrent        Int      @default(0)
+  streakBest           Int      @default(0)
+  lastActiveDate       String?
+  lastInactivityCharge String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([xp])
+  @@index([level])
+  @@index([streakCurrent])
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+}
+
+model XpLog {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String
+  meta      String   @default("{}")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model DailyQuest {
+  id          String    @id @default(cuid())
+  userId      String
+  date        String // YYYY-MM-DD (UTC)
+  type        String // post_count | comment_count | lesson_count | test_pass | reaction_given | certificate_earned
+  target      Int
+  current     Int       @default(0)
+  xpReward    Int
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, type])
+  @@index([userId, date])
+  @@index([completed, date])
+}
+
+model QuestTemplate {
+  id        String   @id @default(cuid())
+  type      String
+  target    Int
+  xpReward  Int
+  label     String?
+  icon      String?
+  weight    Int      @default(1)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}
+
+model Achievement {
+  id          String   @id // стабильный ключ, например "first_post"
+  title       String
+  description String
+  icon        String   @default("🏆")
+  rarity      String   @default("common")
+  counter     String? // postsCount | commentsCount | ...
+  threshold   Int?
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
 }

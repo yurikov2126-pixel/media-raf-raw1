@@ -11,6 +11,7 @@ const ICONS = {
     certificate: '🏆',
     system: '📢',
     report: '🚩',
+    password_reset: '🔑',
 };
 
 const TITLES = {
@@ -21,6 +22,8 @@ const TITLES = {
     system: (p) => p.title || 'Сообщение от администрации',
     report: (p) =>
         `Жалоба на ${p.targetLabel || 'контент'} от ${p.reporterName || 'пользователя'}`,
+    password_reset: (p) =>
+        `Запрос на сброс пароля от ${p.userName || 'пользователя'}`,
 };
 
 const FILTERS = [
@@ -31,6 +34,7 @@ const FILTERS = [
     { v: 'post', l: '📝 Посты' },
     { v: 'certificate', l: '🏆 Сертификаты' },
     { v: 'system', l: '📢 Система' },
+    { v: 'password_reset', l: '🔑 Пароли' },
 ];
 
 export default function Notifications() {
@@ -62,6 +66,7 @@ export default function Notifications() {
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
+        else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
     };
 
     const flash = (text) => {

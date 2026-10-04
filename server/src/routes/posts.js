@@ -2,13 +2,17 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
 import { createNotification } from '../lib/notify.js';
+import {
+    onPostCreated,
+    onCommentCreated,
+    onPostDeleted,
+    onCommentDeleted,
+    onReactionGiven,
+} from '../lib/gamification.js';
 
 const router = Router();
 
-/* ─────────── Лента (единый запрос + пагинация) ───────────
-   Один запрос вместо 16 (N+1): достаём посты сразу со всеми
-   авторами, реакциями и счётчиком комментариев.
-   Пагинация — по id (cursor-based), сортировка по createdAt desc. */
+/* ─────────── Лента (единый запрос + пагинация) ─────────── */
 router.get('/feed', auth, async (req, res) => {
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
     const cursor = req.query.cursor || null;
@@ -81,6 +85,7 @@ router.post('/', auth, async (req, res) => {
         data: { authorId: req.user.id, content: content || '', mediaUrl, mediaType },
     });
 
+    // Уведомления всем (не блокирует)
     try {
         const users = await prisma.user.findMany({
             where: { id: { not: req.user.id }, isBanned: false },
@@ -100,6 +105,11 @@ router.post('/', auth, async (req, res) => {
     } catch (e) {
         console.error('post notify', e);
     }
+
+    // ─── Геймификация: XP за пост + прогресс квеста ───
+    onPostCreated(req.user.id).catch((e) =>
+        console.error('[posts] gamif post:', e)
+    );
 
     res.json(post);
 });
@@ -126,7 +136,21 @@ router.delete('/:id', auth, async (req, res) => {
     if (post.authorId !== req.user.id && req.user.role !== 'ADMIN') {
         return res.status(403).json({ error: 'Нет прав' });
     }
+
     await prisma.post.delete({ where: { id: post.id } });
+
+    // ─── Геймификация: вычет XP за удаление ───
+    // Если автор удаляет сам — штраф ему. Если админ удаляет чужой — штраф автору.
+    if (post.authorId === req.user.id) {
+        onPostDeleted(req.user.id, post.id).catch((e) =>
+            console.error('[posts] gamif post delete:', e)
+        );
+    } else if (req.user.role === 'ADMIN') {
+        onPostDeleted(post.authorId, post.id).catch((e) =>
+            console.error('[posts] gamif admin-delete:', e)
+        );
+    }
+
     res.json({ ok: true });
 });
 
@@ -178,6 +202,11 @@ router.post('/:id/reactions', auth, async (req, res) => {
                 postId: post.id,
             });
         }
+
+        // ─── Геймификация: прогресс квеста «поставь реакции» ───
+        onReactionGiven(req.user.id).catch((e) =>
+            console.error('[posts] gamif reaction:', e)
+        );
     }
 
     const reactions = await prisma.postReaction.findMany({
@@ -275,6 +304,11 @@ router.post('/:id/comments', auth, async (req, res) => {
         console.error('[comments] notify error:', e);
     }
 
+    // ─── Геймификация: XP за комментарий (мин. длина) + прогресс квеста ───
+    onCommentCreated(req.user.id, content).catch((e) =>
+        console.error('[posts] gamif comment:', e)
+    );
+
     res.json({ ...comment, replies: [] });
 });
 
@@ -297,7 +331,20 @@ router.delete('/comments/:id', auth, async (req, res) => {
     if (c.authorId !== req.user.id && req.user.role !== 'ADMIN') {
         return res.status(403).json({ error: 'Нет прав' });
     }
+
     await prisma.comment.delete({ where: { id: c.id } });
+
+    // ─── Геймификация: вычет XP за удаление комментария ───
+    if (c.authorId === req.user.id) {
+        onCommentDeleted(req.user.id, c.id).catch((e) =>
+            console.error('[posts] gamif comment delete:', e)
+        );
+    } else if (req.user.role === 'ADMIN') {
+        onCommentDeleted(c.authorId, c.id).catch((e) =>
+            console.error('[posts] gamif admin-comment delete:', e)
+        );
+    }
+
     res.json({ ok: true });
 });
 

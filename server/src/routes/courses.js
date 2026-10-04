@@ -2,6 +2,12 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
 import { createNotification } from '../lib/notify.js';
+import {
+    onLessonCompleted,
+    onTestPassed,
+    onTestFailed,
+    onCertificateEarned,
+} from '../lib/gamification.js';
 
 const router = Router();
 
@@ -294,6 +300,12 @@ router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
             return res.status(403).json({ error: access.reason || 'Урок пока недоступен' });
         }
 
+        // Проверяем, не был ли урок уже пройден — чтобы не начислить XP дважды
+        const existingProgress = await prisma.lessonProgress.findUnique({
+            where: { userId_lessonId: { userId: req.user.id, lessonId: lesson.id } },
+        });
+        const wasAlreadyCompleted = existingProgress?.completed === true;
+
         await prisma.lessonProgress.upsert({
             where: { userId_lessonId: { userId: req.user.id, lessonId: lesson.id } },
             update: { completed: true },
@@ -312,8 +324,30 @@ router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
         });
 
         let certificate = null;
+        let wasCertificateNew = false;
         if (progress === 100) {
+            const beforeCert = await prisma.certificate.findUnique({
+                where: {
+                    userId_courseId: {
+                        userId: req.user.id,
+                        courseId: lesson.courseId,
+                    },
+                },
+            });
             certificate = await issueCertificateIfNeeded(req.user.id, lesson.courseId);
+            wasCertificateNew = !beforeCert && !!certificate;
+        }
+
+        // ─── Геймификация (не блокирует ответ) ───
+        if (!wasAlreadyCompleted) {
+            onLessonCompleted(req.user.id, lesson.id).catch((e) =>
+                console.error('[courses] gamif lesson:', e)
+            );
+        }
+        if (wasCertificateNew && certificate) {
+            onCertificateEarned(req.user.id, certificate.id).catch((e) =>
+                console.error('[courses] gamif cert:', e)
+            );
         }
 
         res.json({ progress, certificate });
@@ -395,7 +429,17 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
         });
 
         let certificate = null;
+        let wasCertificateNew = false;
+
         if (passed) {
+            // Проверяем, был ли урок уже пройден — чтобы не задвоить XP
+            const existingProgress = await prisma.lessonProgress.findUnique({
+                where: {
+                    userId_lessonId: { userId: req.user.id, lessonId: test.lessonId },
+                },
+            });
+            const wasAlreadyCompleted = existingProgress?.completed === true;
+
             // Урок автоматически помечается пройденным
             await prisma.lessonProgress.upsert({
                 where: {
@@ -420,8 +464,32 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
             });
 
             if (progress === 100) {
+                const beforeCert = await prisma.certificate.findUnique({
+                    where: { userId_courseId: { userId: req.user.id, courseId } },
+                });
                 certificate = await issueCertificateIfNeeded(req.user.id, courseId);
+                wasCertificateNew = !beforeCert && !!certificate;
             }
+
+            // ─── Геймификация: XP за тест + за урок (если впервые) + за сертификат ───
+            onTestPassed(req.user.id, test.id, percent).catch((e) =>
+                console.error('[courses] gamif test pass:', e)
+            );
+            if (!wasAlreadyCompleted) {
+                onLessonCompleted(req.user.id, test.lessonId).catch((e) =>
+                    console.error('[courses] gamif lesson:', e)
+                );
+            }
+            if (wasCertificateNew && certificate) {
+                onCertificateEarned(req.user.id, certificate.id).catch((e) =>
+                    console.error('[courses] gamif cert:', e)
+                );
+            }
+        } else {
+            // Штраф за провал теста
+            onTestFailed(req.user.id, test.id, percent).catch((e) =>
+                console.error('[courses] gamif test fail:', e)
+            );
         }
 
         res.json({

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../store/auth.jsx';
 import { Sticker } from '../stickers/pack.jsx';
+import RecoverPasswordModal from '../components/RecoverPasswordModal.jsx';
 
 export default function Login() {
     const { user, loginWithPassword, register, loading } = useAuth();
@@ -16,6 +17,7 @@ export default function Login() {
     const [direction, setDirection] = useState('photo');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [recoverOpen, setRecoverOpen] = useState(false);
 
     // Если пользователь уже авторизован и попал на /login — редиректим в /app
     useEffect(() => {
@@ -165,6 +167,16 @@ export default function Login() {
                         {busy ? 'Подождите…' : mode === 'login' ? 'Войти' : 'Создать аккаунт'}
                     </button>
 
+                    {mode === 'login' && (
+                        <button
+                            type="button"
+                            onClick={() => setRecoverOpen(true)}
+                            className="text-sm text-white/50 hover:text-violet-soft transition mb-3 w-full text-left"
+                        >
+                            Забыли пароль?
+                        </button>
+                    )}
+
                     <button
                         type="button"
                         onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
@@ -174,6 +186,12 @@ export default function Login() {
                     </button>
                 </form>
             </div>
+
+            <RecoverPasswordModal
+                open={recoverOpen}
+                onClose={() => setRecoverOpen(false)}
+            />
+
         </div>
     );
 }

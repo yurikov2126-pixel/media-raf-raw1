@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
+import { createResetRequest, verifyCodeAndReset } from '../lib/passwordReset.js';
+import { recordDailyActivity } from '../lib/gamification.js';
 
 const router = Router();
 
@@ -153,6 +155,11 @@ router.get(
         prisma.user
             .update({ where: { id: user.id }, data: { lastSeen: new Date() } })
             .catch(() => {});
+        
+        // Ежедневный вход + streak
+        recordDailyActivity(user.id).catch((e) =>
+            console.error('[gamification] daily hook:', e)
+        );
 
         res.json(hidePrivate(user));
     })
@@ -183,6 +190,43 @@ router.get(
 
         const busy = await prisma.user.findUnique({ where: { phone: norm } });
         res.json({ available: !busy });
+    })
+);
+
+/* ─── Восстановление пароля ─── */
+
+router.post(
+    '/recover/request',
+    safe(async (req, res) => {
+        const { identifier } = req.body || {};
+        if (!identifier?.trim())
+            return res.status(400).json({ error: 'Введите телефон, @ник или email' });
+
+        try {
+            const r = await createResetRequest({ identifier: identifier.trim() });
+            res.json({
+                ok: true,
+                requestId: r.requestId,
+                phoneMasked: r.phoneMasked,
+                username: r.username,
+                fullName: r.fullName,
+            });
+        } catch (e) {
+            res.status(400).json({ error: e.message });
+        }
+    })
+);
+
+router.post(
+    '/recover/verify',
+    safe(async (req, res) => {
+        const { identifier, code, newPassword } = req.body || {};
+        try {
+            const r = await verifyCodeAndReset({ identifier, code, newPassword });
+            res.json(r);
+        } catch (e) {
+            res.status(400).json({ error: e.message });
+        }
     })
 );
 

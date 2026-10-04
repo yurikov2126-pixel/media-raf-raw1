@@ -9,12 +9,14 @@ import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import NetworkBanner from './NetworkBanner.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import { useGamification } from '../store/gamification.jsx';
 
 const FALLBACK_LINKS = [
     { to: '/app', label: 'Лента', end: true, icon: '🏠' },
     { to: '/app/chats', label: 'Чаты', icon: '💬' },
     { to: '/app/courses', label: 'Обучение', icon: '🎓' },
     { to: '/app/wiki', label: 'Вики', icon: '📖' },
+    { to: '/app/leaderboard', label: 'Рейтинг', icon: '🏆' },
 ];
 
 const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
@@ -36,6 +38,7 @@ export default function Layout() {
         return !key || isEnabled(key);
     });
     const SWIPE_ORDER = links.map((l) => l.to);
+    const { enabled: gamifEnabled } = useGamification();
 
     useEffect(() => {
         if (Object.keys(modules).length === 0) return;

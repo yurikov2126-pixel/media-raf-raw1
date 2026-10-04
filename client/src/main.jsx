@@ -11,6 +11,7 @@ import { SocketProvider } from './store/socket.jsx';
 import { NotificationsProvider } from './store/notifications.jsx';
 import { OnboardingProvider } from './store/onboarding.jsx';
 import './styles/index.css';
+import { GamificationProvider } from './store/gamification.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
@@ -21,9 +22,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                         <ModulesProvider>
                             <SocketProvider>
                                 <NotificationsProvider>
-                                    <OnboardingProvider>
-                                        <App />
-                                    </OnboardingProvider>
+                                    <GamificationProvider>
+                                        <OnboardingProvider>
+                                            <App />
+                                        </OnboardingProvider>
+                                    </GamificationProvider>
                                 </NotificationsProvider>
                             </SocketProvider>
                         </ModulesProvider>

@@ -139,7 +139,10 @@ router.patch('/me/password', auth, async (req, res) => {
         const passwordHash = await bcrypt.hash(newPassword, 10);
         await prisma.user.update({
             where: { id: req.user.id },
-            data: { passwordHash },
+            data: {
+                passwordHash,
+                passwordChangedAt: new Date(),
+            },
         });
 
         console.log(`[users] password changed for ${user.username}`);
