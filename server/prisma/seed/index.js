@@ -4,9 +4,8 @@ import { photography } from './courses/photography/index.js';
 import { videography } from './courses/videography/index.js';
 import { editing } from './courses/editing/index.js';
 import { radio } from './courses/radio/index.js';
-
-// import { studioSound } from './courses/studio-sound.js';
-// import { liveSound } from './courses/live-sound.js';
+import { studioSound } from './courses/studio-sound/index.js';
+import { liveSound } from './courses/live-sound/index.js';
 
 const prisma = new PrismaClient();
 
@@ -15,8 +14,8 @@ const COURSES = [
     videography,
     editing,
     radio,
-    // studioSound,
-    // liveSound,
+    studioSound,
+    liveSound,
 ];
 
 /**
