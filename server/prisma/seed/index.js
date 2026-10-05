@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-import { photography } from './courses/photography.js';
+import { photography } from './courses/photography/index.js';
 // import { videography } from './courses/videography.js';
 // import { editing } from './courses/editing.js';
 // import { radio } from './courses/radio.js';

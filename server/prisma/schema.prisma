@@ -185,6 +185,7 @@ model Course {
   certificateDescription String?
   dripMode               String?
   dripInterval           Int?
+  weeklyLessonLimit      Int?     @default(3)
   createdAt              DateTime @default(now())
 
   lessons      Lesson[]

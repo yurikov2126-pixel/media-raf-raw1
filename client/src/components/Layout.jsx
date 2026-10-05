@@ -38,6 +38,7 @@ export default function Layout() {
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     const isAdmin = user?.role === 'ADMIN';
+    const isMentor = user?.role === 'MENTOR' || user?.role === 'ADMIN';
 
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
     const links = rawLinks.filter((l) => {
@@ -126,6 +127,20 @@ export default function Layout() {
                     </NavLink>
                 )}
 
+                {isMentor && (
+                    <NavLink
+                        to="/app/mentor"
+                        className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
+                            }`
+                        }
+                    >
+                        <span className="text-xl">🧑‍🏫</span>
+                        <span className="font-semibold">Руководителю</span>
+                    </NavLink>
+                )}
+
                 {isAdmin && (
                     <NavLink
                         to="/app/admin"
@@ -183,6 +198,16 @@ export default function Layout() {
 
                         <div className="flex items-center gap-1">
                             <ThemeToggle />
+                            {isMentor && !isAdmin && (
+                                <Link
+                                    to="/app/mentor"
+                                    className="w-9 h-9 grid place-items-center rounded-full text-lg text-white/70 hover:text-white hover:bg-white/10 transition"
+                                    title="Кабинет руководителя"
+                                    aria-label="Кабинет руководителя"
+                                >
+                                    🧑‍🏫
+                                </Link>
+                            )}
                             {isAdmin && (
                                 <Link
                                     to="/app/admin"

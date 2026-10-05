@@ -20,6 +20,7 @@ import Certificate from './pages/Certificate.jsx';
 import Verify from './pages/Verify.jsx';
 import Wiki from './pages/Wiki.jsx';
 import WikiArticle from './pages/WikiArticle.jsx';
+import MentorReviews from './pages/MentorReviews.jsx';
 
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
@@ -79,6 +80,7 @@ export default function App() {
                     <Route path="wiki" element={<Wiki />} />
                     <Route path="wiki/:slug" element={<WikiArticle />} />
                     <Route path="certificates/:id" element={<Certificate />} />
+                    <Route path="mentor" element={<MentorReviews />} />
                     <Route
                         path="admin"
                         element={
@@ -89,7 +91,7 @@ export default function App() {
                     />
                 </Route>
 
-                <Route path="*" element={<Navigate to="/" />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
 
             {/* Онбординг и попапы достижений — поверх всего, только для авторизованных */}

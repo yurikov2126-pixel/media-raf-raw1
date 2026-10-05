@@ -1,9 +1,5 @@
 import React from 'react';
 
-/* Собирает регулярку для одного inline-паттерна.
-   Поддерживает: **жирный**, *курсив*, `код`, [ссылку](url). */
-const INLINE_RE = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`|\[[^\]]+\]\([^)\s]+\))/g;
-
 function escapeHtml(s) {
     return String(s)
         .replace(/&/g, '&amp;')
@@ -13,60 +9,44 @@ function escapeHtml(s) {
         .replace(/'/g, '&#39;');
 }
 
+/**
+ * Инлайновая разметка: **жирный**, *курсив*, `код`, [ссылка](url).
+ * Возвращает HTML-строку, безопасную для dangerouslySetInnerHTML,
+ * потому что сначала экранируется исходный текст, а потом
+ * в него вставляются только наши теги.
+ */
 function renderInline(text) {
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-    INLINE_RE.lastIndex = 0;
-    while ((match = INLINE_RE.exec(text)) !== null) {
-        if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
-        const m = match[0];
+    let s = escapeHtml(text);
 
-        if (m.startsWith('**')) {
-            parts.push(<strong key={`b-${match.index}`}>{m.slice(2, -2)}</strong>);
-        } else if (m.startsWith('`')) {
-            parts.push(
-                <code
-                    key={`c-${match.index}`}
-                    className="px-1.5 py-0.5 rounded-md bg-black/40 text-cyan-soft text-[0.85em] font-mono"
-                >
-                    {m.slice(1, -1)}
-                </code>
-            );
-        } else if (m.startsWith('[')) {
-            const textMatch = m.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
-            if (textMatch) {
-                const url = textMatch[2];
-                const isExternal = /^https?:\/\//i.test(url);
-                parts.push(
-                    <a
-                        key={`a-${match.index}`}
-                        href={url}
-                        className="text-violet-soft hover:underline"
-                        {...(isExternal ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
-                    >
-                        {textMatch[1]}
-                    </a>
-                );
-            } else {
-                parts.push(m);
-            }
-        } else {
-            parts.push(<em key={`i-${match.index}`}>{m.slice(1, -1)}</em>);
-        }
-        lastIndex = match.index + m.length;
-    }
-    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
-    return parts;
+    // 1) bold: **...** (жадно до следующего **)
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // 2) italic: *...* (не задевая остатки от bold)
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+
+    // 3) inline code: `...`
+    s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+    // 4) ссылки: [текст](url)
+    s = s.replace(
+        /\[([^\]]+)\]\(([^)\s]+)\)/g,
+        '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>'
+    );
+
+    return s;
 }
 
 /**
- * Рендер Markdown-текста.
- * Поддерживает: # / ## / ### / #### заголовки, **жирный**, *курсив*,
- * `inline-код`, ```code blocks```, - / 1. списки, > цитаты, [ссылки](url),
- * --- горизонтальный разделитель.
+ * Markdown → HTML.
+ * Поддерживает:
+ *   # / ## / ### / #### заголовки
+ *   **жирный**, *курсив*, `inline`, [ссылки](url)
+ *   - и 1. списки
+ *   > цитаты
+ *   ```code blocks```
+ *   --- разделитель
  *
- * Итоговая разметка оформляется классами .mrr-md-content (см. index.css).
+ * Стили задаются классом .mrr-md-content (см. index.css).
  */
 export default function MarkdownView({ text, className = '' }) {
     if (!text) return null;
@@ -123,7 +103,7 @@ export default function MarkdownView({ text, className = '' }) {
             continue;
         }
 
-        // Заголовки
+        // Заголовки #..######
         const h = line.match(/^(#{1,6})\s+(.*)$/);
         if (h) {
             closeList();

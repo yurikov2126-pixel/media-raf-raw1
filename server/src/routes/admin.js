@@ -380,9 +380,16 @@ router.get(
             include: {
                 lessons: {
                     orderBy: { order: 'asc' },
-                    include: { test: { include: { questions: true } } },
+                    include: {
+                        test: { include: { questions: true } },
+                        practical: {
+                            include: {
+                                supervisor: { select: { id: true, fullName: true, username: true } },
+                            },
+                        },
+                        homework: true,
+                    },
                 },
-                _count: { select: { enrollments: true, certificates: true } },
             },
         });
         res.json(courses);
@@ -411,7 +418,8 @@ router.post(
     safe(async (req, res) => {
         const {
             title, slug, description, category, level, cover, published,
-            certificateTitle, certificateDescription, dripMode, dripInterval,
+            certificateTitle, certificateDescription,
+            dripMode, dripInterval, weeklyLessonLimit,
         } = req.body;
         if (!title || !slug)
             return res.status(400).json({ error: 'title и slug обязательны' });
@@ -428,6 +436,7 @@ router.post(
                 certificateDescription: certificateDescription || null,
                 dripMode: dripMode || null,
                 dripInterval: dripInterval ? Number(dripInterval) : null,
+                weeklyLessonLimit: weeklyLessonLimit ? Number(weeklyLessonLimit) : null,
             },
         });
         res.json(course);
@@ -439,17 +448,34 @@ router.patch(
     safe(async (req, res) => {
         const allowed = [
             'title', 'slug', 'description', 'category', 'level', 'cover', 'published',
-            'certificateTitle', 'certificateDescription', 'dripMode', 'dripInterval',
+            'certificateTitle', 'certificateDescription',
+            'dripMode', 'dripInterval', 'weeklyLessonLimit',
         ];
         const data = {};
         for (const key of allowed)
             if (req.body[key] !== undefined) data[key] = req.body[key];
 
-        if (data.dripMode !== undefined && data.dripMode === '') data.dripMode = null;
+        // dripMode
+        if (data.dripMode !== undefined) {
+            data.dripMode = data.dripMode || null;
+        }
+        // dripInterval
         if (data.dripInterval !== undefined) {
-            if (data.dripInterval === null || data.dripInterval === '')
+            if (data.dripInterval === null || data.dripInterval === '' || data.dripInterval === undefined)
                 data.dripInterval = null;
             else data.dripInterval = Number(data.dripInterval) || 7;
+        }
+        // weeklyLessonLimit
+        if (data.weeklyLessonLimit !== undefined) {
+            if (data.weeklyLessonLimit === null || data.weeklyLessonLimit === '' || data.weeklyLessonLimit === undefined)
+                data.weeklyLessonLimit = null;
+            else data.weeklyLessonLimit = Math.max(1, Math.min(50, Number(data.weeklyLessonLimit) || 3));
+        }
+
+        // Согласование полей при смене режима
+        if (data.dripMode !== undefined) {
+            if (data.dripMode !== 'schedule') data.dripInterval = null;
+            if (data.dripMode !== 'test_weekly') data.weeklyLessonLimit = null;
         }
 
         const course = await prisma.course.update({
@@ -1876,5 +1902,158 @@ router.post('/gamification/quests/regenerate-all', safe(async (req, res) => {
     }).catch(() => {});
     res.json({ ok: true, deleted: del.count, date: todayKey });
 }));
+
+/* ═══════════ ПРАКТИКИ ═══════════ */
+
+router.get(
+    '/mentors',
+    safe(async (_req, res) => {
+        const users = await prisma.user.findMany({
+            where: { role: { in: ['MENTOR', 'ADMIN'] }, isBanned: false },
+            select: { id: true, fullName: true, username: true, role: true },
+            orderBy: { fullName: 'asc' },
+        });
+        res.json(users);
+    })
+);
+
+router.post(
+    '/lessons/:lessonId/practical',
+    safe(async (req, res) => {
+        const { topic, description, location, scheduledAt, durationMin, supervisorId } = req.body;
+        if (!topic || !description) {
+            return res.status(400).json({ error: 'topic и description обязательны' });
+        }
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: req.params.lessonId },
+        });
+        if (!lesson) return res.status(404).json({ error: 'Урок не найден' });
+
+        const data = {
+            topic,
+            description,
+            location: location || null,
+            scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+            durationMin: Number(durationMin) || 90,
+            supervisorId: supervisorId || null,
+        };
+
+        const practical = await prisma.practicalWork.upsert({
+            where: { lessonId: lesson.id },
+            update: data,
+            create: { ...data, lessonId: lesson.id, courseId: lesson.courseId },
+        });
+
+        await prisma.lesson.update({
+            where: { id: lesson.id },
+            data: { requiresPractical: true },
+        });
+
+        res.json(practical);
+    })
+);
+
+router.patch(
+    '/practicals/:id',
+    safe(async (req, res) => {
+        const allowed = ['topic', 'description', 'location', 'scheduledAt', 'durationMin', 'supervisorId'];
+        const data = {};
+        for (const k of allowed) {
+            if (req.body[k] !== undefined) {
+                if (k === 'scheduledAt') {
+                    data[k] = req.body[k] ? new Date(req.body[k]) : null;
+                } else if (k === 'durationMin') {
+                    data[k] = Number(req.body[k]) || 90;
+                } else {
+                    data[k] = req.body[k] || null;
+                }
+            }
+        }
+        const practical = await prisma.practicalWork.update({
+            where: { id: req.params.id },
+            data,
+        });
+        res.json(practical);
+    })
+);
+
+router.delete(
+    '/practicals/:id',
+    safe(async (req, res) => {
+        const practical = await prisma.practicalWork.findUnique({
+            where: { id: req.params.id },
+        });
+        if (!practical) return res.status(404).json({ error: 'Практика не найдена' });
+
+        await prisma.practicalWork.delete({ where: { id: practical.id } });
+        await prisma.lesson.update({
+            where: { id: practical.lessonId },
+            data: { requiresPractical: false },
+        });
+
+        res.json({ ok: true });
+    })
+);
+
+/* ═══════════ ДОМАШНИЕ ЗАДАНИЯ ═══════════ */
+
+router.post(
+    '/lessons/:lessonId/homework',
+    safe(async (req, res) => {
+        const { title, description, maxFiles, maxFileSizeMb } = req.body;
+        if (!title || !description) {
+            return res.status(400).json({ error: 'title и description обязательны' });
+        }
+
+        const lesson = await prisma.lesson.findUnique({
+            where: { id: req.params.lessonId },
+        });
+        if (!lesson) return res.status(404).json({ error: 'Урок не найден' });
+
+        const data = {
+            title,
+            description,
+            maxFiles: Math.max(1, Math.min(20, Number(maxFiles) || 3)),
+            maxFileSizeMb: Math.max(1, Math.min(500, Number(maxFileSizeMb) || 50)),
+        };
+
+        const homework = await prisma.homework.upsert({
+            where: { lessonId: lesson.id },
+            update: data,
+            create: { ...data, lessonId: lesson.id },
+        });
+
+        res.json(homework);
+    })
+);
+
+router.patch(
+    '/homework/:id',
+    safe(async (req, res) => {
+        const allowed = ['title', 'description', 'maxFiles', 'maxFileSizeMb'];
+        const data = {};
+        for (const k of allowed) {
+            if (req.body[k] !== undefined) {
+                if (k === 'maxFiles') data[k] = Math.max(1, Math.min(20, Number(req.body[k]) || 3));
+                else if (k === 'maxFileSizeMb') data[k] = Math.max(1, Math.min(500, Number(req.body[k]) || 50));
+                else data[k] = req.body[k];
+            }
+        }
+        const homework = await prisma.homework.update({
+            where: { id: req.params.id },
+            data,
+        });
+        res.json(homework);
+    })
+);
+
+router.delete(
+    '/homework/:id',
+    safe(async (req, res) => {
+        await prisma.homework.delete({ where: { id: req.params.id } });
+        res.json({ ok: true });
+    })
+);
 
 export default router;

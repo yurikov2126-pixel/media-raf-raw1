@@ -9,6 +9,7 @@ import {
     onCertificateEarned,
 } from '../lib/gamification.js';
 import { getLessonStatuses, computeAccess } from '../lib/courseLogic.js';
+import { shuffledIndices, shuffleArray } from '../lib/shuffle.js';   // ← добавьте это
 
 const router = Router();
 
@@ -52,7 +53,7 @@ async function issueCertificateIfNeeded(userId, courseId) {
     return cert;
 }
 
-function scoreQuestion(question, userAnswer) {
+function scoreQuestion(question, userAnswer, seed) {
     const p = (() => {
         try { return JSON.parse(question.payload || '{}'); } catch { return {}; }
     })();
@@ -60,14 +61,49 @@ function scoreQuestion(question, userAnswer) {
     const max = question.points;
     let gained = 0;
 
+    // Те же перестановки, что и в sanitizePayload
+    const permOptions = (Array.isArray(p.options) && p.options.length)
+        ? shuffledIndices(p.options.length, `${seed}:${question.id}`)
+        : null;
+
+    const permRight = (Array.isArray(p.right) && p.right.length)
+        ? shuffledIndices(p.right.length, `${seed}:right:${question.id}`)
+        : null;
+
     switch (type) {
-        case 'single':
-            if (Number(userAnswer) === Number(p.correct)) gained = max;
+        case 'single': {
+            if (permOptions) {
+                const origIdx = permOptions[Number(userAnswer)];
+                if (origIdx === Number(p.correct)) gained = max;
+            } else {
+                if (Number(userAnswer) === Number(p.correct)) gained = max;
+            }
             break;
+        }
         case 'multiple': {
-            const ua = Array.isArray(userAnswer) ? [...userAnswer].map(Number).sort() : [];
-            const ca = Array.isArray(p.correct) ? [...p.correct].map(Number).sort() : [];
-            if (ua.length === ca.length && ua.every((v, i) => v === ca[i])) gained = max;
+            const ua = Array.isArray(userAnswer) ? userAnswer.map(Number) : [];
+            const ca = Array.isArray(p.correct) ? p.correct.map(Number) : [];
+            if (permOptions) {
+                // переводим выбранные shuffled-индексы в исходные
+                const uaOriginal = ua.map((s) => permOptions[s]);
+                const uaSet = new Set(uaOriginal);
+                const caSet = new Set(ca);
+                if (
+                    uaSet.size === caSet.size &&
+                    [...uaSet].every((v) => caSet.has(v))
+                ) {
+                    gained = max;
+                }
+            } else {
+                const uaSorted = [...ua].sort((a, b) => a - b);
+                const caSorted = [...ca].sort((a, b) => a - b);
+                if (
+                    uaSorted.length === caSorted.length &&
+                    uaSorted.every((v, i) => v === caSorted[i])
+                ) {
+                    gained = max;
+                }
+            }
             break;
         }
         case 'matching': {
@@ -75,14 +111,20 @@ function scoreQuestion(question, userAnswer) {
             const pairs = Array.isArray(p.pairs) ? p.pairs : [];
             if (!pairs.length) break;
             let ok = 0;
-            for (const [li, ri] of pairs) if (Number(ua[li]) === Number(ri)) ok++;
+            for (const [li, ri] of pairs) {
+                const userShuffled = Number(ua[li]);
+                const userOriginal = permRight ? permRight[userShuffled] : userShuffled;
+                if (userOriginal === Number(ri)) ok++;
+            }
             gained = (ok / pairs.length) * max;
             break;
         }
         case 'text': {
             const ua = String(userAnswer ?? '').trim();
             const ca = String(p.answer ?? '').trim();
-            if (p.caseSensitive ? ua === ca : ua.toLowerCase() === ca.toLowerCase()) gained = max;
+            if (p.caseSensitive ? ua === ca : ua.toLowerCase() === ca.toLowerCase()) {
+                gained = max;
+            }
             break;
         }
         case 'order': {
@@ -95,7 +137,7 @@ function scoreQuestion(question, userAnswer) {
     return { gained, max };
 }
 
-function sanitizePayload(question) {
+function sanitizePayload(question, seed) {
     const p = (() => {
         try { return JSON.parse(question.payload || '{}'); } catch { return {}; }
     })();
@@ -103,6 +145,17 @@ function sanitizePayload(question) {
     delete safe.correct;
     delete safe.answer;
     delete safe.pairs;
+
+    if ((question.type === 'single' || question.type === 'multiple') &&
+        Array.isArray(p.options) && p.options.length > 1) {
+        safe.options = shuffleArray(p.options, `${seed}:${question.id}`);
+    }
+
+    if (question.type === 'matching' &&
+        Array.isArray(p.right) && p.right.length > 1) {
+        safe.right = shuffleArray(p.right, `${seed}:right:${question.id}`);
+    }
+
     return JSON.stringify(safe);
 }
 
@@ -200,7 +253,7 @@ router.get('/:slug', auth, async (req, res) => {
                 ...l.test,
                 questions: l.test.questions.map((q) => ({
                     ...q,
-                    payload: sanitizePayload(q),
+                    payload: sanitizePayload(q, req.user.id),   // ← стало
                 })),
             }
             : null;
@@ -226,16 +279,33 @@ router.get('/:slug', auth, async (req, res) => {
     });
 });
 
-/* ─────────── Запись на курс ─────────── */
-router.post('/:id/enroll', auth, async (req, res) => {
-    const enrollment = await prisma.enrollment.upsert({
-        where: { userId_courseId: { userId: req.user.id, courseId: req.params.id } },
-        update: {},
-        create: { userId: req.user.id, courseId: req.params.id },
-    });
-    res.json(enrollment);
-});
+/* ─────────── Запись на курс (принимает id ИЛИ slug) ─────────── */
+router.post('/:idOrSlug/enroll', auth, async (req, res) => {
+    try {
+        const key = req.params.idOrSlug;
 
+        let course = await prisma.course.findUnique({ where: { id: key } });
+        if (!course) course = await prisma.course.findUnique({ where: { slug: key } });
+        if (!course) return res.status(404).json({ error: 'Курс не найден' });
+
+        const enrollment = await prisma.enrollment.upsert({
+            where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
+            update: {},
+            create: { userId: req.user.id, courseId: course.id },
+        });
+
+        res.json({
+            id: enrollment.id,
+            courseId: course.id,
+            courseSlug: course.slug,
+            progress: enrollment.progress,
+            createdAt: enrollment.createdAt,
+        });
+    } catch (e) {
+        console.error('[courses] enroll error:', e);
+        res.status(500).json({ error: e.message || 'Не удалось записаться' });
+    }
+});
 /* ─────────── Прогресс по курсу ─────────── */
 async function recalcProgress(userId, courseId) {
     const statuses = await getLessonStatuses(userId, courseId);
@@ -342,7 +412,7 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
 
         for (const q of test.questions) {
             const userAnswer = answers ? answers[q.id] : undefined;
-            const r = scoreQuestion(q, userAnswer);
+            const r = scoreQuestion(q, userAnswer, req.user.id);    // ← стало
             gained += r.gained;
             max += r.max;
 
@@ -351,7 +421,7 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
                     id: q.id,
                     type: q.type,
                     text: q.text,
-                    payload: sanitizePayload(q),
+                    payload: sanitizePayload(q, req.user.id),       // ← стало
                     userAnswer: userAnswer ?? null,
                     gained: r.gained,
                     max: r.max,
