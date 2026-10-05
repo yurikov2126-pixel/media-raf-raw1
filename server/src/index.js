@@ -33,13 +33,12 @@ import gamificationRouter from './routes/gamification.js';
 import { scheduleInactivityCharge } from './lib/gamificationCron.js';
 import practicalsRouter from './routes/practicals.js';
 import homeworkRouter from './routes/homework.js';
-
+import { scheduleDeadlineReminders } from './lib/deadlineCron.js';
+import { scheduleDripUnlockNotifications } from './lib/dripCron.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /* ─────────── CORS ─────────── */
-// CLIENT_URL может быть как один домен, так и список через запятую.
-// Если не задан — разрешаем все origin'ы (dev-режим).
 const CLIENT_URL_RAW = process.env.CLIENT_URL || '';
 const CLIENT_ORIGINS = CLIENT_URL_RAW
     .split(',')
@@ -62,20 +61,11 @@ app.use(express.json({ limit: '10mb' }));
 // Статика загрузок (фото, видео, файлы, голосовые)
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
-/* ─────────── Bot-метаданные ───────────
-   Этот middleware перехватывает запросы к /app/u/:username,
-   /app/certificates/:id, /verify/:serial, /app/wiki/:slug,
-   /app/courses/:slug ТОЛЬКО если User-Agent похож на бота
-   (Telegram, VK, WhatsApp и др.). Отдаёт HTML с og-тегами.
-   Для обычных пользователей пропускает дальше (next()),
-   и они получают обычный SPA.
-
-   ВАЖНО: должен идти ДО express.static('client/dist') и ДО SPA-fallback. */
+/* ─────────── Bot-метаданные ─────────── */
 app.use(publicMetaRouter);
 
 /* ─────────── Публичные настройки ─────────── */
 const PUBLIC_SETTING_KEYS = [
-    // Брендинг
     'site_name',
     'site_description',
     'brand_logo_text',
@@ -83,8 +73,6 @@ const PUBLIC_SETTING_KEYS = [
     'brand_accent_1',
     'brand_accent_2',
     'brand_accent_3',
-
-    // Лендинг
     'landing_hero_badge',
     'landing_hero_title_prefix',
     'landing_hero_title_accent',
@@ -97,24 +85,16 @@ const PUBLIC_SETTING_KEYS = [
     'landing_cta_title',
     'landing_cta_subtitle',
     'landing_cta_button',
-
-    // Меню
     'nav_items',
-
-    // Футер
     'footer_description',
     'footer_copyright',
     'footer_links',
-
-    // Сертификаты
     'certificate_template',
     'certificate_accent_1',
     'certificate_accent_2',
     'certificate_org_name',
     'certificate_subtitle',
     'certificate_signature',
-
-    // Контакты
     'contact_email',
     'radio_stream_url',
     'vk_link',
@@ -155,26 +135,16 @@ app.get('/api/health', (_req, res) =>
     res.json({ ok: true, service: 'MEDIA-RAF-RAW' })
 );
 
-/* ─────────── 404 для API ───────────
-   Если запрос к /api/... не совпал ни с одним роутом — вернём JSON,
-   а не HTML. Иначе клиент получит "Cannot GET /api/..." с кодом 404,
-   но в виде HTML-страницы, что ломает парсинг. */
+/* ─────────── 404 для API ─────────── */
 app.use('/api', (req, res) => {
     res.status(404).json({ error: `Не найдено: ${req.method} ${req.originalUrl}` });
 });
 
-/* ─────────── Раздача клиента (SPA) ───────────
-   Express отдаёт собранный клиент из client/dist.
-   Это нужно, чтобы:
-   - SPA-fallback работал (для клиентских роутов типа /app/u/xxx)
-   - publicMetaRouter мог пропустить не-ботов дальше, и они получили index.html
-   Если у вас клиент раздаёт nginx напрямую и он до сюда не доходит —
-   этот блок просто не будет срабатывать, что нормально. */
+/* ─────────── Раздача клиента (SPA) ─────────── */
 const CLIENT_DIST = path.join(__dirname, '..', '..', 'client', 'dist');
 const INDEX_HTML = path.join(CLIENT_DIST, 'index.html');
 
 if (fs.existsSync(INDEX_HTML)) {
-    // Хэшированные ассеты — надолго
     app.use(
         express.static(CLIENT_DIST, {
             maxAge: '30d',
@@ -182,8 +152,6 @@ if (fs.existsSync(INDEX_HTML)) {
             index: false,
         })
     );
-    // Любой другой GET (кроме /api и /uploads) отдаёт index.html —
-    // React Router дальше разберётся сам.
     app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
             return next();
@@ -210,6 +178,8 @@ schedulePushCleanup();
 scheduleNotifyCleanup();
 schedulePasswordResetCleanup();
 scheduleInactivityCharge();
+scheduleDeadlineReminders();
+scheduleDripUnlockNotifications();
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () =>

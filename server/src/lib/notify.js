@@ -79,6 +79,79 @@ function payloadToPush(type, payload) {
             tag: `sys-${Date.now()}`,
         };
     }
+
+    /* ─────────── Курсы и практики ─────────── */
+
+    if (type === 'lesson_new') {
+        return {
+            title: `📖 Новый урок`,
+            body: `«${payload.lessonTitle}» — в курсе «${payload.courseTitle}»`,
+            url: `/app/courses/${payload.courseSlug}?lesson=${payload.lessonOrder}`,
+            tag: `lesson-${payload.lessonId}`,
+        };
+    }
+
+    if (type === 'practical_scheduled') {
+        const when = payload.scheduledAt
+            ? new Date(payload.scheduledAt).toLocaleString('ru-RU', {
+                day: '2-digit', month: 'long',
+                hour: '2-digit', minute: '2-digit',
+            })
+            : '';
+        return {
+            title: `🎯 Практика назначена`,
+            body: `${payload.topic} — ${when}`,
+            url: `/app/courses/${payload.courseSlug}?lesson=${payload.lessonOrder}`,
+            tag: `practical-${payload.practicalId}`,
+        };
+    }
+
+    if (type === 'practical_due') {
+        const when = payload.scheduledAt
+            ? new Date(payload.scheduledAt).toLocaleTimeString('ru-RU', {
+                hour: '2-digit', minute: '2-digit',
+            })
+            : '';
+        return {
+            title: `⏰ Скоро практика`,
+            body: `${payload.topic} — ${when ? `в ${when}` : 'завтра'}`,
+            url: `/app/courses/${payload.courseSlug}?lesson=${payload.lessonOrder}`,
+            tag: `practical-due-${payload.practicalId}`,
+        };
+    }
+
+    if (type === 'homework_due') {
+        const when = payload.dueAt
+            ? new Date(payload.dueAt).toLocaleString('ru-RU', {
+                day: '2-digit', month: 'long',
+                hour: '2-digit', minute: '2-digit',
+            })
+            : '';
+        return {
+            title: `📋 Скоро дедлайн ДЗ`,
+            body: `${payload.title} — ${when}`,
+            url: `/app/courses/${payload.courseSlug}?lesson=${payload.lessonOrder}`,
+            tag: `homework-due-${payload.homeworkId}`,
+        };
+    }
+    if (type === 'homework_overdue') {
+        return {
+            title: `⚠️ ДЗ просрочено`,
+            body: `${payload.title} — срок истёк`,
+            url: `/app/courses/${payload.courseSlug}?lesson=${payload.lessonOrder}`,
+            tag: `homework-overdue-${payload.homeworkId}`,
+        };
+    }
+
+    if (type === 'lesson_unlocked') {
+        return {
+            title: `🔓 Открыт новый урок`,
+            body: `«${payload.lessonTitle}» — в курсе «${payload.courseTitle}»`,
+            url: `/app/courses/${payload.courseSlug}?lesson=${payload.lessonOrder}`,
+            tag: `lesson-unlocked-${payload.lessonId}`,
+        };
+    }
+
     return { title: 'MEDIA·RAF·RAW', body: 'Новое уведомление', url: '/app' };
 }
 

@@ -17,16 +17,12 @@ export default function CourseView() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Какой урок открыт (порядок = 1..N)
     const lessonParam = Number(searchParams.get('lesson') || 1);
-    // Режим просмотра: lesson | test | result
     const mode = searchParams.get('mode') || 'lesson';
 
-    // Ответы на тест храним локально — при возврате к уроку сбрасываем
     const [testAnswers, setTestAnswers] = useState({});
     const [testResult, setTestResult] = useState(null);
 
-    // ── Загрузка курса ────────────────────────────────────────
     useEffect(() => {
         setLoading(true);
         api(`/courses/${slug}`, { token })
@@ -42,23 +38,34 @@ export default function CourseView() {
         image: course?.cover,
     });
 
-    // ── Активный урок и его позиция в массиве ────────────────
-    const { activeLesson, activeIndex, prevLesson, nextLesson } = useMemo(() => {
+    const isEnrolled = !!course?.enrolled;
+
+    const { activeLesson, prevLesson, nextLesson } = useMemo(() => {
+        if (!isEnrolled) return { activeLesson: null, prevLesson: null, nextLesson: null };
         if (!course?.lessons?.length) {
-            return { activeLesson: null, activeIndex: -1, prevLesson: null, nextLesson: null };
+            return { activeLesson: null, prevLesson: null, nextLesson: null };
         }
         let idx = course.lessons.findIndex((l) => l.order === lessonParam);
         if (idx === -1) idx = 0;
         return {
             activeLesson: course.lessons[idx],
-            activeIndex: idx,
             prevLesson: idx > 0 ? course.lessons[idx - 1] : null,
             nextLesson: idx < course.lessons.length - 1 ? course.lessons[idx + 1] : null,
         };
-    }, [course, lessonParam]);
+    }, [course, lessonParam, isEnrolled]);
 
-    // ── Хелперы для навигации по URL ─────────────────────────
+    // Если не записан, а в URL стоит ?mode=test или ?mode=result — сбрасываем
+    useEffect(() => {
+        if (!isEnrolled && mode !== 'lesson') {
+            const next = new URLSearchParams(searchParams);
+            next.set('mode', 'lesson');
+            next.delete('lesson');
+            setSearchParams(next, { replace: true });
+        }
+    }, [isEnrolled, mode, searchParams, setSearchParams]);
+
     const goLesson = (order, keepMode = false) => {
+        if (!isEnrolled) return;
         setTestAnswers({});
         setTestResult(null);
         const next = new URLSearchParams(searchParams);
@@ -69,7 +76,7 @@ export default function CourseView() {
     };
 
     const goTest = () => {
-        if (!activeLesson) return;
+        if (!isEnrolled || !activeLesson) return;
         const next = new URLSearchParams(searchParams);
         next.set('lesson', String(activeLesson.order));
         next.set('mode', 'test');
@@ -93,14 +100,12 @@ export default function CourseView() {
         window.scrollTo({ top: 0 });
     };
 
-    // Перезагрузить данные курса с сервера
     const refreshCourse = async () => {
         const fresh = await api(`/courses/${slug}`, { token });
         setCourse(fresh);
         return fresh;
     };
 
-    // ── Loading / error ───────────────────────────────────────
     if (loading) {
         return <div className="p-10 text-center text-white/40">Загрузка…</div>;
     }
@@ -115,22 +120,33 @@ export default function CourseView() {
         );
     }
 
-    // ── Прохождение теста ─────────────────────────────────────
     const submitTest = async () => {
-        const res = await api(`/courses/tests/${activeLesson.test.id}/submit`, {
-            token,
-            method: 'POST',
-            body: { answers: testAnswers },
-        });
-        // Обновим прогресс в курсе
-        await refreshCourse();
-        goResult(res);
-        return res;
+        try {
+            const res = await api(`/courses/tests/${activeLesson.test.id}/submit`, {
+                token,
+                method: 'POST',
+                body: { answers: testAnswers },
+            });
+            goResult(res);
+            refreshCourse().catch((e) => console.error('[course] refresh failed:', e));
+            return res;
+        } catch (e) {
+            console.error('[test] submit error:', e);
+            return { error: e?.message || 'Ошибка отправки теста' };
+        }
     };
 
-    // ── Рендер ────────────────────────────────────────────────
+    // Метаданные курса
+    const totalLessons = course.lessons?.length || 0;
+    const totalPracticals = course.lessons?.filter((l) => l.practical).length || 0;
+    const totalHomeworks = course.lessons?.filter((l) => l.homework).length || 0;
+    const totalMinutes = course.lessons?.reduce((s, l) => s + (l.duration || 0), 0) || 0;
+    const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
+    const progress = course.enrolled?.progress ?? course.progress ?? 0;
+    const completedLessons = course.lessons?.filter((l) => l.fullyCompleted).length || 0;
+
     return (
-        <div className="p-4 md:p-8 max-w-6xl mx-auto">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
             {/* Хлебные крошки */}
             <nav className="flex items-center gap-2 text-sm text-white/50 mb-4 flex-wrap">
                 <Link to="/app/courses" className="hover:text-white">📚 Курсы</Link>
@@ -138,119 +154,285 @@ export default function CourseView() {
                 <span className="text-white/80 font-medium truncate">{course.title}</span>
             </nav>
 
-            {!course.enrolled && (
-                <div className="card p-4 mb-6 flex flex-wrap items-center gap-4">
-                    <div className="flex-1 min-w-[200px] text-sm text-white/70">
-                        Вы ещё не записаны на этот курс. Запишитесь, чтобы отслеживать прогресс и получить сертификат.
+            {/* ─── Шапка курса ─── */}
+            <header className="card overflow-hidden mb-6">
+                {course.cover && (
+                    <div className="relative w-full h-40 md:h-56 bg-black/40 overflow-hidden">
+                        <img
+                            src={course.cover}
+                            alt={course.title}
+                            className="w-full h-full object-cover opacity-70"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-ink-900 via-ink-900/40 to-transparent" />
                     </div>
-                    <EnrollButton
-                        course={course}
-                        onEnrolled={async () => {
-                            const fresh = await api(`/courses/${slug}`, { token });
-                            setCourse(fresh);
-                        }}
-                    />
-                </div>
-            )}
+                )}
 
-            <div className="grid lg:grid-cols-[280px_1fr] gap-6">
-                {/* ─── Сайдбар со списком уроков ─── */}
-                <aside className="lg:sticky lg:top-4 self-start">
-                    <div className="card p-4">
-                        <div className="text-sm text-white/50 mb-3">
-                            Прогресс:{' '}
-                            <span className="text-white font-semibold">
-                                {course.enrolled?.progress ?? course.progress ?? 0}%
+                <div className="p-5 md:p-7">
+                    <div className="flex flex-wrap items-center gap-2 text-xs mb-3">
+                        {course.category && (
+                            <span className="chip bg-violet/20 text-violet-soft uppercase">
+                                {course.category}
+                            </span>
+                        )}
+                        {course.level && (
+                            <span className="chip bg-white/10 text-white/70">
+                                {course.level === 'beginner' ? 'Для начинающих'
+                                    : course.level === 'intermediate' ? 'Средний уровень'
+                                        : course.level === 'advanced' ? 'Продвинутый'
+                                            : course.level}
+                            </span>
+                        )}
+                        {course.dripMode && (
+                            <span className="chip bg-cyan/10 text-cyan-soft">
+                                {course.dripMode === 'test' && '🔒 Открытие по тестам'}
+                                {course.dripMode === 'test_weekly' && `🔒 Не более ${course.weeklyLessonLimit || 3}/нед.`}
+                                {course.dripMode === 'schedule' && `🗓 Каждые ${course.dripInterval || 7} дн.`}
+                            </span>
+                        )}
+                    </div>
+
+                    <h1 className="text-3xl md:text-4xl font-bold mb-4">{course.title}</h1>
+
+                    {course.description && (
+                        <div className="text-white/80 text-sm md:text-base leading-relaxed mb-5 max-w-3xl">
+                            <MarkdownView text={course.description} />
+                        </div>
+                    )}
+
+                    {/* Метаданные */}
+                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/60 mb-5">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-white/40">📖</span>
+                            <span><b className="text-white">{totalLessons}</b> уроков</span>
+                        </div>
+                        {totalPracticals > 0 && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-white/40">🎯</span>
+                                <span><b className="text-white">{totalPracticals}</b> практик</span>
+                            </div>
+                        )}
+                        {totalHomeworks > 0 && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-white/40">📋</span>
+                                <span><b className="text-white">{totalHomeworks}</b> заданий</span>
+                            </div>
+                        )}
+                        {totalHours > 0 && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-white/40">⏱</span>
+                                <span>≈ <b className="text-white">{totalHours}</b> ч</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Прогресс или кнопка записи */}
+                    {course.enrolled ? (
+                        <div>
+                            <div className="flex items-center justify-between text-xs text-white/60 mb-2">
+                                <span>
+                                    Прогресс: <b className="text-white">{progress}%</b>
+                                    {totalLessons > 0 && (
+                                        <span className="text-white/40 ml-2">
+                                            ({completedLessons} из {totalLessons})
+                                        </span>
+                                    )}
+                                </span>
+                                {progress === 100 && (
+                                    <span className="text-lime">✓ Курс завершён</span>
+                                )}
+                            </div>
+                            <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                                <div
+                                    className="h-full bg-violet-soft transition-all"
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap items-center gap-3">
+                            <EnrollButton
+                                course={course}
+                                onEnrolled={async () => {
+                                    const fresh = await api(`/courses/${slug}`, { token });
+                                    setCourse(fresh);
+                                }}
+                            />
+                            <span className="text-xs text-white/40">
+                                Запишитесь, чтобы открыть уроки, отслеживать прогресс и получить сертификат
                             </span>
                         </div>
-                        <div className="space-y-1">
-                            {course.lessons.map((l) => {
-                                const isActive = l.id === activeLesson?.id;
-                                return (
-                                    <button
-                                        key={l.id}
-                                        onClick={() => goLesson(l.order)}
-                                        disabled={!l.unlocked}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-start gap-2 ${
-                                            isActive
-                                                ? 'bg-violet-soft/20 text-white'
-                                                : 'hover:bg-white/5 text-white/70'
-                                        } ${!l.unlocked ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                        title={l.unlocked ? '' : l.lockReason}
-                                    >
-                                        <span className="text-white/40 text-xs mt-0.5 w-5 shrink-0">
-                                            {l.order}.
-                                        </span>
-                                        <span className="flex-1">{l.title}</span>
-                                        {l.fullyCompleted && (
-                                            <span className="text-emerald-400 text-xs">✓</span>
-                                        )}
-                                        {!l.unlocked && (
-                                            <span className="text-white/40 text-xs">🔒</span>
-                                        )}
-                                    </button>
-                                );
-                            })}
+                    )}
+
+                    {course.certificateTitle && (
+                        <div className="mt-4 pt-4 border-t border-white/10 text-xs text-white/50 flex items-start gap-2">
+                            <span className="text-lg">🎓</span>
+                            <div>
+                                <div className="text-white/70 font-medium">По итогам курса</div>
+                                <div>{course.certificateTitle}</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </header>
+
+            {isEnrolled ? (
+                /* ─── Записан: полный интерфейс с уроками ─── */
+                <div className="grid lg:grid-cols-[280px_1fr] gap-6">
+                    {/* Сайдбар со списком уроков */}
+                    <aside className="lg:sticky lg:top-4 self-start">
+                        <div className="card p-4">
+                            <div className="text-sm text-white/50 mb-3">
+                                Уроки{' '}
+                                {totalLessons > 0 && (
+                                    <span className="text-white/40">
+                                        · {completedLessons}/{totalLessons}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="space-y-1">
+                                {course.lessons.map((l) => {
+                                    const isActive = l.id === activeLesson?.id;
+                                    return (
+                                        <button
+                                            key={l.id}
+                                            onClick={() => goLesson(l.order)}
+                                            disabled={!l.unlocked}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-start gap-2 ${
+                                                isActive
+                                                    ? 'bg-violet-soft/20 text-white'
+                                                    : 'hover:bg-white/5 text-white/70'
+                                            } ${!l.unlocked ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                            title={l.unlocked ? '' : l.lockReason}
+                                        >
+                                            <span className="text-white/40 text-xs mt-0.5 w-5 shrink-0">
+                                                {l.order}.
+                                            </span>
+                                            <span className="flex-1">{l.title}</span>
+                                            {l.fullyCompleted && (
+                                                <span className="text-emerald-400 text-xs">✓</span>
+                                            )}
+                                            {!l.unlocked && (
+                                                <span className="text-white/40 text-xs">🔒</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* Основной блок */}
+                    <main>
+                        {mode === 'lesson' && activeLesson && (
+                            <LessonPanel
+                                lesson={activeLesson}
+                                courseSlug={slug}
+                                onStartTest={goTest}
+                                onPrev={() => prevLesson && goLesson(prevLesson.order)}
+                                onNext={() => nextLesson?.unlocked && goLesson(nextLesson.order)}
+                                hasPrev={!!prevLesson}
+                                hasNext={!!nextLesson && nextLesson.unlocked}
+                                onRefresh={refreshCourse}
+                            />
+                        )}
+
+                        {mode === 'test' && activeLesson?.test && (
+                            <TestRunner
+                                lesson={activeLesson}
+                                answers={testAnswers}
+                                onChange={(qid, value) =>
+                                    setTestAnswers((prev) => ({ ...prev, [qid]: value }))
+                                }
+                                onSubmit={submitTest}
+                                onBack={backToLesson}
+                            />
+                        )}
+
+                        {mode === 'result' && testResult && (
+                            <TestResult
+                                result={testResult}
+                                lesson={activeLesson}
+                                onBack={backToLesson}
+                                hasNext={!!nextLesson && nextLesson.unlocked}
+                                onNext={() => nextLesson && goLesson(nextLesson.order)}
+                            />
+                        )}
+
+                        {mode === 'test' && !activeLesson?.test && (
+                            <div className="card p-6 text-center text-white/60">
+                                У этого урока нет теста.{' '}
+                                <button onClick={backToLesson} className="text-violet-soft hover:underline">
+                                    Вернуться к уроку
+                                </button>
+                            </div>
+                        )}
+                        {mode === 'result' && !testResult && (
+                            <div className="card p-6 text-center text-white/60">
+                                Результат недоступен.{' '}
+                                <button onClick={backToLesson} className="text-violet-soft hover:underline">
+                                    Вернуться к уроку
+                                </button>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            ) : (
+                /* ─── Не записан: teaser со списком тем ─── */
+                <div className="card p-5 md:p-7">
+                    <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                        <div>
+                            <div className="text-lg md:text-xl font-bold">Что внутри курса</div>
+                            <div className="text-sm text-white/50 mt-1">
+                                Уроки откроются после записи на курс
+                            </div>
+                        </div>
+                        <div className="text-xs text-white/40 text-right">
+                            <div>{totalLessons} уроков</div>
+                            {totalHours > 0 && <div>≈ {totalHours} ч материала</div>}
                         </div>
                     </div>
-                </aside>
 
-                {/* ─── Основной блок ─── */}
-                <main>
-                    {mode === 'lesson' && activeLesson && (
-                        <LessonPanel
-                            lesson={activeLesson}
-                            courseSlug={slug}
-                            onStartTest={goTest}
-                            onPrev={() => prevLesson && goLesson(prevLesson.order)}
-                            onNext={() => nextLesson?.unlocked && goLesson(nextLesson.order)}
-                            hasPrev={!!prevLesson}
-                            hasNext={!!nextLesson && nextLesson.unlocked}
-                            onRefresh={refreshCourse}
+                    <div className="grid sm:grid-cols-2 gap-2">
+                        {course.lessons.map((l) => (
+                            <div
+                                key={l.id}
+                                className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5"
+                            >
+                                <div className="w-8 h-8 grid place-items-center rounded-full bg-white/10 text-xs font-bold shrink-0 text-white/50">
+                                    {l.order}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-white/80 truncate">
+                                        {l.title}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs text-white/40 mt-0.5 flex-wrap">
+                                        {l.duration > 0 && <span>⏱ {l.duration} мин</span>}
+                                        {l.test && <span>📝 тест</span>}
+                                        {l.practical && <span>🎯 практика</span>}
+                                        {l.homework && <span>📋 ДЗ</span>}
+                                    </div>
+                                </div>
+                                <span className="text-white/25 text-sm shrink-0">🔒</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-6 pt-5 border-t border-white/10 flex flex-wrap items-center gap-4">
+                        <EnrollButton
+                            course={course}
+                            onEnrolled={async () => {
+                                const fresh = await api(`/courses/${slug}`, { token });
+                                setCourse(fresh);
+                            }}
                         />
-                    )}
-
-                    {mode === 'test' && activeLesson?.test && (
-                        <TestRunner
-                            lesson={activeLesson}
-                            answers={testAnswers}
-                            onChange={(qid, value) =>
-                                setTestAnswers((prev) => ({ ...prev, [qid]: value }))
-                            }
-                            onSubmit={submitTest}
-                            onBack={backToLesson}
-                        />
-                    )}
-
-                    {mode === 'result' && testResult && (
-                        <TestResult
-                            result={testResult}
-                            lesson={activeLesson}
-                            onBack={backToLesson}
-                            hasNext={!!nextLesson && nextLesson.unlocked}
-                            onNext={() => nextLesson && goLesson(nextLesson.order)}
-                        />
-                    )}
-
-                    {/* На всякий случай: если режим есть, а данных нет */}
-                    {mode === 'test' && !activeLesson?.test && (
-                        <div className="card p-6 text-center text-white/60">
-                            У этого урока нет теста.{' '}
-                            <button onClick={backToLesson} className="text-violet-soft hover:underline">
-                                Вернуться к уроку
-                            </button>
+                        <div className="text-xs text-white/40 flex-1 min-w-[200px]">
+                            После записи откроется первый урок, а остальные — по мере прохождения.
+                            {course.dripMode === 'test_weekly' && ` Не более ${course.weeklyLessonLimit || 3} уроков в неделю.`}
+                            {course.dripMode === 'schedule' && ` Каждые ${course.dripInterval || 7} дней.`}
                         </div>
-                    )}
-                    {mode === 'result' && !testResult && (
-                        <div className="card p-6 text-center text-white/60">
-                            Результат недоступен.{' '}
-                            <button onClick={backToLesson} className="text-violet-soft hover:underline">
-                                Вернуться к уроку
-                            </button>
-                        </div>
-                    )}
-                </main>
-            </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -293,7 +475,6 @@ function LessonPanel({
                 </div>
             </header>
 
-            {/* Видео — только здесь, на экране урока */}
             {lesson.videoUrl && (
                 <div className="mb-6 rounded-xl overflow-hidden aspect-video bg-black">
                     <iframe
@@ -306,23 +487,19 @@ function LessonPanel({
                 </div>
             )}
 
-            {/* Markdown-контент */}
             <MarkdownView
                 text={lesson.content}
                 className="text-white/85 text-sm md:text-base mb-6"
             />
 
-            {/* Практическое занятие */}
             {lesson.practical && (
                 <PracticalCard practical={lesson.practical} onRefresh={onRefresh} />
             )}
 
-            {/* Домашнее задание */}
             {lesson.homework && (
                 <HomeworkCard homework={lesson.homework} onRefresh={onRefresh} />
             )}
 
-            {/* Кнопки */}
             <footer className="mt-8 pt-5 border-t border-white/10 flex flex-wrap gap-3 items-center justify-between">
                 <button
                     onClick={onPrev}
@@ -333,21 +510,18 @@ function LessonPanel({
                 </button>
 
                 <div className="flex gap-3 flex-wrap">
-                    {/* Кнопка «Пройти тест» — если есть тест и урок открыт */}
                     {canTakeTest && (
                         <button onClick={onStartTest} className="btn-primary">
                             {testPassed ? 'Пройти тест заново' : 'Пройти тест →'}
                         </button>
                     )}
 
-                    {/* Кнопка «Следующий урок» — если тест пройден (или теста нет) */}
                     {hasNext && (!hasTest || testPassed) && (
                         <button onClick={onNext} className="btn-ghost">
                             Следующий урок →
                         </button>
                     )}
 
-                    {/* Если урок закрыт — предупреждение вместо кнопок действия */}
                     {!lesson.unlocked && (
                         <div className="text-sm text-amber-300/80">
                             {lesson.lockReason || 'Урок пока закрыт'}
@@ -484,8 +658,8 @@ function TestRunner({ lesson, answers, onChange, onSubmit, onBack }) {
                     <div className="card p-6 max-w-sm w-full">
                         <h3 className="text-lg font-bold mb-2">Завершить тест?</h3>
                         <p className="text-sm text-white/60 mb-5">
-                            После отправки вы увидите результат и разбор ошибок.
-                            Изменить ответы будет нельзя.
+                            После отправки вы увидите результат и разбор ошибок. Изменить
+                            ответы будет нельзя.
                         </p>
 
                         {submitError && (
@@ -518,7 +692,7 @@ function TestRunner({ lesson, answers, onChange, onSubmit, onBack }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   КАРТОЧКА ВОПРОСА (типы: single/multiple/matching/text/order)
+   КАРТОЧКА ВОПРОСА
    ═══════════════════════════════════════════════════════════ */
 function QuestionCard({ question, value, onChange }) {
     const p = useMemo(() => {

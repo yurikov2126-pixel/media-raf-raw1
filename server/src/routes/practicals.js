@@ -47,7 +47,6 @@ router.post('/:practicalId/submit', async (req, res) => {
             },
         });
 
-        // Уведомляем руководителя
         if (practical.supervisorId) {
             await createNotification(practical.supervisorId, 'system', {
                 title: 'Практика сдана на проверку',
@@ -83,13 +82,20 @@ router.get('/my', async (req, res) => {
     res.json(submissions);
 });
 
-/* ─────────── Руководитель: список практик на проверку ─────────── */
+/* ─────────── Руководитель: список практик ───────────
+   Query-параметры:
+     status   — PENDING | APPROVED | REJECTED (фильтр по статусу сдач)
+     courseId — только по конкретному курсу
+   Возвращает массив практик с массивом submissions внутри. */
 router.get('/review', async (req, res) => {
     if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
         return res.status(403).json({ error: 'Нет прав' });
     }
 
+    const { courseId, status } = req.query;
+
     const where = req.user.role === 'ADMIN' ? {} : { supervisorId: req.user.id };
+    if (courseId) where.courseId = courseId;
 
     const practicals = await prisma.practicalWork.findMany({
         where,
@@ -99,9 +105,12 @@ router.get('/review', async (req, res) => {
             lesson: { select: { id: true, title: true, order: true } },
             supervisor: { select: { id: true, fullName: true } },
             submissions: {
+                where: status ? { status } : undefined,
                 include: {
                     user: { select: { id: true, fullName: true, username: true, avatar: true } },
+                    reviewer: { select: { id: true, fullName: true, username: true } },
                 },
+                orderBy: { updatedAt: 'desc' },
             },
         },
     });
@@ -147,7 +156,6 @@ router.post('/submissions/:id/review', async (req, res) => {
         },
     });
 
-    // Уведомляем студента
     await createNotification(submission.userId, 'system', {
         title: status === 'APPROVED' ? 'Практика принята' : 'Практика отклонена',
         message:
@@ -161,7 +169,7 @@ router.post('/submissions/:id/review', async (req, res) => {
     res.json(updated);
 });
 
-/* ─────────── Админ / руководитель: принудительно разблокировать урок ─────────── */
+/* ─────────── Админ / руководитель: принудительно разблокировать ─────────── */
 router.post('/unlock/:lessonId', async (req, res) => {
     if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
         return res.status(403).json({ error: 'Нет прав' });
@@ -175,7 +183,6 @@ router.post('/unlock/:lessonId', async (req, res) => {
     });
     if (!lesson) return res.status(404).json({ error: 'Урок не найден' });
 
-    // Разблокировка = автоодобрение практики этого урока, если она есть
     const practical = await prisma.practicalWork.findUnique({
         where: { lessonId: lesson.id },
     });
@@ -199,7 +206,6 @@ router.post('/unlock/:lessonId', async (req, res) => {
         });
     }
 
-    // Плюс закрываем теорию, если не закрыта
     await prisma.lessonProgress.upsert({
         where: { userId_lessonId: { userId, lessonId: lesson.id } },
         update: { completed: true },

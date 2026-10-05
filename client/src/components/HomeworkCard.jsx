@@ -13,6 +13,54 @@ function StatusBadge({ status }) {
     return <span className={`text-xs px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
 }
 
+function DeadlineInfo({ deadline, submission }) {
+    if (!deadline) {
+        return (
+            <div className="text-xs text-white/50 mb-3">
+                ⏱ Без срока сдачи
+            </div>
+        );
+    }
+    const now = Date.now();
+    const dl = new Date(deadline).getTime();
+    const diff = dl - now;
+
+    const isPast = diff < 0;
+    const isUrgent = diff > 0 && diff < 24 * 60 * 60 * 1000;
+    const isDone = submission && (submission.status === 'PENDING' || submission.status === 'APPROVED');
+
+    let cls = 'text-white/60';
+    if (isPast && !isDone) cls = 'text-red-400';
+    else if (isUrgent && !isDone) cls = 'text-amber-300';
+
+    const remainingLabel = (() => {
+        if (isDone) return '';
+        if (isPast) {
+            const lateDays = Math.ceil(-diff / (24 * 60 * 60 * 1000));
+            return `· просрочено на ${lateDays} дн.`;
+        }
+        const hours = Math.floor(diff / (60 * 60 * 1000));
+        const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+        if (hours >= 24) {
+            const days = Math.floor(hours / 24);
+            return `· осталось ${days} дн.`;
+        }
+        if (hours > 0) return `· осталось ${hours} ч`;
+        return `· осталось ${mins} мин`;
+    })();
+
+    return (
+        <div className={`text-xs mb-3 ${cls}`}>
+            ⏰ Дедлайн:{' '}
+            {new Date(deadline).toLocaleString('ru-RU', {
+                day: '2-digit', month: 'long',
+                hour: '2-digit', minute: '2-digit',
+            })}
+            {remainingLabel && <span className="ml-1">{remainingLabel}</span>}
+        </div>
+    );
+}
+
 export default function HomeworkCard({ homework, onRefresh }) {
     const { token } = useAuth();
     const submission = homework.submissions?.[0] || null;
@@ -31,6 +79,9 @@ export default function HomeworkCard({ homework, onRefresh }) {
     const [error, setError] = useState('');
 
     const editable = !submission || status === 'REJECTED';
+    const deadline = homework.deadline ? new Date(homework.deadline) : null;
+    const isOverdue =
+        deadline && deadline.getTime() < Date.now() && !submission;
 
     const submit = async () => {
         if (!text.trim() && !link.trim() && files.length === 0) {
@@ -67,9 +118,29 @@ export default function HomeworkCard({ homework, onRefresh }) {
                 {homework.description}
             </div>
 
+            {/* Дедлайн */}
+            <DeadlineInfo deadline={homework.deadline} submission={submission} />
+
+            {/* Штраф за просрочку — предупреждение */}
+            {homework.latePenaltyPerDay > 0 && (
+                <div className="text-xs text-pink/80 mb-3">
+                    ⚠️ Штраф за просрочку: −{homework.latePenaltyPerDay} балла
+                    за каждые 24 ч (максимум −{homework.latePenaltyMax}).
+                </div>
+            )}
+
+            {/* Штраф по этой сдаче — снапшот */}
+            {submission?.latePenalty > 0 && (
+                <div className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 mb-3">
+                    📌 Сдано с опозданием на {submission.lateDays} дн.
+                    Штраф: −{submission.latePenalty} балла.
+                </div>
+            )}
+
+            {/* Фидбек */}
             {submission?.feedback && status !== 'PENDING' && (
                 <div
-                    className={`mt-3 mb-3 rounded-lg p-3 text-sm ${
+                    className={`mt-1 mb-3 rounded-lg p-3 text-sm ${
                         status === 'APPROVED'
                             ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-200'
                             : 'bg-amber-500/10 border border-amber-500/30 text-amber-200'
@@ -77,12 +148,19 @@ export default function HomeworkCard({ homework, onRefresh }) {
                 >
                     <div className="font-medium mb-1">
                         {status === 'APPROVED' ? '✓ Принято' : '↺ Нужно доработать'}
-                        {submission.grade != null && ` · Оценка ${submission.grade}/5`}
+                        {submission.finalGrade != null && ` · Итоговая оценка: ${submission.finalGrade}/5`}
+                        {submission.finalGrade == null && submission.grade != null && ` · Оценка ${submission.grade}/5`}
+                        {submission.latePenalty > 0 && status === 'APPROVED' && (
+                            <span className="text-amber-200/80 ml-1">
+                                (штраф −{submission.latePenalty})
+                            </span>
+                        )}
                     </div>
                     {submission.feedback}
                 </div>
             )}
 
+            {/* Просмотр сдачи */}
             {submission && status === 'APPROVED' && (
                 <div className="mt-3 pt-3 border-t border-white/10 text-xs text-white/60 space-y-1">
                     {submission.text && (
@@ -119,8 +197,14 @@ export default function HomeworkCard({ homework, onRefresh }) {
                 </div>
             )}
 
+            {/* Форма сдачи */}
             {editable && (
                 <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                    {isOverdue && (
+                        <div className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
+                            ⚠️ Дедлайн уже прошёл. Ваша сдача будет помечена как просроченная.
+                        </div>
+                    )}
                     <textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}

@@ -21,6 +21,7 @@ import {
     runVacuumAnalyze,
 } from '../lib/dbMaintenance.js';
 import { getAnalytics } from '../lib/analytics.js';
+import { getCourseAnalytics, buildSummary } from '../lib/courseAnalytics.js';
 import {
     sendPushToAll,
     sendPushToUser,
@@ -82,6 +83,13 @@ import {
     COUNTER_OPTIONS,
     DEFAULT_LEVEL_THRESHOLDS,
 } from '../lib/gamificationCatalog.js';
+import {
+    listResetRequests,
+    getStats as getPasswordResetStats,
+    generateCodeForRequest,
+    rejectRequest,
+} from '../lib/passwordReset.js';
+import { notifyNewLesson, notifyPracticalScheduled } from '../lib/notificationEvents.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
@@ -186,6 +194,27 @@ router.get(
     safe(async (req, res) => {
         const period = Math.max(7, Math.min(365, Number(req.query.period) || 30));
         res.json(await getAnalytics(period));
+    })
+);
+
+/* ─── Воронка по курсам ─── */
+router.get(
+    '/analytics/courses',
+    safe(async (req, res) => {
+        const periodRaw = req.query.period;
+        let periodDays = null;
+        if (periodRaw && periodRaw !== 'all') {
+            periodDays = Math.max(7, Math.min(365, Number(periodRaw) || 30));
+        }
+
+        const courses = await getCourseAnalytics({ periodDays });
+        const summary = buildSummary(courses);
+
+        res.json({
+            period: periodDays ?? 'all',
+            summary,
+            courses,
+        });
     })
 );
 
@@ -404,7 +433,15 @@ router.get(
             include: {
                 lessons: {
                     orderBy: { order: 'asc' },
-                    include: { test: { include: { questions: true } } },
+                    include: {
+                        test: { include: { questions: true } },
+                        practical: {
+                            include: {
+                                supervisor: { select: { id: true, fullName: true, username: true } },
+                            },
+                        },
+                        homework: true,
+                    },
                 },
             },
         });
@@ -447,35 +484,32 @@ router.patch(
     '/courses/:id',
     safe(async (req, res) => {
         const allowed = [
-            'title', 'slug', 'description', 'category', 'level', 'cover', 'published',
-            'certificateTitle', 'certificateDescription',
-            'dripMode', 'dripInterval', 'weeklyLessonLimit',
+            'title', 'description', 'maxFiles', 'maxFileSizeMb',
+            'dueAt', 'hoursToComplete', 'latePenaltyPerDay', 'latePenaltyMax',
         ];
         const data = {};
-        for (const key of allowed)
-            if (req.body[key] !== undefined) data[key] = req.body[key];
-
-        // dripMode
-        if (data.dripMode !== undefined) {
-            data.dripMode = data.dripMode || null;
-        }
-        // dripInterval
-        if (data.dripInterval !== undefined) {
-            if (data.dripInterval === null || data.dripInterval === '' || data.dripInterval === undefined)
-                data.dripInterval = null;
-            else data.dripInterval = Number(data.dripInterval) || 7;
-        }
-        // weeklyLessonLimit
-        if (data.weeklyLessonLimit !== undefined) {
-            if (data.weeklyLessonLimit === null || data.weeklyLessonLimit === '' || data.weeklyLessonLimit === undefined)
-                data.weeklyLessonLimit = null;
-            else data.weeklyLessonLimit = Math.max(1, Math.min(50, Number(data.weeklyLessonLimit) || 3));
-        }
-
-        // Согласование полей при смене режима
-        if (data.dripMode !== undefined) {
-            if (data.dripMode !== 'schedule') data.dripInterval = null;
-            if (data.dripMode !== 'test_weekly') data.weeklyLessonLimit = null;
+        for (const k of allowed) {
+            if (req.body[k] !== undefined) {
+                if (k === 'maxFiles')
+                    data[k] = Math.max(1, Math.min(20, Number(req.body[k]) || 3));
+                else if (k === 'maxFileSizeMb')
+                    data[k] = Math.max(1, Math.min(500, Number(req.body[k]) || 50));
+                else if (k === 'dueAt')
+                    data[k] = req.body[k] ? new Date(req.body[k]) : null;
+                else if (k === 'hoursToComplete')
+                    data[k] = req.body[k] != null
+                        ? Math.max(1, Math.min(2000, Number(req.body[k])))
+                        : null;
+                else if (k === 'latePenaltyPerDay')
+                    data[k] = req.body[k] != null
+                        ? Math.max(0, Math.min(5, Number(req.body[k])))
+                        : 0;
+                else if (k === 'latePenaltyMax')
+                    data[k] = req.body[k] != null
+                        ? Math.max(0, Math.min(5, Number(req.body[k])))
+                        : 5;
+                else data[k] = req.body[k];
+            }
         }
 
         const course = await prisma.course.update({
@@ -507,6 +541,15 @@ router.post(
                 order: order ?? 0, duration: duration ?? 0,
             },
         });
+
+        // Уведомляем всех записанных (не блокирует ответ)
+        notifyNewLesson({
+            courseId: req.params.courseId,
+            lessonId: lesson.id,
+            lessonTitle: lesson.title,
+            lessonOrder: lesson.order,
+        }).catch((e) => console.error('[admin] notify lesson:', e));
+
         res.json(lesson);
     })
 );
@@ -1923,6 +1966,10 @@ router.post(
         const { topic, description, location, scheduledAt, durationMin, supervisorId } = req.body;
         if (!topic || !description) {
             return res.status(400).json({ error: 'topic и description обязательны' });
+            if (practical.scheduledAt) {
+                notifyPracticalScheduled({ practicalId: practical.id, isUpdate: false })
+                    .catch((e) => console.error('[admin] notify practical:', e));
+            }
         }
 
         const lesson = await prisma.lesson.findUnique({
@@ -1970,10 +2017,24 @@ router.patch(
                 }
             }
         }
+
+        // Сохраняем прежнее значение, чтобы понять, «первая» это установка даты или изменение
+        const before = await prisma.practicalWork.findUnique({
+            where: { id: req.params.id },
+            select: { scheduledAt: true },
+        });
+
         const practical = await prisma.practicalWork.update({
             where: { id: req.params.id },
             data,
         });
+
+        // Уведомляем только если дата появилась впервые
+        if (!before?.scheduledAt && practical.scheduledAt) {
+            notifyPracticalScheduled({ practicalId: practical.id, isUpdate: false })
+                .catch((e) => console.error('[admin] notify practical:', e));
+        }
+
         res.json(practical);
     })
 );
@@ -2016,6 +2077,16 @@ router.post(
             description,
             maxFiles: Math.max(1, Math.min(20, Number(maxFiles) || 3)),
             maxFileSizeMb: Math.max(1, Math.min(500, Number(maxFileSizeMb) || 50)),
+            dueAt: req.body.dueAt ? new Date(req.body.dueAt) : null,
+            hoursToComplete: req.body.hoursToComplete != null
+                ? Math.max(1, Math.min(2000, Number(req.body.hoursToComplete)))
+                : null,
+            latePenaltyPerDay: req.body.latePenaltyPerDay != null
+                ? Math.max(0, Math.min(5, Number(req.body.latePenaltyPerDay)))
+                : 0,
+            latePenaltyMax: req.body.latePenaltyMax != null
+                ? Math.max(0, Math.min(5, Number(req.body.latePenaltyMax)))
+                : 5,
         };
 
         const homework = await prisma.homework.upsert({
@@ -2031,12 +2102,18 @@ router.post(
 router.patch(
     '/homework/:id',
     safe(async (req, res) => {
-        const allowed = ['title', 'description', 'maxFiles', 'maxFileSizeMb'];
+        const allowed = ['title', 'description', 'maxFiles', 'maxFileSizeMb', 'dueAt', 'hoursToComplete'];
         const data = {};
         for (const k of allowed) {
             if (req.body[k] !== undefined) {
                 if (k === 'maxFiles') data[k] = Math.max(1, Math.min(20, Number(req.body[k]) || 3));
                 else if (k === 'maxFileSizeMb') data[k] = Math.max(1, Math.min(500, Number(req.body[k]) || 50));
+                else if (k === 'dueAt') data[k] = req.body[k] ? new Date(req.body[k]) : null;
+                else if (k === 'hoursToComplete') {
+                    data[k] = req.body[k] != null
+                        ? Math.max(1, Math.min(2000, Number(req.body[k])))
+                        : null;
+                }
                 else data[k] = req.body[k];
             }
         }
@@ -2053,6 +2130,138 @@ router.delete(
     safe(async (req, res) => {
         await prisma.homework.delete({ where: { id: req.params.id } });
         res.json({ ok: true });
+    })
+);
+
+/* ═══════════ ПРАКТИКИ И ДЗ (обзорная вкладка) ═══════════ */
+
+router.get(
+    '/practicals-list',
+    safe(async (_req, res) => {
+        const practicals = await prisma.practicalWork.findMany({
+            orderBy: [{ courseId: 'asc' }, { scheduledAt: 'desc' }, { createdAt: 'desc' }],
+            include: {
+                course: { select: { id: true, slug: true, title: true } },
+                lesson: { select: { id: true, title: true, order: true } },
+                supervisor: { select: { id: true, fullName: true, username: true } },
+                submissions: { select: { status: true } },
+            },
+        });
+
+        res.json(
+            practicals.map((p) => {
+                const total = p.submissions.length;
+                const pending = p.submissions.filter((s) => s.status === 'PENDING').length;
+                const approved = p.submissions.filter((s) => s.status === 'APPROVED').length;
+                const rejected = p.submissions.filter((s) => s.status === 'REJECTED').length;
+                return {
+                    id: p.id,
+                    courseId: p.courseId,
+                    course: p.course,
+                    lesson: p.lesson,
+                    topic: p.topic,
+                    description: p.description,
+                    location: p.location,
+                    scheduledAt: p.scheduledAt,
+                    durationMin: p.durationMin,
+                    supervisorId: p.supervisorId,
+                    supervisor: p.supervisor,
+                    totalCount: total,
+                    pendingCount: pending,
+                    approvedCount: approved,
+                    rejectedCount: rejected,
+                };
+            })
+        );
+    })
+);
+
+router.get(
+    '/homeworks-list',
+    safe(async (_req, res) => {
+        const homeworks = await prisma.homework.findMany({
+            orderBy: [{ createdAt: 'asc' }],
+            include: {
+                lesson: {
+                    select: {
+                        id: true,
+                        title: true,
+                        order: true,
+                        course: { select: { id: true, slug: true, title: true } },
+                    },
+                },
+                submissions: { select: { status: true } },
+            },
+        });
+
+        res.json(
+            homeworks.map((h) => {
+                const total = h.submissions.length;
+                const pending = h.submissions.filter((s) => s.status === 'PENDING').length;
+                const approved = h.submissions.filter((s) => s.status === 'APPROVED').length;
+                const rejected = h.submissions.filter((s) => s.status === 'REJECTED').length;
+                return {
+                    id: h.id,
+                    lessonId: h.lessonId,
+                    lesson: h.lesson,
+                    title: h.title,
+                    description: h.description,
+                    maxFiles: h.maxFiles,
+                    maxFileSizeMb: h.maxFileSizeMb,
+                    totalCount: total,
+                    pendingCount: pending,
+                    approvedCount: approved,
+                    rejectedCount: rejected,
+                };
+            })
+        );
+    })
+);
+
+router.post(
+    '/practicals/bulk-assign-supervisor',
+    safe(async (req, res) => {
+        const { courseId, supervisorId } = req.body || {};
+        if (!courseId) return res.status(400).json({ error: 'courseId обязателен' });
+
+        const result = await prisma.practicalWork.updateMany({
+            where: { courseId },
+            data: { supervisorId: supervisorId || null },
+        });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'practicals_bulk_assign_supervisor',
+                payload: JSON.stringify({ courseId, supervisorId }),
+                affected: result.count,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true, affected: result.count });
+    })
+);
+
+router.post(
+    '/homeworks/bulk-delete',
+    safe(async (req, res) => {
+        const { courseId } = req.body || {};
+        if (!courseId) return res.status(400).json({ error: 'courseId обязателен' });
+
+        const result = await prisma.homework.deleteMany({
+            where: { lesson: { courseId } },
+        });
+
+        await prisma.adminAction.create({
+            data: {
+                adminId: req.user.id,
+                action: 'homeworks_bulk_delete',
+                payload: JSON.stringify({ courseId }),
+                affected: result.count,
+            },
+        }).catch(() => {});
+
+        res.json({ ok: true, affected: result.count });
     })
 );
 

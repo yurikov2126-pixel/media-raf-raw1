@@ -264,13 +264,14 @@ model Enrollment {
 }
 
 model LessonProgress {
-  id        String   @id @default(cuid())
-  userId    String
-  lessonId  String
-  completed Boolean  @default(false)
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  userId      String
+  lessonId    String
+  completed   Boolean   @default(false)
+  completedAt DateTime? // момент прохождения урока (для отсчёта ДЗ)
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
 }
@@ -578,33 +579,40 @@ model PracticalSubmission {
  */
 
 model Homework {
-  id            String   @id @default(cuid())
-  lessonId      String   @unique
-  title         String
-  description   String
-  maxFiles      Int      @default(3)
-  maxFileSizeMb Int      @default(50)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String    @id @default(cuid())
+  lessonId          String    @unique
+  title             String
+  description       String
+  maxFiles          Int       @default(3)
+  maxFileSizeMb     Int       @default(50)
+  dueAt             DateTime?
+  hoursToComplete   Int?
+  latePenaltyPerDay Float?    @default(0) // баллов за каждые 24 ч просрочки
+  latePenaltyMax    Float?    @default(5) // максимум снятия (шкала 1..5)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   submissions HomeworkSubmission[]
 }
 
 model HomeworkSubmission {
-  id         String    @id @default(cuid())
-  homeworkId String
-  userId     String
-  text       String? // Текстовый ответ
-  link       String? // Ссылка (например, на облако)
-  files      String    @default("[]") // JSON: [{url, name, type, size}]
-  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
-  reviewedBy String?
-  reviewedAt DateTime?
-  feedback   String?
-  grade      Int?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  homeworkId  String
+  userId      String
+  text        String?
+  link        String?
+  files       String    @default("[]")
+  status      String    @default("PENDING")
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  feedback    String?
+  grade       Int?
+  lateDays    Int? // снапшот: сколько суток просрочки на момент сдачи
+  latePenalty Float? // снапшот: сколько баллов штрафа (в момент сдачи)
+  finalGrade  Float? // итоговая оценка = max(1, grade - latePenalty) после approve
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
   user     User     @relation("HomeworkSubmitter", fields: [userId], references: [id], onDelete: Cascade)

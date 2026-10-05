@@ -67,33 +67,29 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
     };
 
     return (
-        <div className="card p-4 space-y-3 min-w-0">
+        <div className="space-y-4 min-w-0">
+            {/* Шапка урока */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="font-bold">Урок</div>
+                <div className="font-bold text-lg">Редактор урока</div>
                 <div className="flex gap-1 flex-wrap">
-                    <button
-                        onClick={() => setShowPreview((s) => !s)}
-                        className="chip bg-white/5 hover:bg-white/10 text-xs"
-                        type="button"
-                    >
-                        {showPreview ? '✎ Редактор' : '👁 Превью'}
-                    </button>
                     <button
                         onClick={remove}
                         className="chip bg-white/5 hover:bg-pink/30 text-xs"
+                        type="button"
                     >
-                        🗑️
+                        🗑️ Удалить урок
                     </button>
                 </div>
             </div>
 
             <input
-                className="input"
+                className="input text-lg font-semibold"
                 value={form.title}
                 onChange={set('title')}
-                placeholder="Название"
+                placeholder="Название урока"
             />
 
+            {/* Вкладки */}
             <div className="flex gap-1 border-b border-white/10 pb-2 flex-wrap">
                 <TabBtn active={tab === 'lesson'} onClick={() => setTab('lesson')}>
                     📖 Урок
@@ -109,62 +105,108 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 </TabBtn>
             </div>
 
+            {/* Вкладка урока */}
             {tab === 'lesson' && (
-                <>
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-white/40 uppercase">
+                            Контент урока {showPreview ? '(превью)' : '(markdown)'}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowPreview((s) => !s)}
+                            className="text-xs text-violet-soft hover:underline"
+                        >
+                            {showPreview ? '✎ Редактор' : '👁 Превью'}
+                        </button>
+                    </div>
+
                     {showPreview ? (
-                        <div className="border border-white/10 rounded-xl p-3 max-h-[400px] overflow-y-auto bg-black/20">
+                        <div className="border border-white/10 rounded-xl p-4 h-[420px] overflow-y-auto bg-black/20">
                             <MarkdownView
                                 text={form.content}
                                 className="text-white/85 text-sm"
                             />
+                            {!form.content && (
+                                <div className="text-white/30 italic">Пустой контент</div>
+                            )}
                         </div>
                     ) : (
                         <textarea
-                            rows={12}
-                            className="input resize-none font-mono text-xs leading-relaxed"
+                            className="input resize-none font-mono text-xs leading-relaxed h-[420px]"
                             value={form.content}
                             onChange={set('content')}
-                            placeholder="Markdown-контент урока"
+                            placeholder="## Заголовок&#10;&#10;Текст урока в markdown…"
                         />
                     )}
-                    <input
-                        className="input"
-                        value={form.videoUrl}
-                        onChange={set('videoUrl')}
-                        placeholder="URL видео (если есть)"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                        <input
-                            type="number"
-                            className="input"
-                            value={form.order}
-                            onChange={set('order')}
-                            placeholder="Порядок"
-                        />
-                        <input
-                            type="number"
-                            className="input"
-                            value={form.duration}
-                            onChange={set('duration')}
-                            placeholder="Длительность (мин)"
-                        />
+
+                    <div className="grid md:grid-cols-2 gap-3">
+                        <div className="md:col-span-2">
+                            <label className="text-xs text-white/40 uppercase block mb-1">URL видео</label>
+                            <input
+                                className="input"
+                                value={form.videoUrl}
+                                onChange={set('videoUrl')}
+                                placeholder="https://www.youtube.com/watch?v=..."
+                            />
+                            {form.videoUrl && (
+                                <div className="mt-2 rounded-lg overflow-hidden aspect-video bg-black max-w-md">
+                                    {/youtu\.?be/.test(form.videoUrl) ? (
+                                        <iframe
+                                            src={form.videoUrl
+                                                .replace('watch?v=', 'embed/')
+                                                .replace('youtu.be/', 'www.youtube.com/embed/')}
+                                            className="w-full h-full"
+                                            allowFullScreen
+                                            title="preview"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full grid place-items-center text-xs text-white/40">
+                                            Предпросмотр доступен для YouTube
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        <div>
+                            <label className="text-xs text-white/40 uppercase block mb-1">Порядок</label>
+                            <input
+                                type="number"
+                                className="input"
+                                value={form.order}
+                                onChange={set('order')}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-white/40 uppercase block mb-1">Длительность (мин)</label>
+                            <input
+                                type="number"
+                                className="input"
+                                value={form.duration}
+                                onChange={set('duration')}
+                            />
+                        </div>
                     </div>
-                    <button
-                        onClick={save}
-                        disabled={busy}
-                        className="btn-primary w-full"
-                    >
-                        {busy ? 'Сохранение…' : 'Сохранить урок'}
-                    </button>
-                </>
+
+                    <div className="flex gap-2 pt-2">
+                        <button onClick={save} disabled={busy} className="btn-primary flex-1">
+                            {busy ? 'Сохранение…' : '💾 Сохранить урок'}
+                        </button>
+                    </div>
+                </div>
             )}
 
+            {/* Вкладка теста */}
             {tab === 'test' && (
                 <div>
                     {!test ? (
-                        <button onClick={createTest} className="btn-ghost w-full text-sm">
-                            ＋ Создать тест
-                        </button>
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-3">📝</div>
+                            <div className="text-white/60 mb-4">У этого урока пока нет теста</div>
+                            <button onClick={createTest} className="btn-primary">
+                                ＋ Создать тест
+                            </button>
+                        </div>
                     ) : (
                         <TestEditor
                             test={test}
@@ -176,6 +218,7 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 </div>
             )}
 
+            {/* Вкладка практики */}
             {tab === 'practical' && (
                 <PracticalEditor
                     lessonId={lesson.id}
@@ -188,6 +231,7 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 />
             )}
 
+            {/* Вкладка ДЗ */}
             {tab === 'homework' && (
                 <HomeworkEditor
                     lessonId={lesson.id}

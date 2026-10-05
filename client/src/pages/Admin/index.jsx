@@ -18,6 +18,7 @@ import Settings from './tabs/Settings.jsx';
 import Modules from './tabs/Modules.jsx';
 import Gamification from './tabs/Gamification.jsx';
 import PasswordResets from './tabs/PasswordResets.jsx';
+import PracticalsHomework from './tabs/PracticalsHomework.jsx';
 
 import CoursesRoot from './tabs/Courses/index.jsx';
 import WikiRoot from './tabs/Wiki/index.jsx';
@@ -138,6 +139,9 @@ export default function Admin() {
                     setCourses={setCourses}
                     token={token}
                 />
+            )}
+            {tab === 'practicals-homework' && (
+                <PracticalsHomework token={token} courses={courses} />
             )}
             {tab === 'wiki' && <WikiRoot token={token} />}
             {tab === 'certificates' && (

@@ -12,6 +12,12 @@ const ICONS = {
     system: '📢',
     report: '🚩',
     password_reset: '🔑',
+    lesson_new: '📖',
+    practical_scheduled: '🎯',
+    practical_due: '⏰',
+    homework_due: '📋',
+    lesson_unlocked: '🔓',
+    homework_overdue: '⚠️',
 };
 
 const TITLES = {
@@ -24,17 +30,30 @@ const TITLES = {
         `Жалоба на ${p.targetLabel || 'контент'} от ${p.reporterName || 'пользователя'}`,
     password_reset: (p) =>
         `Запрос на сброс пароля от ${p.userName || 'пользователя'}`,
+    lesson_new: (p) => `📖 Новый урок: ${p.lessonTitle || ''}`,
+    practical_scheduled: (p) => `🎯 Практика: ${p.topic || ''}`,
+    practical_due: (p) => `⏰ Скоро практика: ${p.topic || ''}`,
+    homework_due: (p) => `📋 Скоро дедлайн ДЗ: ${p.title || ''}`,
+    lesson_unlocked: (p) => `🔓 Открыт урок: ${p.lessonTitle || ''}`,
+    homework_overdue: (p) => `⚠️ Просрочено ДЗ: ${p.title || ''}`,
 };
 
 const FILTERS = [
     { v: 'all', l: 'Все' },
     { v: 'unread', l: 'Непрочитанные' },
+    { v: 'lesson_new', l: '📖 Уроки' },
+    { v: 'practical_scheduled', l: '🎯 Практики' },
+    { v: 'practical_due', l: '⏰ Напоминания' },
+    { v: 'homework_due', l: '📋 ДЗ' },
     { v: 'report', l: '🚩 Жалобы' },
     { v: 'message', l: '💬 Сообщения' },
     { v: 'post', l: '📝 Посты' },
     { v: 'certificate', l: '🏆 Сертификаты' },
     { v: 'system', l: '📢 Система' },
     { v: 'password_reset', l: '🔑 Пароли' },
+    { v: 'lesson_unlocked', l: '🔓 Открытие уроков' },
+    { v: 'homework_overdue', l: '⚠️ Просроченные' },
+
 ];
 
 export default function Notifications() {
@@ -45,7 +64,7 @@ export default function Notifications() {
     } = useNotifications();
     const [filter, setFilter] = useState('all');
     const [busy, setBusy] = useState(false);
-    const [confirm, setConfirm] = useState(null); // 'clearRead' | 'clearAll'
+    const [confirm, setConfirm] = useState(null);
     const [message, setMessage] = useState('');
     const nav = useNavigate();
 
@@ -67,6 +86,17 @@ export default function Notifications() {
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
+        else if (
+            n.type === 'lesson_new' ||
+            n.type === 'lesson_unlocked' ||
+            n.type === 'practical_scheduled' ||
+            n.type === 'practical_due' ||
+            n.type === 'homework_due' ||
+            n.type === 'homework_overdue'
+        ) {
+            const q = p.lessonOrder ? `?lesson=${p.lessonOrder}` : '';
+            nav(`/app/courses/${p.courseSlug}${q}`);
+        }
     };
 
     const flash = (text) => {
@@ -127,7 +157,6 @@ export default function Notifications() {
                             onClick={markAllRead}
                             disabled={busy}
                             className="btn-ghost !py-2 text-sm"
-                            title="Пометить все как прочитанные"
                         >
                             ✓ Прочитать все
                         </button>
@@ -137,7 +166,6 @@ export default function Notifications() {
                             onClick={() => setConfirm('clearRead')}
                             disabled={busy}
                             className="btn-ghost !py-2 text-sm"
-                            title="Удалить только прочитанные"
                         >
                             🧹 Очистить прочитанные
                         </button>
@@ -147,7 +175,6 @@ export default function Notifications() {
                             onClick={() => setConfirm('clearAll')}
                             disabled={busy}
                             className="btn-ghost !py-2 text-sm text-pink"
-                            title="Удалить все уведомления"
                         >
                             🗑️ Очистить всё
                         </button>
@@ -169,6 +196,7 @@ export default function Notifications() {
                             : f.v === 'unread'
                                 ? unread
                                 : items.filter((n) => n.type === f.v).length;
+                    if (count === 0 && f.v !== 'all' && f.v !== 'unread') return null;
                     return (
                         <button
                             key={f.v}
@@ -199,73 +227,111 @@ export default function Notifications() {
             )}
 
             <div className="card p-0 overflow-hidden">
-                {filtered.map((n) => (
-                    <div
-                        key={n.id}
-                        className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
-                            !n.readAt ? 'bg-violet/5' : ''
-                        }`}
-                        onClick={() => go(n)}
-                    >
-                        <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
-                        <div className="flex-1 min-w-0">
-                            <div className="text-sm font-semibold truncate">
-                                {(TITLES[n.type] || TITLES.system)(n.payload || {})}
-                            </div>
-                            {(n.type === 'message' || n.type === 'mention') && (
-                                <div className="text-xs text-white/50 truncate mt-0.5">
-                                    {n.payload.chatTitle && (
-                                        <span className="text-white/70">
-                                            {n.payload.chatTitle}:{' '}
-                                        </span>
+                {filtered.map((n) => {
+                    const p = n.payload || {};
+                    const subline = (() => {
+                        if (n.type === 'message' || n.type === 'mention') {
+                            return (
+                                <>
+                                    {p.chatTitle && (
+                                        <span className="text-white/70">{p.chatTitle}: </span>
                                     )}
-                                    {n.payload.preview}
-                                </div>
-                            )}
-                            {n.type === 'post' && (
-                                <div className="text-xs text-white/50 truncate mt-0.5">
-                                    {n.payload.preview}
-                                </div>
-                            )}
-                            {n.type === 'certificate' && (
-                                <div className="text-xs text-white/50 truncate mt-0.5">
-                                    {n.payload.courseTitle}
-                                </div>
-                            )}
-                            {n.type === 'system' && (
-                                <div className="text-xs text-white/50 truncate mt-0.5">
-                                    {n.payload.message}
-                                </div>
-                            )}
-                            {n.type === 'report' && (
-                                <div className="text-xs text-white/50 truncate mt-0.5">
-                                    Причина: {n.payload.reason}
-                                    {n.payload.autoAction && (
+                                    {p.preview}
+                                </>
+                            );
+                        }
+                        if (n.type === 'post') return p.preview;
+                        if (n.type === 'certificate') return p.courseTitle;
+                        if (n.type === 'system') return p.message;
+                        if (n.type === 'report') {
+                            return (
+                                <>
+                                    Причина: {p.reason}
+                                    {p.autoAction && (
                                         <span className="ml-2 text-pink">
-                                            · авто: {n.payload.autoAction}
+                                            · авто: {p.autoAction}
                                         </span>
                                     )}
-                                </div>
-                            )}
-                            <div className="text-[10px] text-white/30 mt-1">
-                                {new Date(n.createdAt).toLocaleString('ru-RU')}
-                            </div>
-                        </div>
-                        {!n.readAt && (
-                            <div className="w-2 h-2 rounded-full bg-pink shrink-0 mt-2" />
-                        )}
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                remove(n.id);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
-                            title="Удалить"
+                                </>
+                            );
+                        }
+                        if (n.type === 'lesson_new') {
+                            return `в курсе «${p.courseTitle || ''}»`;
+                        }
+                        if (n.type === 'practical_scheduled') {
+                            return p.scheduledAt
+                                ? new Date(p.scheduledAt).toLocaleString('ru-RU', {
+                                    day: '2-digit', month: 'short',
+                                    hour: '2-digit', minute: '2-digit',
+                                })
+                                : '';
+                        }
+                        if (n.type === 'practical_due') {
+                            return p.scheduledAt
+                                ? `в ${new Date(p.scheduledAt).toLocaleTimeString('ru-RU', {
+                                    hour: '2-digit', minute: '2-digit',
+                                })}`
+                                : '';
+                        }
+                        if (n.type === 'homework_due') {
+                            return p.dueAt
+                                ? `до ${new Date(p.dueAt).toLocaleString('ru-RU', {
+                                    day: '2-digit', month: 'short',
+                                    hour: '2-digit', minute: '2-digit',
+                                })}`
+                                : '';
+                        }
+                        if (n.type === 'lesson_unlocked') {
+                            return `в курсе «${p.courseTitle || ''}»`;
+                        }
+                        if (n.type === 'homework_overdue') {
+                            return p.dueAt
+                                ? `срок истёк ${new Date(p.dueAt).toLocaleString('ru-RU', {
+                                    day: '2-digit', month: 'short',
+                                    hour: '2-digit', minute: '2-digit',
+                                })}`
+                                : '';
+                        }
+                        return null;
+                    })();
+                    return (
+                        <div
+                            key={n.id}
+                            className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
+                                !n.readAt ? 'bg-violet/5' : ''
+                            }`}
+                            onClick={() => go(n)}
                         >
-                            ✕
-                        </button>
-                    </div>
-                ))}
+                            <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold truncate">
+                                    {(TITLES[n.type] || TITLES.system)(p)}
+                                </div>
+                                {subline && (
+                                    <div className="text-xs text-white/50 truncate mt-0.5">
+                                        {subline}
+                                    </div>
+                                )}
+                                <div className="text-[10px] text-white/30 mt-1">
+                                    {new Date(n.createdAt).toLocaleString('ru-RU')}
+                                </div>
+                            </div>
+                            {!n.readAt && (
+                                <div className="w-2 h-2 rounded-full bg-pink shrink-0 mt-2" />
+                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    remove(n.id);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
+                                title="Удалить"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    );
+                })}
             </div>
 
             <ConfirmDialog

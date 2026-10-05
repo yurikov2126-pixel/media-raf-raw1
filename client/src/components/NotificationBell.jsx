@@ -12,6 +12,12 @@ const ICONS = {
     system: '📢',
     report: '🚩',
     password_reset: '🔑',
+    lesson_new: '📖',
+    practical_scheduled: '🎯',
+    practical_due: '⏰',
+    homework_due: '📋',
+    lesson_unlocked: '🔓',
+    homework_overdue: '⚠️',
 };
 
 const TITLES = {
@@ -24,6 +30,12 @@ const TITLES = {
         `Жалоба на ${p.targetLabel || 'контент'} от ${p.reporterName || 'пользователя'}`,
     password_reset: (p) =>
         `Запрос на сброс пароля от ${p.userName || 'пользователя'}`,
+    lesson_new: (p) => `📖 Новый урок: ${p.lessonTitle || ''}`,
+    practical_scheduled: (p) => `🎯 Практика: ${p.topic || ''}`,
+    practical_due: (p) => `⏰ Скоро практика: ${p.topic || ''}`,
+    homework_due: (p) => `📋 Скоро дедлайн ДЗ: ${p.title || ''}`,
+    lesson_unlocked: (p) => `🔓 Открыт урок: ${p.lessonTitle || ''}`,
+    homework_overdue: (p) => `⚠️ Просрочено ДЗ: ${p.title || ''}`,
 };
 
 const PANEL_W = 400;
@@ -44,7 +56,7 @@ export default function NotificationBell({ align = 'right' }) {
     const [pos, setPos] = useState(null);
     const [busy, setBusy] = useState(false);
     const [pushError, setPushError] = useState('');
-    const [confirm, setConfirm] = useState(null); // 'clearRead' | 'clearAll'
+    const [confirm, setConfirm] = useState(null);
     const [actionMsg, setActionMsg] = useState('');
     const btnRef = useRef(null);
     const panelRef = useRef(null);
@@ -139,11 +151,23 @@ export default function NotificationBell({ align = 'right' }) {
     const handleClick = async (n) => {
         if (!n.readAt) await markRead(n.id);
         setOpen(false);
-        if (n.type === 'message' || n.type === 'mention') nav(`/app/chats/${n.payload.chatId}`);
-        else if (n.type === 'post') nav(`/app/u/${n.payload.authorUsername}`);
-        else if (n.type === 'certificate') nav(`/app/certificates/${n.payload.certificateId}`);
+        const p = n.payload || {};
+        if (n.type === 'message' || n.type === 'mention') nav(`/app/chats/${p.chatId}`);
+        else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
+        else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
+        else if (
+            n.type === 'lesson_new' ||
+            n.type === 'lesson_unlocked' ||
+            n.type === 'practical_scheduled' ||
+            n.type === 'practical_due' ||
+            n.type === 'homework_due' ||
+            n.type === 'homework_overdue'
+        ) {
+            const q = p.lessonOrder ? `?lesson=${p.lessonOrder}` : '';
+            nav(`/app/courses/${p.courseSlug}${q}`);
+        }
     };
 
     const flashMsg = (text) => {
@@ -200,7 +224,6 @@ export default function NotificationBell({ align = 'right' }) {
                 className="fixed z-[100] card p-0 overflow-hidden animate-pop flex flex-col"
                 style={style}
             >
-                {/* Шапка */}
                 <div className="px-4 py-3 border-b border-white/5 shrink-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
                         <div className="font-bold">
@@ -220,14 +243,12 @@ export default function NotificationBell({ align = 'right' }) {
                         </button>
                     </div>
 
-                    {/* Кнопки действий */}
                     {items.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
                             {unread > 0 && (
                                 <button
                                     onClick={markAllRead}
                                     className="chip bg-violet/20 hover:bg-violet/40 text-white text-[11px]"
-                                    title="Пометить все как прочитанные"
                                 >
                                     ✓ Прочитать все ({unread})
                                 </button>
@@ -236,7 +257,6 @@ export default function NotificationBell({ align = 'right' }) {
                                 <button
                                     onClick={() => setConfirm('clearRead')}
                                     className="chip bg-white/5 hover:bg-white/10 text-white/70 text-[11px]"
-                                    title="Удалить только прочитанные"
                                 >
                                     🧹 Очистить прочитанные ({readCount})
                                 </button>
@@ -244,7 +264,6 @@ export default function NotificationBell({ align = 'right' }) {
                             <button
                                 onClick={() => setConfirm('clearAll')}
                                 className="chip bg-white/5 hover:bg-pink/30 text-white/70 text-[11px]"
-                                title="Удалить все уведомления"
                             >
                                 🗑️ Очистить всё
                             </button>
@@ -272,77 +291,119 @@ export default function NotificationBell({ align = 'right' }) {
                     )}
                 </div>
 
-                {/* Список */}
                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                     {items.length === 0 && (
                         <div className="p-8 text-center text-white/40 text-sm">Пока пусто</div>
                     )}
-                    {items.map((n) => (
-                        <div
-                            key={n.id}
-                            className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
-                                !n.readAt ? 'bg-violet/5' : ''
-                            }`}
-                            onClick={() => handleClick(n)}
-                        >
-                            <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-sm font-semibold truncate">
-                                    {(TITLES[n.type] || TITLES.system)(n.payload || {})}
-                                </div>
-                                {(n.type === 'message' || n.type === 'mention') && (
-                                    <div className="text-xs text-white/50 truncate mt-0.5">
-                                        {n.payload.chatTitle && (
-                                            <span className="text-white/70">{n.payload.chatTitle}: </span>
+                    {items.map((n) => {
+                        const p = n.payload || {};
+                        const subline = (() => {
+                            if (n.type === 'message' || n.type === 'mention') {
+                                return (
+                                    <>
+                                        {p.chatTitle && (
+                                            <span className="text-white/70">{p.chatTitle}: </span>
                                         )}
-                                        {n.payload.preview}
-                                    </div>
-                                )}
-                                {n.type === 'post' && (
-                                    <div className="text-xs text-white/50 truncate mt-0.5">
-                                        {n.payload.preview}
-                                    </div>
-                                )}
-                                {n.type === 'certificate' && (
-                                    <div className="text-xs text-white/50 truncate mt-0.5">
-                                        {n.payload.courseTitle}
-                                    </div>
-                                )}
-                                {n.type === 'system' && (
-                                    <div className="text-xs text-white/50 truncate mt-0.5">
-                                        {n.payload.message}
-                                    </div>
-                                )}
-                                {n.type === 'report' && (
-                                    <div className="text-xs text-white/50 truncate mt-0.5">
-                                        Причина: {n.payload.reason}
-                                        {n.payload.autoAction && (
-                                            <span className="ml-2 text-pink">· авто: {n.payload.autoAction}</span>
+                                        {p.preview}
+                                    </>
+                                );
+                            }
+                            if (n.type === 'post') return p.preview;
+                            if (n.type === 'certificate') return p.courseTitle;
+                            if (n.type === 'system') return p.message;
+                            if (n.type === 'report') {
+                                return (
+                                    <>
+                                        Причина: {p.reason}
+                                        {p.autoAction && (
+                                            <span className="ml-2 text-pink">
+                                                · авто: {p.autoAction}
+                                            </span>
                                         )}
-                                    </div>
-                                )}
-                                <div className="text-[10px] text-white/30 mt-1">
-                                    {new Date(n.createdAt).toLocaleString('ru-RU')}
-                                </div>
-                            </div>
-                            {!n.readAt && (
-                                <div className="w-2 h-2 rounded-full bg-pink shrink-0 mt-2" />
-                            )}
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    remove(n.id);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
-                                title="Удалить"
+                                    </>
+                                );
+                            }
+                            if (n.type === 'lesson_new') {
+                                return `в курсе «${p.courseTitle || ''}»`;
+                            }
+                            if (n.type === 'practical_scheduled') {
+                                return p.scheduledAt
+                                    ? new Date(p.scheduledAt).toLocaleString('ru-RU', {
+                                        day: '2-digit', month: 'short',
+                                        hour: '2-digit', minute: '2-digit',
+                                    })
+                                    : '';
+                            }
+                            if (n.type === 'practical_due') {
+                                return p.scheduledAt
+                                    ? `в ${new Date(p.scheduledAt).toLocaleTimeString('ru-RU', {
+                                        hour: '2-digit', minute: '2-digit',
+                                    })}`
+                                    : '';
+                            }
+                            if (n.type === 'homework_due') {
+                                return p.dueAt
+                                    ? `до ${new Date(p.dueAt).toLocaleString('ru-RU', {
+                                        day: '2-digit', month: 'short',
+                                        hour: '2-digit', minute: '2-digit',
+                                    })}`
+                                    : '';
+
+
+                            }
+                            if (n.type === 'lesson_unlocked') {
+                                return `в курсе «${p.courseTitle || ''}»`;
+                            }
+                            if (n.type === 'homework_overdue') {
+                                return p.dueAt
+                                    ? `срок истёк ${new Date(p.dueAt).toLocaleString('ru-RU', {
+                                        day: '2-digit', month: 'short',
+                                        hour: '2-digit', minute: '2-digit',
+                                    })}`
+                                    : '';
+                            }
+                            return null;
+                        })();
+                        return (
+                            <div
+                                key={n.id}
+                                className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
+                                    !n.readAt ? 'bg-violet/5' : ''
+                                }`}
+                                onClick={() => handleClick(n)}
                             >
-                                ✕
-                            </button>
-                        </div>
-                    ))}
+                                <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-semibold truncate">
+                                        {(TITLES[n.type] || TITLES.system)(p)}
+                                    </div>
+                                    {subline && (
+                                        <div className="text-xs text-white/50 truncate mt-0.5">
+                                            {subline}
+                                        </div>
+                                    )}
+                                    <div className="text-[10px] text-white/30 mt-1">
+                                        {new Date(n.createdAt).toLocaleString('ru-RU')}
+                                    </div>
+                                </div>
+                                {!n.readAt && (
+                                    <div className="w-2 h-2 rounded-full bg-pink shrink-0 mt-2" />
+                                )}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        remove(n.id);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
+                                    title="Удалить"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        );
+                    })}
                 </div>
 
-                {/* Футер */}
                 <Link
                     to="/app/notifications"
                     onClick={() => setOpen(false)}
@@ -353,7 +414,6 @@ export default function NotificationBell({ align = 'right' }) {
                         : 'Открыть страницу уведомлений'}
                 </Link>
 
-                {/* Подтверждение очистки */}
                 {confirm && (
                     <div
                         className="absolute inset-0 bg-black/70 backdrop-blur-sm grid place-items-center p-4 z-10"

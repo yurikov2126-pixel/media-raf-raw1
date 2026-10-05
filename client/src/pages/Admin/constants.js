@@ -4,6 +4,7 @@ export const TABS = [
     ['moderation', 'Модерация', '🛡️'],
     ['users', 'Пользователи', '👥'],
     ['courses', 'Курсы', '📚'],
+    ['practicals-homework', 'Практики и ДЗ', '🎯'],
     ['wiki', 'Wiki', '📖'],
     ['certificates', 'Сертификаты', '🏆'],
     ['broadcast', 'Рассылки', '📢'],
@@ -13,7 +14,7 @@ export const TABS = [
     ['modules', 'Модули', '🧩'],
     ['backups', 'Бэкапы', '🗄️'],
     ['password-resets', 'Восстановление', '🔑'],
-    ['gamification', 'Геймификация', '🎮'],   // ← эта строка
+    ['gamification', 'Геймификация', '🎮'],
     ['settings', 'Система', '⚙️'],
 ];
 

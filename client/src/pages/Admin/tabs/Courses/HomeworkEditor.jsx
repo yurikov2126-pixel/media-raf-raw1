@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
 
+function toLocalInput(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function HomeworkEditor({
                                            lessonId,
                                            homework,
@@ -13,6 +20,10 @@ export default function HomeworkEditor({
         description: homework?.description || '',
         maxFiles: homework?.maxFiles ?? 3,
         maxFileSizeMb: homework?.maxFileSizeMb ?? 50,
+        dueAt: toLocalInput(homework?.dueAt),
+        hoursToComplete: homework?.hoursToComplete ?? '',
+        latePenaltyPerDay: homework?.latePenaltyPerDay ?? 0,
+        latePenaltyMax: homework?.latePenaltyMax ?? 5,
     });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -32,6 +43,12 @@ export default function HomeworkEditor({
                 description: form.description,
                 maxFiles: Number(form.maxFiles) || 3,
                 maxFileSizeMb: Number(form.maxFileSizeMb) || 50,
+                hoursToComplete: form.hoursToComplete === ''
+                    ? null
+                    : Number(form.hoursToComplete) || null,
+                dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null,
+                latePenaltyPerDay: Number(form.latePenaltyPerDay) || 0,
+                latePenaltyMax: Number(form.latePenaltyMax) || 5,
             };
             const saved = homework
                 ? await api(`/admin/homework/${homework.id}`, {
@@ -69,7 +86,7 @@ export default function HomeworkEditor({
     };
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-3">
             <div className="text-sm font-bold mb-1">
                 📋 Домашнее задание {homework ? '(создано)' : '(нет)'}
             </div>
@@ -78,39 +95,149 @@ export default function HomeworkEditor({
                     {error}
                 </div>
             )}
-            <input
-                className="input"
-                value={form.title}
-                onChange={set('title')}
-                placeholder="Название ДЗ"
-            />
-            <textarea
-                rows={6}
-                className="input resize-none text-sm"
-                value={form.description}
-                onChange={set('description')}
-                placeholder="Описание задания (поддерживается markdown)"
-            />
-            <div className="grid grid-cols-2 gap-2">
+
+            <div>
+                <label className="text-xs text-white/40 uppercase block mb-1">Название</label>
                 <input
-                    type="number"
-                    min="1"
-                    max="20"
                     className="input"
-                    value={form.maxFiles}
-                    onChange={set('maxFiles')}
-                    placeholder="Макс. файлов"
-                />
-                <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    className="input"
-                    value={form.maxFileSizeMb}
-                    onChange={set('maxFileSizeMb')}
-                    placeholder="Макс. размер, МБ"
+                    value={form.title}
+                    onChange={set('title')}
+                    placeholder="Название ДЗ"
                 />
             </div>
+
+            <div>
+                <label className="text-xs text-white/40 uppercase block mb-1">
+                    Описание (поддерживает markdown)
+                </label>
+                <textarea
+                    rows={6}
+                    className="input resize-none text-sm"
+                    value={form.description}
+                    onChange={set('description')}
+                    placeholder="Описание задания"
+                />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs text-white/40 uppercase block mb-1">
+                        Макс. файлов
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        className="input"
+                        value={form.maxFiles}
+                        onChange={set('maxFiles')}
+                    />
+                </div>
+                <div>
+                    <label className="text-xs text-white/40 uppercase block mb-1">
+                        Макс. размер (МБ)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        className="input"
+                        value={form.maxFileSizeMb}
+                        onChange={set('maxFileSizeMb')}
+                    />
+                </div>
+            </div>
+
+            {/* ─── Срок сдачи ─── */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <div className="text-xs text-white/60 uppercase font-semibold">
+                    ⏱ Срок сдачи
+                </div>
+
+                <div>
+                    <label className="text-xs text-white/40 uppercase block mb-1">
+                        Часов на выполнение после прохождения урока
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="2000"
+                        className="input"
+                        value={form.hoursToComplete}
+                        onChange={set('hoursToComplete')}
+                        placeholder="например, 24"
+                    />
+                    <div className="text-[11px] text-white/40 mt-1">
+                        Отсчёт начнётся в момент, когда студент пройдёт урок.
+                    </div>
+                </div>
+
+                <div>
+                    <label className="text-xs text-white/40 uppercase block mb-1">
+                        Или фиксированная дата
+                    </label>
+                    <input
+                        type="datetime-local"
+                        className="input"
+                        value={form.dueAt}
+                        onChange={set('dueAt')}
+                    />
+                    <div className="text-[11px] text-white/40 mt-1">
+                        Если указано «часов на выполнение» — фиксированная дата игнорируется.
+                    </div>
+                </div>
+            </div>
+
+            {/* ─── Штраф за просрочку ─── */}
+            <div className="p-3 rounded-xl bg-pink/5 border border-pink/20 space-y-3">
+                <div className="text-xs text-pink uppercase font-semibold">
+                    ⚠️ Штраф за просрочку
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                        <label className="text-xs text-white/40 uppercase block mb-1">
+                            Баллов за каждые 24 ч просрочки
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="5"
+                            step="0.1"
+                            className="input"
+                            value={form.latePenaltyPerDay}
+                            onChange={set('latePenaltyPerDay')}
+                        />
+                        <div className="text-[11px] text-white/40 mt-1">
+                            0 — штрафа нет. Например, 0.5 — минус полбалла в сутки.
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs text-white/40 uppercase block mb-1">
+                            Максимум снятия (баллов)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="5"
+                            step="0.1"
+                            className="input"
+                            value={form.latePenaltyMax}
+                            onChange={set('latePenaltyMax')}
+                        />
+                        <div className="text-[11px] text-white/40 mt-1">
+                            Оценка не опустится ниже 1 из 5.
+                        </div>
+                    </div>
+                </div>
+
+                <div className="text-[11px] text-white/50">
+                    Штраф фиксируется в момент сдачи. Например: 24 ч, потом ещё
+                    каждые сутки. При проверке руководитель видит рекомендованную оценку
+                    с учётом штрафа.
+                </div>
+            </div>
+
             <div className="flex gap-2">
                 <button
                     onClick={save}

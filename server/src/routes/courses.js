@@ -9,7 +9,7 @@ import {
     onCertificateEarned,
 } from '../lib/gamification.js';
 import { getLessonStatuses, computeAccess } from '../lib/courseLogic.js';
-import { shuffledIndices, shuffleArray } from '../lib/shuffle.js';   // ← добавьте это
+import { shuffledIndices, shuffleArray } from '../lib/shuffle.js';
 
 const router = Router();
 
@@ -61,7 +61,6 @@ function scoreQuestion(question, userAnswer, seed) {
     const max = question.points;
     let gained = 0;
 
-    // Те же перестановки, что и в sanitizePayload
     const permOptions = (Array.isArray(p.options) && p.options.length)
         ? shuffledIndices(p.options.length, `${seed}:${question.id}`)
         : null;
@@ -84,7 +83,6 @@ function scoreQuestion(question, userAnswer, seed) {
             const ua = Array.isArray(userAnswer) ? userAnswer.map(Number) : [];
             const ca = Array.isArray(p.correct) ? p.correct.map(Number) : [];
             if (permOptions) {
-                // переводим выбранные shuffled-индексы в исходные
                 const uaOriginal = ua.map((s) => permOptions[s]);
                 const uaSet = new Set(uaOriginal);
                 const caSet = new Set(ca);
@@ -237,6 +235,16 @@ router.get('/:slug', auth, async (req, res) => {
     // Статусы и доступ
     const statuses = await getLessonStatuses(req.user.id, course.id);
 
+    // Дедлайны ДЗ для текущего пользователя (batch-запрос прогресса)
+    const hwLessonIds = course.lessons.filter((l) => l.homework).map((l) => l.id);
+    const hwProgresses = hwLessonIds.length
+        ? await prisma.lessonProgress.findMany({
+            where: { userId: req.user.id, lessonId: { in: hwLessonIds } },
+            select: { lessonId: true, completed: true, completedAt: true },
+        })
+        : [];
+    const hwProgressMap = new Map(hwProgresses.map((p) => [p.lessonId, p]));
+
     const lessons = course.lessons.map((l, i) => {
         const s = statuses[i];
         const access = computeAccess({
@@ -247,19 +255,38 @@ router.get('/:slug', auth, async (req, res) => {
             unlockOverrides: overrideSet,
         });
 
-        // Чистим ответы теста от правильных вариантов
+        // Чистим ответы теста от правильных вариантов + шаффлим
         const safeTest = l.test
             ? {
                 ...l.test,
                 questions: l.test.questions.map((q) => ({
                     ...q,
-                    payload: sanitizePayload(q, req.user.id),   // ← стало
+                    payload: sanitizePayload(q, req.user.id),
                 })),
             }
             : null;
 
+        // Дедлайн ДЗ
+        let homeworkWithDeadline = l.homework;
+        if (l.homework) {
+            const hw = l.homework;
+            let deadline = null;
+            if (hw.hoursToComplete != null) {
+                const lp = hwProgressMap.get(l.id);
+                if (lp?.completed && lp.completedAt) {
+                    deadline = new Date(
+                        lp.completedAt.getTime() + hw.hoursToComplete * 60 * 60 * 1000
+                    );
+                }
+            } else if (hw.dueAt) {
+                deadline = hw.dueAt;
+            }
+            homeworkWithDeadline = { ...hw, deadline };
+        }
+
         return {
             ...l,
+            homework: homeworkWithDeadline,
             test: safeTest,
             unlocked: access.unlocked,
             unlockAt: access.unlockAt,
@@ -306,6 +333,7 @@ router.post('/:idOrSlug/enroll', auth, async (req, res) => {
         res.status(500).json({ error: e.message || 'Не удалось записаться' });
     }
 });
+
 /* ─────────── Прогресс по курсу ─────────── */
 async function recalcProgress(userId, courseId) {
     const statuses = await getLessonStatuses(userId, courseId);
@@ -354,8 +382,16 @@ router.post('/lessons/:lessonId/complete', auth, async (req, res) => {
 
         await prisma.lessonProgress.upsert({
             where: { userId_lessonId: { userId: req.user.id, lessonId: lesson.id } },
-            update: { completed: true },
-            create: { userId: req.user.id, lessonId: lesson.id, completed: true },
+            update: {
+                completed: true,
+                completedAt: existing?.completedAt || new Date(),
+            },
+            create: {
+                userId: req.user.id,
+                lessonId: lesson.id,
+                completed: true,
+                completedAt: new Date(),
+            },
         });
 
         const progress = await recalcProgress(req.user.id, lesson.courseId);
@@ -412,7 +448,7 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
 
         for (const q of test.questions) {
             const userAnswer = answers ? answers[q.id] : undefined;
-            const r = scoreQuestion(q, userAnswer, req.user.id);    // ← стало
+            const r = scoreQuestion(q, userAnswer, req.user.id);
             gained += r.gained;
             max += r.max;
 
@@ -421,7 +457,7 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
                     id: q.id,
                     type: q.type,
                     text: q.text,
-                    payload: sanitizePayload(q, req.user.id),       // ← стало
+                    payload: sanitizePayload(q, req.user.id),
                     userAnswer: userAnswer ?? null,
                     gained: r.gained,
                     max: r.max,
@@ -453,8 +489,16 @@ router.post('/tests/:testId/submit', auth, async (req, res) => {
 
             await prisma.lessonProgress.upsert({
                 where: { userId_lessonId: { userId: req.user.id, lessonId: test.lessonId } },
-                update: { completed: true },
-                create: { userId: req.user.id, lessonId: test.lessonId, completed: true },
+                update: {
+                    completed: true,
+                    completedAt: existing?.completedAt || new Date(),
+                },
+                create: {
+                    userId: req.user.id,
+                    lessonId: test.lessonId,
+                    completed: true,
+                    completedAt: new Date(),
+                },
             });
 
             const progress = await recalcProgress(req.user.id, test.lesson.courseId);
