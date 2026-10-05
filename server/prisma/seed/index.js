@@ -6,6 +6,7 @@ import { editing } from './courses/editing/index.js';
 import { radio } from './courses/radio/index.js';
 import { studioSound } from './courses/studio-sound/index.js';
 import { liveSound } from './courses/live-sound/index.js';
+import { seedWiki } from './wiki/index.js';
 
 const prisma = new PrismaClient();
 
@@ -22,6 +23,9 @@ const COURSES = [
  * Идемпотентный seed: удаляет все курсы и создаёт заново.
  * Всё, что связано с курсами (уроки, тесты, прогресс, сертификаты),
  * удаляется каскадно. Пользователи и остальные данные сохраняются.
+ *
+ * Вики сидируется отдельно и НЕ удаляется — только upsert по slug.
+ * Существующие статьи не затрагиваются.
  */
 async function main() {
     console.log('=== Seed курсов ===');
@@ -111,6 +115,10 @@ async function main() {
                         description: l.homework.description,
                         maxFiles: l.homework.maxFiles ?? 3,
                         maxFileSizeMb: l.homework.maxFileSizeMb ?? 50,
+                        hoursToComplete: l.homework.hoursToComplete ?? null,
+                        dueAt: l.homework.dueAt ? new Date(l.homework.dueAt) : null,
+                        latePenaltyPerDay: l.homework.latePenaltyPerDay ?? 0,
+                        latePenaltyMax: l.homework.latePenaltyMax ?? 5,
                     },
                 });
             }
@@ -120,6 +128,9 @@ async function main() {
         console.log(`  практик: ${data.lessons.filter((l) => l.practical).length}`);
         console.log(`  ДЗ: ${data.lessons.filter((l) => l.homework).length}`);
     }
+
+    // ─── Вики ───
+    await seedWiki(prisma);
 
     console.log('\n=== Готово ===');
 }
