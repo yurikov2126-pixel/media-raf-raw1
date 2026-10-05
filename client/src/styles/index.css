@@ -836,6 +836,78 @@ html, body {
     word-break: break-word;
 }
 
+.mrr-md-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9em;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.mrr-md-content thead {
+    background-color: rgba(167, 139, 250, 0.12);
+}
+
+.mrr-md-content th {
+    text-align: left;
+    padding: 0.65rem 0.9rem;
+    font-weight: 700;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    white-space: nowrap;
+}
+
+.mrr-md-content td {
+    padding: 0.6rem 0.9rem;
+    color: rgba(255, 255, 255, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    vertical-align: top;
+}
+
+.mrr-md-content tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.mrr-md-content tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Горизонтальный скролл для широких таблиц на мобилке */
+.mrr-md-content table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+    white-space: nowrap;
+}
+.mrr-md-content table thead,
+.mrr-md-content table tbody,
+.mrr-md-content table tr {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+}
+
+/* Светлая тема */
+[data-theme="light"] .mrr-md-content table {
+    background-color: rgba(15, 15, 20, 0.03);
+}
+[data-theme="light"] .mrr-md-content thead {
+    background-color: rgba(124, 58, 237, 0.08);
+}
+[data-theme="light"] .mrr-md-content th {
+    color: #0f0f14;
+    border-bottom-color: rgba(15, 15, 20, 0.1);
+}
+[data-theme="light"] .mrr-md-content td {
+    color: rgba(15, 15, 20, 0.85);
+    border-bottom-color: rgba(15, 15, 20, 0.06);
+}
+[data-theme="light"] .mrr-md-content tbody tr:hover {
+    background-color: rgba(15, 15, 20, 0.04);
+}
+
 .mrr-md-content > *:first-child { margin-top: 0; }
 .mrr-md-content > *:last-child { margin-bottom: 0; }
 

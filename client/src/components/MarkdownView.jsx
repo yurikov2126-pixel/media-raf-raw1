@@ -10,31 +10,93 @@ function escapeHtml(s) {
 }
 
 /**
- * Инлайновая разметка: **жирный**, *курсив*, `код`, [ссылка](url).
- * Возвращает HTML-строку, безопасную для dangerouslySetInnerHTML,
- * потому что сначала экранируется исходный текст, а потом
- * в него вставляются только наши теги.
+ * Inline-разметка: **жирный**, *курсив*, `код`, [ссылка](url).
+ * Возвращает безопасную HTML-строку для dangerouslySetInnerHTML.
  */
 function renderInline(text) {
     let s = escapeHtml(text);
-
-    // 1) bold: **...** (жадно до следующего **)
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-    // 2) italic: *...* (не задевая остатки от bold)
     s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-
-    // 3) inline code: `...`
     s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-
-    // 4) ссылки: [текст](url)
     s = s.replace(
         /\[([^\]]+)\]\(([^)\s]+)\)/g,
         '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>'
     );
-
     return s;
 }
+
+/* ─────────── Таблицы ─────────── */
+
+/**
+ * Разделительная строка таблицы.
+ * Пример: |---|---| или |:---|:---:|---:|
+ */
+function isTableSeparator(line) {
+    const t = line.trim();
+    if (!t.includes('-')) return false;
+    // Только -, :, | и пробелы
+    return /^\|?[\s:|-]+\|?$/.test(t);
+}
+
+/**
+ * Есть ли тут начало таблицы:
+ * текущая строка содержит "|" и следующая — разделитель.
+ */
+function isTableStart(lines, i) {
+    const cur = lines[i];
+    const next = lines[i + 1];
+    if (cur == null || next == null) return false;
+    if (!cur.includes('|')) return false;
+    return isTableSeparator(next);
+}
+
+/** Разбивает строку "| a | b | c |" на ["a", "b", "c"]. */
+function splitTableRow(line) {
+    let t = line.trim();
+    if (t.startsWith('|')) t = t.slice(1);
+    if (t.endsWith('|')) t = t.slice(0, -1);
+    return t.split('|').map((c) => c.trim());
+}
+
+/** Определяет выравнивание колонки по разделителю: left | center | right | none */
+function parseAlignments(sepLine) {
+    const cells = splitTableRow(sepLine);
+    return cells.map((c) => {
+        const t = c.trim();
+        const left = t.startsWith(':');
+        const right = t.endsWith(':');
+        if (left && right) return 'center';
+        if (right) return 'right';
+        if (left) return 'left';
+        return null;
+    });
+}
+
+function renderTable(headerCells, rows, alignments) {
+    const styleFor = (i) => {
+        const a = alignments[i];
+        return a ? ` style="text-align:${a}"` : '';
+    };
+    const thead = headerCells
+        .map((c, i) => `<th${styleFor(i)}>${renderInline(c)}</th>`)
+        .join('');
+    const tbody = rows
+        .map(
+            (r) =>
+                '<tr>' +
+                headerCells
+                    .map((_, i) => {
+                        const cell = r[i] ?? '';
+                        return `<td${styleFor(i)}>${renderInline(cell)}</td>`;
+                    })
+                    .join('') +
+                '</tr>'
+        )
+        .join('');
+    return `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+}
+
+/* ─────────── Компонент ─────────── */
 
 /**
  * Markdown → HTML.
@@ -45,6 +107,7 @@ function renderInline(text) {
  *   > цитаты
  *   ```code blocks```
  *   --- разделитель
+ *   Таблицы (| a | b | + строка-разделитель)
  *
  * Стили задаются классом .mrr-md-content (см. index.css).
  */
@@ -70,7 +133,7 @@ export default function MarkdownView({ text, className = '' }) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
 
-        // Блок кода ```
+        /* ─── Блок кода ``` ─── */
         if (line.trim().startsWith('```')) {
             if (inCode) {
                 out.push(`<pre><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`);
@@ -88,14 +151,14 @@ export default function MarkdownView({ text, className = '' }) {
             continue;
         }
 
-        // Пустая строка
+        /* ─── Пустая строка ─── */
         if (!line.trim()) {
             closeList();
             closeBlockquote();
             continue;
         }
 
-        // Горизонтальный разделитель ---
+        /* ─── Горизонтальный разделитель --- ─── */
         if (/^---+\s*$/.test(line)) {
             closeList();
             closeBlockquote();
@@ -103,7 +166,30 @@ export default function MarkdownView({ text, className = '' }) {
             continue;
         }
 
-        // Заголовки #..######
+        /* ─── Таблица ───
+           Ловим её ДО заголовков, потому что строка может начинаться
+           с "|", а не с "#". */
+        if (isTableStart(lines, i)) {
+            closeList();
+            closeBlockquote();
+
+            const headerCells = splitTableRow(line);
+            const alignments = parseAlignments(lines[i + 1]);
+
+            // собираем строки тела
+            const rows = [];
+            let j = i + 2;
+            while (j < lines.length && lines[j].includes('|') && lines[j].trim()) {
+                rows.push(splitTableRow(lines[j]));
+                j++;
+            }
+
+            out.push(renderTable(headerCells, rows, alignments));
+            i = j - 1; // пропускаем обработанные строки
+            continue;
+        }
+
+        /* ─── Заголовки #..###### ─── */
         const h = line.match(/^(#{1,6})\s+(.*)$/);
         if (h) {
             closeList();
@@ -113,7 +199,7 @@ export default function MarkdownView({ text, className = '' }) {
             continue;
         }
 
-        // Цитата
+        /* ─── Цитата ─── */
         if (line.startsWith('> ')) {
             closeList();
             if (!inBlockquote) { out.push('<blockquote>'); inBlockquote = true; }
@@ -123,7 +209,7 @@ export default function MarkdownView({ text, className = '' }) {
             closeBlockquote();
         }
 
-        // Маркированный список
+        /* ─── Маркированный список ─── */
         if (/^[-*]\s+/.test(line)) {
             if (inOrderedList) { out.push('</ol>'); inOrderedList = false; }
             if (!inList) { out.push('<ul>'); inList = true; }
@@ -131,7 +217,7 @@ export default function MarkdownView({ text, className = '' }) {
             continue;
         }
 
-        // Нумерованный список
+        /* ─── Нумерованный список ─── */
         if (/^\d+\.\s+/.test(line)) {
             if (inList) { out.push('</ul>'); inList = false; }
             if (!inOrderedList) { out.push('<ol>'); inOrderedList = true; }
@@ -141,7 +227,7 @@ export default function MarkdownView({ text, className = '' }) {
 
         closeList();
 
-        // Обычный абзац
+        /* ─── Обычный абзац ─── */
         out.push(`<p>${renderInline(line)}</p>`);
     }
 
