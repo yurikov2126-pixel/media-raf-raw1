@@ -7,6 +7,20 @@ beforeAll(() => {
 });
 
 afterEach(async () => {
+    // Ждём завершения fire-and-forget задач (gamification, notify)
+    await new Promise((r) => setTimeout(r, 250));
+
+    // Посты удаляются каскадом вместе с юзерами,
+    // но на всякий случай чистим и их — если автор не наш.
+    await prisma.post.deleteMany({
+        where: {
+            OR: [
+                { author: { phone: { startsWith: '+7999' } } },
+                { author: { username: { startsWith: 'test_' } } }
+            ]
+        }
+    });
+
     await prisma.user.deleteMany({
         where: {
             OR: [

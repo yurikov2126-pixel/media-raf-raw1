@@ -41,8 +41,8 @@ router.get('/feed', auth, async (req, res) => {
 
     let nextCursor = null;
     if (posts.length > limit) {
-        const extra = posts.pop();
-        nextCursor = extra.id;
+        posts.pop(); // удаляем «лишний», он нужен был только для проверки «есть ещё»
+        nextCursor = posts[posts.length - 1].id; // cursor = ID последнего возвращённого
     }
 
     const myId = req.user.id;

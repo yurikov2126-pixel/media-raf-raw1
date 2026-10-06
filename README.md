@@ -15,6 +15,8 @@
 - [Переменные окружения](#-переменные-окружения)
 - [Структура проекта](#-структура-проекта)
 - [Работа с базой данных](#-работа-с-базой-данных)
+- [Тестирование](#-тестирование)
+- [CI/CD](#-cicd)
 - [Seed курсов](#-seed-курсов)
 - [API](#-api)
 - [PWA и офлайн-режим](#-pwa-и-офлайн-режим)
@@ -64,6 +66,12 @@
 - **PWA** с офлайн-режимом, splash-экраном и push-уведомлениями.
 - **Админ-панель** с полным управлением: пользователи, курсы, wiki, сертификаты, бэкапы, аналитика, пакетные операции.
 
+### Качество и автоматизация
+- **78 интеграционных тестов** (Vitest + Supertest) для API — auth и posts.
+- **GitHub Actions CI** — линт, тесты и сборка на каждый push и PR.
+- **GitHub Actions CD** — деплой на прод в один клик (ручной запуск из вкладки Actions).
+- **ESLint + Prettier** — единый стиль кода.
+
 ---
 
 ## 🛠 Стек технологий
@@ -71,7 +79,7 @@
 ### Backend
 | Технология | Назначение |
 |---|---|
-| **Node.js** (ESM) | Серверная среда |
+| **Node.js** (ESM) | Серверная среда (≥ 22) |
 | **Express** | HTTP-сервер |
 | **Prisma** | ORM |
 | **PostgreSQL** | Основная БД |
@@ -83,11 +91,19 @@
 | **web-push** | Push-уведомления |
 | **pg_dump / pg_restore** | Резервное копирование |
 
+### Backend — качество и тесты
+| Технология | Назначение |
+|---|---|
+| **Vitest 5** | Тест-раннер (ESM, быстрый) |
+| **Supertest** | HTTP-тесты против Express-приложения |
+| **ESLint 9** | Линтер (flat config) |
+| **Prettier** | Форматирование |
+
 ### Frontend
 | Технология | Назначение |
 |---|---|
 | **React 18** | UI |
-| **Vite** | Сборка |
+| **Vite 5** | Сборка |
 | **React Router** | Маршрутизация |
 | **Tailwind CSS** | Стилизация |
 | **Framer Motion** | Анимации (минимально) |
@@ -97,6 +113,13 @@
 | **qrcode.react** | QR-коды сертификатов |
 | **html-to-image + jsPDF** | PDF-экспорт сертификатов |
 | **vite-plugin-pwa** | PWA и Service Worker |
+
+### Инфраструктура
+| Технология | Назначение |
+|---|---|
+| **GitHub Actions** | CI (тесты, линт, сборка) + CD (деплой по SSH) |
+| **pm2** | Процесс-менеджер на сервере |
+| **Nginx** | Реверс-прокси, SSL, раздача SPA |
 
 ---
 
@@ -122,7 +145,8 @@
 **Ключевые принципы:**
 - **Клиент и сервер разделены.** Клиент знает только `VITE_API` и `VITE_SOCKET`.
 - **Аутентификация через JWT.** Токен хранится в `localStorage` (mrr_token). После смены пароля все старые токены инвалидируются через `passwordChangedAt`.
-- **Prisma — единая точка работы с БД.** Все миграции через `prisma db push`.
+- **Express-приложение отделено от запуска сервера.** `src/app.js` создаёт и настраивает `app` (без `listen`), `src/index.js` поднимает HTTP-сервер, Socket.IO и cron-задачи. Такое разделение позволяет тестировать API через Supertest без запуска реального сервера.
+- **Prisma — единая точка работы с БД.** Схема синхронизируется через `prisma db push`.
 - **Socket.IO** используется для чатов, typing-индикатора, уведомлений в реальном времени.
 - **PWA** работает офлайн: precache HTML/JS/CSS, кеш `/uploads`, офлайн-экран при отсутствии сети.
 
@@ -132,7 +156,7 @@
 
 ### Требования
 
-- **Node.js** ≥ 20
+- **Node.js** ≥ 22
 - **PostgreSQL** ≥ 14
 - **ffmpeg** (для waveform голосовых)
 - **pg_dump / pg_restore** (для бэкапов)
@@ -191,6 +215,16 @@ PORT=4000
 # GAMIFICATION_INACTIVITY_CRON="0 5 * * *"
 ```
 
+Создайте `server/.env.test` (для интеграционных тестов):
+
+```env
+DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test"
+JWT_SECRET="test-secret-do-not-use-in-prod"
+NODE_ENV="test"
+```
+
+> ⚠️ **Важно:** тесты пишут данные в БД. Никогда не запускайте их против продакшн-базы. Всегда используйте отдельную тестовую базу (`media_raf_raw_test`).
+
 Создайте `client/.env`:
 
 ```env
@@ -201,10 +235,13 @@ VITE_SOCKET="http://localhost:4000"
 ### Миграция и запуск
 
 ```bash
-# 1. Применить схему Prisma
+# 1. Применить схему Prisma (к основной и тестовой БД)
 cd server
 npx prisma db push
 npx prisma generate
+
+# Тестовая БД
+DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma db push --skip-generate
 
 # 2. Запустить сервер (dev)
 npm start
@@ -223,10 +260,15 @@ npm run dev
 ```
 media-raf-raw1/
 │
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                             # CI: lint + tests + build на push/PR
+│       └── deploy.yml                         # CD: деплой по SSH (workflow_dispatch)
+│
 ├── client/                                    # ─── React + Vite (SPA + PWA)
 │   │
 │   ├── public/                                # Статика, попадает в dist как есть
-│   │   ├── favicon.svg                        # Основная иконка (SVG)
+│   │   ├── favicon.svg
 │   │   ├── favicon-16.png
 │   │   ├── favicon-32.png
 │   │   ├── apple-touch-icon.png               # 180×180 для iOS
@@ -237,154 +279,147 @@ media-raf-raw1/
 │   │
 │   ├── src/
 │   │   │
-│   │   ├── api/                               # Работа с HTTP-API
+│   │   ├── api/
 │   │   │   └── client.js                      # fetch-обёртка, ApiError, uploadFile/uploadBlob, ping
 │   │   │
 │   │   ├── components/                        # Переиспользуемые компоненты
+│   │   │   ├── messenger/
+│   │   │   │   ├── MessageBubble.jsx
+│   │   │   │   ├── GroupAvatar.jsx
+│   │   │   │   ├── NewChatButton.jsx
+│   │   │   │   └── MessengerNavMenu.jsx
 │   │   │   │
-│   │   │   ├── messenger/                     # Компоненты мессенджера
-│   │   │   │   ├── MessageBubble.jsx          # Пузырь сообщения с реакциями
-│   │   │   │   ├── GroupAvatar.jsx            # Сетка 2×2 из аватаров
-│   │   │   │   ├── NewChatButton.jsx          # Модалка создания чата
-│   │   │   │   └── MessengerNavMenu.jsx       # Popover-меню (опционально)
-│   │   │   │
-│   │   │   ├── Layout.jsx                     # Общий каркас: сайдбар + мобильный хедер + outlet
-│   │   │   ├── MobileNav.jsx                  # Нижняя навигация на мобильных
-│   │   │   ├── Avatar.jsx                     # Аватар с индикатором «онлайн»
-│   │   │   ├── NotificationBell.jsx           # Колокольчик + попап уведомлений
-│   │   │   ├── NetworkBanner.jsx              # Баннер при потере сети
-│   │   │   ├── ThemeToggle.jsx                # Переключатель темы
-│   │   │   ├── SplashScreen.jsx               # React-сплэш после гидратации
-│   │   │   ├── OfflineScreen.jsx              # Полноэкранная заглушка без сети
-│   │   │   ├── OnboardingModal.jsx            # Пошаговый тур по платформе
-│   │   │   │
-│   │   │   ├── PostCard.jsx                   # Карточка поста (обычная/компактная)
-│   │   │   ├── PostReactions.jsx              # Панель реакций на пост
-│   │   │   ├── CommentSection.jsx             # Комментарии с вложенностью
-│   │   │   ├── ReportButton.jsx               # Кнопка «Пожаловаться» + модалка
-│   │   │   ├── MessageText.jsx                # Рендер markdown + @упоминания
-│   │   │   │
-│   │   │   ├── VoicePlayer.jsx                # Плеер голосовых с waveform и перемоткой
-│   │   │   ├── VoiceRecorder.jsx              # (в Messenger) запись голосовых
-│   │   │   ├── ImageViewer.jsx                # Полноэкранный просмотрщик с свайпами
-│   │   │   ├── ImageCropper.jsx               # Кроппер (аватары, обложки, посты)
-│   │   │   ├── MediaGalleryModal.jsx          # Галерея медиа в чате
-│   │   │   ├── ProfileEditor.jsx              # Модалка редактирования профиля
-│   │   │   ├── ChangePasswordModal.jsx        # Смена пароля
-│   │   │   ├── MentionSuggest.jsx             # Автокомплит @упоминаний
-│   │   │   ├── PinnedBar.jsx                  # Плашка закреплённого сообщения
-│   │   │   │
-│   │   │   ├── LevelBadge.jsx                 # Значок уровня
-│   │   │   ├── XpProgressBar.jsx              # Прогресс XP до след. уровня
-│   │   │   ├── AchievementCard.jsx            # Карточка одного достижения
-│   │   │   ├── AchievementToast.jsx           # Pop-up о level-up / достижении
-│   │   │   ├── QuestCard.jsx                  # Карточка ежедневного квеста
-│   │   │   │
-│   │   │   ├── OnboardingModal.jsx
+│   │   │   ├── Layout.jsx
+│   │   │   ├── MobileNav.jsx
+│   │   │   ├── Avatar.jsx
+│   │   │   ├── NotificationBell.jsx
+│   │   │   ├── NetworkBanner.jsx
+│   │   │   ├── ThemeToggle.jsx
 │   │   │   ├── SplashScreen.jsx
+│   │   │   ├── OfflineScreen.jsx
+│   │   │   ├── OnboardingModal.jsx
 │   │   │   │
-│   │   │   └── Admin/                         # Компоненты только для админки
-│   │   │       ├── ConfirmDialog.jsx          # Универсальный диалог подтверждения
-│   │   │       └── SearchSelect.jsx           # Дропдаун с поиском
-│   │   │
-│   │   ├── hooks/                             # Кастомные React-хуки
-│   │   │   ├── usePageMeta.js                 # Динамический <title> + og-теги
-│   │   │   ├── usePostDraft.js                # Автосохранение черновика поста
-│   │   │   ├── usePullToRefresh.js            # Pull-to-refresh для списков
-│   │   │   └── useLocalStorage.js             # Синхронизация стейта с localStorage
-│   │   │
-│   │   ├── lib/                               # Внутренние утилиты клиента
-│   │   │   ├── modalStack.js                  # Счётчик открытых модалок (для отключения свайпов)
-│   │   │   └── push.js                        # Web Push API, проверка iOS/standalone
-│   │   │
-│   │   ├── pages/                             # Страницы (роуты)
+│   │   │   ├── PostCard.jsx
+│   │   │   ├── PostReactions.jsx
+│   │   │   ├── CommentSection.jsx
+│   │   │   ├── ReportButton.jsx
+│   │   │   ├── MessageText.jsx
 │   │   │   │
-│   │   │   ├── Landing.jsx                    # Публичный лендинг
-│   │   │   ├── Login.jsx                      # Вход + регистрация
-│   │   │   ├── Feed.jsx                       # Лента с infinite scroll
-│   │   │   ├── Profile.jsx                    # Профиль (свой/чужой)
-│   │   │   ├── Messenger.jsx                  # Мессенджер (список + чат)
-│   │   │   ├── Notifications.jsx              # Страница уведомлений
-│   │   │   ├── Leaderboard.jsx                # Рейтинг
-│   │   │   ├── Courses.jsx                    # Список курсов
-│   │   │   ├── CourseView.jsx                 # Курс с уроками, тестами, практиками, ДЗ
-│   │   │   ├── Certificate.jsx                # Сертификат с PDF-экспортом
-│   │   │   ├── Verify.jsx                     # Публичная проверка сертификата
-│   │   │   ├── Wiki.jsx                       # Список статей
-│   │   │   ├── WikiArticle.jsx                # Статья с хлебными крошками
+│   │   │   ├── VoicePlayer.jsx
+│   │   │   ├── VoiceRecorder.jsx
+│   │   │   ├── ImageViewer.jsx
+│   │   │   ├── ImageCropper.jsx
+│   │   │   ├── MediaGalleryModal.jsx
+│   │   │   ├── ProfileEditor.jsx
+│   │   │   ├── ChangePasswordModal.jsx
+│   │   │   ├── MentionSuggest.jsx
+│   │   │   ├── PinnedBar.jsx
 │   │   │   │
-│   │   │   └── Admin/                         # ─── Админ-панель (модульная)
-│   │   │       ├── index.jsx                  # Роутер вкладок
-│   │   │       ├── constants.js               # TABS, TEMPLATES, QUESTION_TYPES
-│   │   │       ├── utils.js                   # downloadJSON, fmtSize, renderMarkdownSimple
-│   │   │       │
-│   │   │       ├── components/                # См. выше
-│   │   │       │
-│   │   │       └── tabs/                      # Одна вкладка = один раздел
-│   │   │           ├── Dashboard.jsx          # Метрики + инфо о сервере + обслуживание БД
-│   │   │           ├── Analytics.jsx          # Графики (Recharts)
-│   │   │           ├── Users.jsx              # Фильтры, массовые действия, экспорт CSV
-│   │   │           ├── Certificates.jsx       # Список сертификатов + выдача
-│   │   │           ├── Broadcast.jsx          # In-app рассылка
-│   │   │           ├── Push.jsx               # Push-рассылка + управление подписками + автоочистка
-│   │   │           ├── Backups.jsx            # Бэкапы PostgreSQL + VACUUM
-│   │   │           ├── Moderation.jsx         # Очередь жалоб
-│   │   │           ├── PasswordResets.jsx     # Заявки на сброс пароля
-│   │   │           ├── Modules.jsx            # Включение/выключение разделов
-│   │   │           ├── Settings.jsx           # Системные настройки + модерация + автоочистка уведомлений
-│   │   │           ├── Gamification.jsx       # Настройки геймификации (подтабы)
+│   │   │   ├── LevelBadge.jsx
+│   │   │   ├── XpProgressBar.jsx
+│   │   │   ├── AchievementCard.jsx
+│   │   │   ├── AchievementToast.jsx
+│   │   │   ├── QuestCard.jsx
+│   │   │   │
+│   │   │   └── Admin/
+│   │   │       ├── ConfirmDialog.jsx
+│   │   │       └── SearchSelect.jsx
+│   │   │
+│   │   ├── hooks/
+│   │   │   ├── usePageMeta.js
+│   │   │   ├── usePostDraft.js
+│   │   │   ├── usePullToRefresh.js
+│   │   │   └── useLocalStorage.js
+│   │   │
+│   │   ├── lib/
+│   │   │   ├── modalStack.js
+│   │   │   └── push.js
+│   │   │
+│   │   ├── pages/
+│   │   │   ├── Landing.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Feed.jsx
+│   │   │   ├── Profile.jsx
+│   │   │   ├── Messenger.jsx
+│   │   │   ├── Notifications.jsx
+│   │   │   ├── Leaderboard.jsx
+│   │   │   ├── Courses.jsx
+│   │   │   ├── CourseView.jsx
+│   │   │   ├── Certificate.jsx
+│   │   │   ├── Verify.jsx
+│   │   │   ├── Wiki.jsx
+│   │   │   ├── WikiArticle.jsx
+│   │   │   │
+│   │   │   └── Admin/
+│   │   │       ├── index.jsx
+│   │   │       ├── constants.js
+│   │   │       ├── utils.js
+│   │   │       ├── components/
+│   │   │       └── tabs/
+│   │   │           ├── Dashboard.jsx
+│   │   │           ├── Analytics.jsx
+│   │   │           ├── Users.jsx
+│   │   │           ├── Certificates.jsx
+│   │   │           ├── Broadcast.jsx
+│   │   │           ├── Push.jsx
+│   │   │           ├── Backups.jsx
+│   │   │           ├── Moderation.jsx
+│   │   │           ├── PasswordResets.jsx
+│   │   │           ├── Modules.jsx
+│   │   │           ├── Settings.jsx
+│   │   │           ├── Gamification.jsx
 │   │   │           │
 │   │   │           ├── Courses/
-│   │   │           │   ├── index.jsx          # Список + экспорт
-│   │   │           │   ├── CourseEditor.jsx   # Редактор курса + мета
-│   │   │           │   ├── LessonEditor.jsx   # Редактор урока
-│   │   │           │   ├── TestEditor.jsx     # Редактор теста
-│   │   │           │   └── QuestionEditor.jsx # Редактор вопроса (5 типов)
+│   │   │           │   ├── index.jsx
+│   │   │           │   ├── CourseEditor.jsx
+│   │   │           │   ├── LessonEditor.jsx
+│   │   │           │   ├── TestEditor.jsx
+│   │   │           │   └── QuestionEditor.jsx
 │   │   │           │
 │   │   │           ├── Wiki/
-│   │   │           │   ├── index.jsx          # Список статей и категорий
+│   │   │           │   ├── index.jsx
 │   │   │           │   ├── CategoryEditor.jsx
-│   │   │           │   └── ArticleEditor.jsx  # Markdown-редактор с превью
+│   │   │           │   └── ArticleEditor.jsx
 │   │   │           │
 │   │   │           ├── Bulk/
-│   │   │           │   ├── index.jsx          # Пакетные операции + журнал
+│   │   │           │   ├── index.jsx
 │   │   │           │   ├── RecalcUserCourseForm.jsx
 │   │   │           │   ├── BulkCourseAction.jsx
-│   │   │           │   └── CurriculumImportForm.jsx  # Импорт курсов из JSON
+│   │   │           │   └── CurriculumImportForm.jsx
 │   │   │           │
 │   │   │           └── SiteDesign/
-│   │   │               ├── index.jsx          # Подтабы
-│   │   │               ├── BrandEditor.jsx    # Логотип, цвета, градиент
-│   │   │               ├── LandingEditor.jsx  # Hero, фичи, CTA
-│   │   │               ├── MenuEditor.jsx     # Пункты навигации
-│   │   │               ├── FooterEditor.jsx   # Футер и ссылки
-│   │   │               ├── CertificateEditor.jsx  # Шаблоны сертификатов
-│   │   │               └── ThemeEditor.jsx    # Тема по умолчанию
+│   │   │               ├── index.jsx
+│   │   │               ├── BrandEditor.jsx
+│   │   │               ├── LandingEditor.jsx
+│   │   │               ├── MenuEditor.jsx
+│   │   │               ├── FooterEditor.jsx
+│   │   │               ├── CertificateEditor.jsx
+│   │   │               └── ThemeEditor.jsx
 │   │   │
-│   │   ├── stickers/                          # SVG-стикеры
-│   │   │   └── pack.jsx                       # STICKERS, Sticker, QUICK_EMOJI
+│   │   ├── stickers/
+│   │   │   └── pack.jsx
 │   │   │
-│   │   ├── store/                             # React-контексты (провайдеры)
-│   │   │   ├── auth.jsx                       # user, token, login/logout, register
-│   │   │   ├── socket.jsx                     # Socket.IO-клиент
-│   │   │   ├── notifications.jsx              # Уведомления + push
-│   │   │   ├── settings.jsx                   # Настройки сайта (бренд, лендинг)
-│   │   │   ├── modules.jsx                    # Состояние модулей (feed/chats/courses/wiki)
-│   │   │   ├── onboarding.jsx                 # Тур для новых пользователей
-│   │   │   ├── theme.jsx                      # Тёмная/светлая тема
-│   │   │   ├── network.jsx                    # Онлайн/офлайн, ping
-│   │   │   └── gamification.jsx               # XP, квесты, achievements + WS-события
+│   │   ├── store/
+│   │   │   ├── auth.jsx
+│   │   │   ├── socket.jsx
+│   │   │   ├── notifications.jsx
+│   │   │   ├── settings.jsx
+│   │   │   ├── modules.jsx
+│   │   │   ├── onboarding.jsx
+│   │   │   ├── theme.jsx
+│   │   │   ├── network.jsx
+│   │   │   └── gamification.jsx
 │   │   │
 │   │   ├── styles/
-│   │   │   └── index.css                      # Tailwind + CSS-переменные + light-theme overrides
+│   │   │   └── index.css
 │   │   │
-│   │   ├── sw.js                              # Service Worker (injectManifest)
-│   │   ├── App.jsx                            # Роуты + Gate-компоненты
-│   │   └── main.jsx                           # Точка входа + провайдеры
+│   │   ├── sw.js
+│   │   ├── App.jsx
+│   │   └── main.jsx
 │   │
-│   ├── index.html                             # HTML-шаблон + inline-splash + og-теги
-│   ├── vite.config.js                         # Vite + PWA-плагин + манифест
-│   ├── tailwind.config.js                     # Цвета (ink, violet, pink, cyan, lime)
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── tailwind.config.js
 │   ├── postcss.config.js
 │   └── package.json
 │
@@ -393,123 +428,115 @@ media-raf-raw1/
 │   ├── prisma/
 │   │   ├── schema.prisma                      # Все модели
 │   │   └── seed/                              # Наполнение курсов
-│   │       ├── index.js                       # Запуск: node prisma/seed/index.js
-│   │       ├── helpers.js                     # buildTest, slugify
+│   │       ├── index.js
+│   │       ├── helpers.js
 │   │       └── courses/
-│   │           ├── photography.js             # Основы фотографии (12 уроков)
-│   │           ├── videography.js             # Основы видеосъёмки (12 уроков)
-│   │           ├── editing.js                 # Основы монтажа (12 уроков)
-│   │           ├── radio.js                   # Радиожурналистика (12 уроков)
-│   │           ├── studio-sound.js            # Студийная звукорежиссура (13 уроков)
-│   │           └── live-sound.js              # Концертная звукорежиссура (13 уроков)
+│   │           ├── photography.js
+│   │           ├── videography.js
+│   │           ├── editing.js
+│   │           ├── radio.js
+│   │           ├── studio-sound.js
+│   │           └── live-sound.js
 │   │
 │   ├── src/
 │   │   │
-│   │   ├── lib/                               # Бизнес-логика
-│   │   │   │
-│   │   │   ├── prisma.js                      # Singleton PrismaClient
-│   │   │   ├── notify.js                      # createNotification, notifyChatMessage, notifyBroadcast, buildPreview
-│   │   │   ├── push.js                        # sendPushToAll / ToUser / ToUsers (web-push)
-│   │   │   │
-│   │   │   ├── backup.js                      # pg_dump / pg_restore, listBackups, checkPgTools
-│   │   │   ├── dbMaintenance.js               # scanDatabase, cleanupDatabase, getDatabaseInfo, VACUUM
-│   │   │   ├── chatCleanup.js                 # hardDeleteChat, getLiveChatStats, cleanupAfterUserDelete
-│   │   │   ├── analytics.js                   # getAnalytics (регистрации, активность, топы)
-│   │   │   ├── bulkActions.js                 # Импорт/экспорт курсов, рекальк прогресса, журнал
-│   │   │   ├── serverInfo.js                  # CPU/RAM/диск/uptime, cleanup логов и бэкапов
-│   │   │   │
-│   │   │   ├── moderation.js                  # listReports, updateReport, deleteReportedContent, applyAutoModeration
-│   │   │   ├── passwordReset.js               # createResetRequest, generateCodeForRequest, verifyCodeAndReset
-│   │   │   ├── passwordResetCron.js           # Ежедневная очистка старых заявок
-│   │   │   │
-│   │   │   ├── pushCleanup.js                 # Удаление неактивных push-подписок
+│   │   ├── app.js                             # Express-приложение (без listen) — для тестов
+│   │   ├── index.js                           # Точка входа: HTTP + Socket.IO + cron
+│   │   ├── socket.js                          # Socket.IO: чаты, typing, сообщения, реакции
+│   │   │
+│   │   ├── lib/
+│   │   │   ├── prisma.js
+│   │   │   ├── notify.js
+│   │   │   ├── push.js
+│   │   │   ├── backup.js
+│   │   │   ├── dbMaintenance.js
+│   │   │   ├── chatCleanup.js
+│   │   │   ├── analytics.js
+│   │   │   ├── bulkActions.js
+│   │   │   ├── serverInfo.js
+│   │   │   ├── moderation.js
+│   │   │   ├── passwordReset.js
+│   │   │   ├── passwordResetCron.js
+│   │   │   ├── pushCleanup.js
 │   │   │   ├── pushCleanupCron.js
-│   │   │   ├── notifyCleanup.js               # Удаление старых прочитанных уведомлений
+│   │   │   ├── notifyCleanup.js
 │   │   │   ├── notifyCleanupCron.js
-│   │   │   │
 │   │   │   ├── gamification.js                # Ядро: awardXp, deductXp, quests, streaks, hooks
-│   │   │   ├── gamificationCatalog.js         # XP_DEFAULTS, DEDUCTION_DEFAULTS, ACHIEVEMENTS, QUEST_TEMPLATES
-│   │   │   ├── gamificationSettings.js        # Чтение/запись настроек геймификации
-│   │   │   ├── gamificationCron.js            # Ежедневное списание XP за неактивность
-│   │   │   │
-│   │   │   ├── courseLogic.js                 # getLessonStatuses, computeAccess (разблокировка уроков)
-│   │   │   └── audioPeaks.js                  # Извлечение waveform из аудио через ffmpeg
+│   │   │   ├── gamificationCatalog.js
+│   │   │   ├── gamificationSettings.js
+│   │   │   ├── gamificationCron.js
+│   │   │   ├── courseLogic.js
+│   │   │   └── audioPeaks.js
 │   │   │
 │   │   ├── middleware/
-│   │   │   └── auth.js                        # JWT-проверка + requireRole + инвалидация по passwordChangedAt
+│   │   │   └── auth.js                        # JWT + requireRole + инвалидация по passwordChangedAt
 │   │   │
-│   │   ├── routes/                            # HTTP-роуты
-│   │   │   │
-│   │   │   ├── auth.js                        # register, login, me, recover/request, recover/verify
-│   │   │   ├── users.js                       # список, профиль, PATCH /me, смена пароля, посты
-│   │   │   ├── posts.js                       # лента (feed), CRUD, реакции, комментарии
-│   │   │   ├── chats.js                       # список чатов, сообщения, медиа, pin
-│   │   │   ├── uploads.js                     # загрузка файлов (Sharp + audioPeaks)
-│   │   │   │
-│   │   │   ├── courses.js                     # список, курс, enroll, complete, submit test, сертификат
-│   │   │   ├── practicals.js                  # сдача практики, проверка (MENTOR/ADMIN), unlock
-│   │   │   ├── homework.js                    # сдача ДЗ, проверка (MENTOR/ADMIN)
-│   │   │   │
-│   │   │   ├── wiki.js                        # категории, статьи, популярное
-│   │   │   ├── notifications.js               # список, mark-read, clear
-│   │   │   ├── reports.js                     # создание жалобы
-│   │   │   ├── modules.js                     # состояние модулей (GET)
-│   │   │   ├── onboarding.js                  # config + complete
-│   │   │   ├── gamification.js                # status, me, daily, quests, leaderboard, achievements catalog
-│   │   │   ├── publicMeta.js                  # og-теги для ботов (user/certificate/wiki/course)
-│   │   │   │
-│   │   │   └── admin.js                       # ─── Все админские роуты
-│   │   │           · /stats, /analytics
-│   │   │           · /server/info, /server/cleanup
-│   │   │           · /maintenance/scan, /cleanup, /dbinfo, /vacuum
-│   │   │           · /users, /courses, /lessons, /tests, /questions
-│   │   │           · /certificates, /settings, /broadcast, /groups
-│   │   │           · /backups
-│   │   │           · /bulk/*
-│   │   │           · /wiki/*
-│   │   │           · /push/*
-│   │   │           · /notifications/cleanup-*
-│   │   │           · /modules
-│   │   │           · /onboarding/*
-│   │   │           · /gamification/* (settings, overview, achievements, levels, quest-templates)
-│   │   │           · /reports, /password-resets
-│   │   │
-│   │   ├── socket.js                          # Socket.IO: чаты, typing, сообщения, реакции, онлайн
-│   │   └── index.js                           # Точка входа: Express + Socket.IO + cron-задачи
+│   │   └── routes/
+│   │       ├── auth.js
+│   │       ├── users.js
+│   │       ├── posts.js
+│   │       ├── chats.js
+│   │       ├── uploads.js
+│   │       ├── courses.js
+│   │       ├── practicals.js
+│   │       ├── homework.js
+│   │       ├── wiki.js
+│   │       ├── notifications.js
+│   │       ├── reports.js
+│   │       ├── modules.js
+│   │       ├── onboarding.js
+│   │       ├── gamification.js
+│   │       ├── publicMeta.js
+│   │       └── admin.js
 │   │
+│   ├── tests/                                 # ─── Интеграционные тесты (Vitest + Supertest)
+│   │   ├── setup.js                           # beforeAll/afterEach/afterAll: чистка БД
+│   │   ├── helpers.js                         # createUser, createPost, makeAdmin, createComment
+│   │   ├── smoke.test.js                      # Проверка, что модули экспортируют функции
+│   │   ├── auth.register.test.js              # POST /api/auth/register
+│   │   ├── auth.login.test.js                 # POST /api/auth/login
+│   │   ├── auth.me.test.js                    # GET /api/auth/me
+│   │   ├── auth.check.test.js                 # GET /api/auth/check-username|phone
+│   │   ├── posts.feed.test.js                 # GET /api/posts/feed
+│   │   ├── posts.crud.test.js                 # POST/PATCH/DELETE /api/posts
+│   │   ├── posts.reactions.test.js            # Реакции на посты
+│   │   └── posts.comments.test.js             # Комментарии и ответы
+│   │
+│   ├── eslint.config.js                       # ESLint (flat config, warnings не валят CI)
+│   ├── vitest.config.js                       # Vitest (forks, без параллелизма)
 │   ├── uploads/                               # Загруженные файлы (создаётся автоматически)
 │   ├── backups/                               # Дампы PostgreSQL (создаётся автоматически)
 │   ├── .env                                   # Не в git
+│   ├── .env.test                              # Не в git (тестовая БД)
 │   ├── .env.example
 │   └── package.json
 │
-├── .gitignore                                 # node_modules, .env, uploads/, backups/, dist/
-├── .github/
-│   └── workflows/                             # (опционально) CI/CD
-│       └── ci.yml
+├── .gitignore                                 # node_modules, .env, .env.test, uploads/, backups/, dist/
 └── README.md
 ```
 
 ### Ключевые принципы организации
 
 **Клиент:**
-- **store/** — глобальный стейт через React Context. Каждый провайдер отвечает за свою часть (auth, theme, socket, gamification).
-- **pages/Admin/** — модульная админка. Один раздел = один файл в `tabs/`, всё сложное (редакторы курсов, wiki) — в подпапках.
+- **store/** — глобальный стейт через React Context. Каждый провайдер отвечает за свою часть.
+- **pages/Admin/** — модульная админка. Один раздел = один файл в `tabs/`, всё сложное — в подпапках.
 - **components/messenger/** — вынесено отдельно, т.к. мессенджер — самая тяжёлая часть UI.
-- **hooks/** — переиспользуемая логика (draft, pull-to-refresh, meta-теги).
-- **lib/** — утилиты без React (modalStack, push).
+- **hooks/** — переиспользуемая логика.
+- **lib/** — утилиты без React.
 
 **Сервер:**
+- **`app.js`** — «чистое» Express-приложение. Экспортирует `app`, не вызывает `listen`. Это позволяет тестам импортировать его напрямую.
+- **`index.js`** — только запуск: HTTP-сервер, Socket.IO, cron. Никакого Express-кода.
 - **lib/** — вся бизнес-логика. Роуты тонкие, они только валидируют и вызывают функции из lib.
-- **routes/** — HTTP-слой. `admin.js` — намеренно большой, там десятки эндпоинтов админки.
-- **prisma/seed/** — данные курсов отделены от кода. Каждый курс — свой файл.
-- **cron-задачи** — регистрируются в `index.js` через `schedule*()`-функции из `lib/*Cron.js`.
+- **routes/** — HTTP-слой.
+- **prisma/seed/** — данные курсов отделены от кода.
+- **tests/** — интеграционные тесты, ходят через Supertest прямо в `app` без запуска сервера.
 
 ### Особенности
 
 - **Нет `prisma migrate`** — только `db push`. История миграций не ведётся.
 - **`uploads/` и `backups/`** — не в git, создаются на сервере.
-- **`.env`** — обязателен на сервере, шаблон в `.env.example`.
+- **`.env` и `.env.test`** — обязательны, шаблон в `.env.example`.
 - **PWA-манифест** — генерируется `vite-plugin-pwa` из `vite.config.js`, в `public/` лежат только иконки.
 
 ---
@@ -529,7 +556,7 @@ npx prisma db push
 # Пересобрать Prisma Client (обязательно после изменения схемы)
 npx prisma generate
 
-# Открыть Prisma Studio (веб-интерфейс для БД)
+# Открыть Prisma Studio
 npx prisma studio
 
 # Проверить схему без изменений
@@ -539,8 +566,8 @@ npx prisma validate
 ### Важно
 
 - Проект **не использует `prisma migrate`** — все изменения схемы применяются через `db push`.
-- После изменения `schema.prisma` **обязательно** запустить `npx prisma generate` и **полностью перезапустить** Node-процесс, чтобы Prisma Client подхватил новые модели.
-- `pm2 restart all` **не всегда достаточно** — используйте `pm2 delete all && pm2 start src/index.js --name mediaraf`.
+- После изменения `schema.prisma` **обязательно** запустить `npx prisma generate` и **полностью перезапустить** Node-процесс.
+- `pm2 restart all` **не всегда достаточно** — используйте `pm2 delete all && pm2 start src/index.js --name mediaraf-api`.
 
 ### Модели БД (обзор)
 
@@ -556,6 +583,133 @@ npx prisma validate
 | Модерация | `Report` |
 | Пароли | `PasswordResetRequest` |
 | Геймификация | `UserStats`, `UserAchievement`, `XpLog`, `DailyQuest`, `QuestTemplate`, `Achievement` |
+
+---
+
+## 🧪 Тестирование
+
+Проект покрыт **интеграционными тестами** на бэкенде. Тесты ходят через `supertest` прямо в Express-приложение (`src/app.js`), без запуска HTTP-сервера и Socket.IO — поэтому прогон быстрый и без побочных эффектов.
+
+### Что тестируется
+
+| Файл | Покрытие |
+|---|---|
+| `tests/smoke.test.js` | Проверка, что ключевые модули экспортируют функции |
+| `tests/auth.register.test.js` | Регистрация: успех, валидация, уникальность, нормализация телефона/username |
+| `tests/auth.login.test.js` | Вход: по username / телефону / email, регистронезависимость, бан |
+| `tests/auth.me.test.js` | Текущий пользователь: токен, бан, обновление `lastSeen` |
+| `tests/auth.check.test.js` | Проверка занятости username/телефона |
+| `tests/posts.feed.test.js` | Лента: пагинация, порядок, фильтрация забаненных, реакции |
+| `tests/posts.crud.test.js` | Создание/редактирование/удаление постов + права доступа |
+| `tests/posts.reactions.test.js` | Реакции: toggle, разные эмодзи, агрегация |
+| `tests/posts.comments.test.js` | Комментарии: вложенность, редактирование, удаление, права |
+
+### Подготовка тестовой БД
+
+```bash
+# Создать тестовую базу (один раз)
+sudo -u postgres psql -c "CREATE DATABASE media_raf_raw_test;"
+
+# Применить схему
+cd server
+DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma db push --skip-generate
+```
+
+### Запуск
+
+```bash
+cd server
+
+# Все тесты (использует .env.test автоматически через NODE_ENV=test)
+NODE_ENV=test DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" JWT_SECRET="test-secret" npm test
+
+# Один файл
+npm test -- tests/posts.feed.test.js
+
+# Watch-режим (для разработки)
+npm run test:watch
+
+# С покрытием
+npm run test:cov
+```
+
+**Ожидаемый результат:** ~78 passed за ~35 секунд.
+
+### Как устроены тесты
+
+- **`tests/setup.js`** — глобальный `beforeAll`/`afterEach`/`afterAll`. После каждого теста удаляет всех тестовых юзеров (по префиксу `+7999` и `test_`) и связанные данные. Даёт 250 мс «хвоста» для завершения fire-and-forget задач (геймификация, уведомления), чтобы не ловить `P2025`.
+- **`tests/helpers.js`** — утилиты: `createUser`, `createPost`, `createComment`, `makeAdmin`, `validPayload`. Генерируют уникальные телефоны и username, чтобы тесты не конфликтовали.
+- **Изоляция:** тесты полагаются на **отдельную тестовую БД**. Никогда не запускайте их против прода.
+
+### Что делать, если тесты упали
+
+1. Проверь `DATABASE_URL` — точно указывает на тестовую БД?
+2. Убедись, что тестовая БД пуста (в тестах ленты мы фильтруем только свои посты, но мусор в БД может замедлить прогон).
+3. Смотри в лог — Vitest показывает конкретный assert и стек.
+
+---
+
+## 🔄 CI/CD
+
+### CI — `.github/workflows/ci.yml`
+
+Запускается на каждый `push` в `main`/`dev` и на каждый Pull Request.
+
+**Job `server`:**
+1. Поднимает сервис-контейнер `postgres:16`.
+2. `npm ci` в `server/`.
+3. `npm run lint` — ESLint (warnings не валят job).
+4. `npx prisma generate`.
+5. `npx prisma db push --skip-generate` — схема в тестовую БД.
+6. `npm test` — все 78 тестов.
+
+**Job `client`:**
+1. `npm ci` в `client/`.
+2. `npm run build` — проверка, что фронт собирается.
+
+**Если CI красный — PR блокируется.** Нельзя мержить код, который ломает тесты или сборку.
+
+### CD — `.github/workflows/deploy.yml`
+
+**Ручной запуск** из вкладки Actions (кнопка Run workflow). Автоматический деплой по push пока закомментирован — включим после того, как убедимся в стабильности.
+
+Что делает:
+1. Подключается по SSH к серверу (`secrets.SSH_HOST`, `SSH_USER`, `SSH_KEY`).
+2. `cd /www/wwwroot/mediarafraw.ru && git pull origin main`.
+3. В `server/`: `npm ci`, `npx prisma generate`, `npx prisma db push --skip-generate`, `pm2 restart mediaraf-api`.
+4. В `client/`: `npm ci`, `npm run build`.
+
+### Настройка секретов в GitHub
+
+**Settings → Secrets and variables → Actions → New repository secret:**
+
+| Имя | Значение |
+|---|---|
+| `SSH_HOST` | IP или домен сервера |
+| `SSH_USER` | `root` (или deploy-юзер) |
+| `SSH_KEY` | Приватный SSH-ключ (без пароля) |
+| `SSH_PORT` | `22` (по умолчанию) |
+
+Генерация ключа:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/mediaraf_deploy -C "deploy@mediaraf" -N ""
+# Приватный ~/.ssh/mediaraf_deploy → в SSH_KEY
+# Публичный ~/.ssh/mediaraf_deploy.pub → в /root/.ssh/authorized_keys на сервере
+```
+
+### Локальная проверка перед push
+
+```bash
+# Server
+cd server
+npm run lint       # 0 errors (warnings OK)
+npm test           # 78 passed
+
+# Client
+cd ../client
+npm run build      # сборка без ошибок
+```
 
 ---
 
@@ -598,10 +752,8 @@ export const myCourse = {
                 passScore: 70,
                 questions: [
                     { type: 'single', text: '...', payload: { options: ['A', 'B'], correct: 0 } },
-                    // ... всего 10-12 вопросов
                 ],
             },
-            // опционально:
             practical: {
                 topic: 'Тема практики',
                 description: 'Что делать',
@@ -634,26 +786,36 @@ Authorization: Bearer <JWT>
 
 | Роут | Описание |
 |---|---|
+| `GET /health` | Health-check (`{ok, service}`) |
 | `POST /auth/register` | Регистрация |
 | `POST /auth/login` | Вход |
 | `GET /auth/me` | Текущий пользователь |
+| `GET /auth/check-username` | Проверка занятости ника |
+| `GET /auth/check-phone` | Проверка занятости телефона |
 | `POST /auth/recover/request` | Запрос восстановления пароля |
 | `POST /auth/recover/verify` | Смена пароля по коду |
 | `GET /users` | Список пользователей |
 | `GET /users/:username` | Профиль |
 | `PATCH /users/me` | Обновить профиль |
-| `GET /posts/feed` | Лента с пагинацией |
+| `GET /posts/feed` | Лента с cursor-пагинацией |
 | `POST /posts` | Создать пост |
+| `PATCH /posts/:id` | Редактировать пост (автор/ADMIN) |
+| `DELETE /posts/:id` | Удалить пост (автор/ADMIN) |
+| `GET /posts/:id/reactions` | Реакции на пост |
+| `POST /posts/:id/reactions` | Поставить/снять реакцию (toggle) |
+| `GET /posts/:id/comments` | Дерево комментариев |
+| `POST /posts/:id/comments` | Добавить комментарий |
+| `PATCH /posts/comments/:id` | Редактировать комментарий |
+| `DELETE /posts/comments/:id` | Удалить комментарий |
 | `GET /chats` | Список чатов |
 | `POST /uploads` | Загрузить файл |
 | `GET /courses` | Список курсов |
-| `GET /courses/:slug` | Курс с уроками, тестами, практиками |
+| `GET /courses/:slug` | Курс с уроками |
 | `POST /courses/:id/enroll` | Записаться на курс |
 | `POST /courses/lessons/:lessonId/complete` | Отметить урок пройденным |
 | `POST /courses/tests/:testId/submit` | Отправить тест |
 | `POST /practicals/:practicalId/submit` | Сдать практику |
 | `POST /practicals/submissions/:id/review` | Проверить практику (MENTOR/ADMIN) |
-| `POST /practicals/unlock/:lessonId` | Принудительно разблокировать урок |
 | `POST /homework/:homeworkId/submit` | Сдать ДЗ |
 | `POST /homework/submissions/:id/review` | Проверить ДЗ (MENTOR/ADMIN) |
 | `GET /wiki/categories` | Wiki: категории |
@@ -664,27 +826,16 @@ Authorization: Bearer <JWT>
 | `GET /gamification/me` | Статистика геймификации |
 | `GET /gamification/quests` | Квесты на сегодня |
 | `GET /gamification/leaderboard` | Лидерборд |
-| `GET /admin/*` | Все админские роуты (требует role=ADMIN) |
+| `GET /settings/public` | Публичные настройки сайта |
+| `GET /admin/*` | Все админские роуты (role=ADMIN) |
 
 ### Socket.IO события
 
 **Клиент → сервер:**
-- `chat:join` — присоединиться к чату
-- `message:send` — отправить сообщение
-- `message:edit` — редактировать
-- `message:delete` — удалить
-- `reaction:toggle` — реакция на сообщение
-- `typing` — индикатор печати
+- `chat:join`, `message:send`, `message:edit`, `message:delete`, `reaction:toggle`, `typing`
 
 **Сервер → клиент:**
-- `message:new` — новое сообщение
-- `message:edited` — отредактировано
-- `message:deleted` — удалено
-- `reaction:update` — обновление реакций
-- `typing` — кто-то печатает
-- `user:online` / `user:offline` — статус пользователей
-- `notification:new` — новое уведомление
-- `chat:updated` — обновление чата
+- `message:new`, `message:edited`, `message:deleted`, `reaction:update`, `typing`, `user:online`, `user:offline`, `notification:new`, `chat:updated`
 
 ---
 
@@ -694,27 +845,27 @@ Authorization: Bearer <JWT>
 
 - **HTML/JS/CSS** — precache через `vite-plugin-pwa` (injectManifest).
 - **`/uploads/`** — стратегия `CacheFirst`, TTL 30 дней, до 200 записей.
-- **`/api/`** — `NetworkOnly` (всегда свежие данные).
+- **`/api/`** — `NetworkOnly`.
 
 ### Офлайн-поведение
 
 - Splash-экран с логотипом.
-- Если сессия сохранена, а сети нет — показывается **Offline-экран** с кнопкой «Повторить».
-- Если приложение уже открыто и сеть пропала — **баннер** сверху с индикатором.
+- Если сессия сохранена, а сети нет — **Offline-экран** с кнопкой «Повторить».
+- Если приложение открыто и сеть пропала — **баннер** сверху.
 
 ### Установка
 
-На мобильном открыть сайт в браузере → «Поделиться» → **«Добавить на главный экран»**. Приложение откроется в standalone-режиме.
+На мобильном открыть сайт → «Поделиться» → **«Добавить на главный экран»**.
 
 ### Обновление
 
-Service Worker обновляется автоматически (`registerType: 'autoUpdate'`). Пользователь получит новую версию при следующем запуске.
+Service Worker обновляется автоматически (`registerType: 'autoUpdate'`).
 
 ---
 
 ## ⏰ Cron-задачи
 
-Все cron-задачи регистрируются в `server/src/index.js` при старте.
+Все cron-задачи регистрируются в `server/src/index.js`.
 
 | Задача | Расписание | Что делает |
 |---|---|---|
@@ -722,8 +873,10 @@ Service Worker обновляется автоматически (`registerType:
 | Notify cleanup | `30 4 * * *` | Удаляет старые прочитанные уведомления |
 | Password reset cleanup | `45 4 * * *` | Удаляет старые заявки на восстановление пароля |
 | Gamification inactivity | `0 5 * * *` | Списывает XP у неактивных пользователей |
+| Deadline reminders | `0 9 * * *` | Напоминания о дедлайнах практик/ДЗ |
+| Drip unlock notifications | `0 8 * * *` | Уведомления о разблокировке уроков |
 
-Расписание можно переопределить через переменные окружения (см. `.env`).
+Расписание переопределяется через переменные окружения.
 
 ---
 
@@ -732,24 +885,24 @@ Service Worker обновляется автоматически (`registerType:
 ### На aaPanel / Ubuntu (продакшен)
 
 ```bash
-# 1. Установить Node.js ≥ 20, PostgreSQL, ffmpeg
+# 1. Установить Node.js ≥ 22, PostgreSQL, ffmpeg
 sudo apt update
 sudo apt install -y postgresql ffmpeg
 
-# 2. Собрать клиент
-cd /www/wwwroot/mediarafraw.ru/client
-npm install
-npm run build
+# 2. Первичная настройка
+cd /www/wwwroot/mediarafraw.ru
 
-# 3. Установить зависимости сервера
-cd /www/wwwroot/mediarafraw.ru/server
-npm install
-npx prisma db push
+# Клиент
+cd client && npm install && npm run build
+
+# Сервер
+cd ../server && npm install
 npx prisma generate
+npx prisma db push
 
-# 4. Запустить через PM2
+# PM2
 npm install -g pm2
-pm2 start src/index.js --name mediaraf
+pm2 start src/index.js --name mediaraf-api
 pm2 save
 pm2 startup
 ```
@@ -761,15 +914,13 @@ server {
     listen 443 ssl http2;
     server_name mediarafraw.ru;
 
-    # SSL (пример)
     ssl_certificate     /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
-    # SPA (статика)
     root /www/wwwroot/mediarafraw.ru/client/dist;
     index index.html;
 
-    # OG-теги для ботов (отдельно, до SPA)
+    # OG-теги для ботов
     location ~ ^/(app/u/|app/certificates/|verify/|app/wiki/|app/courses/) {
         proxy_pass http://127.0.0.1:4000;
         proxy_set_header Host $host;
@@ -806,19 +957,25 @@ server {
 }
 ```
 
-### Перезапуск после обновления
+### Деплой через GitHub Actions
+
+Основной способ деплоя — **workflow `Deploy to production`** в GitHub Actions (ручной запуск из вкладки Actions). Он сам делает `git pull`, `npm ci`, `prisma db push`, `pm2 restart` и сборку клиента. См. раздел [CI/CD](#-cicd).
+
+### Ручной деплой (fallback)
 
 ```bash
 cd /www/wwwroot/mediarafraw.ru
 git pull
+
 cd client && npm install && npm run build
 cd ../server && npm install && npx prisma db push && npx prisma generate
+
 pm2 delete all
-pm2 start src/index.js --name mediaraf
+pm2 start src/index.js --name mediaraf-api
 pm2 save
 ```
 
-**Важно:** для применения изменений Prisma-схемы **обязательно** `pm2 delete`, а не `restart`.
+**Важно:** при изменении Prisma-схемы **обязательно** `pm2 delete`, а не `restart` — иначе Client не подхватит новые модели.
 
 ---
 
@@ -840,7 +997,13 @@ pm2 save
 {
   "scripts": {
     "start": "node src/index.js",
-    "seed": "node prisma/seed/index.js"
+    "seed": "node prisma/seed/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.js\""
   }
 }
 ```
@@ -852,7 +1015,8 @@ pm2 save
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "icons": "node scripts/generate-icons.mjs"
   }
 }
 ```
@@ -867,15 +1031,17 @@ pm2 save
 - **Уникальные индексы** в БД на `username`, `phone`, `email`.
 - **CORS** — настраивается на конкретный домен, а не `origin: true`.
 - **Загружаемые файлы** — лимит 200 МБ, изображения сжимаются через `sharp` до 1920px.
+- **Харденинг геймификации** — все операции `awardXp`/`deductXp` устойчивы к удалению пользователя во время выполнения (`P2025`/`P2003` не падают, а тихо возвращают `null`).
 
 ---
 
 ## 🐛 Известные ограничения
 
 - **SQLite не поддерживается** — только PostgreSQL. Для dev на Mac используйте `brew services start postgresql`.
-- **ffmpeg** обязателен для генерации waveform голосовых. Без него используется fallback (хеш-based waveform).
+- **ffmpeg** обязателен для генерации waveform голосовых. Без него используется fallback.
 - **`prisma migrate` не используется** — только `db push`. История миграций в проекте не ведётся.
 - **PDF-экспорт сертификатов** работает на клиенте через `html-to-image` + `jsPDF`.
+- **Тестовая БД — обязательна.** Тесты не изолированы от прод-данных, если запускать их против основной БД.
 
 ---
 
@@ -892,4 +1058,4 @@ pm2 save
 
 ---
 
-**Made with ❤️ by MEDIA·RAF·RAW team**ы
+**Made with ❤️ by MEDIA·RAF·RAW team**
