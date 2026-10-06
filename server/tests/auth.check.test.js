@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { validPayload, createUser } from './helpers.js';
+import { createUser } from './helpers.js';
 
 describe('GET /api/auth/check-username', () => {
     it('возвращает available: true для свободного username', async () => {

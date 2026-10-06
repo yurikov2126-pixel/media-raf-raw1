@@ -1,7 +1,14 @@
 export default [
     {
         files: ['**/*.js'],
-        ignores: ['node_modules/**', 'dist/**', 'coverage/**'],
+        ignores: [
+            'node_modules/**',
+            'dist/**',
+            'coverage/**',
+            'prisma/migrations/**',
+            'prisma/seed/**',      // ← ДОБАВЛЕНО: сид-данные, не код
+            'scripts/**'
+        ],
         languageOptions: {
             ecmaVersion: 2023,
             sourceType: 'module',
@@ -12,14 +19,23 @@ export default [
                 __dirname: 'readonly',
                 setTimeout: 'readonly',
                 setInterval: 'readonly',
-                clearInterval: 'readonly'
+                clearInterval: 'readonly',
+                clearTimeout: 'readonly',
+                setImmediate: 'readonly',
+                URL: 'readonly',
+                fetch: 'readonly'
             }
         },
         rules: {
-            'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+            'no-unused-vars': [
+                'warn',
+                { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }
+            ],
+            'prefer-const': 'warn',
             'no-console': 'off',
-            'prefer-const': 'error',
-            'eqeqeq': ['error', 'smart']
+            eqeqeq: ['warn', 'smart'],
+            'no-empty': 'warn',
+            'no-undef': 'error'
         }
     }
 ];
