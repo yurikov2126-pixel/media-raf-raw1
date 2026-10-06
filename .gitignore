@@ -42,3 +42,37 @@ server/prisma/*.db-journal
 # === Логи ===
 *.log
 logs/
+
+# === Собранный клиент в корне (nginx root) ===
+# Nginx отдаёт статику из корня репо, а не из client/dist.
+# Эти файлы — артефакты сборки, в git не место.
+/index.html
+/404.html
+/502.html
+/sw.js
+/registerSW.js
+/workbox-*.js
+/manifest.webmanifest
+/favicon*.png
+/apple-touch-icon.png
+/icon-*.png
+/icon*.svg
+/photo.svg
+/video.svg
+/radio.svg
+/zvuk.svg
+/assets/
+
+# === Файлы aaPanel (специфичны для сервера) ===
+/.user.ini
+/.htaccess
+/.well-known/
+
+# === Env-вариации (уже есть .env, но добавим тестовые) ===
+.env.test
+.env.test.local
+
+# === Серверные данные ===
+server/uploads/
+server/backups/
+server/public/uploads/

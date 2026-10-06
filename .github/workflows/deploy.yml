@@ -22,16 +22,56 @@ jobs:
           script: |
             set -e
             cd /www/wwwroot/mediarafraw.ru
+
+            echo "=== 1. Проверка состояния репо ==="
+            if [ -n "$(git status --porcelain | grep -v '^??')" ]; then
+              echo "❌ На сервере есть незакоммиченные изменения в трекаемых файлах:"
+              git status --short
+              exit 1
+            fi
+            echo "OK: дерево чистое (untracked не считаем)"
+
+            echo "=== 2. Бэкап БД ==="
+            mkdir -p /root/db-backups
+            BACKUP_FILE=/root/db-backups/mediaraf_$(date +%Y%m%d_%H%M%S).sql
+            DB_URL=$(grep -E '^DATABASE_URL=' server/.env | cut -d= -f2- | tr -d '"')
+            pg_dump "$DB_URL" > "$BACKUP_FILE"
+            echo "OK: дамп сохранён в $BACKUP_FILE ($(du -h $BACKUP_FILE | cut -f1))"
+
+            echo "=== 3. Обновление кода из GitHub ==="
             git pull origin main
 
+            echo "=== 4. Сервер: зависимости и БД ==="
             cd server
             npm ci
             npx prisma generate
             npx prisma db push --skip-generate
-            pm2 restart mediaraf-api
 
+            echo "=== 5. Перезапуск API (systemd) ==="
+            systemctl restart mediaraf-api
+            sleep 3
+            systemctl is-active mediaraf-api
+
+            echo "=== 6. Клиент: зависимости и сборка ==="
             cd ../client
             npm ci
             npm run build
 
-            echo "Deployed at $(date)"
+            echo "=== 7. Публикация клиента в корень (nginx root) ==="
+            cd ..
+            # Копируем содержимое client/dist в корень, перезаписывая старый билд
+            cp -r client/dist/. .
+            # Возвращаем владельца www, чтобы nginx и pm2 читали
+            chown -R www:www index.html assets sw.js manifest.webmanifest registerSW.js workbox-*.js favicon*.png icon*.png icon*.svg apple-touch-icon.png 2>/dev/null || true
+            echo "OK: клиент опубликован"
+
+            echo "=== 8. Healthcheck API ==="
+            sleep 2
+            curl -fsS http://localhost:4000/api/health || (echo "❌ API не отвечает"; exit 1)
+
+            echo "=== 9. Проверка клиента ==="
+            curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ | grep -q 200 \
+              && echo "OK: сайт отвечает 200" \
+              || echo "⚠️  сайт ответил не 200"
+
+            echo "✅ Deployed at $(date)"
