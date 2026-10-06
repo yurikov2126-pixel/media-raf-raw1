@@ -75,4 +75,4 @@ logs/
 # === Серверные данные ===
 server/uploads/
 server/backups/
-server/public/uploads/
+server/public/uploads/server/.env.test
