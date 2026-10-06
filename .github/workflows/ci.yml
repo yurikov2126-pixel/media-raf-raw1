@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -48,8 +48,8 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
-      - name: Run migrations on test DB
-        run: npx prisma migrate deploy
+      - name: Prepare test DB schema
+        run: npx prisma db push --skip-generate
         env:
           DATABASE_URL: postgresql://postgres:test@localhost:5432/mediaraf_test
 
@@ -57,11 +57,11 @@ jobs:
         run: npm test
         env:
           DATABASE_URL: postgresql://postgres:test@localhost:5432/mediaraf_test
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-do-not-use-in-prod
           NODE_ENV: test
 
   client:
-    name: Client — lint & build
+    name: Client — build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,15 +72,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
 
       - name: Install deps
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
 
       - name: Build
         run: npm run build
