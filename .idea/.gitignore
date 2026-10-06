@@ -1,8 +1,58 @@
-# Default ignored files
-/shelf/
-/workspace.xml
-# Editor-based HTTP Client requests
-/httpRequests/
-# Datasource local storage ignored files
-/dataSources/
-/dataSources.local.xml
+# === Node ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# === Сборки ===
+dist/
+build/
+client/dist/
+server/dist/
+*.tsbuildinfo
+
+# === Переменные окружения ===
+.env
+.env.local
+.env.*.local
+server/.env.test
+!server/.env.example
+!client/.env.example
+
+# === Пользовательские загрузки ===
+server/uploads/
+!server/uploads/.gitkeep
+
+# === Бэкапы БД ===
+server/backups/
+*.sql
+*.dump
+
+# === Логи ===
+*.log
+logs/
+
+# === macOS / Windows / Linux ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# === Редакторы ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Тесты ===
+coverage/
+.nyc_output/
+
+# === Prisma ===
+server/prisma/*.db
+server/prisma/migrations/dev.db

@@ -12,6 +12,11 @@ import {
     levelProgress,
 } from './gamificationCatalog.js';
 
+/* PATCH: хелпер — ошибки "запись исчезла во время работы" */
+function isRecordGone(e) {
+    return e?.code === 'P2025' || e?.code === 'P2003';
+}
+
 /* ─── Проверка включённости ─── */
 export async function isGamificationEnabled() {
     const s = await getSettings();
@@ -103,10 +108,15 @@ async function checkNewAchievements(userId) {
 
     if (newlyUnlocked.length === 0) return [];
 
-    await prisma.userAchievement.createMany({
-        data: newlyUnlocked.map((id) => ({ userId, achievementId: id })),
-        skipDuplicates: true,
-    });
+    try {
+        await prisma.userAchievement.createMany({
+            data: newlyUnlocked.map((id) => ({ userId, achievementId: id })),
+            skipDuplicates: true,
+        });
+    } catch (e) {
+        if (isRecordGone(e)) return [];
+        throw e;
+    }
 
     const achMap = Object.fromEntries(achievements.map((a) => [a.id, a]));
     return newlyUnlocked.map((id) => achMap[id]).filter(Boolean);
@@ -119,24 +129,38 @@ export async function awardXp({ userId, amount, reason, meta = {}, silent = fals
     const s = await getSettings();
     if (!s.enabled) return null;
 
-    await ensureStats(userId);
+    /* PATCH: ensureStats может упасть, если юзер уже удалён */
+    try {
+        await ensureStats(userId);
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     const before = await prisma.userStats.findUnique({ where: { userId } });
-    const xpBefore = before?.xp || 0;
-    const levelBefore = before?.level || 1;
+    if (!before) return null;
+
+    const xpBefore = before.xp || 0;
+    const levelBefore = before.level || 1;
 
     const xpAfter = xpBefore + amount;
     const levelAfter = levelFromXp(xpAfter, s.levelThresholds);
 
-    await prisma.$transaction([
-        prisma.userStats.update({
-            where: { userId },
-            data: { xp: xpAfter, level: levelAfter },
-        }),
-        prisma.xpLog.create({
-            data: { userId, amount, reason, meta: JSON.stringify(meta) },
-        }),
-    ]);
+    /* PATCH: транзакция может упасть P2025, если юзера удалили параллельно */
+    try {
+        await prisma.$transaction([
+            prisma.userStats.update({
+                where: { userId },
+                data: { xp: xpAfter, level: levelAfter },
+            }),
+            prisma.xpLog.create({
+                data: { userId, amount, reason, meta: JSON.stringify(meta) },
+            }),
+        ]);
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     const newAchievements = await checkNewAchievements(userId);
 
@@ -160,24 +184,37 @@ export async function deductXp({ userId, amount, reason, meta = {}, silent = fal
     if (!s.enabled) return null;
     if (!s.deductionsEnabled) return null;
 
-    await ensureStats(userId);
+    try {
+        await ensureStats(userId);
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     const before = await prisma.userStats.findUnique({ where: { userId } });
-    const xpBefore = before?.xp || 0;
-    const levelBefore = before?.level || 1;
+    if (!before) return null;
+
+    const xpBefore = before.xp || 0;
+    const levelBefore = before.level || 1;
 
     const xpAfter = Math.max(0, xpBefore - amount);
     const levelAfter = levelFromXp(xpAfter, s.levelThresholds);
 
-    await prisma.$transaction([
-        prisma.userStats.update({
-            where: { userId },
-            data: { xp: xpAfter, level: levelAfter },
-        }),
-        prisma.xpLog.create({
-            data: { userId, amount: -amount, reason, meta: JSON.stringify(meta) },
-        }),
-    ]);
+    /* PATCH */
+    try {
+        await prisma.$transaction([
+            prisma.userStats.update({
+                where: { userId },
+                data: { xp: xpAfter, level: levelAfter },
+            }),
+            prisma.xpLog.create({
+                data: { userId, amount: -amount, reason, meta: JSON.stringify(meta) },
+            }),
+        ]);
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     const result = {
         userId, kind: 'deduct', amount: -amount, reason,
@@ -247,52 +284,60 @@ function yesterdayUTC() {
 
 /* ─── Ежедневный вход ─── */
 export async function recordDailyActivity(userId) {
-    const s = await getSettings();
-    if (!s.enabled) return null;
+    /* PATCH: полностью защищаем fire-and-forget задачу от удаления юзера */
+    try {
+        const s = await getSettings();
+        if (!s.enabled) return null;
 
-    await ensureStats(userId);
+        await ensureStats(userId);
 
-    const stats = await prisma.userStats.findUnique({ where: { userId } });
-    const today = todayUTC();
-    const yesterday = yesterdayUTC();
+        const stats = await prisma.userStats.findUnique({ where: { userId } });
+        if (!stats) return null;
 
-    if (stats.lastActiveDate === today) {
-        return { alreadyRecorded: true, streakCurrent: stats.streakCurrent };
-    }
+        const today = todayUTC();
+        const yesterday = yesterdayUTC();
 
-    let streakCurrent;
-    if (stats.lastActiveDate === yesterday) {
-        streakCurrent = stats.streakCurrent + 1;
-    } else {
-        streakCurrent = 1;
-    }
-    const streakBest = Math.max(stats.streakBest, streakCurrent);
+        if (stats.lastActiveDate === today) {
+            return { alreadyRecorded: true, streakCurrent: stats.streakCurrent };
+        }
 
-    const baseXp = s.xp.daily_login || 0;
-    const streakBonus = s.streakBonusEnabled
-        ? Math.min(streakCurrent * STREAK_BONUS.per_day, STREAK_BONUS.cap)
-        : 0;
-    const totalXp = baseXp + streakBonus;
+        let streakCurrent;
+        if (stats.lastActiveDate === yesterday) {
+            streakCurrent = stats.streakCurrent + 1;
+        } else {
+            streakCurrent = 1;
+        }
+        const streakBest = Math.max(stats.streakBest, streakCurrent);
 
-    await prisma.userStats.update({
-        where: { userId },
-        data: { lastActiveDate: today, streakCurrent, streakBest },
-    });
+        const baseXp = s.xp.daily_login || 0;
+        const streakBonus = s.streakBonusEnabled
+            ? Math.min(streakCurrent * STREAK_BONUS.per_day, STREAK_BONUS.cap)
+            : 0;
+        const totalXp = baseXp + streakBonus;
 
-    let awardResult = null;
-    if (totalXp > 0) {
-        awardResult = await awardXp({
-            userId, amount: totalXp, reason: 'daily_login',
-            meta: { streak: streakCurrent, base: baseXp, bonus: streakBonus },
-            silent: true,
+        await prisma.userStats.update({
+            where: { userId },
+            data: { lastActiveDate: today, streakCurrent, streakBest },
         });
-    }
 
-    return {
-        alreadyRecorded: false,
-        streakCurrent, streakBest, xpAwarded: totalXp, streakBonus,
-        ...(awardResult || {}),
-    };
+        let awardResult = null;
+        if (totalXp > 0) {
+            awardResult = await awardXp({
+                userId, amount: totalXp, reason: 'daily_login',
+                meta: { streak: streakCurrent, base: baseXp, bonus: streakBonus },
+                silent: true,
+            });
+        }
+
+        return {
+            alreadyRecorded: false,
+            streakCurrent, streakBest, xpAwarded: totalXp, streakBonus,
+            ...(awardResult || {}),
+        };
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 }
 
 /* ─── Штраф за отсутствие ─── */
@@ -305,7 +350,12 @@ export async function chargeInactivity(userId) {
     if (!s.enabled || !s.deductionsEnabled) return null;
     if (!s.inactivityEnabled || s.inactivityAmount <= 0) return null;
 
-    await ensureStats(userId);
+    try {
+        await ensureStats(userId);
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     const stats = await prisma.userStats.findUnique({ where: { userId } });
     if (!stats) return null;
@@ -324,10 +374,15 @@ export async function chargeInactivity(userId) {
     const amount = days * s.inactivityAmount;
     if (amount <= 0) return null;
 
-    await prisma.userStats.update({
-        where: { userId },
-        data: { lastInactivityCharge: today },
-    });
+    try {
+        await prisma.userStats.update({
+            where: { userId },
+            data: { lastInactivityCharge: today },
+        });
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     return deductXp({
         userId, amount, reason: 'inactivity',
@@ -519,16 +574,21 @@ export async function ensureTodayQuests(userId) {
 
     if (picked.length === 0) return [];
 
-    await prisma.dailyQuest.createMany({
-        data: picked.map((t) => ({
-            userId,
-            date: today,
-            type: t.type,
-            target: t.target,
-            xpReward: t.xpReward,
-        })),
-        skipDuplicates: true,
-    });
+    try {
+        await prisma.dailyQuest.createMany({
+            data: picked.map((t) => ({
+                userId,
+                date: today,
+                type: t.type,
+                target: t.target,
+                xpReward: t.xpReward,
+            })),
+            skipDuplicates: true,
+        });
+    } catch (e) {
+        if (isRecordGone(e)) return [];
+        throw e;
+    }
 
     return prisma.dailyQuest.findMany({
         where: { userId, date: today },
@@ -553,14 +613,19 @@ export async function bumpQuestProgress(userId, type, amount = 1) {
     const next = Math.min(quest.target, quest.current + amount);
     const reached = next >= quest.target;
 
-    await prisma.dailyQuest.update({
-        where: { id: quest.id },
-        data: {
-            current: next,
-            completed: reached,
-            completedAt: reached ? new Date() : null,
-        },
-    });
+    try {
+        await prisma.dailyQuest.update({
+            where: { id: quest.id },
+            data: {
+                current: next,
+                completed: reached,
+                completedAt: reached ? new Date() : null,
+            },
+        });
+    } catch (e) {
+        if (isRecordGone(e)) return null;
+        throw e;
+    }
 
     if (reached) {
         await awardXp({
