@@ -12,6 +12,7 @@
 - [Стек технологий](#-стек-технологий)
 - [Архитектура](#-архитектура)
 - [Быстрый старт](#-быстрый-старт)
+- [Локальная разработка с Docker](#-локальная-разработка-с-docker)
 - [Переменные окружения](#-переменные-окружения)
 - [Структура проекта](#-структура-проекта)
 - [Работа с базой данных](#-работа-с-базой-данных)
@@ -67,15 +68,16 @@
 - **Онбординг** — короткий тур для новых пользователей и при добавлении новых фич.
 - **Тёмная и светлая** темы.
 - **PWA** с офлайн-режимом, splash-экраном и push-уведомлениями.
-- **Админ-панель** с полным управлением: пользователи, курсы, wiki, сертификаты, бэкапы, аналитика, пакетные операции.
+- **Админ-панель** с полным управлением: пользователи, курсы, wiki, сертификаты, бэкапы, аналитика, пакетные операции. Разбита на 21 модульный подроутер (см. `server/src/routes/admin/`).
 
 ### Качество и автоматизация
-- **78 интеграционных тестов** (Vitest + Supertest) для API — auth и posts.
+- **127 интеграционных тестов** (Vitest + Supertest) для API: auth, posts, users, moderation, backups, modules.
+- **Глобальный error handler** — все Prisma-коды (P2002/P2003/P2025) маппятся в HTTP-статусы в одном месте (`server/src/middleware/errorHandler.js`), а `safe()` стал тонкой обёрткой над `next(err)`.
 - **GitHub Actions CI** — линт, тесты и сборка на каждый push и PR. Зелёный CI блокирует мерж красного PR.
 - **Автоматический деплой** через self-hosted runner: `git push` в `main` → деплой на прод за ~1 минуту.
 - **Ручной деплой в одну команду** — `bash scripts/deploy.sh` (бэкап БД → git pull → зависимости → миграция схемы → перезапуск → сборка клиента → healthcheck).
 - **Prisma migrate** с baseline-миграцией — история изменений схемы под контролем.
-- **ESLint + Prettier** — единый стиль кода.
+- **ESLint (flat config)** — 0 ошибок, `ignoreRestSiblings` и `allowEmptyCatch` включены.
 
 ---
 
@@ -101,7 +103,7 @@
 |---|---|
 | **Vitest 5** | Тест-раннер (ESM, быстрый) |
 | **Supertest** | HTTP-тесты против Express-приложения |
-| **ESLint 9** | Линтер (flat config, warnings не валят CI) |
+| **ESLint 9** | Линтер (flat config, 0 warnings) |
 | **Prettier** | Форматирование |
 
 ### Frontend
@@ -122,6 +124,7 @@
 ### Инфраструктура
 | Технология | Назначение |
 |---|---|
+| **Docker Compose** | Локальный PostgreSQL для разработки и тестов |
 | **GitHub Actions** | CI (тесты, линт, сборка) |
 | **GitHub Actions self-hosted runner** | CD: запуск деплоя прямо на сервере |
 | **systemd** | Процесс-менеджер на сервере (`mediaraf-api.service`) |
@@ -153,6 +156,8 @@
 - **Клиент и сервер разделены.** Клиент знает только `VITE_API` и `VITE_SOCKET`.
 - **Аутентификация через JWT.** Токен хранится в `localStorage` (mrr_token). После смены пароля все старые токены инвалидируются через `passwordChangedAt`.
 - **Express-приложение отделено от запуска сервера.** `src/app.js` создаёт и настраивает `app` (без `listen`), `src/index.js` поднимает HTTP-сервер, Socket.IO и cron-задачи. Такое разделение позволяет тестировать API через Supertest без запуска реального сервера.
+- **Глобальный error handler.** `src/middleware/errorHandler.js` — единая точка для всех ошибок роутов. Prisma-коды `P2003` → 409, `P2025` → 404, `P2002` → 409, `err.status` пробрасывается как есть, остальное → 500. Роуты оборачиваются в `safe(fn)` из `routes/admin/_shared.js`, который просто зовёт `Promise.resolve(fn()).catch(next)`. Бизнес-логика в `lib/` больше не думает про HTTP-статусы — она бросает ошибки через `Object.assign(new Error(msg), { status })`, а хендлер сам разбирается.
+- **Модульная админка.** Бывший монолит `routes/admin.js` (~1400 строк) разбит на 21 подроутер в `routes/admin/` (`users.js`, `courses.js`, `moderation.js`, `backups.js`, `bulk.js`, `wiki.js`, `push.js`, `gamification.js`, `practicals.js`, `homework.js` и т.д.). `routes/admin.js` — тонкий barrel (5 строк). Префикс `/api/admin` и middleware `auth + requireRole('ADMIN')` вешаются один раз в `routes/admin/index.js`.
 - **Prisma migrate, а не db push.** Схема версионируется через миграции. Первая миграция `0_init` — baseline для уже существующей БД.
 - **Socket.IO** используется для чатов, typing-индикатора, уведомлений в реальном времени.
 - **PWA** работает офлайн: precache HTML/JS/CSS, кеш `/uploads`, офлайн-экран при отсутствии сети.
@@ -166,7 +171,7 @@
 ### Требования
 
 - **Node.js** ≥ 22
-- **PostgreSQL** ≥ 14 (на проде — 18)
+- **PostgreSQL** ≥ 14 (на проде — 18), либо **Docker** для локальной разработки
 - **ffmpeg** (для waveform голосовых)
 - **pg_dump / pg_restore** от версии сервера БД (для бэкапов)
 
@@ -195,8 +200,9 @@ npm install
 
 ### Настройка БД
 
+Если у вас свой Postgres — создайте базу:
+
 ```bash
-# Создать базу (пример для Ubuntu)
 sudo -u postgres psql <<'EOF'
 CREATE DATABASE media_raf_raw
   WITH ENCODING='UTF8'
@@ -211,7 +217,94 @@ ALTER SCHEMA public OWNER TO media_raf_raw;
 EOF
 ```
 
-### Переменные окружения
+Если Docker — см. секцию [Локальная разработка с Docker](#-локальная-разработка-с-docker).
+
+### Миграции и запуск
+
+```bash
+# 1. Применить миграции к основной БД
+cd server
+npx prisma migrate deploy
+npx prisma generate
+
+# 2. Запустить сервер (dev)
+npm run dev
+
+# 3. В отдельном терминале — клиент
+cd ../client
+npm run dev
+```
+
+Открыть **http://localhost:5173**
+
+---
+
+## 🐳 Локальная разработка с Docker
+
+Для локальной разработки используется отдельный Postgres в контейнере — изолированно от системного и прод-БД.
+
+### `docker-compose.dev.yml` (в корне репо)
+
+```yaml
+services:
+  postgres-dev:
+    image: postgres:16-alpine
+    container_name: media-raf-raw-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: media_raf_raw
+      POSTGRES_PASSWORD: dev_password_local
+      POSTGRES_DB: media_raf_raw_dev
+    volumes:
+      - media_raf_raw_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U media_raf_raw"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  media_raf_raw_pgdata:
+```
+
+**Почему 5434, а не 5432:** на Mac часто уже стоит Postgres (Homebrew, Postgres.app). 5434 = «мой тестовый, не тронь системный».
+
+### Запуск
+
+```bash
+# 1. Из корня репо
+docker compose -f docker-compose.dev.yml up -d
+
+# 2. Проверить, что поднялся
+docker ps | grep postgres-dev
+# должно быть: Up ... (healthy)
+
+# 3. Перейти в server
+cd server
+
+# 4. Скопировать шаблоны env
+cp .env.test.example .env.test
+cp .env.test.example .env.local
+
+# 5. Накатить миграции
+npm run db:migrate
+
+# 6. Запустить дев-сервер
+npm run dev
+```
+
+### Особенности окружений
+
+- **`server/.env`** — для локальной разработки (указывает на Docker 5434). На проде **другой** `.env`, он живёт только на сервере.
+- **`server/.env.test`** — для тестов. Читается через `loadEnv({ path: '.env.test', override: true })` в `vitest.config.js`, а не через стандартный `dotenv/config` (иначе бы подхватился `.env` и увёл тесты в прод-БД).
+- **`server/.env.local`** — для `npm run dev` (передаётся через `node --env-file=.env.local`).
+- **Sanity-check в `tests/setup.js`** — если `DATABASE_URL` не задан или (локально, при `CI !== true`) указывает на порт 5432, тесты падают с понятным сообщением. В CI (`process.env.CI === 'true'`) проверка порта пропускается, потому что GitHub Actions поднимает Postgres как service именно на 5432.
+
+---
+
+## 🔐 Переменные окружения
 
 Создайте `server/.env` (см. также `server/.env.example`):
 
@@ -240,14 +333,22 @@ VAPID_SUBJECT="mailto:admin@mediarafraw.ru"
 Создайте `server/.env.test` для интеграционных тестов (в git лежит `server/.env.test.example`):
 
 ```env
-DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test?schema=public"
+DATABASE_URL="postgresql://media_raf_raw:dev_password_local@localhost:5434/media_raf_raw_dev?schema=public"
 JWT_SECRET="test-secret-do-not-use-in-prod"
 NODE_ENV="test"
 ```
 
-> ⚠️ **Важно:** тесты пишут данные в БД. Никогда не запускайте их против продакшн-базы. Всегда используйте отдельную тестовую базу (`media_raf_raw_test`).
+> ⚠️ **Важно:** тесты пишут данные в БД. Никогда не запускайте их против продакшн-базы. Всегда используйте отдельную тестовую БД (или Docker-контейнер).
 
-> 🔒 `.env` и `.env.test` **не в git**. Если случайно закоммитили — немедленно отзовите секреты и удалите файл из истории.
+Создайте `server/.env.local` для локальной разработки (обычно = `.env`, если оба указывают на Docker):
+
+```env
+DATABASE_URL="postgresql://media_raf_raw:dev_password_local@localhost:5434/media_raf_raw_dev?schema=public"
+JWT_SECRET="dev-secret-local-only"
+NODE_ENV="development"
+CLIENT_URL="http://localhost:5173"
+PORT=4000
+```
 
 Создайте `client/.env`:
 
@@ -256,26 +357,7 @@ VITE_API="http://localhost:4000/api"
 VITE_SOCKET="http://localhost:4000"
 ```
 
-### Миграции и запуск
-
-```bash
-# 1. Применить миграции к основной БД
-cd server
-npx prisma migrate deploy
-npx prisma generate
-
-# 2. Тестовая БД
-DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma migrate deploy
-
-# 3. Запустить сервер (dev)
-npm start
-
-# 4. В отдельном терминале — клиент
-cd ../client
-npm run dev
-```
-
-Открыть **http://localhost:5173**
+> 🔒 `.env`, `.env.test`, `.env.local` **не в git**. Если случайно закоммитили — немедленно отзовите секреты и удалите файл из истории.
 
 ---
 
@@ -290,26 +372,27 @@ media-raf-raw1/
 │       └── deploy.yml                         # CD: деплой через self-hosted runner
 │
 ├── scripts/                                   # Общие скрипты
-│   └── deploy.sh                              # Деплой в одну команду (вызывается и вручную, и из CD)
+│   └── deploy.sh                              # Деплой в одну команду
+│
+├── docker-compose.dev.yml                     # Локальный Postgres для разработки и тестов
 │
 ├── client/                                    # ─── React + Vite (SPA + PWA)
 │   │
-│   ├── public/                                # Статика, попадает в dist как есть
+│   ├── public/                                # Статика
 │   │   ├── favicon.svg
 │   │   ├── favicon-16.png
 │   │   ├── favicon-32.png
-│   │   ├── apple-touch-icon.png               # 180×180 для iOS
-│   │   ├── icon-192.png                       # PWA-иконка
-│   │   ├── icon-512.png                       # PWA-иконка (high-res)
-│   │   ├── icon-maskable.svg                  # Maskable-иконка для Android
+│   │   ├── apple-touch-icon.png
+│   │   ├── icon-192.png
+│   │   ├── icon-512.png
+│   │   ├── icon-maskable.svg
 │   │   └── robots.txt
 │   │
 │   ├── src/
-│   │   │
 │   │   ├── api/
-│   │   │   └── client.js                      # fetch-обёртка, ApiError, uploadFile/uploadBlob, ping
+│   │   │   └── client.js
 │   │   │
-│   │   ├── components/                        # Переиспользуемые компоненты
+│   │   ├── components/
 │   │   │   ├── messenger/
 │   │   │   │   ├── MessageBubble.jsx
 │   │   │   │   ├── GroupAvatar.jsx
@@ -492,7 +575,7 @@ media-raf-raw1/
 │   │   │   ├── pushCleanupCron.js
 │   │   │   ├── notifyCleanup.js
 │   │   │   ├── notifyCleanupCron.js
-│   │   │   ├── gamification.js                # Ядро: awardXp, deductXp, quests, streaks, hooks
+│   │   │   ├── gamification.js
 │   │   │   ├── gamificationCatalog.js
 │   │   │   ├── gamificationSettings.js
 │   │   │   ├── gamificationCron.js
@@ -500,7 +583,8 @@ media-raf-raw1/
 │   │   │   └── audioPeaks.js
 │   │   │
 │   │   ├── middleware/
-│   │   │   └── auth.js                        # JWT + requireRole + инвалидация по passwordChangedAt
+│   │   │   ├── auth.js                        # JWT + requireRole + инвалидация по passwordChangedAt
+│   │   │   └── errorHandler.js                # Глобальный обработчик: Prisma-коды → HTTP-статусы
 │   │   │
 │   │   └── routes/
 │   │       ├── auth.js
@@ -518,32 +602,60 @@ media-raf-raw1/
 │   │       ├── onboarding.js
 │   │       ├── gamification.js
 │   │       ├── publicMeta.js
-│   │       └── admin.js
+│   │       │
+│   │       ├── admin.js                       # Barrel: 5 строк, экспортирует admin/index.js
+│   │       └── admin/                         # ─── 21 модуль админки
+│   │           ├── index.js                   # Сборка + auth + requireRole('ADMIN')
+│   │           ├── _shared.js                 # safe()
+│   │           ├── stats.js                   # /stats
+│   │           ├── system.js                  # /server/*, /maintenance/*
+│   │           ├── analytics.js               # /analytics, /analytics/courses
+│   │           ├── users.js                   # /users/*
+│   │           ├── courses.js                 # /courses/*, /lessons/*, /tests/*, /questions/*
+│   │           ├── certificates.js            # /certificates/*
+│   │           ├── moderation.js              # /reports/*
+│   │           ├── backups.js                 # /backups/*
+│   │           ├── bulk.js                    # /bulk/*
+│   │           ├── wiki.js                    # /wiki/*
+│   │           ├── push.js                    # /push/*
+│   │           ├── notifications.js           # /notifications/cleanup-*
+│   │           ├── modules.js                 # /modules
+│   │           ├── onboarding.js              # /onboarding/*
+│   │           ├── passwordResets.js          # /password-resets/*
+│   │           ├── gamification.js            # /gamification/*
+│   │           ├── practicals.js              # /mentors, /lessons/:id/practical, /practicals*
+│   │           ├── homework.js                # /lessons/:id/homework, /homework*, /homeworks*
+│   │           └── settings.js                # /settings, /broadcast, /groups
 │   │
 │   ├── tests/                                 # ─── Интеграционные тесты (Vitest + Supertest)
-│   │   ├── setup.js                           # beforeAll/afterEach/afterAll: чистка БД
+│   │   ├── setup.js                           # Env-check + чистка БД (CI-aware)
 │   │   ├── helpers.js                         # createUser, createPost, makeAdmin, createComment
-│   │   ├── smoke.test.js                      # Проверка, что модули экспортируют функции
-│   │   ├── auth.register.test.js              # POST /api/auth/register
-│   │   ├── auth.login.test.js                 # POST /api/auth/login
-│   │   ├── auth.me.test.js                    # GET /api/auth/me
-│   │   ├── auth.check.test.js                 # GET /api/auth/check-username|phone
-│   │   ├── posts.feed.test.js                 # GET /api/posts/feed
-│   │   ├── posts.crud.test.js                 # POST/PATCH/DELETE /api/posts
-│   │   ├── posts.reactions.test.js            # Реакции на посты
-│   │   └── posts.comments.test.js             # Комментарии и ответы
+│   │   ├── smoke.test.js
+│   │   ├── auth.register.test.js
+│   │   ├── auth.login.test.js
+│   │   ├── auth.me.test.js
+│   │   ├── auth.check.test.js
+│   │   ├── posts.feed.test.js
+│   │   ├── posts.crud.test.js
+│   │   ├── posts.reactions.test.js
+│   │   ├── posts.comments.test.js
+│   │   ├── admin.users.test.js                # 13 тестов
+│   │   ├── admin.moderation.test.js           # 14 тестов
+│   │   ├── admin.backups.test.js              # 13 тестов
+│   │   └── admin.modules.test.js              # 8 тестов
 │   │
-│   ├── eslint.config.js                       # ESLint (flat config, warnings не валят CI)
-│   ├── vitest.config.js                       # Vitest (forks, без параллелизма)
+│   ├── eslint.config.js                       # ESLint (flat config, ignoreRestSiblings, 0 warnings)
+│   ├── vitest.config.js                       # Vitest (forks, loadEnv .env.test)
 │   ├── uploads/                               # Загруженные файлы (создаётся автоматически)
 │   ├── backups/                               # Дампы PostgreSQL (создаётся автоматически)
 │   ├── .env                                   # Не в git
+│   ├── .env.local                             # Не в git
 │   ├── .env.test                              # Не в git
 │   ├── .env.example                           # Шаблон
 │   ├── .env.test.example                      # Шаблон тестового окружения
 │   └── package.json
 │
-├── .gitignore                                 # node_modules, .env, .env.test, uploads/, backups/, dist/,
+├── .gitignore                                 # node_modules, .env, .env.local, .env.test, uploads/, backups/, dist/,
 │                                              # собранный клиент в корне (index.html, assets/, sw.js, ...)
 └── README.md
 ```
@@ -560,8 +672,10 @@ media-raf-raw1/
 **Сервер:**
 - **`app.js`** — «чистое» Express-приложение. Экспортирует `app`, не вызывает `listen`. Это позволяет тестам импортировать его напрямую.
 - **`index.js`** — только запуск: HTTP-сервер, Socket.IO, cron. Никакого Express-кода.
-- **lib/** — вся бизнес-логика. Роуты тонкие, они только валидируют и вызывают функции из lib.
-- **routes/** — HTTP-слой.
+- **lib/** — вся бизнес-логика. Роуты тонкие, они только валидируют и вызывают функции из lib. Ошибки бросают через `Object.assign(new Error(msg), { status: N })` — их ловит `errorHandler`.
+- **middleware/errorHandler.js** — единая точка для ошибок. Все Prisma-коды и `err.status` маппятся тут.
+- **routes/** — HTTP-слой. Все роуты оборачиваются в `safe(fn)` — тонкий passthrough над `next(err)`.
+- **routes/admin/** — модульная админка (21 файл). `routes/admin.js` — тонкий barrel.
 - **prisma/seed/** — данные курсов отделены от кода.
 - **prisma/migrations/** — миграции схемы (начиная с baseline `0_init`).
 - **tests/** — интеграционные тесты, ходят через Supertest прямо в `app` без запуска сервера.
@@ -570,7 +684,7 @@ media-raf-raw1/
 
 - **Prisma migrate с baseline.** Первая миграция `0_init` помечена как применённая на проде (`prisma migrate resolve --applied 0_init`) — это значит, что существующая схема не пересоздаётся, но все будущие миграции применятся корректно.
 - **`uploads/` и `backups/`** — не в git, создаются на сервере.
-- **`.env` и `.env.test`** — обязательны, шаблоны в `.env.example` и `.env.test.example`.
+- **`.env` / `.env.local` / `.env.test`** — обязательны для соответствующих режимов, шаблоны в `.env.example` и `.env.test.example`.
 - **Собранный клиент публикуется в корень репо** — nginx отдаёт статику именно из `/www/wwwroot/mediarafraw.ru`, а не из `client/dist`. Эти файлы (index.html, assets/, sw.js, иконки) перечислены в `.gitignore` и не коммитятся.
 - **PWA-манифест** — генерируется `vite-plugin-pwa` из `vite.config.js`, в `public/` лежат только иконки.
 
@@ -686,6 +800,8 @@ git push
 
 Проект покрыт **интеграционными тестами** на бэкенде. Тесты ходят через `supertest` прямо в Express-приложение (`src/app.js`), без запуска HTTP-сервера и Socket.IO — поэтому прогон быстрый и без побочных эффектов.
 
+**Всего: 127 тестов в 13 файлах**, прогон ~35–50 секунд.
+
 ### Что тестируется
 
 | Файл | Покрытие |
@@ -699,14 +815,31 @@ git push
 | `tests/posts.crud.test.js` | Создание/редактирование/удаление постов + права доступа |
 | `tests/posts.reactions.test.js` | Реакции: toggle, разные эмодзи, агрегация |
 | `tests/posts.comments.test.js` | Комментарии: вложенность, редактирование, удаление, права |
+| `tests/admin.users.test.js` | Админ-управление пользователями: роли, бан, пароль, каскадное удаление |
+| `tests/admin.moderation.test.js` | Жалобы: список, фильтры, статусы, delete-content, ban-user |
+| `tests/admin.backups.test.js` | Бэкапы: права, валидация имён, path traversal, restore без filename |
+| `tests/admin.modules.test.js` | Включение/выключение модулей, «хотя бы один включён» |
 
 ### Подготовка тестовой БД
 
-```bash
-# Создать тестовую базу (один раз)
-sudo -u postgres psql -c "CREATE DATABASE media_raf_raw_test;"
+**Вариант А — Docker (рекомендуется):**
 
-# Применить миграции
+```bash
+# 1. Из корня репо
+docker compose -f docker-compose.dev.yml up -d
+
+# 2. Скопировать шаблон env
+cd server
+cp .env.test.example .env.test
+
+# 3. Применить миграции к тестовой БД
+npm run db:migrate
+```
+
+**Вариант Б — системный Postgres:**
+
+```bash
+sudo -u postgres psql -c "CREATE DATABASE media_raf_raw_test;"
 cd server
 DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma migrate deploy
 ```
@@ -716,33 +849,41 @@ DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_r
 ```bash
 cd server
 
-# Все тесты (использует .env.test через NODE_ENV=test)
-NODE_ENV=test DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" JWT_SECRET="test-secret" npm test
+# Все тесты
+npm test
 
 # Один файл
-npm test -- tests/posts.feed.test.js
+npx vitest run tests/admin.users.test.js
 
-# Watch-режим (для разработки)
+# Watch-режим
 npm run test:watch
 
 # С покрытием
 npm run test:cov
 ```
 
-**Ожидаемый результат:** ~78 passed за ~35 секунд.
+**Ожидаемый результат:** `Test Files 13 passed (13)` / `Tests 127 passed (127)`.
 
 ### Как устроены тесты
 
-- **`tests/setup.js`** — глобальный `beforeAll`/`afterEach`/`afterAll`. После каждого теста удаляет всех тестовых юзеров (по префиксу `+7999` и `test_`) и связанные данные. Даёт 250 мс «хвоста» для завершения fire-and-forget задач (геймификация, уведомления), чтобы не ловить `P2025`.
+- **`tests/setup.js`** — `beforeAll` проверяет `DATABASE_URL` (и, если не CI, что порт не 5432 — защита от запуска против прод-БД). `afterEach` удаляет всех тестовых юзеров (по префиксу `+7999` и `test_`) и связанные данные. Даёт 250 мс «хвоста» для завершения fire-and-forget задач (геймификация, уведомления), чтобы не ловить `P2025`.
 - **`tests/helpers.js`** — утилиты: `createUser`, `createPost`, `createComment`, `makeAdmin`, `validPayload`. Генерируют уникальные телефоны и username, чтобы тесты не конфликтовали.
-- **Изоляция от прод-данных.** Тесты постов фильтруют ленту по автору (`onlyTestPosts`), чтобы не полагаться на пустую БД. Это позволяет безопасно запускать их даже на тестовой БД, где случайно оказались «настоящие» данные.
-- **Пойманные баги.** Тест `posts.feed.test.js` при первом запуске поймал реальный баг в cursor-пагинации ленты: последний элемент страницы «съедался» и терялся на следующей странице. Исправлено.
+- **Изоляция от прод-данных.** Тесты постов фильтруют ленту по автору (`onlyTestPosts`), чтобы не полагаться на пустую БД.
+- **ENV для тестов читается из `.env.test`**, а не `.env`. Это делает `vitest.config.js` через `loadEnv({ path: '.env.test', override: true })`.
+- **CI-aware sanity-check.** Если `process.env.CI === 'true'`, проверка порта (5432 vs 5434) пропускается — в GitHub Actions Postgres поднимается как service именно на 5432.
+
+### Пойманные баги (история)
+
+- `posts.feed.test.js` при первом запуске поймал реальный баг в cursor-пагинации: последний элемент страницы «съедался» и терялся на следующей странице. Исправлено.
+- `admin.moderation.test.js` поймал 3 проблемы в `lib/moderation.js`: голые `Error` без `status` (500 вместо 400/404) и `banReportedUser` не помечал жалобу `RESOLVED`. Исправлено.
+- `admin.backups.test.js` (в связке с ручным аудитом) вскрыл **path traversal** в `DELETE /admin/backups/:filename` — исправлено через `path.basename` + проверку расширения.
 
 ### Что делать, если тесты упали
 
-1. Проверь `DATABASE_URL` — точно указывает на тестовую БД?
-2. Убедись, что тестовая БД пуста (в тестах ленты мы фильтруем только свои посты, но мусор в БД может замедлить прогон).
-3. Смотри в лог — Vitest показывает конкретный assert и стек.
+1. Проверь `DATABASE_URL` — точно указывает на тестовую БД (порт 5434 для Docker)?
+2. Убедись, что Postgres-контейнер поднят: `docker ps | grep postgres-dev`.
+3. Если падает с `Environment variable not found` — проверь, что `.env.test` существует и в нём есть `DATABASE_URL`.
+4. Смотри в лог — Vitest показывает конкретный assert и стек.
 
 ---
 
@@ -753,13 +894,13 @@ npm run test:cov
 Запускается на каждый `push` в `main`/`dev` и на каждый Pull Request.
 
 **Job `server`:**
-1. Поднимает сервис-контейнер `postgres:16`.
+1. Поднимает сервис-контейнер `postgres:16` (на порту 5432, стандартном для Actions).
 2. Node 22.
 3. `npm ci` в `server/`.
-4. `npm run lint` — ESLint (warnings не валят job).
+4. `npm run lint` — ESLint (0 errors, 0 warnings).
 5. `npx prisma generate`.
 6. `npx prisma migrate deploy` — применяет все миграции к тестовой БД.
-7. `npm test` — все 78 тестов.
+7. `npm test` — все 127 тестов.
 
 **Job `client`:**
 1. Node 22.
@@ -824,8 +965,8 @@ journalctl -u actions.runner.yurikov2126-pixel-media-raf-raw1.ubuntu.service -n 
 ```bash
 # Server
 cd server
-npm run lint       # 0 errors (warnings OK)
-NODE_ENV=test DATABASE_URL="..." JWT_SECRET="test-secret" npm test   # 78 passed
+npm run lint       # 0 errors, 0 warnings
+npm test           # 127 passed
 
 # Client
 cd ../client
@@ -948,7 +1089,7 @@ Authorization: Bearer <JWT>
 | `GET /gamification/quests` | Квесты на сегодня |
 | `GET /gamification/leaderboard` | Лидерборд |
 | `GET /settings/public` | Публичные настройки сайта |
-| `GET /admin/*` | Все админские роуты (role=ADMIN) |
+| `GET /admin/*` | Все админские роуты (role=ADMIN) — 21 модуль |
 
 ### Socket.IO события
 
@@ -1231,14 +1372,18 @@ scripts/deploy.sh              # Деплой на прод (вызываетс�
 ```json
 {
   "scripts": {
+    "dev": "node --watch --env-file=.env.local src/index.js",
     "start": "node src/index.js",
-    "seed": "node prisma/seed/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.js\""
+    "lint": "eslint src tests --ext .js",
+    "lint:fix": "eslint src tests --ext .js --fix",
+    "format": "prettier --write \"src/**/*.js\"",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "node prisma/seed/index.js",
+    "db:generate": "prisma generate"
   }
 }
 ```
@@ -1266,10 +1411,12 @@ scripts/deploy.sh              # Деплой на прод (вызываетс�
 - **Уникальные индексы** в БД на `username`, `phone`, `email`.
 - **CORS** — настраивается на конкретный домен, а не `origin: true`.
 - **Загружаемые файлы** — лимит 200 МБ, изображения сжимаются через `sharp` до 1920px.
+- **Path traversal защищён в `/admin/backups/*`.** `DELETE`, `GET /download` и `POST /restore` используют `path.basename` + проверку расширения (`.dump`/`.sql`) + `startsWith(BACKUPS_DIR)`. **Не удаляй эти проверки при рефакторинге.**
 - **Харденинг геймификации** — все операции `awardXp`/`deductXp` устойчивы к удалению пользователя во время выполнения (`P2025`/`P2003` не падают, а тихо возвращают `null`).
+- **Харденинг модерации** — `lib/moderation.js` бросает ошибки через `Object.assign(new Error(msg), { status })`, чтобы глобальный `errorHandler` возвращал 400/404 вместо 500 на ожидаемых ситуациях.
 - **Self-hosted runner — только для `push` в main.** Workflow деплоя не имеет триггера `pull_request`. В Settings → Actions включено «Require approval for first-time contributors». Это защищает от запуска деплоя из PR-из-форков.
 - **PostgreSQL слушает только `127.0.0.1:5432`** — снаружи недоступен.
-- **`.env` и `.env.test` — не в git.** Если случайно закоммитили — немедленно:
+- **`.env`, `.env.local`, `.env.test` — не в git.** Если случайно закоммитили — немедленно:
     1. Удалите файл: `git rm --cached server/.env`.
     2. Добавьте в `.gitignore`.
     3. **Ротируйте все секреты**, которые в нём были (`JWT_SECRET`, `VAPID_*`, пароль БД). Просто удалить файл недостаточно — он остаётся в истории git.
@@ -1279,12 +1426,13 @@ scripts/deploy.sh              # Деплой на прод (вызываетс�
 
 ## 🐛 Известные ограничения
 
-- **SQLite не поддерживается** — только PostgreSQL. Для dev на Mac используйте `brew services start postgresql`.
+- **SQLite не поддерживается** — только PostgreSQL. Для dev на Mac используйте `docker compose -f docker-compose.dev.yml up -d`.
 - **ffmpeg** обязателен для генерации waveform голосовых. Без него используется fallback.
 - **`pg_dump` и PostgreSQL должны совпадать по мажорной версии.** На проде PostgreSQL 18, а системный `pg_dump` в Ubuntu 24.04 — 16. `scripts/deploy.sh` автоматически ищет `pg_dump` от 18-й версии (aaPanel-овский `/www/server/pgsql/bin/pg_dump`).
 - **npm-зеркала.** aaPanel ставит глобально `registry.npmmirror.com`, где периодически нет свежих пакетов. `scripts/deploy.sh` принудительно переключает registry на `https://registry.npmjs.org/`.
 - **VAPID-ключи** были в истории git (в `.env.test`). Формально скомпрометированы. Для полной чистоты нужна ротация (сломает существующие push-подписки — все пользователи должны подписаться заново). Пока отложено.
 - **PDF-экспорт сертификатов** работает на клиенте через `html-to-image` + `jsPDF`.
+- **Порты Docker vs прод.** Локально Postgres — на 5434 (чтобы не конфликтовать с системным). В CI — на 5432 (стандартный для GitHub Actions). Sanity-check в `tests/setup.js` учитывает это через `if (!process.env.CI)`.
 
 ---
 
