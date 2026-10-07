@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 import Avatar from '../../../components/Avatar.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
@@ -45,6 +46,7 @@ const SUBTABS = [
 ];
 
 export default function Gamification({ token }) {
+    const toast = useToast();
     const [subtab, setSubtab] = useState('general');
     const [settings, setSettings] = useState(null);
     const [draft, setDraft] = useState(null);
@@ -56,7 +58,6 @@ export default function Gamification({ token }) {
     const [templates, setTemplates] = useState([]);
 
     const [busy, setBusy] = useState(false);
-    const [message, setMessage] = useState('');
     const [confirmReset, setConfirmReset] = useState(null);
     const [confirmRegen, setConfirmRegen] = useState(false);
     const [confirmResetAch, setConfirmResetAch] = useState(false);
@@ -74,32 +75,48 @@ export default function Gamification({ token }) {
             const s = await api('/admin/gamification/settings', { token });
             setSettings(s);
             setDraft({ ...s, xp: { ...s.xp }, deductions: { ...s.deductions } });
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
     const loadOverview = async () => {
-        try { setOverview(await api('/admin/gamification/overview', { token })); } catch {}
+        try {
+            setOverview(await api('/admin/gamification/overview', { token }));
+        } catch {
+            /* тихо — вторичные данные */
+        }
     };
     const loadCatalog = async () => {
-        try { setCatalog(await api('/admin/gamification/catalog', { token })); } catch {}
+        try {
+            setCatalog(await api('/admin/gamification/catalog', { token }));
+        } catch {
+            /* тихо */
+        }
     };
     const loadAchievements = async () => {
         try {
             const r = await api('/admin/gamification/achievements', { token });
             setAchievements(r.achievements || []);
-        } catch {}
+        } catch {
+            /* тихо */
+        }
     };
     const loadLevels = async () => {
         try {
             const r = await api('/admin/gamification/levels', { token });
             setLevels(r.thresholds);
             setLevelDraft(r.thresholds);
-        } catch {}
+        } catch {
+            /* тихо */
+        }
     };
     const loadTemplates = async () => {
         try {
             const r = await api('/admin/gamification/quest-templates', { token });
             setTemplates(r.templates || []);
-        } catch {}
+        } catch {
+            /* тихо */
+        }
     };
 
     useEffect(() => {
@@ -121,7 +138,7 @@ export default function Gamification({ token }) {
 
     /* ─── Сохранения ─── */
     const saveSettings = async () => {
-        setBusy(true); setMessage('');
+        setBusy(true);
         try {
             await api('/admin/gamification/settings', {
                 method: 'PUT', token,
@@ -141,14 +158,16 @@ export default function Gamification({ token }) {
                 },
             });
             await loadSettings();
-            setMessage('✓ Сохранено');
-            setTimeout(() => setMessage(''), 2000);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+            toast.success('Настройки сохранены');
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const saveLevels = async () => {
-        setBusy(true); setMessage('');
+        setBusy(true);
         try {
             const r = await api('/admin/gamification/levels', {
                 method: 'PUT', token,
@@ -156,10 +175,12 @@ export default function Gamification({ token }) {
             });
             setLevels(r.thresholds);
             setLevelDraft(r.thresholds);
-            setMessage('✓ Уровни сохранены');
-            setTimeout(() => setMessage(''), 2000);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+            toast.success('Уровни сохранены');
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const resetLevels = async () => {
@@ -171,10 +192,12 @@ export default function Gamification({ token }) {
             });
             setLevels(r.thresholds);
             setLevelDraft(r.thresholds);
-            setMessage('✓ Уровни сброшены');
-            setTimeout(() => setMessage(''), 2000);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+            toast.success('Уровни сброшены к формуле');
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const doReset = async () => {
@@ -182,17 +205,21 @@ export default function Gamification({ token }) {
         try {
             if (confirmReset === 'all') {
                 await api('/admin/gamification/reset-all', { method: 'POST', token });
-                setMessage('✓ Сброшено для всех');
+                toast.success('Прогресс сброшен для всех');
             } else if (confirmReset === 'user' && targetUser) {
-                await api(`/admin/gamification/reset-user/${targetUser.id}`, { method: 'POST', token });
-                setMessage(`✓ Сброшено для ${targetUser.fullName}`);
+                await api(`/admin/gamification/reset-user/${targetUser.id}`, {
+                    method: 'POST', token,
+                });
+                toast.success(`Прогресс сброшен для ${targetUser.fullName}`);
             }
             setConfirmReset(null);
             setTargetUser(null);
             await loadOverview();
-            setTimeout(() => setMessage(''), 2500);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const doGrant = async () => {
@@ -204,24 +231,34 @@ export default function Gamification({ token }) {
                 method: 'POST', token,
                 body: { userId: grantTarget.id, amount: signed },
             });
-            setMessage(`✓ ${grantMode === 'deduct' ? 'Списано' : 'Начислено'} ${Math.abs(grantAmount)} XP — ${grantTarget.fullName}`);
+            toast.success(
+                `${grantMode === 'deduct' ? 'Списано' : 'Начислено'} ${Math.abs(grantAmount)} XP — ${grantTarget.fullName}`
+            );
             setGrantTarget(null);
             await loadOverview();
-            setTimeout(() => setMessage(''), 2500);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const doRegenerate = async () => {
         setConfirmRegen(false);
         setBusy(true);
         try {
-            const r = await api('/admin/gamification/quests/regenerate-all', { method: 'POST', token });
-            setMessage(`✓ Удалено ${r.deleted} квестов. Пользователи получат новые при следующем заходе.`);
+            const r = await api('/admin/gamification/quests/regenerate-all', {
+                method: 'POST', token,
+            });
+            toast.success(
+                `Удалено ${r.deleted} квестов. Пользователи получат новые при следующем заходе.`
+            );
             await loadOverview();
-            setTimeout(() => setMessage(''), 3000);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const updateDraft = (patch) => setDraft((d) => ({ ...d, ...patch }));
@@ -237,34 +274,52 @@ export default function Gamification({ token }) {
         setBusy(true);
         try {
             if (editingAchievement.mode === 'create') {
-                await api('/admin/gamification/achievements', { method: 'POST', token, body: data });
+                await api('/admin/gamification/achievements', {
+                    method: 'POST', token, body: data,
+                });
+                toast.success('Достижение создано');
             } else {
-                await api(`/admin/gamification/achievements/${data.id}`, { method: 'PATCH', token, body: data });
+                await api(`/admin/gamification/achievements/${data.id}`, {
+                    method: 'PATCH', token, body: data,
+                });
+                toast.success('Достижение сохранено');
             }
             setEditingAchievement(null);
             await loadAchievements();
-        } catch (e) { alert(e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const deleteAchievement = async (id) => {
         if (!confirm('Удалить достижение?')) return;
         try {
-            await api(`/admin/gamification/achievements/${id}`, { method: 'DELETE', token });
+            await api(`/admin/gamification/achievements/${id}`, {
+                method: 'DELETE', token,
+            });
             await loadAchievements();
-        } catch (e) { alert(e.message); }
+            toast.success('Достижение удалено');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const doResetAch = async () => {
         setConfirmResetAch(false);
         setBusy(true);
         try {
-            await api('/admin/gamification/achievements/reset-defaults', { method: 'POST', token });
+            await api('/admin/gamification/achievements/reset-defaults', {
+                method: 'POST', token,
+            });
             await loadAchievements();
-            setMessage('✓ Достижения сброшены к дефолтным');
-            setTimeout(() => setMessage(''), 2500);
-        } catch (e) { setMessage('Ошибка: ' + e.message); }
-        finally { setBusy(false); }
+            toast.success('Достижения сброшены к дефолтным');
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     /* ─── Шаблоны квестов CRUD ─── */
@@ -274,30 +329,49 @@ export default function Gamification({ token }) {
         setBusy(true);
         try {
             if (editingTemplate.mode === 'create') {
-                await api('/admin/gamification/quest-templates', { method: 'POST', token, body: data });
+                await api('/admin/gamification/quest-templates', {
+                    method: 'POST', token, body: data,
+                });
+                toast.success('Шаблон создан');
             } else {
-                await api(`/admin/gamification/quest-templates/${data.id}`, { method: 'PATCH', token, body: data });
+                await api(`/admin/gamification/quest-templates/${data.id}`, {
+                    method: 'PATCH', token, body: data,
+                });
+                toast.success('Шаблон сохранён');
             }
             setEditingTemplate(null);
             await loadTemplates();
-        } catch (e) { alert(e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const deleteTemplate = async (id) => {
         if (!confirm('Удалить шаблон?')) return;
         try {
-            await api(`/admin/gamification/quest-templates/${id}`, { method: 'DELETE', token });
+            await api(`/admin/gamification/quest-templates/${id}`, {
+                method: 'DELETE', token,
+            });
             await loadTemplates();
-        } catch (e) { alert(e.message); }
+            toast.success('Шаблон удалён');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const resetTemplates = async () => {
         if (!confirm('Сбросить шаблоны квестов к стандартным?')) return;
         try {
-            await api('/admin/gamification/quest-templates/reset-defaults', { method: 'POST', token });
+            await api('/admin/gamification/quest-templates/reset-defaults', {
+                method: 'POST', token,
+            });
             await loadTemplates();
-        } catch (e) { alert(e.message); }
+            toast.success('Шаблоны сброшены');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     return (
@@ -314,8 +388,6 @@ export default function Gamification({ token }) {
                     </button>
                 ))}
             </div>
-
-            {message && <div className="card p-3 text-sm bg-white/5">{message}</div>}
 
             {/* ═══════════ ОСНОВНОЕ ═══════════ */}
             {subtab === 'general' && (

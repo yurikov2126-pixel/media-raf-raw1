@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 import ChangePasswordModal from '../../../components/ChangePasswordModal.jsx';
 
 const ROLES = ['STUDENT', 'MENTOR', 'ADMIN'];
@@ -7,6 +8,7 @@ const DIRECTIONS = ['photo', 'video', 'radio', 'sound'];
 const DIR_LABEL = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
 export default function Users({ users, setUsers, token }) {
+    const toast = useToast();
     const [resetting, setResetting] = useState(null);
     const [q, setQ] = useState('');
     const [role, setRole] = useState('');
@@ -41,8 +43,12 @@ export default function Users({ users, setUsers, token }) {
     }, [users, q, role, direction, status, sortDesc]);
 
     const updateUser = async (id, patch) => {
-        const u = await api(`/admin/users/${id}`, { method: 'PATCH', token, body: patch });
-        setUsers((prev) => prev.map((x) => (x.id === id ? u : x)));
+        try {
+            const u = await api(`/admin/users/${id}`, { method: 'PATCH', token, body: patch });
+            setUsers((prev) => prev.map((x) => (x.id === id ? u : x)));
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const deleteUser = async (id) => {
@@ -50,15 +56,17 @@ export default function Users({ users, setUsers, token }) {
         try {
             await api(`/admin/users/${id}`, { method: 'DELETE', token });
             setUsers((prev) => prev.filter((x) => x.id !== id));
+            toast.success('Пользователь удалён');
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         }
     };
 
     const toggleSelect = (id) => {
         setSelected((prev) => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
             return next;
         });
     };
@@ -75,20 +83,31 @@ export default function Users({ users, setUsers, token }) {
         try {
             const ids = [...selected];
             let done = 0;
+            let failed = 0;
             for (const id of ids) {
                 try {
                     if (action === 'delete') {
                         await api(`/admin/users/${id}`, { method: 'DELETE', token });
                         setUsers((prev) => prev.filter((x) => x.id !== id));
                     } else {
-                        const u = await api(`/admin/users/${id}`, { method: 'PATCH', token, body: payload });
+                        const u = await api(`/admin/users/${id}`, {
+                            method: 'PATCH',
+                            token,
+                            body: payload,
+                        });
                         setUsers((prev) => prev.map((x) => (x.id === id ? u : x)));
                     }
                     done++;
-                } catch {}
+                } catch {
+                    failed++;
+                }
             }
             setSelected(new Set());
-            alert(`Обработано: ${done} из ${ids.length}`);
+            if (failed === 0) {
+                toast.success(`Обработано: ${done} из ${ids.length}`);
+            } else {
+                toast.warn(`Обработано: ${done}, ошибок: ${failed} из ${ids.length}`);
+            }
         } finally {
             setBulkBusy(false);
         }
@@ -112,6 +131,7 @@ export default function Users({ users, setUsers, token }) {
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 500);
+        toast.success(`Экспортировано: ${filtered.length} строк`);
     };
 
     return (
