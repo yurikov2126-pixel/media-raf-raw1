@@ -6,8 +6,8 @@ export default [
             'dist/**',
             'coverage/**',
             'prisma/migrations/**',
-            'prisma/seed/**',      // ← ДОБАВЛЕНО: сид-данные, не код
-            'scripts/**'
+            'prisma/seed/**',
+            'scripts/**'    // ← добавить
         ],
         languageOptions: {
             ecmaVersion: 2023,
