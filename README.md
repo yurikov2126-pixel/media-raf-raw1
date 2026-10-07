@@ -72,7 +72,9 @@
 ### Качество и автоматизация
 - **78 интеграционных тестов** (Vitest + Supertest) для API — auth и posts.
 - **GitHub Actions CI** — линт, тесты и сборка на каждый push и PR. Зелёный CI блокирует мерж красного PR.
+- **Автоматический деплой** через self-hosted runner: `git push` в `main` → деплой на прод за ~1 минуту.
 - **Ручной деплой в одну команду** — `bash scripts/deploy.sh` (бэкап БД → git pull → зависимости → миграция схемы → перезапуск → сборка клиента → healthcheck).
+- **Prisma migrate** с baseline-миграцией — история изменений схемы под контролем.
 - **ESLint + Prettier** — единый стиль кода.
 
 ---
@@ -121,8 +123,10 @@
 | Технология | Назначение |
 |---|---|
 | **GitHub Actions** | CI (тесты, линт, сборка) |
+| **GitHub Actions self-hosted runner** | CD: запуск деплоя прямо на сервере |
 | **systemd** | Процесс-менеджер на сервере (`mediaraf-api.service`) |
 | **Nginx** | Реверс-прокси, SSL, раздача SPA |
+| **aaPanel** | Панель управления сервером (nginx, PostgreSQL, SSL) |
 
 ---
 
@@ -149,10 +153,11 @@
 - **Клиент и сервер разделены.** Клиент знает только `VITE_API` и `VITE_SOCKET`.
 - **Аутентификация через JWT.** Токен хранится в `localStorage` (mrr_token). После смены пароля все старые токены инвалидируются через `passwordChangedAt`.
 - **Express-приложение отделено от запуска сервера.** `src/app.js` создаёт и настраивает `app` (без `listen`), `src/index.js` поднимает HTTP-сервер, Socket.IO и cron-задачи. Такое разделение позволяет тестировать API через Supertest без запуска реального сервера.
-- **Prisma — единая точка работы с БД.** Схема синхронизируется через `prisma db push`.
+- **Prisma migrate, а не db push.** Схема версионируется через миграции. Первая миграция `0_init` — baseline для уже существующей БД.
 - **Socket.IO** используется для чатов, typing-индикатора, уведомлений в реальном времени.
 - **PWA** работает офлайн: precache HTML/JS/CSS, кеш `/uploads`, офлайн-экран при отсутствии сети.
 - **systemd, а не pm2.** API запускается как системный сервис `mediaraf-api.service`, что даёт автозапуск после ребута, рестарт при падении и единый способ управления из CI/скриптов.
+- **Self-hosted GitHub Actions runner.** Раннер установлен на самом сервере (исходящее соединение к GitHub по HTTPS). Пуш в `main` запускает деплой локально, без SSH извне.
 
 ---
 
@@ -251,21 +256,21 @@ VITE_API="http://localhost:4000/api"
 VITE_SOCKET="http://localhost:4000"
 ```
 
-### Миграция и запуск
+### Миграции и запуск
 
 ```bash
-# 1. Применить схему Prisma (к основной и тестовой БД)
+# 1. Применить миграции к основной БД
 cd server
-npx prisma db push
+npx prisma migrate deploy
 npx prisma generate
 
-# Тестовая БД
-DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma db push --skip-generate
+# 2. Тестовая БД
+DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma migrate deploy
 
-# 2. Запустить сервер (dev)
+# 3. Запустить сервер (dev)
 npm start
 
-# 3. В отдельном терминале — клиент
+# 4. В отдельном терминале — клиент
 cd ../client
 npm run dev
 ```
@@ -282,10 +287,10 @@ media-raf-raw1/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                             # CI: lint + tests + build на push/PR
-│       └── deploy.yml                         # CD: деплой по SSH (см. «Известные ограничения»)
+│       └── deploy.yml                         # CD: деплой через self-hosted runner
 │
 ├── scripts/                                   # Общие скрипты
-│   └── deploy.sh                              # Ручной деплой в одну команду
+│   └── deploy.sh                              # Деплой в одну команду (вызывается и вручную, и из CD)
 │
 ├── client/                                    # ─── React + Vite (SPA + PWA)
 │   │
@@ -449,6 +454,10 @@ media-raf-raw1/
 │   │
 │   ├── prisma/
 │   │   ├── schema.prisma                      # Все модели
+│   │   ├── migrations/                        # ─── Prisma migrations
+│   │   │   ├── 0_init/                        # Baseline для существующей схемы
+│   │   │   │   └── migration.sql
+│   │   │   └── migration_lock.toml
 │   │   └── seed/                              # Наполнение курсов
 │   │       ├── index.js
 │   │       ├── helpers.js
@@ -511,9 +520,6 @@ media-raf-raw1/
 │   │       ├── publicMeta.js
 │   │       └── admin.js
 │   │
-│   ├── scripts/                               # Скрипты миграции/обслуживания
-│   │   └── migrate-to-pg.mjs                  # SQLite → PostgreSQL (архивный)
-│   │
 │   ├── tests/                                 # ─── Интеграционные тесты (Vitest + Supertest)
 │   │   ├── setup.js                           # beforeAll/afterEach/afterAll: чистка БД
 │   │   ├── helpers.js                         # createUser, createPost, makeAdmin, createComment
@@ -557,11 +563,12 @@ media-raf-raw1/
 - **lib/** — вся бизнес-логика. Роуты тонкие, они только валидируют и вызывают функции из lib.
 - **routes/** — HTTP-слой.
 - **prisma/seed/** — данные курсов отделены от кода.
+- **prisma/migrations/** — миграции схемы (начиная с baseline `0_init`).
 - **tests/** — интеграционные тесты, ходят через Supertest прямо в `app` без запуска сервера.
 
 ### Особенности
 
-- **Нет `prisma migrate`** — только `db push`. История миграций не ведётся.
+- **Prisma migrate с baseline.** Первая миграция `0_init` помечена как применённая на проде (`prisma migrate resolve --applied 0_init`) — это значит, что существующая схема не пересоздаётся, но все будущие миграции применятся корректно.
 - **`uploads/` и `backups/`** — не в git, создаются на сервере.
 - **`.env` и `.env.test`** — обязательны, шаблоны в `.env.example` и `.env.test.example`.
 - **Собранный клиент публикуется в корень репо** — nginx отдаёт статику именно из `/www/wwwroot/mediarafraw.ru`, а не из `client/dist`. Эти файлы (index.html, assets/, sw.js, иконки) перечислены в `.gitignore` и не коммитятся.
@@ -571,15 +578,24 @@ media-raf-raw1/
 
 ## 🗄 Работа с базой данных
 
-Проект использует **PostgreSQL** и **Prisma ORM**.
+Проект использует **PostgreSQL** и **Prisma ORM** с **migrate** (история миграций ведётся).
 
 ### Основные команды
 
 ```bash
 cd server
 
-# Синхронизировать схему с БД (без миграций, безопасно)
-npx prisma db push
+# Применить все миграции к БД (прод, CI, ручной запуск)
+npx prisma migrate deploy
+
+# Создать новую миграцию после изменения schema.prisma (локально)
+npx prisma migrate dev --name add_something
+
+# Создать миграцию без применения (для случаев, когда БД нет локально)
+npx prisma migrate dev --create-only --name add_something
+
+# Пометить миграцию как применённую (для baseline)
+npx prisma migrate resolve --applied 0_init
 
 # Пересобрать Prisma Client (обязательно после изменения схемы)
 npx prisma generate
@@ -587,18 +603,56 @@ npx prisma generate
 # Открыть Prisma Studio
 npx prisma studio
 
+# Проверить статус миграций
+npx prisma migrate status
+
 # Проверить схему без изменений
 npx prisma validate
 ```
 
+### Baseline `0_init`
+
+Первая миграция `server/prisma/migrations/0_init/migration.sql` создана через `prisma migrate diff` из текущей схемы и **помечена как уже применённая** на проде через `migrate resolve --applied`. Это значит:
+
+- Существующая БД не пересоздаётся.
+- `_prisma_migrations` содержит запись `0_init`.
+- Все будущие миграции применятся штатно поверх.
+
+**Если разворачиваете проект с нуля** (новая БД без данных) — просто запустите `npx prisma migrate deploy`. Она применит `0_init` и создаст все таблицы.
+
+**Если БД уже существует** (например, восстановлена из дампа) — после `git clone` нужно один раз выполнить:
+
+```bash
+npx prisma migrate resolve --applied 0_init
+```
+
+### Как добавить новую миграцию
+
+```bash
+cd server
+
+# 1. Изменить schema.prisma (добавить поле/модель/индекс)
+
+# 2. Локально: создать миграцию + применить к dev-БД
+npx prisma migrate dev --name add_user_locale
+
+# 3. Закоммитить папку prisma/migrations/<timestamp>_add_user_locale/
+git add prisma/migrations/
+git commit -m "feat(db): add User.locale"
+git push
+```
+
+На проде при следующем деплое `scripts/deploy.sh` вызовет `prisma migrate deploy`, которая применит новую миграцию автоматически.
+
 ### Важно
 
-- Проект **не использует `prisma migrate`** — все изменения схемы применяются через `db push`.
-- После изменения `schema.prisma` **обязательно** запустить `npx prisma generate` и **полностью перезапустить** Node-процесс:
+- **Никогда не редактируйте существующие миграции.** Если нашли ошибку — создайте новую миграцию, которая исправляет.
+- **`prisma db push` — только для тестовой БД в ручных экспериментах.** В проде и CI используется `migrate deploy`.
+- После изменения `schema.prisma` **обязательно** `npx prisma generate` и **полный перезапуск** Node-процесса:
   ```bash
   systemctl restart mediaraf-api
   ```
-- `systemctl reload` или перезапуск через панель может **не подхватить** новые модели — только полный `restart`.
+  `systemctl reload` не подхватит новые модели.
 
 ### Модели БД (обзор)
 
@@ -652,9 +706,9 @@ npx prisma validate
 # Создать тестовую базу (один раз)
 sudo -u postgres psql -c "CREATE DATABASE media_raf_raw_test;"
 
-# Применить схему
+# Применить миграции
 cd server
-DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma db push --skip-generate
+DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" npx prisma migrate deploy
 ```
 
 ### Запуск
@@ -704,7 +758,7 @@ npm run test:cov
 3. `npm ci` в `server/`.
 4. `npm run lint` — ESLint (warnings не валят job).
 5. `npx prisma generate`.
-6. `npx prisma db push --skip-generate` — схема в тестовую БД.
+6. `npx prisma migrate deploy` — применяет все миграции к тестовой БД.
 7. `npm test` — все 78 тестов.
 
 **Job `client`:**
@@ -716,15 +770,54 @@ npm run test:cov
 
 ### CD — `.github/workflows/deploy.yml`
 
-Workflow настроен, но **на текущем сервере не работает** из-за NAT (см. [Известные ограничения](#-известные-ограничения)). Используйте **ручной деплой через `scripts/deploy.sh`** (см. [Деплой](#-деплой)).
+**Работает через self-hosted GitHub Actions runner**, установленный на самом сервере. Раннер подключается к GitHub по исходящему HTTPS — никаких открытых портов и SSH-туннелей не нужно.
 
-Что делает workflow (на случай переезда на сервер с публичным SSH):
-1. Подключается по SSH к серверу (`secrets.SSH_HOST`, `SSH_USER`, `SSH_KEY`).
-2. Бэкап БД.
-3. `git pull origin main`.
-4. В `server/`: `npm ci`, `npx prisma generate`, `npx prisma db push --skip-generate`, `systemctl restart mediaraf-api`.
-5. В `client/`: `npm ci`, `npm run build`, копирование в корень.
-6. Healthcheck.
+**Триггеры:**
+- `push` в `main` — автоматический деплой.
+- `workflow_dispatch` — ручной запуск из вкладки Actions.
+
+**Что делает workflow:**
+```yaml
+steps:
+  - name: Run deploy script
+    run: bash /www/wwwroot/mediarafraw.ru/scripts/deploy.sh
+    working-directory: /www/wwwroot/mediarafraw.ru
+```
+
+То есть workflow просто запускает `scripts/deploy.sh` локально на сервере.
+
+**Защита от параллельных деплоев:**
+```yaml
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+```
+
+**Защита от PR-из-форков:** в Settings → Actions → General установлено «Require approval for first-time contributors». Дополнительно workflow не имеет триггера `pull_request` — только `push` и `workflow_dispatch`. Это значит, что PR из форков не может запустить деплой.
+
+### Self-hosted runner
+
+Установлен в `/opt/actions-runner` на сервере, работает как systemd-сервис:
+
+```bash
+systemctl status actions.runner.yurikov2126-pixel-media-raf-raw1.ubuntu.service
+```
+
+**Переменная `RUNNER_ALLOW_RUNASROOT=1`** прописана в unit-файле сервиса, потому что деплой требует root (systemctl, chown www, запись в `/root/db-backups`).
+
+**Управление:**
+```bash
+cd /opt/actions-runner
+./svc.sh status      # статус
+./svc.sh stop        # остановить
+./svc.sh start       # запустить
+./svc.sh uninstall   # удалить сервис
+```
+
+**Логи:**
+```bash
+journalctl -u actions.runner.yurikov2126-pixel-media-raf-raw1.ubuntu.service -n 50 --no-pager
+```
 
 ### Локальная проверка перед push
 
@@ -910,31 +1003,70 @@ Service Worker обновляется автоматически (`registerType:
 
 ## 🚢 Деплой
 
-### Ручной деплой — основной способ
+### Автоматический деплой (основной способ)
 
-На сервере:
+```bash
+# На Mac
+cd ~/WebstormProjects/media-raf-raw1
+git push origin main
+```
+
+Всё. Через ~1 минуту прод обновлён.
+
+**Как это работает:**
+1. `git push` → GitHub получает коммит.
+2. GitHub отправляет задачу self-hosted runner'у на сервере.
+3. Раннер выполняет `bash /www/wwwroot/mediarafraw.ru/scripts/deploy.sh`.
+4. Скрипт делает полный деплой (см. ниже).
+5. Через ~60 секунд — зелёная галочка в GitHub Actions, прод обновлён.
+
+**Где смотреть:**
+- GitHub Actions: https://github.com/yurikov2126-pixel/media-raf-raw1/actions
+- Лог деплоя на сервере: `tail -f /var/log/mediaraf-deploy.log`
+
+### Ручной деплой
+
+Если нужно задеплоить без пуша (например, после `git pull` вручную):
 
 ```bash
 cd /www/wwwroot/mediarafraw.ru
 bash scripts/deploy.sh
 ```
 
-**Что делает скрипт:**
+### Что делает `scripts/deploy.sh`
 
 1. **Проверка состояния репо.** Если есть незакоммиченные трекаемые файлы — стоп (untracked не считаются: там собранный клиент и служебные файлы).
 2. **Бэкап БД.** Автоматически ищет `pg_dump` подходящей версии (`/www/server/pgsql/bin/pg_dump`, `/usr/lib/postgresql/18/...`, и т.д.). Сохраняет в `/root/db-backups/mediaraf_YYYYMMDD_HHMMSS.sql`.
-3. **`git pull origin main`.**
-4. **Server:** `npm ci`, `npx prisma generate`, `npx prisma db push --skip-generate`.
+3. **`git pull origin main`.** Настроено `git config pull.ff only` — если на сервере есть локальные коммиты, pull упадёт явно.
+4. **Server:** `npm ci`, `npx prisma generate`, `npx prisma migrate deploy`.
 5. **Restart API:** `systemctl restart mediaraf-api`, проверка `is-active` + `curl /api/health`.
 6. **Client:** `npm ci`, `npm run build`.
-7. **Публикация клиента.** `cp -r client/dist/. .` — nginx отдаёт статику из корня репо.
+7. **Публикация клиента.** `cp -r client/dist/. .` — nginx отдаёт статику из корня репо. Затем `chown -R www:www` для свежих файлов.
 8. **Финальные проверки:** API, `localhost/`, внешний домен.
+
+**Перед каждым `npm ci`** скрипт выставляет `npm config set registry https://registry.npmjs.org/` — чтобы избежать проблем с китайским зеркалом aaPanel.
 
 Лог пишется в `/var/log/mediaraf-deploy.log`.
 
-### Автоматический деплой (не работает на текущем сервере)
+### Откат
 
-Workflow `.github/workflows/deploy.yml` настроен, но **SSH-подключение из GitHub Actions к серверу невозможно** — сервер находится за NAT хостера (LXC-контейнер с приватным IP `192.168.10.33`, внешний SSH на :22 ведёт не на наш sshd). См. [Известные ограничения](#-известные-ограничения).
+**Если деплой сломал прод:**
+
+```bash
+# На сервере
+cd /www/wwwroot/mediarafraw.ru
+
+# 1. Откатить код
+git reset --hard <предыдущий_коммит>
+cd server && npm ci && npx prisma generate && npx prisma migrate deploy
+systemctl restart mediaraf-api
+cd ../client && npm ci && npm run build
+cp -r client/dist/. .
+
+# 2. Если БД испорчена — восстановить из бэкапа
+ls -la /root/db-backups/    # найти последний дамп
+psql "$DATABASE_URL" < /root/db-backups/mediaraf_YYYYMMDD_HHMMSS.sql
+```
 
 ### Первичная настройка сервера (aaPanel / Ubuntu)
 
@@ -952,7 +1084,7 @@ cd client && npm config set registry https://registry.npmjs.org/ && npm install 
 # Сервер
 cd ../server && npm config set registry https://registry.npmjs.org/ && npm install
 npx prisma generate
-npx prisma db push
+npx prisma migrate deploy
 
 # 3. systemd-юнит
 cat > /etc/systemd/system/mediaraf-api.service <<'EOF'
@@ -984,6 +1116,21 @@ chown www:www /var/log/mediaraf-api.log /var/log/mediaraf-api.err.log
 systemctl daemon-reload
 systemctl enable mediaraf-api
 systemctl start mediaraf-api
+
+# 4. Self-hosted runner для CD
+mkdir -p /opt/actions-runner && cd /opt/actions-runner
+curl -o actions-runner-linux-x64-2.337.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.337.0/actions-runner-linux-x64-2.337.0.tar.gz
+tar xzf actions-runner-linux-x64-2.337.0.tar.gz
+
+export RUNNER_ALLOW_RUNASROOT=1
+./config.sh --url https://github.com/yurikov2126-pixel/media-raf-raw1 --token <TOKEN>
+./svc.sh install root
+
+# Добавить Environment=RUNNER_ALLOW_RUNASROOT=1 в unit-файл сервиса
+systemctl edit --full actions.runner.yurikov2126-pixel-media-raf-raw1.ubuntu.service
+systemctl daemon-reload
+./svc.sh start
 ```
 
 ### Управление API
@@ -995,6 +1142,16 @@ systemctl stop mediaraf-api      # остановка
 systemctl start mediaraf-api     # запуск
 journalctl -u mediaraf-api -n 50 # логи через journald
 tail -f /var/log/mediaraf-api.log # логи приложения
+```
+
+### Управление runner'ом
+
+```bash
+cd /opt/actions-runner
+./svc.sh status
+./svc.sh stop
+./svc.sh start
+journalctl -u actions.runner.yurikov2126-pixel-media-raf-raw1.ubuntu.service -n 50 --no-pager
 ```
 
 ### Nginx
@@ -1066,7 +1223,7 @@ server {
 ### В корне репозитория
 
 ```bash
-scripts/deploy.sh              # Ручной деплой на прод (см. «Деплой»)
+scripts/deploy.sh              # Деплой на прод (вызывается и вручную, и из GitHub Actions)
 ```
 
 ### Server (`server/package.json`)
@@ -1110,8 +1267,10 @@ scripts/deploy.sh              # Ручной деплой на прод (см. 
 - **CORS** — настраивается на конкретный домен, а не `origin: true`.
 - **Загружаемые файлы** — лимит 200 МБ, изображения сжимаются через `sharp` до 1920px.
 - **Харденинг геймификации** — все операции `awardXp`/`deductXp` устойчивы к удалению пользователя во время выполнения (`P2025`/`P2003` не падают, а тихо возвращают `null`).
+- **Self-hosted runner — только для `push` в main.** Workflow деплоя не имеет триггера `pull_request`. В Settings → Actions включено «Require approval for first-time contributors». Это защищает от запуска деплоя из PR-из-форков.
+- **PostgreSQL слушает только `127.0.0.1:5432`** — снаружи недоступен.
 - **`.env` и `.env.test` — не в git.** Если случайно закоммитили — немедленно:
-    1. Удалите файл: `git rm --cached server/.env.test`.
+    1. Удалите файл: `git rm --cached server/.env`.
     2. Добавьте в `.gitignore`.
     3. **Ротируйте все секреты**, которые в нём были (`JWT_SECRET`, `VAPID_*`, пароль БД). Просто удалить файл недостаточно — он остаётся в истории git.
     4. После ротации `JWT_SECRET` все активные сессии станут невалидными — пользователи перелогинятся.
@@ -1122,12 +1281,10 @@ scripts/deploy.sh              # Ручной деплой на прод (см. 
 
 - **SQLite не поддерживается** — только PostgreSQL. Для dev на Mac используйте `brew services start postgresql`.
 - **ffmpeg** обязателен для генерации waveform голосовых. Без него используется fallback.
-- **`prisma migrate` не используется** — только `db push`. История миграций в проекте не ведётся.
-- **PDF-экспорт сертификатов** работает на клиенте через `html-to-image` + `jsPDF`.
-- **Тестовая БД — обязательна.** Тесты не изолированы от прод-данных, если запускать их против основной БД.
-- **Автодеплой через GitHub Actions невозможен на текущем сервере.** Сервер — LXC-контейнер за NAT хостера (внутренний IP `192.168.10.33`, внешний `178.252.214.17` — это хост-машина, на её порту 22 отвечает чужой sshd). GitHub Actions не может подключиться к нашему sshd по SSH. **Решение:** ручной деплой через `bash scripts/deploy.sh`. Если переедете на VPS с публичным SSH — workflow `deploy.yml` заработает без изменений.
 - **`pg_dump` и PostgreSQL должны совпадать по мажорной версии.** На проде PostgreSQL 18, а системный `pg_dump` в Ubuntu 24.04 — 16. `scripts/deploy.sh` автоматически ищет `pg_dump` от 18-й версии (aaPanel-овский `/www/server/pgsql/bin/pg_dump`).
 - **npm-зеркала.** aaPanel ставит глобально `registry.npmmirror.com`, где периодически нет свежих пакетов. `scripts/deploy.sh` принудительно переключает registry на `https://registry.npmjs.org/`.
+- **VAPID-ключи** были в истории git (в `.env.test`). Формально скомпрометированы. Для полной чистоты нужна ротация (сломает существующие push-подписки — все пользователи должны подписаться заново). Пока отложено.
+- **PDF-экспорт сертификатов** работает на клиенте через `html-to-image` + `jsPDF`.
 
 ---
 
