@@ -7,7 +7,9 @@ export default [
             'coverage/**',
             'prisma/migrations/**',
             'prisma/seed/**',
-            'scripts/**'    // ← добавить
+            'scripts/**',
+            '**/scripts/**',     // ← добавить это
+            '**/*.mjs'            // ← и это — .mjs файлы вне src не трогаем
         ],
         languageOptions: {
             ecmaVersion: 2023,

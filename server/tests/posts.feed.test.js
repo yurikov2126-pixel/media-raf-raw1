@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/lib/prisma.js';
-import { createUser, createPost, makeAdmin } from './helpers.js';
+import { createUser, createPost } from './helpers.js';
 
 // Хелпер: оставляем только посты, авторы которых созданы нашими тестовыми юзерами
 function onlyTestPosts(items) {
