@@ -8,13 +8,10 @@ import { TABS } from './constants.js';
 
 import AdminSkeleton from './components/AdminSkeleton.jsx';
 import AdminSidebar from './components/AdminSidebar.jsx';
+import AdminCommandPalette from './components/AdminCommandPalette.jsx';
 
-// Dashboard — самый частый таб, оставляем статическим,
-// чтобы первая отрисовка админки была мгновенной.
 import Dashboard from './tabs/Dashboard.jsx';
 
-// Остальные — lazy. Каждый становится отдельным чанком,
-// грузится только при клике на таб.
 const Analytics = lazy(() => import('./tabs/Analytics.jsx'));
 const Users = lazy(() => import('./tabs/Users.jsx'));
 const Certificates = lazy(() => import('./tabs/Certificates.jsx'));
@@ -55,6 +52,7 @@ export default function Admin() {
     const [openReports, setOpenReports] = useState(0);
     const [pendingResets, setPendingResets] = useState(0);
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [paletteOpen, setPaletteOpen] = useState(false);
 
     const reloadReportsBadge = () => {
         api('/admin/reports?status=NEW&limit=1', { token })
@@ -104,7 +102,7 @@ export default function Admin() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
-    // Закрываем drawer на Escape
+    // Esc закрывает drawer
     useEffect(() => {
         if (!drawerOpen) return;
         const onKey = (e) => {
@@ -113,6 +111,18 @@ export default function Admin() {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [drawerOpen]);
+
+    // ⌘K / Ctrl+K открывает палитру
+    useEffect(() => {
+        const onKey = (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setPaletteOpen((o) => !o);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
 
     const badges = {
         moderation: openReports || 0,
@@ -123,7 +133,6 @@ export default function Admin() {
 
     return (
         <div className="flex">
-            {/* Постоянный admin sidebar — только xl+ */}
             <aside className="hidden xl:flex flex-col w-56 shrink-0 sticky top-0 h-screen py-8 pl-6 overflow-y-auto">
                 <div className="mb-5">
                     <div className="font-bold text-xl">⚙️ Админка</div>
@@ -132,34 +141,52 @@ export default function Admin() {
                 <AdminSidebar tab={tab} onSelect={setTab} badges={badges} />
             </aside>
 
-            {/* Контентная область */}
             <div className="flex-1 min-w-0 py-4 md:py-8 px-4 md:px-8">
-                {/* xl: большой заголовок */}
-                <h1 className="hidden xl:block text-3xl font-bold mb-6">
-                    Админ-панель
-                </h1>
+                <div className="hidden xl:flex items-center justify-between mb-6">
+                    <h1 className="text-3xl font-bold">Админ-панель</h1>
+                    <button
+                        type="button"
+                        onClick={() => setPaletteOpen(true)}
+                        className="btn-ghost !py-2 text-sm flex items-center gap-2"
+                    >
+                        🔍 Поиск
+                        <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-white/15 text-white/50">
+                            ⌘K
+                        </kbd>
+                    </button>
+                </div>
 
-                {/* < xl: кнопка открытия меню */}
-                <button
-                    type="button"
-                    onClick={() => setDrawerOpen(true)}
-                    className="xl:hidden mb-4 w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition text-left"
-                >
-                    <span className="text-xl shrink-0">☰</span>
-                    <div className="min-w-0 flex-1">
-                        <div className="text-[10px] uppercase tracking-wider text-white/40">
-                            Раздел админки
+                <div className="xl:hidden mb-4 flex gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setDrawerOpen(true)}
+                        className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition text-left min-w-0"
+                    >
+                        <span className="text-xl shrink-0">☰</span>
+                        <div className="min-w-0 flex-1">
+                            <div className="text-[10px] uppercase tracking-wider text-white/40">
+                                Раздел админки
+                            </div>
+                            <div className="text-sm font-semibold truncate">
+                                {currentMeta.icon} {currentMeta.label}
+                            </div>
                         </div>
-                        <div className="text-sm font-semibold truncate">
-                            {currentMeta.icon} {currentMeta.label}
-                        </div>
-                    </div>
-                    {(badges.moderation > 0 || badges['password-resets'] > 0) && (
-                        <span className="shrink-0 chip bg-pink/20 text-pink text-[10px]">
-                            {(badges.moderation || 0) + (badges['password-resets'] || 0)}
-                        </span>
-                    )}
-                </button>
+                        {(badges.moderation > 0 || badges['password-resets'] > 0) && (
+                            <span className="shrink-0 chip bg-pink/20 text-pink text-[10px]">
+                                {(badges.moderation || 0) + (badges['password-resets'] || 0)}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setPaletteOpen(true)}
+                        className="shrink-0 w-12 rounded-2xl bg-white/5 hover:bg-white/10 transition grid place-items-center text-lg"
+                        aria-label="Поиск"
+                        title="Поиск (⌘K)"
+                    >
+                        🔍
+                    </button>
+                </div>
 
                 <div className="max-w-6xl">
                     <Suspense fallback={<AdminSkeleton />}>
@@ -240,6 +267,14 @@ export default function Admin() {
                     }}
                     badges={badges}
                     onClose={() => setDrawerOpen(false)}
+                />
+            )}
+
+            {paletteOpen && (
+                <AdminCommandPalette
+                    users={users}
+                    courses={courses}
+                    onClose={() => setPaletteOpen(false)}
                 />
             )}
         </div>
