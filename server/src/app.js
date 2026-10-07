@@ -23,6 +23,7 @@ import gamificationRouter from './routes/gamification.js';
 import practicalsRouter from './routes/practicals.js';
 import homeworkRouter from './routes/homework.js';
 import { prisma } from './lib/prisma.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -149,5 +150,10 @@ if (fs.existsSync(INDEX_HTML)) {
 } else {
     console.warn(`⚠️  ${INDEX_HTML} не найден — клиент, вероятно, раздаётся через nginx`);
 }
+
+/* ─────────── Глобальный обработчик ошибок ─────────── */
+// Регистрируется последним — Express ищет error-handler среди middleware,
+// стоящих ПОСЛЕ точки, где произошла ошибка.
+app.use(errorHandler);
 
 export { app };
