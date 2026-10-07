@@ -34,6 +34,8 @@ function rmOrphan(name) {
 }
 
 describe('admin/maintenance orphaned files', () => {
+    /* ═══════════ СКАН ═══════════ */
+
     it('scan returns details.orphanFiles.items', async () => {
         const { token } = await createAdmin();
         const name = mkOrphan();
@@ -58,6 +60,8 @@ describe('admin/maintenance orphaned files', () => {
             rmOrphan(name);
         }
     });
+
+    /* ═══════════ УДАЛЕНИЕ ОДНОГО ФАЙЛА ═══════════ */
 
     it('DELETE removes the file', async () => {
         const { token } = await createAdmin();
@@ -113,8 +117,7 @@ describe('admin/maintenance orphaned files', () => {
         const name = mkOrphan();
 
         // Привязываем файл к админу через avatar — collectUsedFiles
-        // читает User.avatar и увидит ссылку. Прямой prisma.update,
-        // потому что POST /users/me принимает avatar через отдельный роут.
+        // читает User.avatar и увидит ссылку.
         await prisma.user.update({
             where: { id: user.id },
             data: { avatar: `/uploads/${name}` },
@@ -132,6 +135,8 @@ describe('admin/maintenance orphaned files', () => {
             rmOrphan(name);
         }
     });
+
+    /* ═══════════ БАТЧ-УДАЛЕНИЕ ═══════════ */
 
     it('purge without filters → 400', async () => {
         const { token } = await createAdmin();
@@ -189,6 +194,8 @@ describe('admin/maintenance orphaned files', () => {
         }
     });
 
+    /* ═══════════ ПРАВА ДОСТУПА ═══════════ */
+
     it('requires ADMIN', async () => {
         const { token } = await createUser();
 
@@ -197,5 +204,90 @@ describe('admin/maintenance orphaned files', () => {
             .set('Authorization', `Bearer ${token}`);
 
         expect(res.status).toBe(403);
+    });
+
+    /* ═══════════ АУДИТ: AdminAction ═══════════ */
+
+    it('logs AdminAction on successful DELETE', async () => {
+        const { user, token } = await createAdmin();
+        const name = mkOrphan();
+
+        const res = await request(app)
+            .delete(`${API}/orphaned-files/${name}`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+
+        const actions = await prisma.adminAction.findMany({
+            where: { adminId: user.id, action: 'maintenance_delete_orphan_file' },
+            orderBy: { createdAt: 'desc' },
+        });
+        expect(actions).toHaveLength(1);
+        expect(actions[0].affected).toBe(1);
+        expect(actions[0].error).toBeNull();
+        const payload = JSON.parse(actions[0].payload);
+        expect(payload.filename).toBe(name);
+    });
+
+    it('logs AdminAction on purge with freedBytes', async () => {
+        const { user, token } = await createAdmin();
+        const a = mkOrphan();
+        const b = mkOrphan();
+
+        try {
+            const res = await request(app)
+                .post(`${API}/orphaned-files/purge`)
+                .set('Authorization', `Bearer ${token}`)
+                .send({ filenames: [a, b] });
+            expect(res.status).toBe(200);
+
+            const actions = await prisma.adminAction.findMany({
+                where: { adminId: user.id, action: 'maintenance_purge_orphan_files' },
+                orderBy: { createdAt: 'desc' },
+            });
+            expect(actions).toHaveLength(1);
+            expect(actions[0].affected).toBe(2);
+            expect(actions[0].error).toBeNull();
+            const payload = JSON.parse(actions[0].payload);
+            expect(payload.deletedCount).toBe(2);
+            expect(payload.freedBytes).toBeGreaterThan(0);
+        } finally {
+            rmOrphan(a);
+            rmOrphan(b);
+        }
+    });
+
+    it('logs AdminAction on DELETE failure (404)', async () => {
+        const { user, token } = await createAdmin();
+
+        const res = await request(app)
+            .delete(`${API}/orphaned-files/definitely_missing_${Date.now()}.jpg`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(404);
+
+        const actions = await prisma.adminAction.findMany({
+            where: { adminId: user.id, action: 'maintenance_delete_orphan_file' },
+            orderBy: { createdAt: 'desc' },
+        });
+        expect(actions).toHaveLength(1);
+        expect(actions[0].affected).toBe(0);
+        expect(actions[0].error).toMatch(/not found/i);
+    });
+
+    it('logs AdminAction on purge failure (400)', async () => {
+        const { user, token } = await createAdmin();
+
+        const res = await request(app)
+            .post(`${API}/orphaned-files/purge`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({});
+        expect(res.status).toBe(400);
+
+        const actions = await prisma.adminAction.findMany({
+            where: { adminId: user.id, action: 'maintenance_purge_orphan_files' },
+            orderBy: { createdAt: 'desc' },
+        });
+        expect(actions).toHaveLength(1);
+        expect(actions[0].affected).toBe(0);
+        expect(actions[0].error).toMatch(/filenames|olderThanDays/i);
     });
 });

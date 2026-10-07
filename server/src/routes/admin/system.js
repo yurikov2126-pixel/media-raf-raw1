@@ -10,6 +10,7 @@ import {
     purgeOrphanFiles,
 } from '../../lib/dbMaintenance.js';
 import { checkPgTools } from '../../lib/backup.js';
+import { prisma } from '../../lib/prisma.js';
 
 const router = Router();
 
@@ -69,9 +70,36 @@ router.post(
 router.delete(
     '/maintenance/orphaned-files/:filename',
     safe(async (req, res) => {
-        const result = await deleteOrphanFile(req.params.filename);
-        // TODO: записать в AdminAction (actorId: req.user.id, action: 'delete_orphan_file', meta: result)
-        res.json(result);
+        const t0 = Date.now();
+        try {
+            const result = await deleteOrphanFile(req.params.filename);
+            await prisma.adminAction
+                .create({
+                    data: {
+                        adminId: req.user.id,
+                        action: 'maintenance_delete_orphan_file',
+                        payload: JSON.stringify({ filename: result.filename }),
+                        affected: 1,
+                        duration: Date.now() - t0,
+                    },
+                })
+                .catch(() => {});
+            res.json(result);
+        } catch (e) {
+            await prisma.adminAction
+                .create({
+                    data: {
+                        adminId: req.user.id,
+                        action: 'maintenance_delete_orphan_file',
+                        payload: JSON.stringify({ filename: req.params.filename }),
+                        affected: 0,
+                        duration: Date.now() - t0,
+                        error: e.message,
+                    },
+                })
+                .catch(() => {});
+            throw e;
+        }
     })
 );
 
@@ -79,9 +107,45 @@ router.post(
     '/maintenance/orphaned-files/purge',
     safe(async (req, res) => {
         const { filenames, olderThanDays } = req.body || {};
-        const result = await purgeOrphanFiles({ filenames, olderThanDays });
-        // TODO: AdminAction c meta: { deletedCount, freedBytes, olderThanDays }
-        res.json(result);
+        const t0 = Date.now();
+        try {
+            const result = await purgeOrphanFiles({ filenames, olderThanDays });
+            await prisma.adminAction
+                .create({
+                    data: {
+                        adminId: req.user.id,
+                        action: 'maintenance_purge_orphan_files',
+                        payload: JSON.stringify({
+                            filenames: filenames || null,
+                            olderThanDays: olderThanDays || null,
+                            deletedCount: result.deletedCount,
+                            failedCount: result.failedCount,
+                            freedBytes: result.freedBytes,
+                        }),
+                        affected: result.deletedCount,
+                        duration: Date.now() - t0,
+                    },
+                })
+                .catch(() => {});
+            res.json(result);
+        } catch (e) {
+            await prisma.adminAction
+                .create({
+                    data: {
+                        adminId: req.user.id,
+                        action: 'maintenance_purge_orphan_files',
+                        payload: JSON.stringify({
+                            filenames: filenames || null,
+                            olderThanDays: olderThanDays || null,
+                        }),
+                        affected: 0,
+                        duration: Date.now() - t0,
+                        error: e.message,
+                    },
+                })
+                .catch(() => {});
+            throw e;
+        }
     })
 );
 
