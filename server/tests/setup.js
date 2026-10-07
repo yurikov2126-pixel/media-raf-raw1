@@ -12,7 +12,13 @@ beforeAll(() => {
     if (!url) {
         throw new Error('DATABASE_URL не задан. Проверь server/.env.test.');
     }
-    if (/@localhost:5432[/?]/.test(url) || /:5432\//.test(url)) {
+
+    // Проверка «не запущены ли тесты против прод-БД» имеет смысл только
+    // на локальной машине. В CI Postgres поднимается как сервис (обычно
+    // на стандартном порту 5432) — там эта проверка ложно срабатывает.
+    // GitHub Actions и другие CI выставляют переменную CI=true.
+    const isCI = !!process.env.CI;
+    if (!isCI && /@localhost:5432[/?]/.test(url)) {
         throw new Error(
             'DATABASE_URL указывает на порт 5432. Ожидается 5434 (docker-compose.dev.yml).'
         );
