@@ -8,6 +8,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..', '..');
 const UPLOADS_DIR = path.join(SERVER_ROOT, 'uploads');
 
+const ORPHAN_FILES_LIMIT = 500;
+
+// Whitelist расширений для точечного удаления через API.
+// В самом скане фильтр не применяется — показываем всё, что лежит в /uploads.
+const DELETABLE_EXTS = new Set([
+    '.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.bmp', '.avif',
+    '.mp4', '.mov', '.webm', '.mkv', '.avi',
+    '.mp3', '.ogg', '.wav', '.m4a', '.aac', '.flac',
+    '.pdf', '.zip', '.txt',
+]);
+
 /* ─────────────────────── SCAN ───────────────────────
    В PostgreSQL с включёнными FK большинство «осиротевших» записей
    физически не может существовать — их отсекают constraint'ы.
@@ -281,8 +292,33 @@ async function collectUsedFiles() {
 async function findOrphanFiles() {
     if (!fs.existsSync(UPLOADS_DIR)) return [];
     const used = await collectUsedFiles();
-    const files = fs.readdirSync(UPLOADS_DIR).filter((f) => !f.startsWith('.'));
-    return files.filter((f) => !used.has(f));
+    const entries = fs.readdirSync(UPLOADS_DIR, { withFileTypes: true });
+
+    const items = [];
+    for (const e of entries) {
+        if (!e.isFile()) continue;
+        if (e.name.startsWith('.')) continue;
+        if (used.has(e.name)) continue;
+
+        const full = path.join(UPLOADS_DIR, e.name);
+        let stat;
+        try {
+            stat = fs.statSync(full);
+        } catch {
+            continue; // файл исчез между readdir и stat — пропускаем
+        }
+        items.push({
+            filename: e.name,
+            url: `/uploads/${e.name}`,        // относительный URL, не абсолютный путь
+            size: stat.size,
+            mtime: stat.mtime.toISOString(),
+            ext: path.extname(e.name).toLowerCase(),
+        });
+    }
+
+    // Свежие сверху — их проще глазами отсеивать.
+    items.sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+    return items;
 }
 
 /* ─────────── Полный скан ─────────── */
@@ -353,9 +389,21 @@ export async function scanDatabase() {
 
     const totalProblems = categories.reduce((s, c) => s + c.count, 0);
 
+    // Детализация — сейчас только для orphanFiles.
+    const orphanFilesTruncated = orphanFiles.length > ORPHAN_FILES_LIMIT;
+    const orphanFilesTotalSize = orphanFiles.reduce((s, f) => s + f.size, 0);
+
     return {
         checkedAt: new Date().toISOString(),
         categories,
+        details: {
+            orphanFiles: {
+                items: orphanFiles.slice(0, ORPHAN_FILES_LIMIT),
+                truncated: orphanFilesTruncated,
+                totalCount: orphanFiles.length,
+                totalSize: orphanFilesTotalSize,
+            },
+        },
         totalProblems,
         clean: totalProblems === 0,
     };
@@ -461,10 +509,10 @@ async function cleanupOrphanFiles() {
     let n = 0;
     for (const f of files) {
         try {
-            fs.unlinkSync(path.join(UPLOADS_DIR, f));
+            fs.unlinkSync(path.join(UPLOADS_DIR, f.filename));
             n++;
         } catch (e) {
-            console.error('[maintenance] file', f, e.message);
+            console.error('[maintenance] file', f.filename, e.message);
         }
     }
     return n;
@@ -504,6 +552,97 @@ export async function cleanupDatabase() {
     return { fixed, totalFixed, scan };
 }
 
+/* ─────────── Точечное удаление осиротевших файлов ─────────── */
+
+function badRequest(message) {
+    return Object.assign(new Error(message), { status: 400 });
+}
+
+// Общая защита: basename + whitelist + startsWith(UPLOADS_DIR) + re-check orphan.
+// Вынесено отдельно, чтобы и deleteOrphanFile, и purgeOrphanFiles ходили через неё.
+async function safeUnlinkOrphan(rawFilename, usedSet) {
+    if (!rawFilename || typeof rawFilename !== 'string') {
+        throw badRequest('filename required');
+    }
+    const base = path.basename(rawFilename);
+    if (base !== rawFilename || base.startsWith('.') || base.length === 0) {
+        throw badRequest('Invalid filename');
+    }
+    const ext = path.extname(base).toLowerCase();
+    if (!DELETABLE_EXTS.has(ext)) {
+        throw badRequest(`Extension not allowed: ${ext || '(none)'}`);
+    }
+
+    const full = path.resolve(UPLOADS_DIR, base);
+    // path.resolve + startsWith — на случай экзотики, хотя basename уже отсекает ..
+    if (!full.startsWith(UPLOADS_DIR + path.sep)) {
+        throw badRequest('Path traversal detected');
+    }
+
+    if (usedSet.has(base)) {
+        // Гонка: между сканом и удалением файл «привязался» к посту/сообщению.
+        throw Object.assign(new Error('File is now referenced in DB'), { status: 409 });
+    }
+    if (!fs.existsSync(full)) {
+        throw Object.assign(new Error('File not found'), { status: 404 });
+    }
+
+    fs.unlinkSync(full);
+    return base;
+}
+
+export async function deleteOrphanFile(filename) {
+    // Свежий collectUsedFiles — не доверяем тому, что было при скане.
+    const used = await collectUsedFiles();
+    const base = await safeUnlinkOrphan(filename, used);
+    return { ok: true, filename: base };
+}
+
+/**
+ * Батч-удаление.
+ *   { filenames: string[] }     — удалить конкретные
+ *   { olderThanDays: number }   — удалить все старше N дней
+ * Если ни то, ни другое — 400 (не разрешаем «удалить всё» без явного фильтра).
+ */
+export async function purgeOrphanFiles({ filenames, olderThanDays } = {}) {
+    const all = await findOrphanFiles();
+    const used = await collectUsedFiles();
+
+    let targets;
+    if (Array.isArray(filenames) && filenames.length > 0) {
+        const allow = new Set(filenames.map((f) => path.basename(String(f))));
+        targets = all.filter((f) => allow.has(f.filename));
+    } else if (Number.isFinite(olderThanDays) && olderThanDays > 0) {
+        const cutoff = Date.now() - olderThanDays * 86400_000;
+        targets = all.filter((f) => new Date(f.mtime).getTime() < cutoff);
+    } else {
+        throw badRequest('Specify filenames[] or olderThanDays');
+    }
+
+    const deleted = [];
+    const failed = [];
+    let freedBytes = 0;
+
+    for (const t of targets) {
+        try {
+            await safeUnlinkOrphan(t.filename, used);
+            deleted.push(t.filename);
+            freedBytes += t.size;
+        } catch (e) {
+            failed.push({ filename: t.filename, error: e.message, status: e.status || 500 });
+        }
+    }
+
+    return {
+        requested: targets.length,
+        deletedCount: deleted.length,
+        failedCount: failed.length,
+        freedBytes,
+        deleted,
+        failed,
+    };
+}
+
 /* ─────────────────────── INFO ───────────────────────
    Возвращает общую информацию о PostgreSQL: версию, размер БД,
    размер каждой таблицы и число строк. Используется в админке. */
@@ -533,7 +672,7 @@ export async function getDatabaseInfo() {
             COALESCE(s.n_live_tup, 0) AS live_rows,
             COALESCE(s.n_dead_tup, 0) AS dead_rows
         FROM pg_class c
-        LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+                 LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
         WHERE c.relkind = 'r'
           AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
         ORDER BY pg_total_relation_size(c.oid) DESC

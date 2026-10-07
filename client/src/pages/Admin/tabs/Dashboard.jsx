@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
 import { fmtSize, fmtUptime } from '../utils.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import OrphanFilesList from '../components/OrphanFilesList.jsx';
 
 export default function Dashboard({ stats, token, onReload }) {
     return (
@@ -70,7 +71,11 @@ function ServerInfoBlock({ token }) {
                 token,
                 body: confirm === 'logs' ? { logs: true } : { backups: true, backupsDays: 30 },
             });
-            setMessage(confirm === 'logs' ? `Очищено логов: ${r.logs?.cleared || 0}` : `Удалено бэкапов: ${r.backups?.removed || 0}`);
+            setMessage(
+                confirm === 'logs'
+                    ? `Очищено логов: ${r.logs?.cleared || 0}`
+                    : `Удалено бэкапов: ${r.backups?.removed || 0}`
+            );
             await load();
         } catch (e) {
             setMessage('Ошибка: ' + e.message);
@@ -84,7 +89,9 @@ function ServerInfoBlock({ token }) {
         return (
             <div className="card p-5">
                 <div className="font-bold text-lg mb-2">🖥️ Сервер</div>
-                <div className="text-white/40 text-sm">{loading ? 'Загрузка…' : 'Не удалось получить данные'}</div>
+                <div className="text-white/40 text-sm">
+                    {loading ? 'Загрузка…' : 'Не удалось получить данные'}
+                </div>
             </div>
         );
     }
@@ -103,7 +110,8 @@ function ServerInfoBlock({ token }) {
                 <div>
                     <div className="font-bold text-lg">🖥️ Сервер</div>
                     <div className="text-sm text-white/50 mt-1">
-                        {info.os.hostname} · {info.os.platform} {info.os.arch} · Uptime {fmtUptime(info.os.uptime)}
+                        {info.os.hostname} · {info.os.platform} {info.os.arch} · Uptime{' '}
+                        {fmtUptime(info.os.uptime)}
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -211,6 +219,7 @@ function MaintenanceBlock({ token, onReload }) {
     const [cleaning, setCleaning] = useState(false);
     const [lastCleanup, setLastCleanup] = useState(null);
     const [error, setError] = useState('');
+    const [expandedKey, setExpandedKey] = useState(null);
 
     const runScan = async () => {
         setScanning(true);
@@ -254,7 +263,9 @@ function MaintenanceBlock({ token, onReload }) {
             <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
                 <div className="flex-1 min-w-[220px]">
                     <div className="font-bold text-lg">🧹 Обслуживание базы данных</div>
-                    <div className="text-sm text-white/50 mt-1">Поиск и удаление неконсистентных данных.</div>
+                    <div className="text-sm text-white/50 mt-1">
+                        Поиск и удаление неконсистентных данных.
+                    </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
                     <button onClick={runScan} disabled={scanning || cleaning} className="btn-ghost">
@@ -265,13 +276,23 @@ function MaintenanceBlock({ token, onReload }) {
                         disabled={cleaning || scanning || !scan || scan.totalProblems === 0}
                         className={`${scan?.totalProblems > 0 ? 'btn-primary' : 'btn-ghost'}`}
                     >
-                        {cleaning ? '⏳' : scan?.totalProblems > 0 ? `🧹 Обслужить (${scan.totalProblems})` : '✓ Всё чисто'}
+                        {cleaning
+                            ? '⏳'
+                            : scan?.totalProblems > 0
+                                ? `🧹 Обслужить (${scan.totalProblems})`
+                                : '✓ Всё чисто'}
                     </button>
                 </div>
             </div>
 
             {scan && (
-                <div className={`rounded-2xl p-4 ${scan.clean ? 'bg-lime/10 border border-lime/30' : 'bg-orange-500/10 border border-orange-500/30'}`}>
+                <div
+                    className={`rounded-2xl p-4 ${
+                        scan.clean
+                            ? 'bg-lime/10 border border-lime/30'
+                            : 'bg-orange-500/10 border border-orange-500/30'
+                    }`}
+                >
                     {scan.clean ? (
                         <div className="flex items-center gap-3">
                             <div className="text-3xl">✅</div>
@@ -287,22 +308,68 @@ function MaintenanceBlock({ token, onReload }) {
                             <div className="flex items-center gap-3 mb-3">
                                 <div className="text-3xl">⚠️</div>
                                 <div>
-                                    <div className="font-bold text-orange-300">Найдено проблем: {scan.totalProblems}</div>
+                                    <div className="font-bold text-orange-300">
+                                        Найдено проблем: {scan.totalProblems}
+                                    </div>
                                     <div className="text-xs text-white/50 mt-0.5">
-                                        Категорий с проблемами: {problems.length} из {scan.categories.length}
+                                        Категорий с проблемами: {problems.length} из{' '}
+                                        {scan.categories.length}
                                     </div>
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                {problems.map((c) => (
-                                    <div key={c.key} className="flex items-center justify-between gap-3 bg-ink-700/50 rounded-xl px-3 py-2">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-sm font-semibold">{c.label}</div>
-                                            {c.hint && <div className="text-xs text-white/40 truncate">{c.hint}</div>}
+                                {problems.map((c) => {
+                                    const hasDetails = c.key === 'orphanFiles';
+                                    const expanded = expandedKey === c.key;
+                                    return (
+                                        <div
+                                            key={c.key}
+                                            className="bg-ink-700/50 rounded-xl overflow-hidden"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    hasDetails &&
+                                                    setExpandedKey(expanded ? null : c.key)
+                                                }
+                                                className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left ${
+                                                    hasDetails
+                                                        ? 'hover:bg-white/5 cursor-pointer'
+                                                        : 'cursor-default'
+                                                }`}
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-sm font-semibold flex items-center gap-2">
+                                                        {hasDetails && (
+                                                            <span className="text-white/40 text-xs">
+                                                                {expanded ? '▾' : '▸'}
+                                                            </span>
+                                                        )}
+                                                        {c.label}
+                                                    </div>
+                                                    {c.hint && (
+                                                        <div className="text-xs text-white/40 truncate">
+                                                            {c.hint}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className="chip bg-pink/20 text-pink shrink-0">
+                                                    {c.count}
+                                                </span>
+                                            </button>
+
+                                            {hasDetails && expanded && (
+                                                <div className="px-3 pb-3">
+                                                    <OrphanFilesList
+                                                        details={scan.details?.orphanFiles}
+                                                        token={token}
+                                                        onChanged={runScan}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
-                                        <span className="chip bg-pink/20 text-pink shrink-0">{c.count}</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -314,7 +381,10 @@ function MaintenanceBlock({ token, onReload }) {
                             </summary>
                             <div className="mt-2 grid sm:grid-cols-2 gap-1 text-xs">
                                 {cleanCategories.map((c) => (
-                                    <div key={c.key} className="flex items-center gap-2 text-white/50">
+                                    <div
+                                        key={c.key}
+                                        className="flex items-center gap-2 text-white/50"
+                                    >
                                         <span className="text-lime">✓</span>
                                         <span className="truncate">{c.label}</span>
                                     </div>
@@ -325,12 +395,18 @@ function MaintenanceBlock({ token, onReload }) {
                 </div>
             )}
 
-            {error && <div className="mt-3 text-sm text-pink bg-pink/10 rounded-xl p-3">{error}</div>}
+            {error && (
+                <div className="mt-3 text-sm text-pink bg-pink/10 rounded-xl p-3">{error}</div>
+            )}
 
             {lastCleanup && (
                 <div className="mt-3 text-sm bg-violet/10 border border-violet/30 rounded-xl p-4">
-                    <div className="font-bold text-violet-soft mb-1">✓ Обслуживание выполнено</div>
-                    <div className="text-white/70">Всего исправлено: <b>{lastCleanup.totalFixed}</b></div>
+                    <div className="font-bold text-violet-soft mb-1">
+                        ✓ Обслуживание выполнено
+                    </div>
+                    <div className="text-white/70">
+                        Всего исправлено: <b>{lastCleanup.totalFixed}</b>
+                    </div>
                 </div>
             )}
         </div>
