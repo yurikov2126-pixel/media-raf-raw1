@@ -41,8 +41,9 @@ jobs:
             echo "=== 3. Обновление кода из GitHub ==="
             git pull origin main
 
-            echo "=== 4. Сервер: зависимости и БД ==="
+                        echo "=== 4. Сервер: зависимости и БД ==="
             cd server
+            npm config set registry https://registry.npmjs.org/
             npm ci
             npx prisma generate
             npx prisma db push --skip-generate
