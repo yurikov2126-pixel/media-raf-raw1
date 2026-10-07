@@ -76,3 +76,9 @@ logs/
 server/uploads/
 server/backups/
 server/public/uploads/server/.env.test
+
+# === Собранный клиент — одиночные файлы в корне ===
+/favicon.svg
+
+# === Собранный клиент — одиночные файлы в корне ===
+/favicon.svg

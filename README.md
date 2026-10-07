@@ -24,6 +24,8 @@
 - [Деплой](#-деплой)
 - [Роли пользователей](#-роли-пользователей)
 - [Скрипты](#-скрипты)
+- [Безопасность](#-безопасность)
+- [Известные ограничения](#-известные-ограничения)
 
 ---
 
@@ -53,6 +55,7 @@
 - **Серии дней** (streak) с бонусами.
 - **Лидерборд** по неделе и за всё время.
 - **Уведомления** о level-up, достижениях и штрафах.
+- **Устойчивость к гонкам**: все операции начисления/списания XP корректно обрабатывают удаление пользователя во время выполнения (`P2025`/`P2003`).
 
 ### Модерация
 - **Жалобы** на посты, комментарии, сообщения, пользователей.
@@ -68,8 +71,8 @@
 
 ### Качество и автоматизация
 - **78 интеграционных тестов** (Vitest + Supertest) для API — auth и posts.
-- **GitHub Actions CI** — линт, тесты и сборка на каждый push и PR.
-- **GitHub Actions CD** — деплой на прод в один клик (ручной запуск из вкладки Actions).
+- **GitHub Actions CI** — линт, тесты и сборка на каждый push и PR. Зелёный CI блокирует мерж красного PR.
+- **Ручной деплой в одну команду** — `bash scripts/deploy.sh` (бэкап БД → git pull → зависимости → миграция схемы → перезапуск → сборка клиента → healthcheck).
 - **ESLint + Prettier** — единый стиль кода.
 
 ---
@@ -89,14 +92,14 @@
 | **ffmpeg** | Генерация waveform для голосовых |
 | **node-cron** | Фоновые задачи |
 | **web-push** | Push-уведомления |
-| **pg_dump / pg_restore** | Резервное копирование |
+| **pg_dump 18** | Резервное копирование БД |
 
 ### Backend — качество и тесты
 | Технология | Назначение |
 |---|---|
 | **Vitest 5** | Тест-раннер (ESM, быстрый) |
 | **Supertest** | HTTP-тесты против Express-приложения |
-| **ESLint 9** | Линтер (flat config) |
+| **ESLint 9** | Линтер (flat config, warnings не валят CI) |
 | **Prettier** | Форматирование |
 
 ### Frontend
@@ -117,8 +120,8 @@
 ### Инфраструктура
 | Технология | Назначение |
 |---|---|
-| **GitHub Actions** | CI (тесты, линт, сборка) + CD (деплой по SSH) |
-| **pm2** | Процесс-менеджер на сервере |
+| **GitHub Actions** | CI (тесты, линт, сборка) |
+| **systemd** | Процесс-менеджер на сервере (`mediaraf-api.service`) |
 | **Nginx** | Реверс-прокси, SSL, раздача SPA |
 
 ---
@@ -149,6 +152,7 @@
 - **Prisma — единая точка работы с БД.** Схема синхронизируется через `prisma db push`.
 - **Socket.IO** используется для чатов, typing-индикатора, уведомлений в реальном времени.
 - **PWA** работает офлайн: precache HTML/JS/CSS, кеш `/uploads`, офлайн-экран при отсутствии сети.
+- **systemd, а не pm2.** API запускается как системный сервис `mediaraf-api.service`, что даёт автозапуск после ребута, рестарт при падении и единый способ управления из CI/скриптов.
 
 ---
 
@@ -157,9 +161,9 @@
 ### Требования
 
 - **Node.js** ≥ 22
-- **PostgreSQL** ≥ 14
+- **PostgreSQL** ≥ 14 (на проде — 18)
 - **ffmpeg** (для waveform голосовых)
-- **pg_dump / pg_restore** (для бэкапов)
+- **pg_dump / pg_restore** от версии сервера БД (для бэкапов)
 
 ### Установка
 
@@ -176,6 +180,13 @@ npm install
 cd ../client
 npm install
 ```
+
+> ⚠️ **Проблема с npm-зеркалами.** Некоторые панели управления (например, aaPanel) ставят глобально китайское зеркало `registry.npmmirror.com`, где периодически отсутствуют свежие пакеты (`electron-to-chromium` и др.). Если `npm ci` падает с `E404`, выполните:
+> ```bash
+> npm config set registry https://registry.npmjs.org/
+> npm cache clean --force
+> ```
+> Скрипт `scripts/deploy.sh` уже делает это автоматически.
 
 ### Настройка БД
 
@@ -197,13 +208,19 @@ EOF
 
 ### Переменные окружения
 
-Создайте `server/.env`:
+Создайте `server/.env` (см. также `server/.env.example`):
 
 ```env
 DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw?schema=public"
-JWT_SECRET="сгенерируйте-через-openssl-rand-hex-32"
+JWT_SECRET="сгенерируйте-через-openssl-rand-base64-32"
 PUBLIC_URL="https://mediarafraw.ru"
 PORT=4000
+NODE_ENV=production
+
+# VAPID (для push-уведомлений)
+VAPID_PUBLIC_KEY="..."
+VAPID_PRIVATE_KEY="..."
+VAPID_SUBJECT="mailto:admin@mediarafraw.ru"
 
 # Опционально:
 # MRR_PG_DUMP_PATH=/www/server/pgsql/bin/pg_dump
@@ -215,15 +232,17 @@ PORT=4000
 # GAMIFICATION_INACTIVITY_CRON="0 5 * * *"
 ```
 
-Создайте `server/.env.test` (для интеграционных тестов):
+Создайте `server/.env.test` для интеграционных тестов (в git лежит `server/.env.test.example`):
 
 ```env
-DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test"
+DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test?schema=public"
 JWT_SECRET="test-secret-do-not-use-in-prod"
 NODE_ENV="test"
 ```
 
 > ⚠️ **Важно:** тесты пишут данные в БД. Никогда не запускайте их против продакшн-базы. Всегда используйте отдельную тестовую базу (`media_raf_raw_test`).
+
+> 🔒 `.env` и `.env.test` **не в git**. Если случайно закоммитили — немедленно отзовите секреты и удалите файл из истории.
 
 Создайте `client/.env`:
 
@@ -263,7 +282,10 @@ media-raf-raw1/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                             # CI: lint + tests + build на push/PR
-│       └── deploy.yml                         # CD: деплой по SSH (workflow_dispatch)
+│       └── deploy.yml                         # CD: деплой по SSH (см. «Известные ограничения»)
+│
+├── scripts/                                   # Общие скрипты
+│   └── deploy.sh                              # Ручной деплой в одну команду
 │
 ├── client/                                    # ─── React + Vite (SPA + PWA)
 │   │
@@ -489,6 +511,9 @@ media-raf-raw1/
 │   │       ├── publicMeta.js
 │   │       └── admin.js
 │   │
+│   ├── scripts/                               # Скрипты миграции/обслуживания
+│   │   └── migrate-to-pg.mjs                  # SQLite → PostgreSQL (архивный)
+│   │
 │   ├── tests/                                 # ─── Интеграционные тесты (Vitest + Supertest)
 │   │   ├── setup.js                           # beforeAll/afterEach/afterAll: чистка БД
 │   │   ├── helpers.js                         # createUser, createPost, makeAdmin, createComment
@@ -507,11 +532,13 @@ media-raf-raw1/
 │   ├── uploads/                               # Загруженные файлы (создаётся автоматически)
 │   ├── backups/                               # Дампы PostgreSQL (создаётся автоматически)
 │   ├── .env                                   # Не в git
-│   ├── .env.test                              # Не в git (тестовая БД)
-│   ├── .env.example
+│   ├── .env.test                              # Не в git
+│   ├── .env.example                           # Шаблон
+│   ├── .env.test.example                      # Шаблон тестового окружения
 │   └── package.json
 │
-├── .gitignore                                 # node_modules, .env, .env.test, uploads/, backups/, dist/
+├── .gitignore                                 # node_modules, .env, .env.test, uploads/, backups/, dist/,
+│                                              # собранный клиент в корне (index.html, assets/, sw.js, ...)
 └── README.md
 ```
 
@@ -536,7 +563,8 @@ media-raf-raw1/
 
 - **Нет `prisma migrate`** — только `db push`. История миграций не ведётся.
 - **`uploads/` и `backups/`** — не в git, создаются на сервере.
-- **`.env` и `.env.test`** — обязательны, шаблон в `.env.example`.
+- **`.env` и `.env.test`** — обязательны, шаблоны в `.env.example` и `.env.test.example`.
+- **Собранный клиент публикуется в корень репо** — nginx отдаёт статику именно из `/www/wwwroot/mediarafraw.ru`, а не из `client/dist`. Эти файлы (index.html, assets/, sw.js, иконки) перечислены в `.gitignore` и не коммитятся.
 - **PWA-манифест** — генерируется `vite-plugin-pwa` из `vite.config.js`, в `public/` лежат только иконки.
 
 ---
@@ -566,8 +594,11 @@ npx prisma validate
 ### Важно
 
 - Проект **не использует `prisma migrate`** — все изменения схемы применяются через `db push`.
-- После изменения `schema.prisma` **обязательно** запустить `npx prisma generate` и **полностью перезапустить** Node-процесс.
-- `pm2 restart all` **не всегда достаточно** — используйте `pm2 delete all && pm2 start src/index.js --name mediaraf-api`.
+- После изменения `schema.prisma` **обязательно** запустить `npx prisma generate` и **полностью перезапустить** Node-процесс:
+  ```bash
+  systemctl restart mediaraf-api
+  ```
+- `systemctl reload` или перезапуск через панель может **не подхватить** новые модели — только полный `restart`.
 
 ### Модели БД (обзор)
 
@@ -584,6 +615,17 @@ npx prisma validate
 | Пароли | `PasswordResetRequest` |
 | Геймификация | `UserStats`, `UserAchievement`, `XpLog`, `DailyQuest`, `QuestTemplate`, `Achievement` |
 
+### Бэкапы
+
+Дамп БД делается через `pg_dump` **от той же версии, что и сервер БД**. Если PostgreSQL на сервере 18-й, а системный `pg_dump` — 16-й, будет ошибка `server version mismatch`. Поэтому `scripts/deploy.sh` автоматически ищет подходящий `pg_dump`:
+
+1. `/www/server/pgsql/bin/pg_dump` (aaPanel, PostgreSQL 18).
+2. `/usr/lib/postgresql/18/bin/pg_dump`.
+3. `/usr/local/pgsql/bin/pg_dump`.
+4. Системный `pg_dump`.
+
+Если ни один не подходит — берётся первый доступный.
+
 ---
 
 ## 🧪 Тестирование
@@ -599,7 +641,7 @@ npx prisma validate
 | `tests/auth.login.test.js` | Вход: по username / телефону / email, регистронезависимость, бан |
 | `tests/auth.me.test.js` | Текущий пользователь: токен, бан, обновление `lastSeen` |
 | `tests/auth.check.test.js` | Проверка занятости username/телефона |
-| `tests/posts.feed.test.js` | Лента: пагинация, порядок, фильтрация забаненных, реакции |
+| `tests/posts.feed.test.js` | Лента: пагинация (cursor-based, без потерь), порядок, фильтрация забаненных, реакции |
 | `tests/posts.crud.test.js` | Создание/редактирование/удаление постов + права доступа |
 | `tests/posts.reactions.test.js` | Реакции: toggle, разные эмодзи, агрегация |
 | `tests/posts.comments.test.js` | Комментарии: вложенность, редактирование, удаление, права |
@@ -620,7 +662,7 @@ DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_r
 ```bash
 cd server
 
-# Все тесты (использует .env.test автоматически через NODE_ENV=test)
+# Все тесты (использует .env.test через NODE_ENV=test)
 NODE_ENV=test DATABASE_URL="postgresql://media_raf_raw:пароль@localhost:5432/media_raf_raw_test" JWT_SECRET="test-secret" npm test
 
 # Один файл
@@ -639,7 +681,8 @@ npm run test:cov
 
 - **`tests/setup.js`** — глобальный `beforeAll`/`afterEach`/`afterAll`. После каждого теста удаляет всех тестовых юзеров (по префиксу `+7999` и `test_`) и связанные данные. Даёт 250 мс «хвоста» для завершения fire-and-forget задач (геймификация, уведомления), чтобы не ловить `P2025`.
 - **`tests/helpers.js`** — утилиты: `createUser`, `createPost`, `createComment`, `makeAdmin`, `validPayload`. Генерируют уникальные телефоны и username, чтобы тесты не конфликтовали.
-- **Изоляция:** тесты полагаются на **отдельную тестовую БД**. Никогда не запускайте их против прода.
+- **Изоляция от прод-данных.** Тесты постов фильтруют ленту по автору (`onlyTestPosts`), чтобы не полагаться на пустую БД. Это позволяет безопасно запускать их даже на тестовой БД, где случайно оказались «настоящие» данные.
+- **Пойманные баги.** Тест `posts.feed.test.js` при первом запуске поймал реальный баг в cursor-пагинации ленты: последний элемент страницы «съедался» и терялся на следующей странице. Исправлено.
 
 ### Что делать, если тесты упали
 
@@ -657,46 +700,31 @@ npm run test:cov
 
 **Job `server`:**
 1. Поднимает сервис-контейнер `postgres:16`.
-2. `npm ci` в `server/`.
-3. `npm run lint` — ESLint (warnings не валят job).
-4. `npx prisma generate`.
-5. `npx prisma db push --skip-generate` — схема в тестовую БД.
-6. `npm test` — все 78 тестов.
+2. Node 22.
+3. `npm ci` в `server/`.
+4. `npm run lint` — ESLint (warnings не валят job).
+5. `npx prisma generate`.
+6. `npx prisma db push --skip-generate` — схема в тестовую БД.
+7. `npm test` — все 78 тестов.
 
 **Job `client`:**
-1. `npm ci` в `client/`.
-2. `npm run build` — проверка, что фронт собирается.
+1. Node 22.
+2. `npm ci` в `client/`.
+3. `npm run build` — проверка, что фронт собирается.
 
 **Если CI красный — PR блокируется.** Нельзя мержить код, который ломает тесты или сборку.
 
 ### CD — `.github/workflows/deploy.yml`
 
-**Ручной запуск** из вкладки Actions (кнопка Run workflow). Автоматический деплой по push пока закомментирован — включим после того, как убедимся в стабильности.
+Workflow настроен, но **на текущем сервере не работает** из-за NAT (см. [Известные ограничения](#-известные-ограничения)). Используйте **ручной деплой через `scripts/deploy.sh`** (см. [Деплой](#-деплой)).
 
-Что делает:
+Что делает workflow (на случай переезда на сервер с публичным SSH):
 1. Подключается по SSH к серверу (`secrets.SSH_HOST`, `SSH_USER`, `SSH_KEY`).
-2. `cd /www/wwwroot/mediarafraw.ru && git pull origin main`.
-3. В `server/`: `npm ci`, `npx prisma generate`, `npx prisma db push --skip-generate`, `pm2 restart mediaraf-api`.
-4. В `client/`: `npm ci`, `npm run build`.
-
-### Настройка секретов в GitHub
-
-**Settings → Secrets and variables → Actions → New repository secret:**
-
-| Имя | Значение |
-|---|---|
-| `SSH_HOST` | IP или домен сервера |
-| `SSH_USER` | `root` (или deploy-юзер) |
-| `SSH_KEY` | Приватный SSH-ключ (без пароля) |
-| `SSH_PORT` | `22` (по умолчанию) |
-
-Генерация ключа:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/mediaraf_deploy -C "deploy@mediaraf" -N ""
-# Приватный ~/.ssh/mediaraf_deploy → в SSH_KEY
-# Публичный ~/.ssh/mediaraf_deploy.pub → в /root/.ssh/authorized_keys на сервере
-```
+2. Бэкап БД.
+3. `git pull origin main`.
+4. В `server/`: `npm ci`, `npx prisma generate`, `npx prisma db push --skip-generate`, `systemctl restart mediaraf-api`.
+5. В `client/`: `npm ci`, `npm run build`, копирование в корень.
+6. Healthcheck.
 
 ### Локальная проверка перед push
 
@@ -704,7 +732,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/mediaraf_deploy -C "deploy@mediaraf" -N ""
 # Server
 cd server
 npm run lint       # 0 errors (warnings OK)
-npm test           # 78 passed
+NODE_ENV=test DATABASE_URL="..." JWT_SECRET="test-secret" npm test   # 78 passed
 
 # Client
 cd ../client
@@ -882,7 +910,33 @@ Service Worker обновляется автоматически (`registerType:
 
 ## 🚢 Деплой
 
-### На aaPanel / Ubuntu (продакшен)
+### Ручной деплой — основной способ
+
+На сервере:
+
+```bash
+cd /www/wwwroot/mediarafraw.ru
+bash scripts/deploy.sh
+```
+
+**Что делает скрипт:**
+
+1. **Проверка состояния репо.** Если есть незакоммиченные трекаемые файлы — стоп (untracked не считаются: там собранный клиент и служебные файлы).
+2. **Бэкап БД.** Автоматически ищет `pg_dump` подходящей версии (`/www/server/pgsql/bin/pg_dump`, `/usr/lib/postgresql/18/...`, и т.д.). Сохраняет в `/root/db-backups/mediaraf_YYYYMMDD_HHMMSS.sql`.
+3. **`git pull origin main`.**
+4. **Server:** `npm ci`, `npx prisma generate`, `npx prisma db push --skip-generate`.
+5. **Restart API:** `systemctl restart mediaraf-api`, проверка `is-active` + `curl /api/health`.
+6. **Client:** `npm ci`, `npm run build`.
+7. **Публикация клиента.** `cp -r client/dist/. .` — nginx отдаёт статику из корня репо.
+8. **Финальные проверки:** API, `localhost/`, внешний домен.
+
+Лог пишется в `/var/log/mediaraf-deploy.log`.
+
+### Автоматический деплой (не работает на текущем сервере)
+
+Workflow `.github/workflows/deploy.yml` настроен, но **SSH-подключение из GitHub Actions к серверу невозможно** — сервер находится за NAT хостера (LXC-контейнер с приватным IP `192.168.10.33`, внешний SSH на :22 ведёт не на наш sshd). См. [Известные ограничения](#-известные-ограничения).
+
+### Первичная настройка сервера (aaPanel / Ubuntu)
 
 ```bash
 # 1. Установить Node.js ≥ 22, PostgreSQL, ffmpeg
@@ -893,21 +947,59 @@ sudo apt install -y postgresql ffmpeg
 cd /www/wwwroot/mediarafraw.ru
 
 # Клиент
-cd client && npm install && npm run build
+cd client && npm config set registry https://registry.npmjs.org/ && npm install && npm run build
 
 # Сервер
-cd ../server && npm install
+cd ../server && npm config set registry https://registry.npmjs.org/ && npm install
 npx prisma generate
 npx prisma db push
 
-# PM2
-npm install -g pm2
-pm2 start src/index.js --name mediaraf-api
-pm2 save
-pm2 startup
+# 3. systemd-юнит
+cat > /etc/systemd/system/mediaraf-api.service <<'EOF'
+[Unit]
+Description=MEDIA-RAF-RAW API (Express + Socket.IO)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/mediarafraw.ru/server
+EnvironmentFile=/www/wwwroot/mediarafraw.ru/server/.env
+ExecStart=/www/server/nodejs/v24.21.0/bin/node src/index.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/mediaraf-api.log
+StandardError=append:/var/log/mediaraf-api.err.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Путь к node может отличаться — проверьте `which node`.
+# Создать логи и включить сервис
+touch /var/log/mediaraf-api.log /var/log/mediaraf-api.err.log
+chown www:www /var/log/mediaraf-api.log /var/log/mediaraf-api.err.log
+systemctl daemon-reload
+systemctl enable mediaraf-api
+systemctl start mediaraf-api
+```
+
+### Управление API
+
+```bash
+systemctl status mediaraf-api    # статус
+systemctl restart mediaraf-api   # перезапуск
+systemctl stop mediaraf-api      # остановка
+systemctl start mediaraf-api     # запуск
+journalctl -u mediaraf-api -n 50 # логи через journald
+tail -f /var/log/mediaraf-api.log # логи приложения
 ```
 
 ### Nginx
+
+**Важно:** nginx раздаёт статику **из корня репозитория** (`/www/wwwroot/mediarafraw.ru`), а не из `client/dist`. `scripts/deploy.sh` копирует собранный клиент в корень после каждой сборки.
 
 ```nginx
 server {
@@ -917,7 +1009,7 @@ server {
     ssl_certificate     /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
-    root /www/wwwroot/mediarafraw.ru/client/dist;
+    root /www/wwwroot/mediarafraw.ru;
     index index.html;
 
     # OG-теги для ботов
@@ -957,26 +1049,6 @@ server {
 }
 ```
 
-### Деплой через GitHub Actions
-
-Основной способ деплоя — **workflow `Deploy to production`** в GitHub Actions (ручной запуск из вкладки Actions). Он сам делает `git pull`, `npm ci`, `prisma db push`, `pm2 restart` и сборку клиента. См. раздел [CI/CD](#-cicd).
-
-### Ручной деплой (fallback)
-
-```bash
-cd /www/wwwroot/mediarafraw.ru
-git pull
-
-cd client && npm install && npm run build
-cd ../server && npm install && npx prisma db push && npx prisma generate
-
-pm2 delete all
-pm2 start src/index.js --name mediaraf-api
-pm2 save
-```
-
-**Важно:** при изменении Prisma-схемы **обязательно** `pm2 delete`, а не `restart` — иначе Client не подхватит новые модели.
-
 ---
 
 ## 👥 Роли пользователей
@@ -990,6 +1062,12 @@ pm2 save
 ---
 
 ## 📜 Скрипты
+
+### В корне репозитория
+
+```bash
+scripts/deploy.sh              # Ручной деплой на прод (см. «Деплой»)
+```
 
 ### Server (`server/package.json`)
 
@@ -1032,6 +1110,11 @@ pm2 save
 - **CORS** — настраивается на конкретный домен, а не `origin: true`.
 - **Загружаемые файлы** — лимит 200 МБ, изображения сжимаются через `sharp` до 1920px.
 - **Харденинг геймификации** — все операции `awardXp`/`deductXp` устойчивы к удалению пользователя во время выполнения (`P2025`/`P2003` не падают, а тихо возвращают `null`).
+- **`.env` и `.env.test` — не в git.** Если случайно закоммитили — немедленно:
+    1. Удалите файл: `git rm --cached server/.env.test`.
+    2. Добавьте в `.gitignore`.
+    3. **Ротируйте все секреты**, которые в нём были (`JWT_SECRET`, `VAPID_*`, пароль БД). Просто удалить файл недостаточно — он остаётся в истории git.
+    4. После ротации `JWT_SECRET` все активные сессии станут невалидными — пользователи перелогинятся.
 
 ---
 
@@ -1042,6 +1125,9 @@ pm2 save
 - **`prisma migrate` не используется** — только `db push`. История миграций в проекте не ведётся.
 - **PDF-экспорт сертификатов** работает на клиенте через `html-to-image` + `jsPDF`.
 - **Тестовая БД — обязательна.** Тесты не изолированы от прод-данных, если запускать их против основной БД.
+- **Автодеплой через GitHub Actions невозможен на текущем сервере.** Сервер — LXC-контейнер за NAT хостера (внутренний IP `192.168.10.33`, внешний `178.252.214.17` — это хост-машина, на её порту 22 отвечает чужой sshd). GitHub Actions не может подключиться к нашему sshd по SSH. **Решение:** ручной деплой через `bash scripts/deploy.sh`. Если переедете на VPS с публичным SSH — workflow `deploy.yml` заработает без изменений.
+- **`pg_dump` и PostgreSQL должны совпадать по мажорной версии.** На проде PostgreSQL 18, а системный `pg_dump` в Ubuntu 24.04 — 16. `scripts/deploy.sh` автоматически ищет `pg_dump` от 18-й версии (aaPanel-овский `/www/server/pgsql/bin/pg_dump`).
+- **npm-зеркала.** aaPanel ставит глобально `registry.npmmirror.com`, где периодически нет свежих пакетов. `scripts/deploy.sh` принудительно переключает registry на `https://registry.npmjs.org/`.
 
 ---
 
