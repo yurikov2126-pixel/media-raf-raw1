@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../../api/client.js';
 import Avatar from '../../../components/Avatar.jsx';
 
@@ -13,24 +14,52 @@ function fmtDuration(ms) {
 function fmtDate(s) {
     if (!s) return '—';
     return new Date(s).toLocaleString('ru-RU', {
-        day: '2-digit', month: '2-digit', year: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
     });
 }
 
 function shortAction(a) {
-    // Длинные action'ы обрезаем визуально, полный видно в payload/тултипе.
     return a.length > 40 ? a.slice(0, 37) + '…' : a;
 }
 
 export default function Actions({ token }) {
-    const [page, setPage] = useState(1);
-    const [limit, setLimit] = useState(20);
-    const [action, setAction] = useState('');
-    const [adminId, setAdminId] = useState('');
-    const [from, setFrom] = useState('');
-    const [to, setTo] = useState('');
-    const [failedOnly, setFailedOnly] = useState(false);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const page = Math.max(1, Number(searchParams.get('page')) || 1);
+    const limit = Math.min(
+        100,
+        Math.max(1, Number(searchParams.get('limit')) || 20)
+    );
+    const action = searchParams.get('action') ?? '';
+    const adminId = searchParams.get('adminId') ?? '';
+    const from = searchParams.get('from') ?? '';
+    const to = searchParams.get('to') ?? '';
+    const failedOnly = searchParams.get('failed') === '1';
+
+    const updateFilters = (patch) => {
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                for (const [k, v] of Object.entries(patch)) {
+                    if (v === '' || v === null || v === undefined || v === false) {
+                        next.delete(k);
+                    } else if (v === true) {
+                        next.set(k, '1');
+                    } else {
+                        next.set(k, String(v));
+                    }
+                }
+                if (!('page' in patch)) next.delete('page');
+                return next;
+            },
+            { replace: true }
+        );
+    };
 
     const [data, setData] = useState(null);
     const [meta, setMeta] = useState({ actions: [], admins: [] });
@@ -42,7 +71,10 @@ export default function Actions({ token }) {
         setLoading(true);
         setError('');
         try {
-            const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+            const q = new URLSearchParams({
+                page: String(page),
+                limit: String(limit),
+            });
             if (action) q.set('action', action);
             if (adminId) q.set('adminId', adminId);
             if (from) q.set('from', from);
@@ -61,7 +93,7 @@ export default function Actions({ token }) {
         try {
             setMeta(await api('/admin/actions/meta', { token }));
         } catch {
-            /* не критично, если мета не пришла */
+            /* не критично */
         }
     };
 
@@ -76,12 +108,16 @@ export default function Actions({ token }) {
     }, []);
 
     const resetFilters = () => {
-        setAction('');
-        setAdminId('');
-        setFrom('');
-        setTo('');
-        setFailedOnly(false);
-        setPage(1);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                for (const k of ['action', 'adminId', 'from', 'to', 'failed', 'page']) {
+                    next.delete(k);
+                }
+                return next;
+            },
+            { replace: true }
+        );
     };
 
     const anyFilter = action || adminId || from || to || failedOnly;
@@ -100,17 +136,22 @@ export default function Actions({ token }) {
                             <select
                                 className="input !py-1 !w-auto ml-2 !text-sm"
                                 value={limit}
-                                onChange={(e) => {
-                                    setLimit(Number(e.target.value));
-                                    setPage(1);
-                                }}
+                                onChange={(e) =>
+                                    updateFilters({ limit: Number(e.target.value) })
+                                }
                             >
                                 {[20, 50, 100].map((n) => (
-                                    <option key={n} value={n}>{n}</option>
+                                    <option key={n} value={n}>
+                                        {n}
+                                    </option>
                                 ))}
                             </select>
                         </label>
-                        <button onClick={load} disabled={loading} className="btn-ghost !py-2">
+                        <button
+                            onClick={load}
+                            disabled={loading}
+                            className="btn-ghost !py-2"
+                        >
                             {loading ? '⏳' : '🔄'}
                         </button>
                     </div>
@@ -125,11 +166,13 @@ export default function Actions({ token }) {
                             className="input !py-1.5 !text-sm"
                             placeholder="maintenance_…"
                             value={action}
-                            onChange={(e) => { setAction(e.target.value); setPage(1); }}
+                            onChange={(e) => updateFilters({ action: e.target.value })}
                             list="admin-actions-list"
                         />
                         <datalist id="admin-actions-list">
-                            {actionOptions.map((a) => <option key={a} value={a} />)}
+                            {actionOptions.map((a) => (
+                                <option key={a} value={a} />
+                            ))}
                         </datalist>
                     </div>
                     <div>
@@ -139,7 +182,7 @@ export default function Actions({ token }) {
                         <select
                             className="input !py-1.5 !text-sm"
                             value={adminId}
-                            onChange={(e) => { setAdminId(e.target.value); setPage(1); }}
+                            onChange={(e) => updateFilters({ adminId: e.target.value })}
                         >
                             <option value="">Все</option>
                             {adminOptions.map((a) => (
@@ -157,7 +200,7 @@ export default function Actions({ token }) {
                             type="datetime-local"
                             className="input !py-1.5 !text-sm"
                             value={from}
-                            onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+                            onChange={(e) => updateFilters({ from: e.target.value })}
                         />
                     </div>
                     <div>
@@ -168,7 +211,7 @@ export default function Actions({ token }) {
                             type="datetime-local"
                             className="input !py-1.5 !text-sm"
                             value={to}
-                            onChange={(e) => { setTo(e.target.value); setPage(1); }}
+                            onChange={(e) => updateFilters({ to: e.target.value })}
                         />
                     </div>
                 </div>
@@ -178,12 +221,17 @@ export default function Actions({ token }) {
                         <input
                             type="checkbox"
                             checked={failedOnly}
-                            onChange={(e) => { setFailedOnly(e.target.checked); setPage(1); }}
+                            onChange={(e) =>
+                                updateFilters({ failed: e.target.checked })
+                            }
                         />
                         Только с ошибками
                     </label>
                     {anyFilter && (
-                        <button onClick={resetFilters} className="btn-ghost !py-1 text-xs ml-auto">
+                        <button
+                            onClick={resetFilters}
+                            className="btn-ghost !py-1 text-xs ml-auto"
+                        >
                             Сбросить фильтры
                         </button>
                     )}
@@ -195,12 +243,15 @@ export default function Actions({ token }) {
             {data && (
                 <>
                     <div className="text-sm text-white/50 px-1">
-                        Всего: {data.total} · Страница {data.page} из {Math.max(1, data.pages)}
+                        Всего: {data.total} · Страница {data.page} из{' '}
+                        {Math.max(1, data.pages)}
                     </div>
 
                     <div className="card overflow-x-auto">
                         {data.items.length === 0 ? (
-                            <div className="p-8 text-center text-white/40">Записей нет</div>
+                            <div className="p-8 text-center text-white/40">
+                                Записей нет
+                            </div>
                         ) : (
                             <table className="w-full text-sm">
                                 <thead className="text-xs text-white/40 uppercase tracking-wider">
@@ -218,9 +269,8 @@ export default function Actions({ token }) {
                                     const isOpen = openId === it.id;
                                     const hasError = !!it.error;
                                     return (
-                                        <>
+                                        <Fragment key={it.id}>
                                             <tr
-                                                key={it.id}
                                                 className={`border-b border-white/5 hover:bg-white/5 ${
                                                     hasError ? 'bg-pink/5' : ''
                                                 }`}
@@ -231,7 +281,10 @@ export default function Actions({ token }) {
                                                 <td className="p-3">
                                                     {it.admin ? (
                                                         <div className="flex items-center gap-2">
-                                                            <Avatar user={it.admin} size={24} />
+                                                            <Avatar
+                                                                user={it.admin}
+                                                                size={24}
+                                                            />
                                                             <div className="min-w-0">
                                                                 <div className="text-xs truncate">
                                                                     {it.admin.fullName}
@@ -256,7 +309,9 @@ export default function Actions({ token }) {
                                                                 {shortAction(it.action)}
                                                             </span>
                                                         {hasError && (
-                                                            <span className={`chip text-[10px] ${FAILED_CHIP}`}>
+                                                            <span
+                                                                className={`chip text-[10px] ${FAILED_CHIP}`}
+                                                            >
                                                                     ошибка
                                                                 </span>
                                                         )}
@@ -271,7 +326,9 @@ export default function Actions({ token }) {
                                                 <td className="p-3 text-center">
                                                     <button
                                                         onClick={() =>
-                                                            setOpenId(isOpen ? null : it.id)
+                                                            setOpenId(
+                                                                isOpen ? null : it.id
+                                                            )
                                                         }
                                                         className="text-white/40 hover:text-white text-xs"
                                                     >
@@ -280,8 +337,11 @@ export default function Actions({ token }) {
                                                 </td>
                                             </tr>
                                             {isOpen && (
-                                                <tr key={it.id + '-details'}>
-                                                    <td colSpan={6} className="p-3 bg-black/20">
+                                                <tr>
+                                                    <td
+                                                        colSpan={6}
+                                                        className="p-3 bg-black/20"
+                                                    >
                                                         <div className="space-y-2 text-xs">
                                                             <div>
                                                                 <div className="text-white/40 uppercase tracking-wider mb-1">
@@ -305,7 +365,7 @@ export default function Actions({ token }) {
                                                     </td>
                                                 </tr>
                                             )}
-                                        </>
+                                        </Fragment>
                                     );
                                 })}
                                 </tbody>
@@ -317,7 +377,7 @@ export default function Actions({ token }) {
                         <div className="flex justify-center gap-2">
                             <button
                                 disabled={page === 1}
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                onClick={() => updateFilters({ page: page - 1 })}
                                 className="btn-ghost !py-2 disabled:opacity-30"
                             >
                                 ← Назад
@@ -327,7 +387,7 @@ export default function Actions({ token }) {
                             </div>
                             <button
                                 disabled={page >= data.pages}
-                                onClick={() => setPage((p) => p + 1)}
+                                onClick={() => updateFilters({ page: page + 1 })}
                                 className="btn-ghost !py-2 disabled:opacity-30"
                             >
                                 Вперёд →

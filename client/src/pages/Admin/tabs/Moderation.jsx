@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, resolveUrl } from '../../../api/client.js';
 import { useToast } from '../../../store/toast.jsx';
 import Avatar from '../../../components/Avatar.jsx';
@@ -25,11 +26,31 @@ const TARGET_LABEL = {
     user: '👤 Пользователь',
 };
 
+const STATUSES = ['NEW', 'IN_REVIEW', 'RESOLVED', 'REJECTED', ''];
+
 export default function Moderation({ token, onChanged }) {
     const toast = useToast();
-    const [status, setStatus] = useState('NEW');
-    const [targetType, setTargetType] = useState('');
-    const [page, setPage] = useState(1);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const status = searchParams.get('status') ?? 'NEW';
+    const targetType = searchParams.get('target') ?? '';
+    const page = Math.max(1, Number(searchParams.get('page')) || 1);
+
+    const updateFilters = (patch) => {
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                for (const [k, v] of Object.entries(patch)) {
+                    if (v === '' || v === null || v === undefined) next.delete(k);
+                    else next.set(k, String(v));
+                }
+                if (!('page' in patch)) next.delete('page');
+                return next;
+            },
+            { replace: true }
+        );
+    };
+
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -99,13 +120,10 @@ export default function Moderation({ token, onChanged }) {
         <div className="space-y-4">
             <div className="card p-4 flex flex-wrap gap-2 items-center">
                 <div className="font-bold text-lg mr-2">🛡️ Модерация жалоб</div>
-                {['NEW', 'IN_REVIEW', 'RESOLVED', 'REJECTED', ''].map((s) => (
+                {STATUSES.map((s) => (
                     <button
                         key={s || 'all'}
-                        onClick={() => {
-                            setStatus(s);
-                            setPage(1);
-                        }}
+                        onClick={() => updateFilters({ status: s })}
                         className={`chip ${
                             status === s ? 'bg-violet text-white' : 'bg-white/5 text-white/60'
                         }`}
@@ -116,10 +134,7 @@ export default function Moderation({ token, onChanged }) {
                 <select
                     className="input !py-2 !w-auto ml-auto"
                     value={targetType}
-                    onChange={(e) => {
-                        setTargetType(e.target.value);
-                        setPage(1);
-                    }}
+                    onChange={(e) => updateFilters({ target: e.target.value })}
                 >
                     <option value="">Все типы</option>
                     <option value="post">Посты</option>
@@ -137,7 +152,8 @@ export default function Moderation({ token, onChanged }) {
             {data && (
                 <>
                     <div className="text-sm text-white/50 px-1">
-                        Всего: {data.total} · Страница {data.page} из {Math.max(1, data.pages)}
+                        Всего: {data.total} · Страница {data.page} из{' '}
+                        {Math.max(1, data.pages)}
                     </div>
 
                     <div className="card divide-y divide-white/5">
@@ -189,7 +205,7 @@ export default function Moderation({ token, onChanged }) {
                         <div className="flex justify-center gap-2">
                             <button
                                 disabled={page === 1}
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                onClick={() => updateFilters({ page: page - 1 })}
                                 className="btn-ghost !py-2 disabled:opacity-30"
                             >
                                 ← Назад
@@ -199,7 +215,7 @@ export default function Moderation({ token, onChanged }) {
                             </div>
                             <button
                                 disabled={page >= data.pages}
-                                onClick={() => setPage((p) => p + 1)}
+                                onClick={() => updateFilters({ page: page + 1 })}
                                 className="btn-ghost !py-2 disabled:opacity-30"
                             >
                                 Вперёд →
@@ -220,7 +236,9 @@ export default function Moderation({ token, onChanged }) {
                     }
                     onDeleteContent={() => setConfirm({ type: 'delete', report: open })}
                     onBanUser={() => setConfirm({ type: 'ban', report: open })}
-                    onRemoveReport={() => setConfirm({ type: 'remove-report', report: open })}
+                    onRemoveReport={() =>
+                        setConfirm({ type: 'remove-report', report: open })
+                    }
                 />
             )}
 
@@ -250,7 +268,15 @@ export default function Moderation({ token, onChanged }) {
     );
 }
 
-function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanUser, onRemoveReport }) {
+function ReportDetail({
+                          report,
+                          busy,
+                          onClose,
+                          onStatus,
+                          onDeleteContent,
+                          onBanUser,
+                          onRemoveReport,
+                      }) {
     const [resolution, setResolution] = useState(report.resolution || '');
 
     const target = report.target?.data;
@@ -350,7 +376,9 @@ function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanU
                             <Avatar user={author} size={36} />
                             <div>
                                 <div className="font-semibold">{author.fullName}</div>
-                                <div className="text-xs text-white/40">@{author.username}</div>
+                                <div className="text-xs text-white/40">
+                                    @{author.username}
+                                </div>
                             </div>
                         </div>
                     </div>
