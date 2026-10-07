@@ -29,7 +29,8 @@ log "OK: дерево чистое"
 log "=== 2. Бэкап БД ==="
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/mediaraf_$(date +%Y%m%d_%H%M%S).sql"
-DB_URL=$(grep -E '^DATABASE_URL=' server/.env | cut -d= -f2- | tr -d '"')
+# Извлекаем URL из .env, убираем кавычки и Prisma-специфичный "?schema=..."
+DB_URL=$(grep -E '^DATABASE_URL=' server/.env | cut -d= -f2- | tr -d '"' | sed 's/?.*$//')
 pg_dump "$DB_URL" > "$BACKUP_FILE"
 log "OK: дамп сохранён в $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
 
