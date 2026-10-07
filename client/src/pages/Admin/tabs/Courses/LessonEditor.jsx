@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 import TestEditor from './TestEditor.jsx';
 import PracticalEditor from './PracticalEditor.jsx';
 import HomeworkEditor from './HomeworkEditor.jsx';
 import MarkdownView from '../../../../components/MarkdownView.jsx';
 
 export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
+    const toast = useToast();
     const [tab, setTab] = useState('lesson');
     const [form, setForm] = useState({
         title: lesson.title,
@@ -38,8 +40,9 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 },
             });
             onSaved?.();
+            toast.success('Урок сохранён');
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }
@@ -47,28 +50,40 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
 
     const remove = async () => {
         if (!confirm('Удалить урок?')) return;
-        await api(`/admin/lessons/${lesson.id}`, { method: 'DELETE', token });
-        onDeleted?.();
+        try {
+            await api(`/admin/lessons/${lesson.id}`, { method: 'DELETE', token });
+            onDeleted?.();
+            toast.success('Урок удалён');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const createTest = async () => {
-        const t = await api(`/admin/lessons/${lesson.id}/test`, {
-            method: 'POST',
-            token,
-            body: { title: `Тест: ${form.title}`, passScore: 70 },
-        });
-        setTest({ ...t, questions: [] });
+        try {
+            const t = await api(`/admin/lessons/${lesson.id}/test`, {
+                method: 'POST',
+                token,
+                body: { title: `Тест: ${form.title}`, passScore: 70 },
+            });
+            setTest({ ...t, questions: [] });
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const deleteTest = async () => {
         if (!confirm('Удалить тест?')) return;
-        await api(`/admin/tests/${test.id}`, { method: 'DELETE', token });
-        setTest(null);
+        try {
+            await api(`/admin/tests/${test.id}`, { method: 'DELETE', token });
+            setTest(null);
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     return (
         <div className="space-y-4 min-w-0">
-            {/* Шапка урока */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="font-bold text-lg">Редактор урока</div>
                 <div className="flex gap-1 flex-wrap">
@@ -89,7 +104,6 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 placeholder="Название урока"
             />
 
-            {/* Вкладки */}
             <div className="flex gap-1 border-b border-white/10 pb-2 flex-wrap">
                 <TabBtn active={tab === 'lesson'} onClick={() => setTab('lesson')}>
                     📖 Урок
@@ -105,7 +119,6 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 </TabBtn>
             </div>
 
-            {/* Вкладка урока */}
             {tab === 'lesson' && (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
@@ -196,7 +209,6 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 </div>
             )}
 
-            {/* Вкладка теста */}
             {tab === 'test' && (
                 <div>
                     {!test ? (
@@ -218,7 +230,6 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 </div>
             )}
 
-            {/* Вкладка практики */}
             {tab === 'practical' && (
                 <PracticalEditor
                     lessonId={lesson.id}
@@ -231,7 +242,6 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                 />
             )}
 
-            {/* Вкладка ДЗ */}
             {tab === 'homework' && (
                 <HomeworkEditor
                     lessonId={lesson.id}

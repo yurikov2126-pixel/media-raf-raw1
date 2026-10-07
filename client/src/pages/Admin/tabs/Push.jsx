@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../../api/client.js';
 import Avatar from '../../../components/Avatar.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useToast } from '../../../store/toast.jsx';
 
 export default function Push({ token, users, courses }) {
     const [stats, setStats] = useState({});
@@ -9,6 +10,8 @@ export default function Push({ token, users, courses }) {
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
     const [error, setError] = useState('');
+    const toast = useToast();
+
 
     // Форма рассылки
     const [target, setTarget] = useState('all');
@@ -98,7 +101,7 @@ export default function Push({ token, users, courses }) {
                 token,
                 body: { title: 'Тест из админки', body: 'Push-сервис работает ✅' },
             });
-            alert(`Отправлено: ${r.sent || 0}, ошибок: ${r.failed || 0}`);
+            toast.success(`Отправлено: ${r.sent || 0}, ошибок: ${r.failed || 0}`);
         } catch (e) {
             setError(e.message);
         } finally {

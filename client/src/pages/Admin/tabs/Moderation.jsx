@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, resolveUrl } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 import Avatar from '../../../components/Avatar.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
@@ -25,6 +26,7 @@ const TARGET_LABEL = {
 };
 
 export default function Moderation({ token, onChanged }) {
+    const toast = useToast();
     const [status, setStatus] = useState('NEW');
     const [targetType, setTargetType] = useState('');
     const [page, setPage] = useState(1);
@@ -51,26 +53,43 @@ export default function Moderation({ token, onChanged }) {
         }
     };
 
-    useEffect(() => { load(); /* eslint-disable-next-line */ }, [status, targetType, page]);
+    useEffect(() => {
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status, targetType, page]);
 
     const apply = async (reportId, action, payload) => {
         setBusy(true);
         try {
             if (action === 'status') {
-                await api(`/admin/reports/${reportId}`, { method: 'PATCH', token, body: payload });
+                await api(`/admin/reports/${reportId}`, {
+                    method: 'PATCH',
+                    token,
+                    body: payload,
+                });
+                toast.success('Статус обновлён');
             } else if (action === 'delete') {
-                await api(`/admin/reports/${reportId}/delete-content`, { method: 'POST', token });
+                await api(`/admin/reports/${reportId}/delete-content`, {
+                    method: 'POST',
+                    token,
+                });
+                toast.success('Контент удалён');
             } else if (action === 'ban') {
-                await api(`/admin/reports/${reportId}/ban-user`, { method: 'POST', token });
+                await api(`/admin/reports/${reportId}/ban-user`, {
+                    method: 'POST',
+                    token,
+                });
+                toast.success('Пользователь заблокирован');
             } else if (action === 'remove-report') {
                 await api(`/admin/reports/${reportId}`, { method: 'DELETE', token });
+                toast.success('Жалоба удалена');
             }
             setConfirm(null);
             setOpen(null);
             await load();
             onChanged?.();
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }
@@ -83,8 +102,13 @@ export default function Moderation({ token, onChanged }) {
                 {['NEW', 'IN_REVIEW', 'RESOLVED', 'REJECTED', ''].map((s) => (
                     <button
                         key={s || 'all'}
-                        onClick={() => { setStatus(s); setPage(1); }}
-                        className={`chip ${status === s ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}
+                        onClick={() => {
+                            setStatus(s);
+                            setPage(1);
+                        }}
+                        className={`chip ${
+                            status === s ? 'bg-violet text-white' : 'bg-white/5 text-white/60'
+                        }`}
                     >
                         {s ? STATUS_LABEL[s] : 'Все'}
                     </button>
@@ -92,7 +116,10 @@ export default function Moderation({ token, onChanged }) {
                 <select
                     className="input !py-2 !w-auto ml-auto"
                     value={targetType}
-                    onChange={(e) => { setTargetType(e.target.value); setPage(1); }}
+                    onChange={(e) => {
+                        setTargetType(e.target.value);
+                        setPage(1);
+                    }}
                 >
                     <option value="">Все типы</option>
                     <option value="post">Посты</option>
@@ -128,20 +155,28 @@ export default function Moderation({ token, onChanged }) {
                                             <span className="chip bg-violet/20 text-violet-soft text-[10px]">
                                                 {REASON_LABEL[r.reason] || r.reason}
                                             </span>
-                                            <span className="chip bg-white/5 text-[10px]">{TARGET_LABEL[r.targetType]}</span>
+                                            <span className="chip bg-white/5 text-[10px]">
+                                                {TARGET_LABEL[r.targetType]}
+                                            </span>
                                             <span className="text-[10px] text-white/30">
                                                 {new Date(r.createdAt).toLocaleString('ru-RU')}
                                             </span>
                                         </div>
                                         <div className="text-sm text-white/70">
-                                            Жалоба от <b>{r.reporter.fullName}</b> (@{r.reporter.username})
+                                            Жалоба от <b>{r.reporter.fullName}</b> (@
+                                            {r.reporter.username})
                                         </div>
                                         {r.comment && (
-                                            <div className="text-xs text-white/60 mt-1 italic">«{r.comment}»</div>
+                                            <div className="text-xs text-white/60 mt-1 italic">
+                                                «{r.comment}»
+                                            </div>
                                         )}
                                     </div>
                                     <div className="flex gap-2 flex-wrap">
-                                        <button onClick={() => setOpen(r)} className="chip bg-white/5 hover:bg-white/10 text-xs">
+                                        <button
+                                            onClick={() => setOpen(r)}
+                                            className="chip bg-white/5 hover:bg-white/10 text-xs"
+                                        >
                                             Открыть
                                         </button>
                                     </div>
@@ -180,7 +215,9 @@ export default function Moderation({ token, onChanged }) {
                     token={token}
                     busy={busy}
                     onClose={() => setOpen(null)}
-                    onStatus={(s, resolution) => apply(open.id, 'status', { status: s, resolution })}
+                    onStatus={(s, resolution) =>
+                        apply(open.id, 'status', { status: s, resolution })
+                    }
                     onDeleteContent={() => setConfirm({ type: 'delete', report: open })}
                     onBanUser={() => setConfirm({ type: 'ban', report: open })}
                     onRemoveReport={() => setConfirm({ type: 'remove-report', report: open })}
@@ -190,9 +227,11 @@ export default function Moderation({ token, onChanged }) {
             <ConfirmDialog
                 open={!!confirm}
                 title={
-                    confirm?.type === 'delete' ? 'Удалить контент?' :
-                        confirm?.type === 'ban' ? 'Заблокировать автора?' :
-                            'Удалить жалобу?'
+                    confirm?.type === 'delete'
+                        ? 'Удалить контент?'
+                        : confirm?.type === 'ban'
+                            ? 'Заблокировать автора?'
+                            : 'Удалить жалобу?'
                 }
                 description={
                     confirm?.type === 'delete'
@@ -215,14 +254,26 @@ function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanU
     const [resolution, setResolution] = useState(report.resolution || '');
 
     const target = report.target?.data;
-    const author = target?.author || target?.sender || (report.targetType === 'user' ? target : null);
+    const author =
+        target?.author || target?.sender || (report.targetType === 'user' ? target : null);
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm overflow-y-auto p-4" onClick={onClose}>
-            <div className="card max-w-3xl mx-auto my-8 p-5" onClick={(e) => e.stopPropagation()}>
+        <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm overflow-y-auto p-4"
+            onClick={onClose}
+        >
+            <div
+                className="card max-w-3xl mx-auto my-8 p-5"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold">🛡️ Жалоба</h2>
-                    <button onClick={onClose} className="text-white/40 hover:text-white text-xl">✕</button>
+                    <button
+                        onClick={onClose}
+                        className="text-white/40 hover:text-white text-xl"
+                    >
+                        ✕
+                    </button>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-3 mb-4 text-sm">
@@ -248,7 +299,9 @@ function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanU
                 </div>
 
                 {report.comment && (
-                    <div className="mb-4 p-3 rounded-xl bg-white/5 text-sm italic">«{report.comment}»</div>
+                    <div className="mb-4 p-3 rounded-xl bg-white/5 text-sm italic">
+                        «{report.comment}»
+                    </div>
                 )}
 
                 <div className="mb-4">
@@ -260,18 +313,30 @@ function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanU
                     ) : report.targetType === 'post' ? (
                         <div className="p-3 rounded-xl bg-white/5 text-sm">
                             {target.content || '(без текста)'}
-                            {target.mediaUrl && <img src={resolveUrl(target.mediaUrl)} alt="" className="mt-2 rounded-xl max-h-60" />}
+                            {target.mediaUrl && (
+                                <img
+                                    src={resolveUrl(target.mediaUrl)}
+                                    alt=""
+                                    className="mt-2 rounded-xl max-h-60"
+                                />
+                            )}
                         </div>
                     ) : report.targetType === 'comment' ? (
-                        <div className="p-3 rounded-xl bg-white/5 text-sm">{target.content}</div>
+                        <div className="p-3 rounded-xl bg-white/5 text-sm">
+                            {target.content}
+                        </div>
                     ) : report.targetType === 'message' ? (
                         <div className="p-3 rounded-xl bg-white/5 text-sm">
                             <b>Тип:</b> {target.type} · <b>Содержимое:</b>{' '}
-                            {target.type === 'text' ? target.content : `[${target.type}] ${target.content}`}
+                            {target.type === 'text'
+                                ? target.content
+                                : `[${target.type}] ${target.content}`}
                         </div>
                     ) : (
                         <div className="p-3 rounded-xl bg-white/5 text-sm">
-                            <div><b>@{target.username}</b></div>
+                            <div>
+                                <b>@{target.username}</b>
+                            </div>
                             <div>{target.fullName}</div>
                             {target.isBanned && <div className="text-pink">забанен</div>}
                         </div>
@@ -292,7 +357,9 @@ function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanU
                 )}
 
                 <div className="mb-4">
-                    <label className="text-xs text-white/40 uppercase block mb-1">Резолюция</label>
+                    <label className="text-xs text-white/40 uppercase block mb-1">
+                        Резолюция
+                    </label>
                     <textarea
                         className="input resize-none"
                         rows={2}
@@ -303,15 +370,51 @@ function ReportDetail({ report, busy, onClose, onStatus, onDeleteContent, onBanU
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    <button onClick={() => onStatus('IN_REVIEW', resolution)} disabled={busy} className="btn-ghost">👀 В работу</button>
-                    <button onClick={() => onStatus('RESOLVED', resolution)} disabled={busy} className="btn-ghost">✅ Решено</button>
-                    <button onClick={() => onStatus('REJECTED', resolution)} disabled={busy} className="btn-ghost">✕ Отклонить</button>
+                    <button
+                        onClick={() => onStatus('IN_REVIEW', resolution)}
+                        disabled={busy}
+                        className="btn-ghost"
+                    >
+                        👀 В работу
+                    </button>
+                    <button
+                        onClick={() => onStatus('RESOLVED', resolution)}
+                        disabled={busy}
+                        className="btn-ghost"
+                    >
+                        ✅ Решено
+                    </button>
+                    <button
+                        onClick={() => onStatus('REJECTED', resolution)}
+                        disabled={busy}
+                        className="btn-ghost"
+                    >
+                        ✕ Отклонить
+                    </button>
                     <div className="ml-auto flex gap-2">
-                        <button onClick={onRemoveReport} disabled={busy} className="btn-ghost text-pink">Удалить жалобу</button>
+                        <button
+                            onClick={onRemoveReport}
+                            disabled={busy}
+                            className="btn-ghost text-pink"
+                        >
+                            Удалить жалобу
+                        </button>
                         {target && (
                             <>
-                                <button onClick={onBanUser} disabled={busy} className="btn-primary !bg-pink">🚫 Забанить</button>
-                                <button onClick={onDeleteContent} disabled={busy} className="btn-primary">🗑️ Удалить контент</button>
+                                <button
+                                    onClick={onBanUser}
+                                    disabled={busy}
+                                    className="btn-primary !bg-pink"
+                                >
+                                    🚫 Забанить
+                                </button>
+                                <button
+                                    onClick={onDeleteContent}
+                                    disabled={busy}
+                                    className="btn-primary"
+                                >
+                                    🗑️ Удалить контент
+                                </button>
                             </>
                         )}
                     </div>

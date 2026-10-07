@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 import LessonEditor from './LessonEditor.jsx';
 
 export default function CourseEditor({ course, token, onClose, onSaved }) {
+    const toast = useToast();
     const isNew = !course;
     const [form, setForm] = useState(() => ({
         title: course?.title || '',
@@ -23,7 +25,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
     const [activeLesson, setActiveLesson] = useState(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const [tab, setTab] = useState('main'); // main | lessons
+    const [tab, setTab] = useState('main');
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -95,7 +97,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
             await api(`/admin/lessons/${swapWith.id}`, { method: 'PATCH', token, body: { order: lesson.order } });
             await refreshLessons();
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         }
     };
 
@@ -105,7 +107,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                 className="card w-full max-w-[1400px] h-full mx-auto flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Шапка */}
                 <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-white/10 shrink-0">
                     <div className="min-w-0">
                         <div className="text-lg md:text-xl font-bold truncate">
@@ -132,7 +133,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                     </div>
                 </div>
 
-                {/* Вкладки */}
                 <div className="flex gap-1 px-5 border-b border-white/10 shrink-0">
                     <TabBtn active={tab === 'main'} onClick={() => setTab('main')}>
                         📋 Основное
@@ -142,7 +142,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                     </TabBtn>
                 </div>
 
-                {/* Контент */}
                 <div className="flex-1 overflow-hidden">
                     {tab === 'main' && (
                         <div className="h-full overflow-y-auto p-5">
@@ -270,7 +269,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
 
                     {tab === 'lessons' && savedCourse && (
                         <div className="h-full flex flex-col">
-                            {/* Панель управления уроками */}
                             <div className="flex items-center justify-between gap-2 px-5 py-2 border-b border-white/5 shrink-0">
                                 <div className="text-sm text-white/60">
                                     Всего: <b className="text-white">{lessons.length}</b>
@@ -285,7 +283,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                                 </button>
                             </div>
 
-                            {/* Список уроков — горизонтальная полоса */}
                             <div className="flex gap-2 px-5 py-3 overflow-x-auto shrink-0 border-b border-white/5">
                                 {lessons.map((l, i) => (
                                     <button
@@ -316,7 +313,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                                 )}
                             </div>
 
-                            {/* Редактор урока — на всю ширину и высоту */}
                             <div className="flex-1 overflow-y-auto px-5 py-4">
                                 {activeLesson ? (
                                     <LessonEditor
@@ -340,7 +336,6 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                     )}
                 </div>
 
-                {/* Футер */}
                 <div className="flex justify-end gap-2 px-5 py-3 border-t border-white/10 shrink-0">
                     <button onClick={onClose} className="btn-ghost">Закрыть</button>
                     <button onClick={onSaved} className="btn-primary">Готово</button>

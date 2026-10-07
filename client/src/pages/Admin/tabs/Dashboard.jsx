@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 import { fmtSize, fmtUptime } from '../utils.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import OrphanFilesList from '../components/OrphanFilesList.jsx';
@@ -38,11 +39,11 @@ function StatsCards({ stats }) {
 
 /* ─────────── Информация о сервере ─────────── */
 function ServerInfoBlock({ token }) {
+    const toast = useToast();
     const [info, setInfo] = useState(null);
     const [loading, setLoading] = useState(false);
     const [confirm, setConfirm] = useState(null);
     const [busy, setBusy] = useState(false);
-    const [message, setMessage] = useState('');
 
     const load = async () => {
         setLoading(true);
@@ -64,21 +65,23 @@ function ServerInfoBlock({ token }) {
 
     const runCleanup = async () => {
         setBusy(true);
-        setMessage('');
         try {
             const r = await api('/admin/server/cleanup', {
                 method: 'POST',
                 token,
-                body: confirm === 'logs' ? { logs: true } : { backups: true, backupsDays: 30 },
+                body:
+                    confirm === 'logs'
+                        ? { logs: true }
+                        : { backups: true, backupsDays: 30 },
             });
-            setMessage(
-                confirm === 'logs'
-                    ? `Очищено логов: ${r.logs?.cleared || 0}`
-                    : `Удалено бэкапов: ${r.backups?.removed || 0}`
-            );
+            if (confirm === 'logs') {
+                toast.success(`Очищено логов: ${r.logs?.cleared || 0}`);
+            } else {
+                toast.success(`Удалено бэкапов: ${r.backups?.removed || 0}`);
+            }
             await load();
         } catch (e) {
-            setMessage('Ошибка: ' + e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
             setConfirm(null);
@@ -98,8 +101,12 @@ function ServerInfoBlock({ token }) {
 
     const Metric = ({ label, value, sub, warn }) => (
         <div className="rounded-2xl bg-ink-700/50 p-3">
-            <div className="text-xs text-white/40 uppercase tracking-wider mb-1">{label}</div>
-            <div className={`text-lg font-bold ${warn ? 'text-orange-300' : ''}`}>{value}</div>
+            <div className="text-xs text-white/40 uppercase tracking-wider mb-1">
+                {label}
+            </div>
+            <div className={`text-lg font-bold ${warn ? 'text-orange-300' : ''}`}>
+                {value}
+            </div>
             {sub && <div className="text-[10px] text-white/40 mt-0.5">{sub}</div>}
         </div>
     );
@@ -187,12 +194,6 @@ function ServerInfoBlock({ token }) {
                     🗑️ Удалить бэкапы старше 30 дней
                 </button>
             </div>
-
-            {message && (
-                <div className="mt-3 text-sm bg-lime/10 border border-lime/30 rounded-xl p-3 text-lime">
-                    {message}
-                </div>
-            )}
 
             <ConfirmDialog
                 open={!!confirm}

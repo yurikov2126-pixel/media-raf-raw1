@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 import ArticleEditor from './ArticleEditor.jsx';
 import CategoryEditor from './CategoryEditor.jsx';
 
 export default function Wiki({ token }) {
+    const toast = useToast();
     const [categories, setCategories] = useState([]);
     const [articles, setArticles] = useState([]);
     const [activeCategory, setActiveCategory] = useState('');
@@ -21,20 +23,29 @@ export default function Wiki({ token }) {
             ]);
             setCategories(c);
             setArticles(a);
-        } catch (e) { setError(e.message); }
+        } catch (e) {
+            setError(e.message);
+        }
     };
 
-    useEffect(() => { reload(); /* eslint-disable-next-line */ }, [token, activeCategory]);
+    useEffect(() => {
+        reload();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token, activeCategory]);
 
     const seedDefaults = async () => {
         if (!confirm('Загрузить стартовые категории и статьи?')) return;
-        setBusy(true); setError('');
+        setBusy(true);
+        setError('');
         try {
             const r = await api('/admin/wiki/seed-defaults', { method: 'POST', token });
-            alert(`Загружено: категорий ${r.categoriesCreated}, статей ${r.articlesCreated}`);
+            toast.success(`Загружено: категорий ${r.categoriesCreated}, статей ${r.articlesCreated}`);
             await reload();
-        } catch (e) { setError(e.message); }
-        finally { setBusy(false); }
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const removeCategory = async (id) => {
@@ -42,7 +53,10 @@ export default function Wiki({ token }) {
         try {
             await api(`/admin/wiki/categories/${id}`, { method: 'DELETE', token });
             await reload();
-        } catch (e) { alert(e.message); }
+            toast.success('Категория удалена');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const removeArticle = async (id) => {
@@ -50,7 +64,10 @@ export default function Wiki({ token }) {
         try {
             await api(`/admin/wiki/articles/${id}`, { method: 'DELETE', token });
             await reload();
-        } catch (e) { alert(e.message); }
+            toast.success('Статья удалена');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const filteredArticles = articles.filter((a) =>

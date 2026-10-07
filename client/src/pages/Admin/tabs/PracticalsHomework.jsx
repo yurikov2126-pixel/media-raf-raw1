@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 
 /* ─────── Утилиты для даты ─────── */
 function toLocalInput(dateStr) {
@@ -21,14 +22,14 @@ function formatDateTime(dateStr) {
 }
 
 export default function PracticalsHomework({ token, courses = [] }) {
-    const [tab, setTab] = useState('practicals'); // practicals | homeworks
+    const toast = useToast();
+    const [tab, setTab] = useState('practicals');
     const [practicals, setPracticals] = useState([]);
     const [homeworks, setHomeworks] = useState([]);
     const [mentors, setMentors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Фильтры
     const [courseFilter, setCourseFilter] = useState('');
     const [supervisorFilter, setSupervisorFilter] = useState('');
     const [dateFilter, setDateFilter] = useState('');
@@ -58,7 +59,6 @@ export default function PracticalsHomework({ token, courses = [] }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
-    /* ─── Фильтрация ─── */
     const filteredPracticals = useMemo(() => {
         let list = practicals;
 
@@ -98,9 +98,8 @@ export default function PracticalsHomework({ token, courses = [] }) {
         return list;
     }, [homeworks, courseFilter, search]);
 
-    /* ─── Счётчики ─── */
     const counts = useMemo(() => {
-        const c = {
+        return {
             practicals: {
                 total: practicals.length,
                 withSupervisor: practicals.filter((p) => p.supervisorId).length,
@@ -112,7 +111,6 @@ export default function PracticalsHomework({ token, courses = [] }) {
                 pending: homeworks.reduce((s, h) => s + (h.pendingCount || 0), 0),
             },
         };
-        return c;
     }, [practicals, homeworks]);
 
     const updatePractical = async (id, patch) => {
@@ -126,8 +124,13 @@ export default function PracticalsHomework({ token, courses = [] }) {
 
     const deletePractical = async (id) => {
         if (!confirm('Удалить практику?')) return;
-        await api(`/admin/practicals/${id}`, { method: 'DELETE', token });
-        setPracticals((prev) => prev.filter((p) => p.id !== id));
+        try {
+            await api(`/admin/practicals/${id}`, { method: 'DELETE', token });
+            setPracticals((prev) => prev.filter((p) => p.id !== id));
+            toast.success('Практика удалена');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const updateHomework = async (id, patch) => {
@@ -143,17 +146,22 @@ export default function PracticalsHomework({ token, courses = [] }) {
 
     const deleteHomework = async (id) => {
         if (!confirm('Удалить ДЗ?')) return;
-        await api(`/admin/homework/${id}`, { method: 'DELETE', token });
-        setHomeworks((prev) => prev.filter((h) => h.id !== id));
+        try {
+            await api(`/admin/homework/${id}`, { method: 'DELETE', token });
+            setHomeworks((prev) => prev.filter((h) => h.id !== id));
+            toast.success('ДЗ удалено');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const bulkAssignSupervisor = async () => {
         if (!courseFilter) {
-            alert('Сначала выберите курс в фильтре');
+            toast.warn('Сначала выберите курс в фильтре');
             return;
         }
         if (!supervisorFilter) {
-            alert('Выберите руководителя в фильтре');
+            toast.warn('Выберите руководителя в фильтре');
             return;
         }
         if (!confirm(
@@ -167,16 +175,16 @@ export default function PracticalsHomework({ token, courses = [] }) {
                 token,
                 body: { courseId: courseFilter, supervisorId: supervisorFilter },
             });
-            alert(`Обновлено практик: ${r.affected}`);
+            toast.success(`Обновлено практик: ${r.affected}`);
             await load();
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         }
     };
 
     const bulkDeleteHomeworks = async () => {
         if (!courseFilter) {
-            alert('Сначала выберите курс в фильтре');
+            toast.warn('Сначала выберите курс в фильтре');
             return;
         }
         const c = courses.find((x) => x.id === courseFilter);
@@ -189,16 +197,15 @@ export default function PracticalsHomework({ token, courses = [] }) {
                 token,
                 body: { courseId: courseFilter },
             });
-            alert(`Удалено ДЗ: ${r.affected}`);
+            toast.success(`Удалено ДЗ: ${r.affected}`);
             await load();
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         }
     };
 
     return (
         <div>
-            {/* Заголовок */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div>
                     <h2 className="text-2xl font-bold">🎯 Практики и домашние задания</h2>
@@ -211,7 +218,6 @@ export default function PracticalsHomework({ token, courses = [] }) {
                 </button>
             </div>
 
-            {/* Под-табы */}
             <div className="flex gap-2 mb-4 flex-wrap">
                 <button
                     onClick={() => setTab('practicals')}
@@ -251,7 +257,6 @@ export default function PracticalsHomework({ token, courses = [] }) {
                 </button>
             </div>
 
-            {/* Фильтры */}
             <div className="card p-4 mb-4 space-y-3">
                 <div className="flex flex-wrap gap-2">
                     <select
@@ -314,7 +319,6 @@ export default function PracticalsHomework({ token, courses = [] }) {
                     )}
                 </div>
 
-                {/* Массовые действия */}
                 {courseFilter && (
                     <div className="pt-3 border-t border-white/10 flex flex-wrap gap-2 items-center text-xs">
                         <span className="text-white/40">Массовые действия:</span>
@@ -340,7 +344,6 @@ export default function PracticalsHomework({ token, courses = [] }) {
                 )}
             </div>
 
-            {/* Контент */}
             {loading && <div className="text-white/40 text-center py-10">Загрузка…</div>}
             {error && <div className="text-red-400 text-center py-10">{error}</div>}
 
@@ -386,6 +389,7 @@ export default function PracticalsHomework({ token, courses = [] }) {
 
 /* ═══════════ СТРОКА ПРАКТИКИ ═══════════ */
 function PracticalRow({ practical, mentors, onSave, onDelete }) {
+    const toast = useToast();
     const [form, setForm] = useState({
         supervisorId: practical.supervisorId || '',
         scheduledAt: toLocalInput(practical.scheduledAt),
@@ -413,7 +417,7 @@ function PracticalRow({ practical, mentors, onSave, onDelete }) {
             setSavedFlash(true);
             setTimeout(() => setSavedFlash(false), 1500);
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }
@@ -433,7 +437,6 @@ function PracticalRow({ practical, mentors, onSave, onDelete }) {
 
     return (
         <div className="card p-4">
-            {/* Шапка */}
             <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -458,7 +461,6 @@ function PracticalRow({ practical, mentors, onSave, onDelete }) {
                 </button>
             </div>
 
-            {/* Поля */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 <div>
                     <label className="text-[10px] uppercase text-white/40 block mb-1">
@@ -519,7 +521,6 @@ function PracticalRow({ practical, mentors, onSave, onDelete }) {
                 </div>
             </div>
 
-            {/* Футер с сохранением */}
             <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-white/5">
                 {savedFlash && (
                     <span className="text-xs text-lime">✓ Сохранено</span>
@@ -541,6 +542,7 @@ function PracticalRow({ practical, mentors, onSave, onDelete }) {
 
 /* ═══════════ СТРОКА ДЗ ═══════════ */
 function HomeworkRow({ homework, onSave, onDelete }) {
+    const toast = useToast();
     const [form, setForm] = useState({
         maxFiles: homework.maxFiles ?? 3,
         maxFileSizeMb: homework.maxFileSizeMb ?? 50,
@@ -562,7 +564,7 @@ function HomeworkRow({ homework, onSave, onDelete }) {
             setSavedFlash(true);
             setTimeout(() => setSavedFlash(false), 1500);
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 import SearchSelect from '../../components/SearchSelect.jsx';
 
 export default function BulkCourseAction({ token, courses, onResult }) {
+    const toast = useToast();
     const [courseId, setCourseId] = useState('');
     const [target, setTarget] = useState('all');
     const [direction, setDirection] = useState('photo');
@@ -15,7 +17,10 @@ export default function BulkCourseAction({ token, courses, onResult }) {
     }, [token]);
 
     const run = async (endpoint, label) => {
-        if (!courseId) return alert('Выберите курс');
+        if (!courseId) {
+            toast.warn('Выберите курс');
+            return;
+        }
         if (!confirm(`${label}\n\nПродолжить?`)) return;
         setBusy(endpoint);
         try {
@@ -23,9 +28,15 @@ export default function BulkCourseAction({ token, courses, onResult }) {
             if (target === 'direction') body.direction = direction;
             if (target === 'group') body.group = group;
             const r = await api(endpoint, { method: 'POST', token, body });
+            if (r?.affected > 0) {
+                toast.success(`Обработано: ${r.affected}`);
+            }
             onResult?.(r, endpoint);
-        } catch (e) { alert(e.message); }
-        finally { setBusy(null); }
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(null);
+        }
     };
 
     return (

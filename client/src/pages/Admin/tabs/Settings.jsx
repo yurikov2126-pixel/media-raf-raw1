@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
+
 
 export default function Settings({ settings, setSettings, token }) {
     const [busy, setBusy] = useState(false);
     const [saved, setSaved] = useState(false);
+    const toast = useToast();
 
     // Автоочистка уведомлений — с сервера
     const [notifyCleanup, setNotifyCleanup] = useState(null);
@@ -22,9 +25,10 @@ export default function Settings({ settings, setSettings, token }) {
         try {
             await api('/admin/settings', { method: 'PUT', token, body: settings });
             setSaved(true);
+            toast.success('Настройки сохранены');
             setTimeout(() => setSaved(false), 2000);
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }

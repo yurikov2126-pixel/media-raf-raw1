@@ -1,21 +1,32 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 import SearchSelect from '../../components/SearchSelect.jsx';
 
 export default function RecalcUserCourseForm({ token, users, courses }) {
+    const toast = useToast();
     const [userId, setUserId] = useState('');
     const [courseId, setCourseId] = useState('');
     const [busy, setBusy] = useState(false);
-    const [result, setResult] = useState(null);
 
     const run = async () => {
-        if (!userId || !courseId) return alert('Выберите студента и курс');
-        setBusy(true); setResult(null);
+        if (!userId || !courseId) {
+            toast.warn('Выберите студента и курс');
+            return;
+        }
+        setBusy(true);
         try {
-            const r = await api('/admin/bulk/recalc-user-course', { method: 'POST', token, body: { userId, courseId } });
-            setResult(r);
-        } catch (e) { alert(e.message); }
-        finally { setBusy(false); }
+            const r = await api('/admin/bulk/recalc-user-course', {
+                method: 'POST',
+                token,
+                body: { userId, courseId },
+            });
+            toast.success(`Прогресс пересчитан: ${r.progress}%`);
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     return (
@@ -33,7 +44,6 @@ export default function RecalcUserCourseForm({ token, users, courses }) {
                 placeholder="Курс…"
             />
             <button onClick={run} disabled={busy} className="btn-ghost">{busy ? '⏳…' : '↺ Пересчитать'}</button>
-            {result && <div className="text-xs text-lime md:col-span-3">Прогресс: {result.progress}%</div>}
         </div>
     );
 }

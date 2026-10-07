@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 
 export default function PracticalEditor({
                                             lessonId,
@@ -8,6 +9,7 @@ export default function PracticalEditor({
                                             token,
                                             onChanged,
                                         }) {
+    const toast = useToast();
     const [form, setForm] = useState({
         topic: practical?.topic || '',
         description: practical?.description || '',
@@ -78,8 +80,9 @@ export default function PracticalEditor({
             });
             setPractical(null);
             onChanged?.();
+            toast.success('Практика удалена');
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         }
     };
 

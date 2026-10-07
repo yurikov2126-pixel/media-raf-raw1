@@ -1,23 +1,34 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 import { downloadJSON } from '../../utils.js';
 import CourseEditor from './CourseEditor.jsx';
 
 export default function Courses({ courses, setCourses, token }) {
+    const toast = useToast();
     const [editingCourse, setEditingCourse] = useState(null);
     const [exporting, setExporting] = useState(null);
 
     const remove = async (id) => {
         if (!confirm('Удалить курс со всеми уроками?')) return;
-        await api(`/admin/courses/${id}`, { method: 'DELETE', token });
-        setCourses((prev) => prev.filter((x) => x.id !== id));
+        try {
+            await api(`/admin/courses/${id}`, { method: 'DELETE', token });
+            setCourses((prev) => prev.filter((x) => x.id !== id));
+            toast.success('Курс удалён');
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const togglePublish = async (c) => {
-        const u = await api(`/admin/courses/${c.id}`, {
-            method: 'PATCH', token, body: { published: !c.published },
-        });
-        setCourses((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...u } : x)));
+        try {
+            const u = await api(`/admin/courses/${c.id}`, {
+                method: 'PATCH', token, body: { published: !c.published },
+            });
+            setCourses((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...u } : x)));
+        } catch (e) {
+            toast.error(e.message);
+        }
     };
 
     const exportCourse = async (c) => {
@@ -25,8 +36,12 @@ export default function Courses({ courses, setCourses, token }) {
         try {
             const r = await api(`/admin/bulk/export-course/${c.id}`, { token });
             downloadJSON([r.course], `course-${c.slug}.json`);
-        } catch (e) { alert(e.message); }
-        finally { setExporting(null); }
+            toast.success('Курс экспортирован');
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setExporting(null);
+        }
     };
 
     const exportAll = async () => {
@@ -34,8 +49,12 @@ export default function Courses({ courses, setCourses, token }) {
         try {
             const r = await api('/admin/bulk/export-all-courses', { token });
             downloadJSON(r.courses, `mrr-courses-${new Date().toISOString().slice(0, 10)}.json`);
-        } catch (e) { alert(e.message); }
-        finally { setExporting(null); }
+            toast.success(`Экспортировано курсов: ${r.courses.length}`);
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setExporting(null);
+        }
     };
 
     const reloadAll = async () => {

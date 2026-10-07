@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
+import { useToast } from '../../../../store/toast.jsx';
 
 function toLocalInput(dateStr) {
     if (!dateStr) return '';
@@ -15,6 +16,7 @@ export default function HomeworkEditor({
                                            token,
                                            onChanged,
                                        }) {
+    const toast = useToast();
     const [form, setForm] = useState({
         title: homework?.title || '',
         description: homework?.description || '',
@@ -80,8 +82,9 @@ export default function HomeworkEditor({
             });
             setHomework(null);
             onChanged?.();
+            toast.success('ДЗ удалено');
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         }
     };
 
@@ -148,7 +151,6 @@ export default function HomeworkEditor({
                 </div>
             </div>
 
-            {/* ─── Срок сдачи ─── */}
             <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-3">
                 <div className="text-xs text-white/60 uppercase font-semibold">
                     ⏱ Срок сдачи
@@ -188,7 +190,6 @@ export default function HomeworkEditor({
                 </div>
             </div>
 
-            {/* ─── Штраф за просрочку ─── */}
             <div className="p-3 rounded-xl bg-pink/5 border border-pink/20 space-y-3">
                 <div className="text-xs text-pink uppercase font-semibold">
                     ⚠️ Штраф за просрочку
