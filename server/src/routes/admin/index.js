@@ -3,6 +3,7 @@ import { auth, requireRole } from '../../middleware/auth.js';
 
 import statsRouter from './stats.js';
 import systemRouter from './system.js';
+import actionsRouter from './actions.js';           // ← добавлено
 import analyticsRouter from './analytics.js';
 import usersRouter from './users.js';
 import coursesRouter from './courses.js';
@@ -23,16 +24,11 @@ import settingsRouter from './settings.js';
 
 const router = Router();
 
-/* Единожды вешаем auth + ADMIN на весь админ-контур */
 router.use(auth, requireRole('ADMIN'));
 
-/*
- * Порядок монтирования сохранён как в старом admin.js.
- * Пути внутри каждого подроутера — абсолютные (начинаются с /),
- * поэтому префикс /api/admin подставляется из app.js.
- */
 router.use(statsRouter);
 router.use(systemRouter);
+router.use(actionsRouter);                            // ← добавлено
 router.use(analyticsRouter);
 router.use(moderationRouter);
 router.use(usersRouter);

@@ -24,6 +24,8 @@ import CoursesRoot from './tabs/Courses/index.jsx';
 import WikiRoot from './tabs/Wiki/index.jsx';
 import BulkRoot from './tabs/Bulk/index.jsx';
 import SiteDesignRoot from './tabs/SiteDesign/index.jsx';
+import Actions from './tabs/Actions.jsx';
+
 
 const VALID_TABS = new Set(TABS.map(([k]) => k));
 
@@ -178,6 +180,9 @@ export default function Admin() {
             {tab === 'modules' && <Modules token={token} />}
             {tab === 'gamification' && <Gamification token={token} />}
             {tab === 'backups' && <Backups token={token} />}
+            {tab === 'backups' && <Backups token={token} />}
+            {tab === 'actions' && <Actions token={token} />}
+            {tab === 'password-resets' && <PasswordResets token={token} />}
             {tab === 'password-resets' && <PasswordResets token={token} />}
             {tab === 'settings' && (
                 <Settings
