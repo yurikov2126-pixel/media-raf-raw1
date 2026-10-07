@@ -47,6 +47,52 @@ function hidePrivate(user) {
 
 /* ─── Регистрация ─── */
 
+/**
+ * @openapi
+ * /auth/register:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Регистрация нового пользователя
+ *     description: |
+ *       Создаёт пользователя с ролью `STUDENT`. Телефон нормализуется к виду
+ *       `+7XXXXXXXXXX` (принимает `8...`, `7...`, 10 цифр). Username приводится
+ *       к нижнему регистру и очищается от `@` в начале.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [firstName, lastName, phone, username, password]
+ *             properties:
+ *               firstName: { type: string, example: 'Иван' }
+ *               lastName: { type: string, example: 'Тестов' }
+ *               phone: { type: string, example: '+79991234567' }
+ *               username: { type: string, example: 'test_user' }
+ *               password: { type: string, format: password, example: 'strongPass123' }
+ *               direction:
+ *                 type: string
+ *                 enum: [photo, video, radio, sound]
+ *                 default: photo
+ *                 description: Если невалидное — подставляется `photo`.
+ *     responses:
+ *       200:
+ *         description: Успешная регистрация
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       400:
+ *         description: Валидация не пройдена (имя, пароль, телефон, username)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: Телефон или username уже заняты
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
     '/register',
     safe(async (req, res) => {
@@ -101,6 +147,48 @@ router.post(
 
 /* ─── Вход ─── */
 
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Вход по логину и паролю
+ *     description: |
+ *       `login` — это username (можно с `@`), телефон (в формате `+7...` или `8...`)
+ *       или email. Регистронезависим. Возвращает JWT и объект пользователя без `passwordHash`.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [login, password]
+ *             properties:
+ *               login: { type: string, example: 'test_user' }
+ *               password: { type: string, format: password, example: 'strongPass123' }
+ *     responses:
+ *       200:
+ *         description: Успешный вход
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       400:
+ *         description: Не передан `login` или `password`
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Неверный логин или пароль
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Пользователь забанен
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
     '/login',
     safe(async (req, res) => {
@@ -141,6 +229,39 @@ router.post(
 
 /* ─── Текущий пользователь ─── */
 
+/**
+ * @openapi
+ * /auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Текущий пользователь
+ *     description: |
+ *       Возвращает профиль по JWT. Обновляет `lastSeen`, а также
+ *       регистрирует ежедневный вход для streak (в фоне, не блокирует ответ).
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Профиль пользователя
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/User' }
+ *       401:
+ *         description: Токен отсутствует или невалиден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Пользователь забанен
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Пользователь не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get(
     '/me',
     auth,
@@ -155,7 +276,7 @@ router.get(
         prisma.user
             .update({ where: { id: user.id }, data: { lastSeen: new Date() } })
             .catch(() => {});
-        
+
         // Ежедневный вход + streak
         recordDailyActivity(user.id).catch((e) =>
             console.error('[gamification] daily hook:', e)
@@ -167,6 +288,45 @@ router.get(
 
 /* ─── Проверка занятости ника (для формы регистрации) ─── */
 
+/**
+ * @openapi
+ * /auth/check-username:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Проверка занятости username
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: u
+ *         required: true
+ *         schema: { type: string }
+ *         description: Username (можно с `@`, регистр не важен)
+ *         example: test_user
+ *     responses:
+ *       200:
+ *         description: |
+ *           Всегда 200. Если username занят — `available: false`.
+ *           Если формат некорректен — `available: false` и `reason`.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 available: { type: boolean, example: true }
+ *                 reason:
+ *                   type: string
+ *                   nullable: true
+ *                   enum: [too-short, invalid-format]
+ *             examples:
+ *               free:
+ *                 value: { available: true }
+ *               busy:
+ *                 value: { available: false }
+ *               tooShort:
+ *                 value: { available: false, reason: too-short }
+ *               invalid:
+ *                 value: { available: false, reason: invalid-format }
+ */
 router.get(
     '/check-username',
     safe(async (req, res) => {
@@ -182,6 +342,35 @@ router.get(
 
 /* ─── Проверка занятости телефона ─── */
 
+/**
+ * @openapi
+ * /auth/check-phone:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Проверка занятости телефона
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: p
+ *         required: true
+ *         schema: { type: string }
+ *         description: Номер в формате +7..., 8... или 10 цифр
+ *         example: '+79991234567'
+ *     responses:
+ *       200:
+ *         description: |
+ *           Всегда 200. Если номер некорректен — `available: false, reason: invalid`.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 available: { type: boolean, example: true }
+ *                 reason:
+ *                   type: string
+ *                   nullable: true
+ *                   enum: [invalid]
+ */
 router.get(
     '/check-phone',
     safe(async (req, res) => {
@@ -195,6 +384,50 @@ router.get(
 
 /* ─── Восстановление пароля ─── */
 
+/**
+ * @openapi
+ * /auth/recover/request:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Запрос на восстановление пароля
+ *     description: |
+ *       Создаёт заявку `PasswordResetRequest` со статусом `PENDING`.
+ *       Дальше администратор выдаёт код через админку, пользователь вводит
+ *       код в `/auth/recover/verify`.
+ *
+ *       Rate limit: не чаще 5 запросов в сутки (проверяется в `lib/passwordReset`).
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [identifier]
+ *             properties:
+ *               identifier:
+ *                 type: string
+ *                 description: Телефон, @username или email
+ *                 example: '+79991234567'
+ *     responses:
+ *       200:
+ *         description: Заявка создана
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean, example: true }
+ *                 requestId: { type: string, example: 'clz9r8y7q0000abcd1234efgh' }
+ *                 phoneMasked: { type: string, example: '+7 (999) ***-**-67' }
+ *                 username: { type: string, example: 'test_user' }
+ *                 fullName: { type: string, example: 'Иван Тестов' }
+ *       400:
+ *         description: Валидация или rate limit
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
     '/recover/request',
     safe(async (req, res) => {
@@ -217,6 +450,42 @@ router.post(
     })
 );
 
+/**
+ * @openapi
+ * /auth/recover/verify:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Смена пароля по коду
+ *     description: |
+ *       Проверяет код, выданный администратором, и меняет пароль.
+ *       Обновляет `passwordChangedAt` — все старые JWT становятся невалидными.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [identifier, code, newPassword]
+ *             properties:
+ *               identifier: { type: string, example: '+79991234567' }
+ *               code: { type: string, example: '123456' }
+ *               newPassword: { type: string, format: password, example: 'newStrongPass456' }
+ *     responses:
+ *       200:
+ *         description: Пароль изменён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean, example: true }
+ *       400:
+ *         description: Неверный код, истёк, слишком много попыток или слабый пароль
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post(
     '/recover/verify',
     safe(async (req, res) => {

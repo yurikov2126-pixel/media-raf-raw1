@@ -24,6 +24,9 @@ import practicalsRouter from './routes/practicals.js';
 import homeworkRouter from './routes/homework.js';
 import { prisma } from './lib/prisma.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './docs/swagger.js';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -119,6 +122,43 @@ app.use('/api/gamification', gamificationRouter);
 app.use('/api/practicals', practicalsRouter);
 app.use('/api/homework', homeworkRouter);
 
+/* ─────────── Swagger / OpenAPI ─────────── */
+app.get('/api/docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+});
+
+app.use(
+    '/api/docs',
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+        customSiteTitle: 'MEDIA·RAF·RAW API',
+        swaggerOptions: {
+            persistAuthorization: true,   // токен не сбрасывается при перезагрузке
+            displayRequestDuration: true,
+        },
+    })
+);
+
+/**
+ * @openapi
+ * /health:
+ *   get:
+ *     tags: [System]
+ *     summary: Health-check
+ *     description: Проверка, что API отвечает. Используется деплой-скриптом и мониторингом.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: API в порядке
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean, example: true }
+ *                 service: { type: string, example: MEDIA-RAF-RAW }
+ */
 app.get('/api/health', (_req, res) =>
     res.json({ ok: true, service: 'MEDIA-RAF-RAW' })
 );

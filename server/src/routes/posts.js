@@ -13,6 +13,54 @@ import {
 const router = Router();
 
 /* ─────────── Лента (единый запрос + пагинация) ─────────── */
+/**
+ * @openapi
+ * /posts/feed:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Лента постов с cursor-пагинацией
+ *     description: |
+ *       Возвращает посты в порядке `createdAt DESC, id DESC`.
+ *       Посты забаненных авторов исключены.
+ *
+ *       **Пагинация:** в ответе есть `nextCursor`. Если он не `null` —
+ *       передайте его в следующий запрос как `?cursor=<nextCursor>`.
+ *       Когда `nextCursor === null`, страницы закончились.
+ *
+ *       Реакции агрегированы: `reactions[]` — все реакции на пост,
+ *       `myReactions[]` — эмодзи текущего пользователя.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+ *         description: Размер страницы (максимум 50).
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
+ *         description: ID последнего поста с предыдущей страницы. Если не указан — начало ленты.
+ *     responses:
+ *       200:
+ *         description: Страница ленты
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/PostInFeed' }
+ *                 nextCursor:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Курсор для следующей страницы или null.
+ *       401:
+ *         description: Токен отсутствует или невалиден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get('/feed', auth, async (req, res) => {
     const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
     const cursor = req.query.cursor || null;
@@ -75,6 +123,49 @@ router.get('/feed', auth, async (req, res) => {
 });
 
 /* ─────────── Создать пост ─────────── */
+/**
+ * @openapi
+ * /posts:
+ *   post:
+ *     tags: [Posts]
+ *     summary: Создать пост
+ *     description: |
+ *       Создаёт пост. Нужен либо непустой `content`, либо `mediaUrl` —
+ *       иначе 400. Файлы сначала загружаются через `POST /uploads`,
+ *       а в теле поста передаётся готовый URL.
+ *
+ *       После создания все активные пользователи (кроме автора) получают
+ *       уведомление. Автору начисляется XP (fire-and-forget).
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               content: { type: string, example: 'Привет, мир!' }
+ *               mediaUrl: { type: string, nullable: true, example: '/uploads/abc.jpg' }
+ *               mediaType: { type: string, nullable: true, enum: [image, video] }
+ *             description: Хотя бы одно из `content` / `mediaUrl` должно быть задано.
+ *     responses:
+ *       200:
+ *         description: Пост создан
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Post' }
+ *       400:
+ *         description: Пустой пост
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       401:
+ *         description: Токен отсутствует или невалиден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/', auth, async (req, res) => {
     const { content, mediaUrl, mediaType } = req.body;
     if (!content?.trim() && !mediaUrl) {
@@ -115,6 +206,45 @@ router.post('/', auth, async (req, res) => {
 });
 
 /* ─────────── Редактировать пост ─────────── */
+/**
+ * @openapi
+ * /posts/{id}:
+ *   patch:
+ *     tags: [Posts]
+ *     summary: Редактировать пост
+ *     description: Доступно автору поста или роли `ADMIN`. Проставляет `editedAt`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               content: { type: string, example: 'Обновлённый текст' }
+ *     responses:
+ *       200:
+ *         description: Пост обновлён
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Post' }
+ *       403:
+ *         description: Не автор и не админ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Пост не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.patch('/:id', auth, async (req, res) => {
     const post = await prisma.post.findUnique({ where: { id: req.params.id } });
     if (!post) return res.status(404).json({ error: 'Пост не найден' });
@@ -130,6 +260,42 @@ router.patch('/:id', auth, async (req, res) => {
 });
 
 /* ─────────── Удалить пост ─────────── */
+/**
+ * @openapi
+ * /posts/{id}:
+ *   delete:
+ *     tags: [Posts]
+ *     summary: Удалить пост
+ *     description: |
+ *       Доступно автору или `ADMIN`. Если автор удаляет сам — штраф XP ему,
+ *       если админ — штраф уходит автору поста (fire-and-forget).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Пост удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean, example: true }
+ *       403:
+ *         description: Не автор и не админ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Пост не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.delete('/:id', auth, async (req, res) => {
     const post = await prisma.post.findUnique({ where: { id: req.params.id } });
     if (!post) return res.status(404).json({ error: 'Пост не найден' });
@@ -155,6 +321,26 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 /* ─────────── Реакции на пост ─────────── */
+/**
+ * @openapi
+ * /posts/{id}/reactions:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Агрегированные реакции на пост
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Реакции по эмодзи + список эмодзи текущего пользователя
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AggregatedReactions' }
+ */
 router.get('/:id/reactions', auth, async (req, res) => {
     const reactions = await prisma.postReaction.findMany({
         where: { postId: req.params.id },
@@ -173,6 +359,55 @@ router.get('/:id/reactions', auth, async (req, res) => {
     });
 });
 
+/**
+ * @openapi
+ * /posts/{id}/reactions:
+ *   post:
+ *     tags: [Posts]
+ *     summary: Поставить / снять реакцию (toggle)
+ *     description: |
+ *       **Toggle-семантика.** Если реакция с этим эмодзи уже стоит —
+ *       она удаляется (`action: "removed"`), иначе создаётся (`action: "added"`).
+ *
+ *       При добавлении реакции на чужой пост автору поста уходит уведомление.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [emoji]
+ *             properties:
+ *               emoji: { type: string, example: '❤️' }
+ *     responses:
+ *       200:
+ *         description: Реакция добавлена или удалена; возвращаются обновлённые агрегаты
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/AggregatedReactions'
+ *                 - type: object
+ *                   properties:
+ *                     action: { type: string, enum: [added, removed], example: added }
+ *       400:
+ *         description: Не передан `emoji`
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Пост не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/:id/reactions', auth, async (req, res) => {
     const { emoji } = req.body;
     if (!emoji) return res.status(400).json({ error: 'emoji обязателен' });
@@ -245,6 +480,32 @@ function buildTree(comments) {
     return roots;
 }
 
+/**
+ * @openapi
+ * /posts/{id}/comments:
+ *   get:
+ *     tags: [Posts]
+ *     summary: Дерево комментариев поста
+ *     description: |
+ *       Возвращает **вложенную** структуру: каждый комментарий содержит
+ *       массив `replies` с ответами. Удалённые (`deletedAt !== null`) исключены.
+ *       Сортировка — по `createdAt` (ASC) на каждом уровне.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Массив корневых комментариев с вложенными `replies`
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/CommentTree' }
+ */
 router.get('/:id/comments', auth, async (req, res) => {
     const comments = await prisma.comment.findMany({
         where: { postId: req.params.id, deletedAt: null },
@@ -256,6 +517,56 @@ router.get('/:id/comments', auth, async (req, res) => {
     res.json(buildTree(comments));
 });
 
+/**
+ * @openapi
+ * /posts/{id}/comments:
+ *   post:
+ *     tags: [Posts]
+ *     summary: Добавить комментарий
+ *     description: |
+ *       Если передан `parentId` — создаётся ответ на существующий комментарий
+ *       того же поста. Иначе — корневой комментарий.
+ *
+ *       Уведомления: автору поста (если не сам), автору родительского
+ *       комментария (если он не автор поста и не сам отвечающий).
+ *       Автору начисляется XP (при длине выше `MIN_COMMENT_LENGTH`).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content: { type: string, example: 'Отличный пост!' }
+ *               parentId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: ID родительского комментария (для ответа).
+ *     responses:
+ *       200:
+ *         description: Комментарий создан (пустой `replies` — клиент вставит сам)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/CommentTree' }
+ *       400:
+ *         description: Пустой комментарий или `parentId` не того поста
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Пост не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/:id/comments', auth, async (req, res) => {
     const { content, parentId } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Пустой комментарий' });
@@ -312,6 +623,45 @@ router.post('/:id/comments', auth, async (req, res) => {
     res.json({ ...comment, replies: [] });
 });
 
+/**
+ * @openapi
+ * /posts/comments/{id}:
+ *   patch:
+ *     tags: [Posts]
+ *     summary: Редактировать комментарий
+ *     description: Доступно автору комментария или `ADMIN`. Проставляет `editedAt`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               content: { type: string, example: 'Уточнённый комментарий' }
+ *     responses:
+ *       200:
+ *         description: Комментарий обновлён
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Comment' }
+ *       403:
+ *         description: Не автор и не админ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Комментарий не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.patch('/comments/:id', auth, async (req, res) => {
     const c = await prisma.comment.findUnique({ where: { id: req.params.id } });
     if (!c) return res.status(404).json({ error: 'Комментарий не найден' });
@@ -325,6 +675,43 @@ router.patch('/comments/:id', auth, async (req, res) => {
     res.json(updated);
 });
 
+/**
+ * @openapi
+ * /posts/comments/{id}:
+ *   delete:
+ *     tags: [Posts]
+ *     summary: Удалить комментарий
+ *     description: |
+ *       Доступно автору комментария или `ADMIN`. Если удаляет автор —
+ *       штраф XP ему, если админ — штраф уходит автору комментария
+ *       (fire-and-forget).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Комментарий удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean, example: true }
+ *       403:
+ *         description: Не автор и не админ
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Комментарий не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.delete('/comments/:id', auth, async (req, res) => {
     const c = await prisma.comment.findUnique({ where: { id: req.params.id } });
     if (!c) return res.status(404).json({ error: 'Комментарий не найден' });
