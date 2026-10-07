@@ -1,21 +1,131 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../../api/client.js';
 import { useToast } from '../../../store/toast.jsx';
 import { fmtSize, fmtUptime } from '../utils.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import OrphanFilesList from '../components/OrphanFilesList.jsx';
+import SparklineCard from '../components/SparklineCard.jsx';
+import QuickActions from '../components/QuickActions.jsx';
+import RecentActivity from '../components/RecentActivity.jsx';
+import AlertsBanner from '../components/AlertsBanner.jsx';
 
 export default function Dashboard({ stats, token, onReload }) {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const periodParam = Number(searchParams.get('period'));
+    const period = [7, 30].includes(periodParam) ? periodParam : 7;
+
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const load = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const r = await api(`/admin/dashboard/summary?period=${period}`, { token });
+            setData(r);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [period, token]);
+
+    const setPeriod = (p) => {
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('tab', 'dash');
+                next.set('period', String(p));
+                return next;
+            },
+            { replace: true }
+        );
+    };
+
+    const setTab = (t) => {
+        setSearchParams({ tab: t }, { replace: true });
+    };
+
     return (
         <div className="space-y-5">
+            {data?.health?.warnings?.length > 0 && (
+                <AlertsBanner warnings={data.health.warnings} />
+            )}
+
             <StatsCards stats={stats} />
+
+            <div className="card p-4 flex items-center justify-between gap-3 flex-wrap">
+                <div className="font-bold text-lg">📊 Динамика</div>
+                <div className="flex gap-2">
+                    {[7, 30].map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => setPeriod(p)}
+                            className={`chip ${
+                                period === p
+                                    ? 'bg-violet text-white'
+                                    : 'bg-white/5 text-white/60'
+                            }`}
+                        >
+                            {p} дн.
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <SparklineCard
+                    title="Регистрации"
+                    icon="👥"
+                    data={data?.registrations || []}
+                    dataKey="value"
+                    color="#A78BFA"
+                    loading={loading && !data}
+                />
+                <SparklineCard
+                    title="Активность"
+                    icon="⚡"
+                    data={data?.activity || []}
+                    dataKey="total"
+                    color="#EC4899"
+                    loading={loading && !data}
+                />
+                <SparklineCard
+                    title="Сообщения"
+                    icon="✉️"
+                    data={data?.activity || []}
+                    dataKey="messages"
+                    color="#06B6D4"
+                    loading={loading && !data}
+                />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-5">
+                <QuickActions onTab={setTab} />
+                <RecentActivity
+                    items={data?.recentActions || []}
+                    onOpenAll={() => setTab('actions')}
+                />
+            </div>
+
+            {error && (
+                <div className="card p-4 text-pink bg-pink/10">{error}</div>
+            )}
+
             <ServerInfoBlock token={token} />
             <MaintenanceBlock token={token} onReload={onReload} />
         </div>
     );
 }
 
-function StatsCards({ stats }) {
+function StatsCards({ stats = {} }) {
     const cards = [
         ['Пользователи', stats.users, '👥'],
         ['Живые чаты', stats.chats, '💬'],
@@ -122,7 +232,11 @@ function ServerInfoBlock({ token }) {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={load} disabled={loading} className="btn-ghost !py-2 text-sm">
+                    <button
+                        onClick={load}
+                        disabled={loading}
+                        className="btn-ghost !py-2 text-sm"
+                    >
                         {loading ? '⏳' : '🔄'}
                     </button>
                 </div>
@@ -269,7 +383,11 @@ function MaintenanceBlock({ token, onReload }) {
                     </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                    <button onClick={runScan} disabled={scanning || cleaning} className="btn-ghost">
+                    <button
+                        onClick={runScan}
+                        disabled={scanning || cleaning}
+                        className="btn-ghost"
+                    >
                         {scanning ? '⏳' : '🔍 Проверить'}
                     </button>
                     <button
@@ -300,7 +418,8 @@ function MaintenanceBlock({ token, onReload }) {
                             <div>
                                 <div className="font-bold text-lime">Всё чисто</div>
                                 <div className="text-xs text-white/50 mt-0.5">
-                                    Проверено {new Date(scan.checkedAt).toLocaleString('ru-RU')}
+                                    Проверено{' '}
+                                    {new Date(scan.checkedAt).toLocaleString('ru-RU')}
                                 </div>
                             </div>
                         </div>
@@ -397,7 +516,9 @@ function MaintenanceBlock({ token, onReload }) {
             )}
 
             {error && (
-                <div className="mt-3 text-sm text-pink bg-pink/10 rounded-xl p-3">{error}</div>
+                <div className="mt-3 text-sm text-pink bg-pink/10 rounded-xl p-3">
+                    {error}
+                </div>
             )}
 
             {lastCleanup && (
