@@ -48,8 +48,8 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
-      - name: Prepare test DB schema
-        run: npx prisma db push --skip-generate
+      - name: Apply migrations to test DB
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:test@localhost:5432/mediaraf_test
 

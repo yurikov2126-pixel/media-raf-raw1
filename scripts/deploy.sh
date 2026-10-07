@@ -67,7 +67,7 @@ cd server
 npm config set registry https://registry.npmjs.org/
 npm ci
 npx prisma generate
-npx prisma db push --skip-generate
+npx prisma migrate deploy
 
 # ─── 5. Перезапуск API ───
 log "=== 5. Перезапуск API ==="
