@@ -31,7 +31,30 @@ mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/mediaraf_$(date +%Y%m%d_%H%M%S).sql"
 # Извлекаем URL из .env, убираем кавычки и Prisma-специфичный "?schema=..."
 DB_URL=$(grep -E '^DATABASE_URL=' server/.env | cut -d= -f2- | tr -d '"' | sed 's/?.*$//')
-pg_dump "$DB_URL" > "$BACKUP_FILE"
+
+# Используем pg_dump от версии сервера (18), а не системный 16
+# Приоритет: aaPanel pg_dump (18) → системные пути → дефолт
+PG_DUMP_BIN=""
+for candidate in \
+  /www/server/pgsql/bin/pg_dump \
+  /usr/lib/postgresql/18/bin/pg_dump \
+  /usr/local/pgsql/bin/pg_dump \
+  pg_dump
+do
+  if [ -x "$candidate" ] || command -v "$candidate" >/dev/null 2>&1; then
+    # Проверим версию — должна быть 18.x
+    ver=$("$candidate" --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
+    if [ "$ver" = "18" ]; then
+      PG_DUMP_BIN="$candidate"
+      break
+    fi
+    # Запомним хоть что-то на случай, если 18 не найдётся
+    [ -z "$PG_DUMP_BIN" ] && PG_DUMP_BIN="$candidate"
+  fi
+done
+
+log "Используем pg_dump: $PG_DUMP_BIN ($($PG_DUMP_BIN --version))"
+"$PG_DUMP_BIN" "$DB_URL" > "$BACKUP_FILE"
 log "OK: дамп сохранён в $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
 
 # ─── 3. Обновление кода ───
