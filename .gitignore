@@ -28,6 +28,7 @@ server/public/uploads/
 # === Env ===
 .env
 .env.local
+.env.test
 .env.*.local
 !.env.example
 

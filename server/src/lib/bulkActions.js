@@ -445,7 +445,7 @@ export async function importCurriculum({ adminId, data, mode = 'merge', preserve
 
                 if (mode === 'replace') {
                     // Сохраняем прогресс по title (если нужно)
-                    let savedProgress = new Map();
+                    const savedProgress = new Map();
                     if (preserveProgress) {
                         const lessons = await prisma.lesson.findMany({
                             where: { courseId: course.id },

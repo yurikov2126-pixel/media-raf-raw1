@@ -1,17 +1,27 @@
 import { beforeAll, afterEach, afterAll } from 'vitest';
 import { prisma } from '../src/lib/prisma.js';
 
+// Здесь НЕ должно быть `import 'dotenv/config'` —
+// он бы загрузил .env и перебил значения из .env.test.
+
 beforeAll(() => {
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-do-not-use-in-prod';
+
+    const url = process.env.DATABASE_URL || '';
+    if (!url) {
+        throw new Error('DATABASE_URL не задан. Проверь server/.env.test.');
+    }
+    if (/@localhost:5432[/?]/.test(url) || /:5432\//.test(url)) {
+        throw new Error(
+            'DATABASE_URL указывает на порт 5432. Ожидается 5434 (docker-compose.dev.yml).'
+        );
+    }
 });
 
 afterEach(async () => {
-    // Ждём завершения fire-and-forget задач (gamification, notify)
     await new Promise((r) => setTimeout(r, 250));
 
-    // Посты удаляются каскадом вместе с юзерами,
-    // но на всякий случай чистим и их — если автор не наш.
     await prisma.post.deleteMany({
         where: {
             OR: [
