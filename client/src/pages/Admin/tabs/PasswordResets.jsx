@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
 import Avatar from '../../../components/Avatar.jsx';
+import { useToast } from '../../../store/toast.jsx';
 
 const STATUS_LABEL = {
     PENDING: '🆕 Ожидает',
@@ -26,6 +27,7 @@ export default function PasswordResets({ token }) {
     const [codeModal, setCodeModal] = useState(null);
     const [rejectTarget, setRejectTarget] = useState(null);
     const [busy, setBusy] = useState(false);
+    const toast = useToast();
 
     const reload = async () => {
         setLoading(true);
@@ -59,8 +61,9 @@ export default function PasswordResets({ token }) {
                 user: req.user,
             });
             await reload();
+            toast.success('Код сгенерирован');
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }
@@ -76,8 +79,9 @@ export default function PasswordResets({ token }) {
             });
             setRejectTarget(null);
             await reload();
+            toast.success('Заявка отклонена');
         } catch (e) {
-            alert(e.message);
+            toast.error(e.message);
         } finally {
             setBusy(false);
         }

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 
 export default function Broadcast({ token, users, courses }) {
+    const toast = useToast();
     const [target, setTarget] = useState('all');
     const [direction, setDirection] = useState('photo');
     const [courseId, setCourseId] = useState('');
@@ -35,7 +37,10 @@ export default function Broadcast({ token, users, courses }) {
     })();
 
     const send = async () => {
-        if (!message.trim()) return alert('Введите текст');
+        if (!message.trim()) {
+            toast.warn('Введите текст');
+            return;
+        }
         if (!confirm('Отправить рассылку?')) return;
         setBusy(true);
         setResult(null);
@@ -48,8 +53,12 @@ export default function Broadcast({ token, users, courses }) {
             setResult(r);
             setMessage('');
             setTitle('');
-        } catch (e) { alert(e.message); }
-        finally { setBusy(false); }
+            toast.success(`Доставлено: ${r.delivered} получателям`);
+        } catch (e) {
+            toast.error(e.message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     return (
