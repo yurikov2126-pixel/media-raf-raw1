@@ -1,23 +1,63 @@
-export const TABS = [
-    ['dash', 'Дашборд', '📊'],
-    ['analytics', 'Аналитика', '📈'],
-    ['moderation', 'Модерация', '🛡️'],
-    ['users', 'Пользователи', '👥'],
-    ['courses', 'Курсы', '📚'],
-    ['practicals-homework', 'Практики и ДЗ', '🎯'],
-    ['wiki', 'Wiki', '📖'],
-    ['certificates', 'Сертификаты', '🏆'],
-    ['broadcast', 'Рассылки', '📢'],
-    ['push', 'Push-уведомления', '🔔'],
-    ['bulk', 'Пакетные действия', '🛠'],
-    ['site', 'Дизайн сайта', '🎨'],
-    ['modules', 'Модули', '🧩'],
-    ['backups', 'Бэкапы', '🗄️'],
-    ['actions', 'История действий', '📜'],
-    ['password-resets', 'Восстановление', '🔑'],
-    ['gamification', 'Геймификация', '🎮'],
-    ['settings', 'Система', '⚙️'],
+export const TAB_GROUPS = [
+    {
+        key: 'overview',
+        label: 'Обзор',
+        tabs: [
+            ['dash', 'Дашборд', '📊'],
+            ['analytics', 'Аналитика', '📈'],
+            ['actions', 'История действий', '📜'],
+        ],
+    },
+    {
+        key: 'people',
+        label: 'Люди и модерация',
+        tabs: [
+            ['moderation', 'Модерация', '🛡️'],
+            ['users', 'Пользователи', '👥'],
+            ['password-resets', 'Восстановление', '🔑'],
+        ],
+    },
+    {
+        key: 'content',
+        label: 'Контент',
+        tabs: [
+            ['courses', 'Курсы', '📚'],
+            ['practicals-homework', 'Практики и ДЗ', '🎯'],
+            ['wiki', 'Wiki', '📖'],
+            ['certificates', 'Сертификаты', '🏆'],
+        ],
+    },
+    {
+        key: 'communications',
+        label: 'Коммуникации',
+        tabs: [
+            ['broadcast', 'Рассылки', '📢'],
+            ['push', 'Push-уведомления', '🔔'],
+        ],
+    },
+    {
+        key: 'platform',
+        label: 'Платформа',
+        tabs: [
+            ['site', 'Дизайн сайта', '🎨'],
+            ['modules', 'Модули', '🧩'],
+            ['gamification', 'Геймификация', '🎮'],
+            ['bulk', 'Пакетные действия', '🛠'],
+        ],
+    },
+    {
+        key: 'system',
+        label: 'Система',
+        tabs: [
+            ['backups', 'Бэкапы', '🗄️'],
+            ['settings', 'Настройки', '⚙️'],
+        ],
+    },
 ];
+
+/* Плоский список — обратная совместимость.
+   VALID_TABS, TAB_META и старые импорты продолжают работать. */
+export const TABS = TAB_GROUPS.flatMap((g) => g.tabs);
 
 export const TEMPLATES = [
     { v: 'gradient', l: 'Градиент' },
