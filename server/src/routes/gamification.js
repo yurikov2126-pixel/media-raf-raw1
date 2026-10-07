@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import {
-    isGamificationEnabled,
     getUserGamification,
     getLeaderboard,
     recordDailyActivity,

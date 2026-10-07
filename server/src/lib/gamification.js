@@ -1,9 +1,8 @@
 import { prisma } from './prisma.js';
 import { createNotification } from './notify.js';
-import { getSettings, getLevelThresholdsCached, listAchievements } from './gamificationSettings.js';
+import { getSettings, listAchievements } from './gamificationSettings.js';
 import {
     CODE_ACHIEVEMENTS,
-    ACHIEVEMENTS_MAP,
     DEFAULT_QUEST_TEMPLATES,
     LEARNING_QUEST_TYPES,
     STREAK_BONUS,

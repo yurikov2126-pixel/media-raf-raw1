@@ -4,7 +4,6 @@ import {
     DEDUCTION_DEFAULTS,
     DEFAULT_LEVEL_THRESHOLDS,
     DEFAULT_ACHIEVEMENTS,
-    LEVEL_MAX,
 } from './gamificationCatalog.js';
 
 const KEYS_XP = Object.keys(XP_DEFAULTS).map((k) => `gamification_xp_${k}`);

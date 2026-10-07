@@ -2,7 +2,6 @@ import os from 'os';
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
-import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { prisma } from './prisma.js';
 
