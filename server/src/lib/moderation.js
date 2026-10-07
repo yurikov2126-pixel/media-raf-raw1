@@ -4,6 +4,15 @@ const TARGET_TYPES = ['post', 'comment', 'message', 'user'];
 const REASONS = ['spam', 'abuse', 'illegal', 'other'];
 const STATUSES = ['NEW', 'IN_REVIEW', 'RESOLVED', 'REJECTED'];
 
+/**
+ * Ошибка с HTTP-статусом — для глобального errorHandler.
+ * Раньше здесь были голые `new Error(...)`, из-за чего API отдавал 500
+ * вместо 400/404 на ожидаемых ошибках валидации и «не найдено».
+ */
+function httpError(message, status) {
+    return Object.assign(new Error(message), { status });
+}
+
 async function resolveTarget(targetType, targetId) {
     switch (targetType) {
         case 'post':
@@ -32,11 +41,11 @@ async function resolveTarget(targetType, targetId) {
 }
 
 export async function createReport({ reporterId, targetType, targetId, reason, comment }) {
-    if (!TARGET_TYPES.includes(targetType)) throw new Error('Недопустимый тип объекта');
-    if (!REASONS.includes(reason)) throw new Error('Недопустимая причина');
+    if (!TARGET_TYPES.includes(targetType)) throw httpError('Недопустимый тип объекта', 400);
+    if (!REASONS.includes(reason)) throw httpError('Недопустимая причина', 400);
 
     const target = await resolveTarget(targetType, targetId);
-    if (!target) throw new Error('Объект не найден');
+    if (!target) throw httpError('Объект не найден', 404);
 
     const targetOwnerId =
         targetType === 'message'
@@ -44,13 +53,13 @@ export async function createReport({ reporterId, targetType, targetId, reason, c
             : targetType === 'user'
                 ? target.id
                 : target.authorId;
-    if (targetOwnerId === reporterId) throw new Error('Нельзя жаловаться на собственный контент');
+    if (targetOwnerId === reporterId) throw httpError('Нельзя жаловаться на собственный контент', 400);
 
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const dup = await prisma.report.findFirst({
         where: { reporterId, targetType, targetId, createdAt: { gte: since } },
     });
-    if (dup) throw new Error('Вы уже жаловались на это недавно');
+    if (dup) throw httpError('Вы уже жаловались на это недавно', 409);
 
     return prisma.report.create({
         data: { reporterId, targetType, targetId, reason, comment: comment || null },
@@ -123,7 +132,7 @@ export async function listReports({ status, targetType, page = 1, limit = 30 }) 
 }
 
 export async function updateReport({ id, status, resolution, resolverId }) {
-    if (!STATUSES.includes(status)) throw new Error('Недопустимый статус');
+    if (!STATUSES.includes(status)) throw httpError('Недопустимый статус', 400);
     const data = { status, resolution: resolution || null };
     if (status === 'RESOLVED' || status === 'REJECTED') {
         data.resolvedBy = resolverId;
@@ -134,7 +143,7 @@ export async function updateReport({ id, status, resolution, resolverId }) {
 
 export async function deleteReportedContent({ reportId, resolverId }) {
     const report = await prisma.report.findUnique({ where: { id: reportId } });
-    if (!report) throw new Error('Жалоба не найдена');
+    if (!report) throw httpError('Жалоба не найдена', 404);
 
     await prisma.$transaction(async (tx) => {
         switch (report.targetType) {
@@ -178,10 +187,10 @@ export async function deleteReportedContent({ reportId, resolverId }) {
 
 export async function banReportedUser({ reportId, resolverId }) {
     const report = await prisma.report.findUnique({ where: { id: reportId } });
-    if (!report) throw new Error('Жалоба не найдена');
+    if (!report) throw httpError('Жалоба не найдена', 404);
 
     const target = await resolveTarget(report.targetType, report.targetId);
-    if (!target) throw new Error('Объект не найден');
+    if (!target) throw httpError('Объект не найден', 404);
 
     const userId =
         report.targetType === 'message'
@@ -189,9 +198,29 @@ export async function banReportedUser({ reportId, resolverId }) {
             : report.targetType === 'user'
                 ? target.id
                 : target.authorId;
-    if (!userId) throw new Error('Не удалось определить автора');
+    if (!userId) throw httpError('Не удалось определить автора', 400);
 
-    await prisma.user.update({ where: { id: userId }, data: { isBanned: true } });
+    // Раньше жалоба оставалась в статусе NEW — теперь закрываем
+    // все открытые жалобы на тот же объект (как в deleteReportedContent
+    // и в ветке ban у applyAutoModeration).
+    await prisma.$transaction(async (tx) => {
+        await tx.user.update({ where: { id: userId }, data: { isBanned: true } });
+
+        await tx.report.updateMany({
+            where: {
+                targetType: report.targetType,
+                targetId: report.targetId,
+                status: { in: ['NEW', 'IN_REVIEW'] },
+            },
+            data: {
+                status: 'RESOLVED',
+                resolution: 'Пользователь заблокирован',
+                resolvedBy: resolverId,
+                resolvedAt: new Date(),
+            },
+        });
+    });
+
     return { ok: true, userId };
 }
 
