@@ -6,6 +6,8 @@ import {
     cleanupDatabase,
     getDatabaseInfo,
     runVacuumAnalyze,
+    deleteOrphanFile,
+    purgeOrphanFiles,
 } from '../../lib/dbMaintenance.js';
 import { checkPgTools } from '../../lib/backup.js';
 
@@ -59,6 +61,27 @@ router.post(
     safe(async (_req, res) => {
         await runVacuumAnalyze();
         res.json({ ok: true, message: 'VACUUM ANALYZE выполнен' });
+    })
+);
+
+/* ─── Точечное удаление осиротевших файлов ─── */
+
+router.delete(
+    '/maintenance/orphaned-files/:filename',
+    safe(async (req, res) => {
+        const result = await deleteOrphanFile(req.params.filename);
+        // TODO: записать в AdminAction (actorId: req.user.id, action: 'delete_orphan_file', meta: result)
+        res.json(result);
+    })
+);
+
+router.post(
+    '/maintenance/orphaned-files/purge',
+    safe(async (req, res) => {
+        const { filenames, olderThanDays } = req.body || {};
+        const result = await purgeOrphanFiles({ filenames, olderThanDays });
+        // TODO: AdminAction c meta: { deletedCount, freedBytes, olderThanDays }
+        res.json(result);
     })
 );
 
