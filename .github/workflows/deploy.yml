@@ -18,6 +18,5 @@ jobs:
 
     steps:
       - name: Run deploy script
-        run: |
-          cd /www/wwwroot/mediarafraw.ru
-          bash scripts  /deploy.sh
+        run: bash /www/wwwroot/mediarafraw.ru/scripts/deploy.sh
+        working-directory: /www/wwwroot/mediarafraw.ru
