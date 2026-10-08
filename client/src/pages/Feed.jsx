@@ -22,6 +22,7 @@ export default function Feed() {
     const [error, setError] = useState('');
     const [composeOpen, setComposeOpen] = useState(false);
     const [image, setImage] = useState('');
+    const [gallery, setGallery] = useState([]);
     const [cropping, setCropping] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [publishing, setPublishing] = useState(false);
@@ -39,18 +40,19 @@ export default function Feed() {
     const scrollRef = useRef(null);
 
     const publish = async () => {
-        if ((!text.trim() && !image) || uploading || publishing) return;
+        if ((!text.trim() && !image && !gallery.length) || uploading || publishing) return;
         setPublishing(true);
         setComposeError('');
         try {
             await api('/posts', {
                 method: 'POST',
                 token,
-                body: { content: text, mediaUrl: image || null, mediaType: image ? 'image' : null },
+                body: { content: text, mediaUrl: gallery[0] || image || null, mediaUrls: gallery.length ? gallery : (image ? [image] : []), mediaType: gallery.length > 1 ? 'gallery' : (gallery.length || image ? 'image' : null) },
             });
             setText('');
             draft.clear();
             setImage('');
+            setGallery([]);
             setComposeOpen(false);
             setPreview(false);
             setSelectedFile(null);
@@ -70,7 +72,8 @@ export default function Feed() {
             const uploaded = await uploadBlob(blob, `post-${Date.now()}.jpg`, token);
             const url = uploaded.absoluteUrl || uploaded.url || uploaded.path;
             if (!url) throw new Error('Сервер не вернул адрес фотографии');
-            setImage(url);
+            setGallery((previous) => [...previous, url].slice(0, 10));
+            setImage('');
             setSelectedFile(null);
         } catch (e) {
             setComposeError(e.message || 'Не удалось загрузить фото');
@@ -188,6 +191,7 @@ export default function Feed() {
                             </div>
                         </div>
                     )}
+                    {gallery.length > 0 && <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">{gallery.map((url, index) => <div key={index} className="relative"><img src={url} alt={`Фото ${index + 1}`} className="h-32 w-full object-cover rounded-xl" /><button type="button" className="absolute right-1 top-1 bg-black/80 rounded-lg px-2" onClick={() => setGallery((a) => a.filter((_, i) => i !== index))} aria-label="Удалить фото">✕</button><div className="flex gap-1 mt-1"><button type="button" disabled={index === 0} onClick={() => setGallery((a) => { const b = [...a]; [b[index - 1], b[index]] = [b[index], b[index - 1]]; return b; })}>←</button><button type="button" disabled={index === gallery.length - 1} onClick={() => setGallery((a) => { const b = [...a]; [b[index + 1], b[index]] = [b[index], b[index + 1]]; return b; })}>→</button></div></div>)}</div>}
                     {image && <div className="relative mt-3"><img src={image} alt="Фото к публикации" className="max-h-80 w-full object-contain rounded-xl" /><button type="button" className="btn-ghost mt-2" onClick={() => { setImage(''); setSelectedFile(null); }}>Удалить фото</button></div>}
                     {preview && (
                         <div className="ui-compose-preview mt-4" aria-label="Предпросмотр публикации">
@@ -197,18 +201,19 @@ export default function Feed() {
                                 <div className="min-w-0"><div className="font-semibold truncate">{user.fullName}</div><div className="text-xs text-white/40">@{user.username} · сейчас</div></div>
                             </div>
                             {text.trim() && <p className="whitespace-pre-wrap break-words text-white/90">{text}</p>}
+                            {gallery.map((url, index) => <img key={index} className="w-full max-h-96 object-contain rounded-xl mt-3" src={url} alt={`Фото ${index + 1}`} />)}
                             {image && <img className="w-full max-h-96 object-contain rounded-xl mt-3" src={image} alt="Предпросмотр фотографии" />}
-                            {!text.trim() && !image && <p className="text-white/40 text-sm">Добавьте текст или фотографию для предпросмотра.</p>}
+                            {!text.trim() && !image && !gallery.length && <p className="text-white/40 text-sm">Добавьте текст или фотографию для предпросмотра.</p>}
                         </div>
                     )}
                     {composeError && <p role="alert" className="text-pink text-sm mt-2">{composeError}</p>}
                     <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-                        <button type="button" className="btn-ghost" disabled={uploading || publishing} onClick={() => fileRef.current?.click()}>{uploading ? 'Загрузка…' : '📷 Добавить фото'}</button>
+                        <button type="button" className="btn-ghost" disabled={uploading || publishing || gallery.length >= 10} onClick={() => fileRef.current?.click()}>{uploading ? 'Загрузка…' : '📷 Добавить фото'}</button>
                         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file?.type.startsWith('image/')) { setSelectedFile(file); setComposeError(''); } else if (file) setComposeError('Выберите изображение'); }} />
                         <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn-ghost" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? "Скрыть предпросмотр" : "Предпросмотр"}</button>
                             <button type="button" className="btn-ghost" onClick={() => setComposeOpen(false)} disabled={publishing}>Закрыть</button>
-                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !image)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
+                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !image && !gallery.length)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
                         </div>
                     </div>
                 </section>

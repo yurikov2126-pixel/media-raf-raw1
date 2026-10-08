@@ -11,6 +11,21 @@ import {
 } from '../lib/gamification.js';
 
 const router = Router();
+const MAX_POST_IMAGES = 10;
+function normalizePostImages(mediaUrls, mediaUrl) {
+    const urls = Array.isArray(mediaUrls) ? mediaUrls : (mediaUrl ? [mediaUrl] : []);
+    if (urls.length > MAX_POST_IMAGES || urls.some((url) => typeof url !== 'string' || !url.trim() || url.length > 2048)) return null;
+    return urls.map((url) => url.trim());
+}
+function postImages(post) {
+    if (post.mediaType === 'gallery' && post.mediaUrl) {
+        try {
+            const urls = JSON.parse(post.mediaUrl);
+            if (Array.isArray(urls)) return urls;
+        } catch {}
+    }
+    return post.mediaUrl ? [post.mediaUrl] : [];
+}
 
 /* ─────────── Лента (единый запрос + пагинация) ─────────── */
 /**
@@ -108,7 +123,8 @@ router.get('/feed', auth, async (req, res) => {
         return {
             id: p.id,
             content: p.content,
-            mediaUrl: p.mediaUrl,
+            mediaUrl: p.mediaType === 'gallery' ? postImages(p)[0] || null : p.mediaUrl,
+            mediaUrls: postImages(p),
             mediaType: p.mediaType,
             createdAt: p.createdAt,
             editedAt: p.editedAt,
@@ -167,13 +183,15 @@ router.get('/feed', auth, async (req, res) => {
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post('/', auth, async (req, res) => {
-    const { content, mediaUrl, mediaType } = req.body;
-    if (!content?.trim() && !mediaUrl) {
+    const { content, mediaUrl, mediaType, mediaUrls } = req.body;
+    const images = normalizePostImages(mediaUrls, mediaUrl);
+    if (!images) return res.status(400).json({ error: 'Допускается не более 10 фотографий с корректными адресами' });
+    if (!content?.trim() && !images.length) {
         return res.status(400).json({ error: 'Пустой пост' });
     }
 
     const post = await prisma.post.create({
-        data: { authorId: req.user.id, content: content || '', mediaUrl, mediaType },
+        data: { authorId: req.user.id, content: content || '', mediaUrl: images.length > 1 ? JSON.stringify(images) : (images[0] || null), mediaType: images.length > 1 ? 'gallery' : (images.length ? (mediaType || 'image') : null) },
     });
 
     // Уведомления всем (не блокирует)
@@ -183,7 +201,7 @@ router.post('/', auth, async (req, res) => {
             select: { id: true },
         });
         const preview =
-            mediaUrl && !content ? '🖼️ Изображение' : (content || '').slice(0, 120);
+            images.length && !content ? '🖼️ Изображение' : (content || '').slice(0, 120);
         for (const u of users) {
             await createNotification(u.id, 'post', {
                 postId: post.id,
