@@ -1,10 +1,9 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 
 export default function MobileNav({ links, user }) {
-    const nav = useNavigate();
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
 
@@ -14,7 +13,7 @@ export default function MobileNav({ links, user }) {
     const primary = [
         { to: '/app', label: 'Главная', icon: 'dashboard', end: true },
         { to: '/app/feed', label: 'Лента', icon: 'feed' },
-        { action: 'create', label: 'Создать', icon: 'plus' },
+        { to: `/app/u/${user.username}`, label: 'Профиль', icon: 'user' },
         { to: '/app/chats', label: 'Чаты', icon: 'message' },
         { action: 'more', label: 'Ещё', icon: 'more' },
     ];
@@ -24,7 +23,6 @@ export default function MobileNav({ links, user }) {
         { to: '/app/wiki', label: 'Wiki', icon: 'book' },
         { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
         { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
-        { to: `/app/u/${user.username}`, label: 'Профиль', icon: 'user' },
         ...(user?.role === 'MENTOR' || user?.role === 'ADMIN'
             ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }]
             : []),
@@ -37,19 +35,6 @@ export default function MobileNav({ links, user }) {
         <>
             <nav className="ui-mobile-nav md:hidden" aria-label="Основная навигация">
                 {primary.map((item) => {
-                    if (item.action === 'create') {
-                        return (
-                            <button
-                                key="create"
-                                type="button"
-                                className="ui-mobile-nav__item is-create"
-                                onClick={() => nav(`/app/u/${user.username}`, { state: { compose: true } })}
-                            >
-                                <span className="ui-mobile-nav__icon"><Icon name="plus" size={21} /></span>
-                                <span>{item.label}</span>
-                            </button>
-                        );
-                    }
                     if (item.action === 'more') {
                         return (
                             <button
