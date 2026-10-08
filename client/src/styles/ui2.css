@@ -1430,3 +1430,27 @@ select {
 /* Feed composer preview */
 .ui-compose-preview{border:1px solid var(--ui-border-strong);background:var(--ui-surface);border-radius:18px;padding:20px;min-width:0;overflow-wrap:anywhere}
 @media(max-width:640px){.ui-compose-preview{padding:14px;border-radius:14px}}
+
+/* Keep desktop navigation anchored even on long profile pages. */
+@media (min-width: 901px) {
+  .ui-shell > .ui-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100dvh;
+    z-index: 40;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .ui-shell > .ui-main {
+    margin-left: 272px;
+    width: calc(100% - 272px);
+    flex: 1 1 auto;
+  }
+}
+/* Let the document remain the only vertical scroller on mobile/PWA. */
+@media (max-width: 900px) {
+  .ui-shell, .ui-main, .ui-feed-page { overflow-y: visible; }
+  .ui-feed-page { touch-action: pan-y; }
+}
