@@ -6,6 +6,7 @@ export default function PwaUpdateNotice() {
     const [update, setUpdate] = useState(null);
     useEffect(() => {
         let active = true;
+        let cleanup = () => {};
         const applyUpdate = registerSW({
             immediate: true,
             onNeedRefresh() { if (active) setAvailable(true); },
@@ -26,7 +27,6 @@ export default function PwaUpdateNotice() {
             },
         });
         setUpdate(() => applyUpdate);
-        let cleanup = () => {};
         return () => { active = false; cleanup(); };
     }, []);
     if (!available) return null;
