@@ -17,6 +17,7 @@
 - [Структура проекта](#-структура-проекта)
 - [Работа с базой данных](#-работа-с-базой-данных)
 - [Тестирование](#-тестирование)
+- [Swagger / OpenAPI](#-swagger--openapi)
 - [CI/CD](#-cicd)
 - [Seed курсов](#-seed-курсов)
 - [API](#-api)
@@ -68,10 +69,14 @@
 - **Онбординг** — короткий тур для новых пользователей и при добавлении новых фич.
 - **Тёмная и светлая** темы.
 - **PWA** с офлайн-режимом, splash-экраном и push-уведомлениями.
-- **Админ-панель** с полным управлением: пользователи, курсы, wiki, сертификаты, бэкапы, аналитика, пакетные операции. Разбита на 21 модульный подроутер (см. `server/src/routes/admin/`).
+- **Админ-панель** с полным управлением: пользователи, курсы, wiki, сертификаты, бэкапы, аналитика, пакетные операции. Разбита на 25 модульных подроутеров (см. `server/src/routes/admin/`).
+- **Дашборд-2.0** — sparklines, quick actions, recent activity из журнала аудита, alerts по здоровью сервера.
+- **Command palette (⌘K / Ctrl+K)** — быстрый переход между разделами и глобальный поиск по users/courses/posts/certificates/wiki.
+- **Undo-удаление** — 30-секундное окно отмены для пользователей и постов с записью в журнал аудита.
+- **История действий админов** — все операции пишутся в `AdminAction` с фильтрами, пагинацией и раскрывающимся payload.
 
 ### Качество и автоматизация
-- **127 интеграционных тестов** (Vitest + Supertest) для API: auth, posts, users, moderation, backups, modules.
+- **173 интеграционных теста** (Vitest + Supertest) для API: auth, posts, users, moderation, backups, modules, actions, maintenance, search.
 - **Глобальный error handler** — все Prisma-коды (P2002/P2003/P2025) маппятся в HTTP-статусы в одном месте (`server/src/middleware/errorHandler.js`), а `safe()` стал тонкой обёрткой над `next(err)`.
 - **GitHub Actions CI** — линт, тесты и сборка на каждый push и PR. Зелёный CI блокирует мерж красного PR.
 - **Автоматический деплой** через self-hosted runner: `git push` в `main` → деплой на прод за ~1 минуту.
@@ -97,6 +102,8 @@
 | **node-cron** | Фоновые задачи |
 | **web-push** | Push-уведомления |
 | **pg_dump 18** | Резервное копирование БД |
+| **swagger-jsdoc** (`7.0.0-rc.6`) | Генерация OpenAPI spec из JSDoc-аннотаций |
+| **swagger-ui-express** | Интерактивный UI для документации API |
 
 ### Backend — качество и тесты
 | Технология | Назначение |
@@ -157,8 +164,10 @@
 - **Аутентификация через JWT.** Токен хранится в `localStorage` (mrr_token). После смены пароля все старые токены инвалидируются через `passwordChangedAt`.
 - **Express-приложение отделено от запуска сервера.** `src/app.js` создаёт и настраивает `app` (без `listen`), `src/index.js` поднимает HTTP-сервер, Socket.IO и cron-задачи. Такое разделение позволяет тестировать API через Supertest без запуска реального сервера.
 - **Глобальный error handler.** `src/middleware/errorHandler.js` — единая точка для всех ошибок роутов. Prisma-коды `P2003` → 409, `P2025` → 404, `P2002` → 409, `err.status` пробрасывается как есть, остальное → 500. Роуты оборачиваются в `safe(fn)` из `routes/admin/_shared.js`, который просто зовёт `Promise.resolve(fn()).catch(next)`. Бизнес-логика в `lib/` больше не думает про HTTP-статусы — она бросает ошибки через `Object.assign(new Error(msg), { status })`, а хендлер сам разбирается.
-- **Модульная админка.** Бывший монолит `routes/admin.js` (~1400 строк) разбит на 21 подроутер в `routes/admin/` (`users.js`, `courses.js`, `moderation.js`, `backups.js`, `bulk.js`, `wiki.js`, `push.js`, `gamification.js`, `practicals.js`, `homework.js` и т.д.). `routes/admin.js` — тонкий barrel (5 строк). Префикс `/api/admin` и middleware `auth + requireRole('ADMIN')` вешаются один раз в `routes/admin/index.js`.
+- **Модульная админка.** Бывший монолит `routes/admin.js` (~1400 строк) разбит на 25 подроутеров в `routes/admin/` (`users.js`, `courses.js`, `moderation.js`, `backups.js`, `bulk.js`, `wiki.js`, `push.js`, `gamification.js`, `practicals.js`, `homework.js`, `actions.js`, `dashboard.js`, `search.js`, `undo.js`, `system.js` и т.д.). `routes/admin.js` — тонкий barrel (5 строк). Префикс `/api/admin` и middleware `auth + requireRole('ADMIN')` вешаются один раз в `routes/admin/index.js`.
+- **Swagger генерируется из кода.** `src/docs/swagger.js` собирает OpenAPI 3.0.3 spec из JSDoc-блоков `@openapi` прямо над роутами. Покрытие можно наращивать постепенно: покрыл роут — появился в UI. Готовый spec отдаётся на `/api/docs.json`, UI — на `/api/docs`.
 - **Prisma migrate, а не db push.** Схема версионируется через миграции. Первая миграция `0_init` — baseline для уже существующей БД.
+- **Отложенное удаление.** `lib/pendingDeletion.js` реализует soft-delete-окно в 30 секунд через таблицу `PendingDeletion`. Роут `DELETE /admin/users/:id` не удаляет сразу, а ставит задачу в очередь и возвращает `undoToken`. Воркер `processPendingDeletions()` раз в 30 секунд подчищает просроченные. Отмена — `POST /admin/undo/:token`.
 - **Socket.IO** используется для чатов, typing-индикатора, уведомлений в реальном времени.
 - **PWA** работает офлайн: precache HTML/JS/CSS, кеш `/uploads`, офлайн-экран при отсутствии сети.
 - **systemd, а не pm2.** API запускается как системный сервис `mediaraf-api.service`, что даёт автозапуск после ребута, рестарт при падении и единый способ управления из CI/скриптов.
@@ -235,7 +244,7 @@ cd ../client
 npm run dev
 ```
 
-Открыть **http://localhost:5173**
+Открыть **http://localhost:5173** (клиент) и **http://localhost:4000/api/docs** (Swagger UI).
 
 ---
 
@@ -328,6 +337,7 @@ VAPID_SUBJECT="mailto:admin@mediarafraw.ru"
 # NOTIFY_CLEANUP_CRON="30 4 * * *"
 # PASSWORD_RESET_CLEANUP_CRON="45 4 * * *"
 # GAMIFICATION_INACTIVITY_CRON="0 5 * * *"
+# ACTION_CLEANUP_CRON="0 6 * * *"
 ```
 
 Создайте `server/.env.test` для интеграционных тестов (в git лежит `server/.env.test.example`):
@@ -358,6 +368,12 @@ VITE_SOCKET="http://localhost:4000"
 ```
 
 > 🔒 `.env`, `.env.test`, `.env.local` **не в git**. Если случайно закоммитили — немедленно отзовите секреты и удалите файл из истории.
+
+> 💡 **Локальные prisma-команды.** Prisma по умолчанию читает `server/.env` (прод-URL). Чтобы не переключать файлы вручную, используйте алиас в `~/.zshrc`:
+> ```zsh
+> alias prisma-local='DATABASE_URL="postgresql://media_raf_raw:dev_password_local@localhost:5434/media_raf_raw_dev?schema=public" npx prisma'
+> ```
+> Тогда `prisma-local migrate dev --name add_something`, `prisma-local studio`, `prisma-local migrate status` — все пойдут в Docker-БД.
 
 ---
 
@@ -465,8 +481,18 @@ media-raf-raw1/
 │   │   │       ├── constants.js
 │   │   │       ├── utils.js
 │   │   │       ├── components/
+│   │   │       │   ├── ConfirmDialog.jsx
+│   │   │       │   ├── SearchSelect.jsx
+│   │   │       │   ├── AdminSidebar.jsx         # Группированное меню
+│   │   │       │   ├── AdminSkeleton.jsx        # Skeleton при загрузке lazy-таба
+│   │   │       │   ├── AdminCommandPalette.jsx  # ⌘K-палитра
+│   │   │       │   ├── OrphanFilesList.jsx      # Детализация осиротевших файлов
+│   │   │       │   ├── SparklineCard.jsx        # Мини-графики
+│   │   │       │   ├── QuickActions.jsx         # Плитки-переходы
+│   │   │       │   ├── RecentActivity.jsx       # Последние AdminAction
+│   │   │       │   └── AlertsBanner.jsx         # Предупреждения по здоровью сервера
 │   │   │       └── tabs/
-│   │   │           ├── Dashboard.jsx
+│   │   │           ├── Dashboard.jsx            # + Sparklines, QuickActions, RecentActivity, Alerts
 │   │   │           ├── Analytics.jsx
 │   │   │           ├── Users.jsx
 │   │   │           ├── Certificates.jsx
@@ -478,11 +504,15 @@ media-raf-raw1/
 │   │   │           ├── Modules.jsx
 │   │   │           ├── Settings.jsx
 │   │   │           ├── Gamification.jsx
+│   │   │           ├── PracticalsHomework.jsx
+│   │   │           ├── Actions.jsx              # История действий + автоочистка
 │   │   │           │
 │   │   │           ├── Courses/
 │   │   │           │   ├── index.jsx
 │   │   │           │   ├── CourseEditor.jsx
 │   │   │           │   ├── LessonEditor.jsx
+│   │   │           │   ├── PracticalEditor.jsx
+│   │   │           │   ├── HomeworkEditor.jsx
 │   │   │           │   ├── TestEditor.jsx
 │   │   │           │   └── QuestionEditor.jsx
 │   │   │           │
@@ -518,7 +548,8 @@ media-raf-raw1/
 │   │   │   ├── onboarding.jsx
 │   │   │   ├── theme.jsx
 │   │   │   ├── network.jsx
-│   │   │   └── gamification.jsx
+│   │   │   ├── gamification.jsx
+│   │   │   └── toast.jsx                        # ToastProvider + useToast()
 │   │   │
 │   │   ├── styles/
 │   │   │   └── index.css
@@ -539,7 +570,7 @@ media-raf-raw1/
 │   │   ├── schema.prisma                      # Все модели
 │   │   ├── migrations/                        # ─── Prisma migrations
 │   │   │   ├── 0_init/                        # Baseline для существующей схемы
-│   │   │   │   └── migration.sql
+│   │   │   ├── <timestamp>_add_pending_deletion/
 │   │   │   └── migration_lock.toml
 │   │   └── seed/                              # Наполнение курсов
 │   │       ├── index.js
@@ -558,6 +589,9 @@ media-raf-raw1/
 │   │   ├── index.js                           # Точка входа: HTTP + Socket.IO + cron
 │   │   ├── socket.js                          # Socket.IO: чаты, typing, сообщения, реакции
 │   │   │
+│   │   ├── docs/
+│   │   │   └── swagger.js                     # Конфиг OpenAPI 3.0.3 + общие схемы
+│   │   │
 │   │   ├── lib/
 │   │   │   ├── prisma.js
 │   │   │   ├── notify.js
@@ -575,6 +609,9 @@ media-raf-raw1/
 │   │   │   ├── pushCleanupCron.js
 │   │   │   ├── notifyCleanup.js
 │   │   │   ├── notifyCleanupCron.js
+│   │   │   ├── adminActionCleanup.js          # Автоочистка журнала AdminAction
+│   │   │   ├── adminActionCleanupCron.js      # Cron-обёртка
+│   │   │   ├── pendingDeletion.js             # Очередь отложенного удаления + воркер
 │   │   │   ├── gamification.js
 │   │   │   ├── gamificationCatalog.js
 │   │   │   ├── gamificationSettings.js
@@ -587,9 +624,9 @@ media-raf-raw1/
 │   │   │   └── errorHandler.js                # Глобальный обработчик: Prisma-коды → HTTP-статусы
 │   │   │
 │   │   └── routes/
-│   │       ├── auth.js
-│   │       ├── users.js
-│   │       ├── posts.js
+│   │       ├── auth.js                        # + OpenAPI-аннотации
+│   │       ├── users.js                       # + OpenAPI-аннотации
+│   │       ├── posts.js                       # + OpenAPI-аннотации
 │   │       ├── chats.js
 │   │       ├── uploads.js
 │   │       ├── courses.js
@@ -604,13 +641,17 @@ media-raf-raw1/
 │   │       ├── publicMeta.js
 │   │       │
 │   │       ├── admin.js                       # Barrel: 5 строк, экспортирует admin/index.js
-│   │       └── admin/                         # ─── 21 модуль админки
+│   │       └── admin/                         # ─── 25 модулей админки
 │   │           ├── index.js                   # Сборка + auth + requireRole('ADMIN')
 │   │           ├── _shared.js                 # safe()
 │   │           ├── stats.js                   # /stats
-│   │           ├── system.js                  # /server/*, /maintenance/*
+│   │           ├── system.js                  # /server/*, /maintenance/*, /maintenance/orphaned-files/*
+│   │           ├── dashboard.js               # /dashboard/summary
+│   │           ├── search.js                  # /search
+│   │           ├── undo.js                    # /undo/:token
+│   │           ├── actions.js                 # /actions, /actions/meta, /actions/cleanup-*
 │   │           ├── analytics.js               # /analytics, /analytics/courses
-│   │           ├── users.js                   # /users/*
+│   │           ├── users.js                   # /users/* (включая отложенное удаление)
 │   │           ├── courses.js                 # /courses/*, /lessons/*, /tests/*, /questions/*
 │   │           ├── certificates.js            # /certificates/*
 │   │           ├── moderation.js              # /reports/*
@@ -631,6 +672,7 @@ media-raf-raw1/
 │   │   ├── setup.js                           # Env-check + чистка БД (CI-aware)
 │   │   ├── helpers.js                         # createUser, createPost, makeAdmin, createComment
 │   │   ├── smoke.test.js
+│   │   ├── docs.test.js                       # Swagger UI + /api/docs.json
 │   │   ├── auth.register.test.js
 │   │   ├── auth.login.test.js
 │   │   ├── auth.me.test.js
@@ -639,10 +681,13 @@ media-raf-raw1/
 │   │   ├── posts.crud.test.js
 │   │   ├── posts.reactions.test.js
 │   │   ├── posts.comments.test.js
-│   │   ├── admin.users.test.js                # 13 тестов
-│   │   ├── admin.moderation.test.js           # 14 тестов
+│   │   ├── admin.users.test.js                # 17 тестов (включая undo)
+│   │   ├── admin.moderation.test.js           # 15 тестов
 │   │   ├── admin.backups.test.js              # 13 тестов
-│   │   └── admin.modules.test.js              # 8 тестов
+│   │   ├── admin.modules.test.js              # 8 тестов
+│   │   ├── admin.maintenance.test.js          # 14 тестов
+│   │   ├── admin.actions.test.js              # 14 тестов
+│   │   └── admin.search.test.js               # 10 тестов
 │   │
 │   ├── eslint.config.js                       # ESLint (flat config, ignoreRestSiblings, 0 warnings)
 │   ├── vitest.config.js                       # Vitest (forks, loadEnv .env.test)
@@ -663,7 +708,7 @@ media-raf-raw1/
 ### Ключевые принципы организации
 
 **Клиент:**
-- **store/** — глобальный стейт через React Context. Каждый провайдер отвечает за свою часть.
+- **store/** — глобальный стейт через React Context. Каждый провайдер отвечает за свою часть. `toast.jsx` — тосты поверх всего приложения.
 - **pages/Admin/** — модульная админка. Один раздел = один файл в `tabs/`, всё сложное — в подпапках.
 - **components/messenger/** — вынесено отдельно, т.к. мессенджер — самая тяжёлая часть UI.
 - **hooks/** — переиспользуемая логика.
@@ -671,11 +716,12 @@ media-raf-raw1/
 
 **Сервер:**
 - **`app.js`** — «чистое» Express-приложение. Экспортирует `app`, не вызывает `listen`. Это позволяет тестам импортировать его напрямую.
-- **`index.js`** — только запуск: HTTP-сервер, Socket.IO, cron. Никакого Express-кода.
+- **`index.js`** — только запуск: HTTP-сервер, Socket.IO, cron + `startPendingDeletionWorker()`.
 - **lib/** — вся бизнес-логика. Роуты тонкие, они только валидируют и вызывают функции из lib. Ошибки бросают через `Object.assign(new Error(msg), { status: N })` — их ловит `errorHandler`.
 - **middleware/errorHandler.js** — единая точка для ошибок. Все Prisma-коды и `err.status` маппятся тут.
-- **routes/** — HTTP-слой. Все роуты оборачиваются в `safe(fn)` — тонкий passthrough над `next(err)`.
-- **routes/admin/** — модульная админка (21 файл). `routes/admin.js` — тонкий barrel.
+- **docs/swagger.js** — конфиг OpenAPI + общие схемы (`Error`, `User`, `AuthResponse`, `Post`, `PostInFeed`, `Comment`, `CommentTree`, `AggregatedReactions`). Аннотации ищутся через `apis: [...]` в `routes/**/*.js` и `app.js`.
+- **routes/** — HTTP-слой. Все роуты оборачиваются в `safe(fn)` — тонкий passthrough над `next(err)`. Роуты содержат `@openapi`-блоки прямо над хендлерами.
+- **routes/admin/** — модульная админка (25 файлов). `routes/admin.js` — тонкий barrel.
 - **prisma/seed/** — данные курсов отделены от кода.
 - **prisma/migrations/** — миграции схемы (начиная с baseline `0_init`).
 - **tests/** — интеграционные тесты, ходят через Supertest прямо в `app` без запуска сервера.
@@ -687,6 +733,8 @@ media-raf-raw1/
 - **`.env` / `.env.local` / `.env.test`** — обязательны для соответствующих режимов, шаблоны в `.env.example` и `.env.test.example`.
 - **Собранный клиент публикуется в корень репо** — nginx отдаёт статику именно из `/www/wwwroot/mediarafraw.ru`, а не из `client/dist`. Эти файлы (index.html, assets/, sw.js, иконки) перечислены в `.gitignore` и не коммитятся.
 - **PWA-манифест** — генерируется `vite-plugin-pwa` из `vite.config.js`, в `public/` лежат только иконки.
+- **Swagger генерируется на старте.** `docs/swagger.js` использует top-level await над `swaggerJsdoc(options)` (v7 возвращает Promise). В `app.js` spec подключается к роутам `/api/docs` (UI) и `/api/docs.json` (raw). При добавлении новой схемы в `components.schemas` — обновляй `swagger.js`, при добавлении роута — просто ставь `@openapi` JSDoc над хендлером.
+- **Отложенное удаление.** Все деструктивные DELETE-роуты возвращают `{ ok, undoToken, executeAt, undoWindowMs }`. UI показывает тост с кнопкой «Отменить» на 20 секунд. Если не отменить — воркер через 30 секунд выполняет реальное удаление. В журнал пишутся три события: `schedule_delete_<type>`, `undo_delete_<type>`, `execute_delete_<type>`.
 
 ---
 
@@ -724,6 +772,8 @@ npx prisma migrate status
 npx prisma validate
 ```
 
+> ⚠️ `prisma migrate dev` читает `server/.env` — там **прод-URL**. Для локальной работы используйте алиас `prisma-local` (см. раздел «Переменные окружения») или явный override: `DATABASE_URL="postgresql://media_raf_raw:dev_password_local@localhost:5434/media_raf_raw_dev" npx prisma migrate dev`.
+
 ### Baseline `0_init`
 
 Первая миграция `server/prisma/migrations/0_init/migration.sql` создана через `prisma migrate diff` из текущей схемы и **помечена как уже применённая** на проде через `migrate resolve --applied`. Это значит:
@@ -748,7 +798,7 @@ cd server
 # 1. Изменить schema.prisma (добавить поле/модель/индекс)
 
 # 2. Локально: создать миграцию + применить к dev-БД
-npx prisma migrate dev --name add_user_locale
+prisma-local migrate dev --name add_user_locale
 
 # 3. Закоммитить папку prisma/migrations/<timestamp>_add_user_locale/
 git add prisma/migrations/
@@ -778,7 +828,7 @@ git push
 | Курсы | `Course`, `Lesson`, `Test`, `Question`, `TestAttempt`, `Enrollment`, `LessonProgress`, `Certificate` |
 | Практики и ДЗ | `PracticalWork`, `PracticalSubmission`, `Homework`, `HomeworkSubmission` |
 | Wiki | `WikiCategory`, `WikiArticle` |
-| Система | `Notification`, `Setting`, `AdminAction` |
+| Система | `Notification`, `Setting`, `AdminAction`, `PendingDeletion` |
 | Модерация | `Report` |
 | Пароли | `PasswordResetRequest` |
 | Геймификация | `UserStats`, `UserAchievement`, `XpLog`, `DailyQuest`, `QuestTemplate`, `Achievement` |
@@ -800,13 +850,14 @@ git push
 
 Проект покрыт **интеграционными тестами** на бэкенде. Тесты ходят через `supertest` прямо в Express-приложение (`src/app.js`), без запуска HTTP-сервера и Socket.IO — поэтому прогон быстрый и без побочных эффектов.
 
-**Всего: 127 тестов в 13 файлах**, прогон ~35–50 секунд.
+**Всего: 173 теста в 16 файлах**, прогон ~60–70 секунд.
 
 ### Что тестируется
 
 | Файл | Покрытие |
 |---|---|
 | `tests/smoke.test.js` | Проверка, что ключевые модули экспортируют функции |
+| `tests/docs.test.js` | Swagger UI (`/api/docs`) и OpenAPI spec (`/api/docs.json`) |
 | `tests/auth.register.test.js` | Регистрация: успех, валидация, уникальность, нормализация телефона/username |
 | `tests/auth.login.test.js` | Вход: по username / телефону / email, регистронезависимость, бан |
 | `tests/auth.me.test.js` | Текущий пользователь: токен, бан, обновление `lastSeen` |
@@ -815,10 +866,13 @@ git push
 | `tests/posts.crud.test.js` | Создание/редактирование/удаление постов + права доступа |
 | `tests/posts.reactions.test.js` | Реакции: toggle, разные эмодзи, агрегация |
 | `tests/posts.comments.test.js` | Комментарии: вложенность, редактирование, удаление, права |
-| `tests/admin.users.test.js` | Админ-управление пользователями: роли, бан, пароль, каскадное удаление |
+| `tests/admin.users.test.js` | Пользователи: роли, бан, пароль, отложенное удаление, undo, аудит |
 | `tests/admin.moderation.test.js` | Жалобы: список, фильтры, статусы, delete-content, ban-user |
 | `tests/admin.backups.test.js` | Бэкапы: права, валидация имён, path traversal, restore без filename |
 | `tests/admin.modules.test.js` | Включение/выключение модулей, «хотя бы один включён» |
+| `tests/admin.maintenance.test.js` | Обслуживание БД: скан, детализация, path traversal, whitelist расширений, 409-гонка, аудит |
+| `tests/admin.actions.test.js` | История действий: фильтры, пагинация, cleanup-settings, dry-run, реальная очистка |
+| `tests/admin.search.test.js` | Глобальный поиск: users, courses, posts, certificates, wiki, лимиты, короткий запрос |
 
 ### Подготовка тестовой БД
 
@@ -833,7 +887,7 @@ cd server
 cp .env.test.example .env.test
 
 # 3. Применить миграции к тестовой БД
-npm run db:migrate
+prisma-local migrate deploy
 ```
 
 **Вариант Б — системный Postgres:**
@@ -862,13 +916,14 @@ npm run test:watch
 npm run test:cov
 ```
 
-**Ожидаемый результат:** `Test Files 13 passed (13)` / `Tests 127 passed (127)`.
+**Ожидаемый результат:** `Test Files 16 passed (16)` / `Tests 173 passed (173)`.
 
 ### Как устроены тесты
 
 - **`tests/setup.js`** — `beforeAll` проверяет `DATABASE_URL` (и, если не CI, что порт не 5432 — защита от запуска против прод-БД). `afterEach` удаляет всех тестовых юзеров (по префиксу `+7999` и `test_`) и связанные данные. Даёт 250 мс «хвоста» для завершения fire-and-forget задач (геймификация, уведомления), чтобы не ловить `P2025`.
 - **`tests/helpers.js`** — утилиты: `createUser`, `createPost`, `createComment`, `makeAdmin`, `validPayload`. Генерируют уникальные телефоны и username, чтобы тесты не конфликтовали.
 - **Изоляция от прод-данных.** Тесты постов фильтруют ленту по автору (`onlyTestPosts`), чтобы не полагаться на пустую БД.
+- **Уникальные маркеры.** Тесты поиска используют `Date.now()` в строках, чтобы не пересекаться с другими тестами.
 - **ENV для тестов читается из `.env.test`**, а не `.env`. Это делает `vitest.config.js` через `loadEnv({ path: '.env.test', override: true })`.
 - **CI-aware sanity-check.** Если `process.env.CI === 'true'`, проверка порта (5432 vs 5434) пропускается — в GitHub Actions Postgres поднимается как service именно на 5432.
 
@@ -883,7 +938,70 @@ npm run test:cov
 1. Проверь `DATABASE_URL` — точно указывает на тестовую БД (порт 5434 для Docker)?
 2. Убедись, что Postgres-контейнер поднят: `docker ps | grep postgres-dev`.
 3. Если падает с `Environment variable not found` — проверь, что `.env.test` существует и в нём есть `DATABASE_URL`.
-4. Смотри в лог — Vitest показывает конкретный assert и стек.
+4. Если падает с `Cannot read properties of undefined` на `prisma.<модель>` — забудь про `npx prisma generate` после изменения схемы.
+5. Смотри в лог — Vitest показывает конкретный assert и стек.
+
+---
+
+## 📖 Swagger / OpenAPI
+
+Проект использует **Swagger UI** для интерактивной документации и **OpenAPI 3.0.3** для машиночитаемого описания API.
+
+### Где смотреть
+
+- **UI (интерактив):** http://localhost:4000/api/docs (в проде — `https://mediarafraw.ru/api/docs`)
+- **Raw spec:** http://localhost:4000/api/docs.json
+
+UI даёт:
+- список всех эндпоинтов, сгруппированных по тегам (`System`, `Auth`, `Users`, `Posts`);
+- интерактивный режим **«Try it out»** — можно выполнить запрос из браузера;
+- кнопку **Authorize** — вставь JWT, и он подхватится во все защищённые запросы (сохраняется в `localStorage` браузера, не сбрасывается при F5);
+- `displayRequestDuration` — время выполнения каждого запроса.
+
+Raw spec можно импортировать в Postman, Insomnia, использовать для генерации клиентов (`openapi-generator`, `orval`).
+
+### Как устроено
+
+Файлы:
+
+- **`server/src/docs/swagger.js`** — конфиг OpenAPI 3.0.3. Здесь описаны: `info`, `servers`, `tags`, `components.securitySchemes.bearerAuth`, общие `components.schemas` (`Error`, `User`, `AuthResponse`, `Post`, `PostInFeed`, `Comment`, `CommentTree`, `AggregatedReactions`). В блоке `apis` указано, где искать `@openapi`-аннотации: `routes/**/*.js` + `app.js`. Использует `swagger-jsdoc@7.0.0-rc.6` через top-level await (v7 возвращает Promise).
+- **`server/src/app.js`** — подключает роуты `/api/docs` (UI) и `/api/docs.json` (raw). **Важно:** регистрируются **до** 404-хендлера `/api/*` и SPA fallback, иначе перехватятся.
+- **`server/src/routes/auth.js`, `users.js`, `posts.js`** — содержат JSDoc-блоки с тегом `@openapi` прямо над соответствующими роутами.
+
+### Как добавить документацию для нового эндпоинта
+
+Просто поставь JSDoc-блок с `@openapi` над хендлером:
+
+```js
+/**
+ * @openapi
+ * /my-new-endpoint:
+ *   get:
+ *     tags: [MyTag]
+ *     summary: Краткое описание
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Успех
+ */
+router.get('/my-new-endpoint', auth, async (req, res) => { ... });
+```
+
+Spec подхватит блок **при следующем запуске** сервера (перезапусти `npm run dev` или `systemctl restart mediaraf-api`).
+
+### Покрытие (текущее состояние)
+
+| Тег | Эндпоинтов | Файл с аннотациями |
+|-----|-----------|---------------------|
+| `System` | 1 (`GET /health`) | `src/app.js` |
+| `Auth` | 6 (register, login, me, check-username, check-phone, recover/*) | `src/routes/auth.js` |
+| `Users` | 5 (`GET /`, `GET /:username`, `PATCH /me`, `PATCH /me/password`, `POST /me/posts`) | `src/routes/users.js` |
+| `Posts` | 10 (feed, create, patch, delete, reactions ×2, comments ×4) | `src/routes/posts.js` |
+
+**Не покрыто пока:** `chats.js`, `uploads.js`, `courses.js`, `practicals.js`, `homework.js`, `wiki.js`, `notifications.js`, `reports.js`, `modules.js`, `onboarding.js`, `gamification.js`, `publicMeta.js`, вся папка `admin/` (25 модулей).
+
+Покрытие наращивается постепенно — каждое новое покрытие тестируется `tests/docs.test.js`.
 
 ---
 
@@ -900,7 +1018,7 @@ npm run test:cov
 4. `npm run lint` — ESLint (0 errors, 0 warnings).
 5. `npx prisma generate`.
 6. `npx prisma migrate deploy` — применяет все миграции к тестовой БД.
-7. `npm test` — все 127 тестов.
+7. `npm test` — все 173 теста.
 
 **Job `client`:**
 1. Node 22.
@@ -966,7 +1084,7 @@ journalctl -u actions.runner.yurikov2126-pixel-media-raf-raw1.ubuntu.service -n 
 # Server
 cd server
 npm run lint       # 0 errors, 0 warnings
-npm test           # 127 passed
+npm test           # 173 passed
 
 # Client
 cd ../client
@@ -1039,6 +1157,8 @@ export const myCourse = {
 
 Базовый URL: `VITE_API` (по умолчанию `http://localhost:4000/api`).
 
+**Интерактивная документация:** `/api/docs` (Swagger UI) — там всегда актуальная версия. Ниже — краткий справочник.
+
 Все защищённые запросы требуют заголовок:
 ```
 Authorization: Bearer <JWT>
@@ -1049,6 +1169,8 @@ Authorization: Bearer <JWT>
 | Роут | Описание |
 |---|---|
 | `GET /health` | Health-check (`{ok, service}`) |
+| `GET /docs` | Swagger UI (HTML) |
+| `GET /docs.json` | OpenAPI 3.0.3 spec (JSON) |
 | `POST /auth/register` | Регистрация |
 | `POST /auth/login` | Вход |
 | `GET /auth/me` | Текущий пользователь |
@@ -1059,6 +1181,7 @@ Authorization: Bearer <JWT>
 | `GET /users` | Список пользователей |
 | `GET /users/:username` | Профиль |
 | `PATCH /users/me` | Обновить профиль |
+| `PATCH /users/me/password` | Смена своего пароля |
 | `GET /posts/feed` | Лента с cursor-пагинацией |
 | `POST /posts` | Создать пост |
 | `PATCH /posts/:id` | Редактировать пост (автор/ADMIN) |
@@ -1089,7 +1212,45 @@ Authorization: Bearer <JWT>
 | `GET /gamification/quests` | Квесты на сегодня |
 | `GET /gamification/leaderboard` | Лидерборд |
 | `GET /settings/public` | Публичные настройки сайта |
-| `GET /admin/*` | Все админские роуты (role=ADMIN) — 21 модуль |
+
+### Ключевые админские роуты
+
+| Роут | Описание |
+|---|---|
+| `GET /admin/stats` | Счётчики для Dashboard (users, chats, messages, courses…) |
+| `GET /admin/dashboard/summary` | Сводка для Dashboard-2.0: sparklines, recent activity, alerts |
+| `GET /admin/server/info` | Метрики сервера (CPU, RAM, диск, БД) |
+| `POST /admin/server/cleanup` | Очистка логов PM2 / старых бэкапов |
+| `GET /admin/maintenance/scan` | Скан БД + детализация осиротевших файлов |
+| `POST /admin/maintenance/cleanup` | Полная очистка неконсистентных данных |
+| `DELETE /admin/maintenance/orphaned-files/:filename` | Удалить один осиротевший файл |
+| `POST /admin/maintenance/orphaned-files/purge` | Батч-удаление (filenames / olderThanDays) |
+| `GET /admin/actions` | История действий админов (фильтры: action, adminId, from, to, failed) |
+| `GET /admin/actions/meta` | Уникальные actions + admins для фильтров |
+| `GET /admin/actions/cleanup-settings` | Настройки автоочистки журнала |
+| `POST /admin/actions/cleanup-now` | Запуск очистки (dryRun / реальный) |
+| `GET /admin/search?q=…` | Глобальный поиск по users/courses/posts/certs/wiki |
+| `POST /admin/undo/:token` | Отмена отложенного удаления |
+| `GET /admin/users` | Список пользователей |
+| `PATCH /admin/users/:id` | Обновить (role, isBanned, direction) |
+| `PATCH /admin/users/:id/password` | Сменить пароль пользователя |
+| `DELETE /admin/users/:id` | Отложенное удаление — возвращает `{ undoToken, executeAt, undoWindowMs }` |
+| `GET /admin/reports` | Жалобы (фильтры: status, targetType) |
+| `PATCH /admin/reports/:id` | Смена статуса/резолюции |
+| `POST /admin/reports/:id/delete-content` | Удалить контент из жалобы |
+| `POST /admin/reports/:id/ban-user` | Забанить автора |
+| `DELETE /admin/reports/:id` | Удалить жалобу |
+| `GET /admin/backups` | Список бэкапов |
+| `POST /admin/backups` | Создать бэкап |
+| `POST /admin/backups/:filename/restore` | Восстановить из бэкапа |
+| `DELETE /admin/backups/:filename` | Удалить бэкап (path traversal защищён) |
+| `GET /admin/gamification/*` | Настройки, достижения, квесты, уровни |
+| `POST /admin/push/send` | Массовая push-рассылка |
+| `GET /admin/push/cleanup-settings` | Настройки автоочистки подписок |
+| `GET /admin/broadcast` | Массовая рассылка уведомлений в приложении |
+| `GET /admin/modules` | Состояние модулей |
+| `PUT /admin/settings` | Обновление настроек сайта |
+| `... | Всего 25 модулей, см. `server/src/routes/admin/` |
 
 ### Socket.IO события
 
@@ -1135,10 +1296,12 @@ Service Worker обновляется автоматически (`registerType:
 | Notify cleanup | `30 4 * * *` | Удаляет старые прочитанные уведомления |
 | Password reset cleanup | `45 4 * * *` | Удаляет старые заявки на восстановление пароля |
 | Gamification inactivity | `0 5 * * *` | Списывает XP у неактивных пользователей |
+| Action cleanup | `0 6 * * *` | Удаляет старые записи журнала `AdminAction` |
 | Deadline reminders | `0 9 * * *` | Напоминания о дедлайнах практик/ДЗ |
 | Drip unlock notifications | `0 8 * * *` | Уведомления о разблокировке уроков |
+| Pending deletion worker | каждые 30 сек | Выполняет отложенные удаления после истечения окна отмены |
 
-Расписание переопределяется через переменные окружения.
+Расписание переопределяется через переменные окружения (`PUSH_CLEANUP_CRON`, `NOTIFY_CLEANUP_CRON`, `PASSWORD_RESET_CLEANUP_CRON`, `GAMIFICATION_INACTIVITY_CRON`, `ACTION_CLEANUP_CRON`).
 
 ---
 
@@ -1177,15 +1340,15 @@ bash scripts/deploy.sh
 ### Что делает `scripts/deploy.sh`
 
 1. **Проверка состояния репо.** Если есть незакоммиченные трекаемые файлы — стоп (untracked не считаются: там собранный клиент и служебные файлы).
-2. **Бэкап БД.** Автоматически ищет `pg_dump` подходящей версии (`/www/server/pgsql/bin/pg_dump`, `/usr/lib/postgresql/18/...`, и т.д.). Сохраняет в `/root/db-backups/mediaraf_YYYYMMDD_HHMMSS.sql`.
-3. **`git pull origin main`.** Настроено `git config pull.ff only` — если на сервере есть локальные коммиты, pull упадёт явно.
+2. **Бэкап БД.** Автоматически ищет `pg_dump` подходящей версии. Сохраняет в `/root/db-backups/mediaraf_YYYYMMDD_HHMMSS.sql`.
+3. **`git pull origin main`.** Настроено `git config pull.ff only`.
 4. **Server:** `npm ci`, `npx prisma generate`, `npx prisma migrate deploy`.
 5. **Restart API:** `systemctl restart mediaraf-api`, проверка `is-active` + `curl /api/health`.
 6. **Client:** `npm ci`, `npm run build`.
-7. **Публикация клиента.** `cp -r client/dist/. .` — nginx отдаёт статику из корня репо. Затем `chown -R www:www` для свежих файлов.
+7. **Публикация клиента.** `cp -r client/dist/. .` + `chown -R www:www`.
 8. **Финальные проверки:** API, `localhost/`, внешний домен.
 
-**Перед каждым `npm ci`** скрипт выставляет `npm config set registry https://registry.npmjs.org/` — чтобы избежать проблем с китайским зеркалом aaPanel.
+**Перед каждым `npm ci`** скрипт выставляет `npm config set registry https://registry.npmjs.org/`.
 
 Лог пишется в `/var/log/mediaraf-deploy.log`.
 
@@ -1251,7 +1414,6 @@ WantedBy=multi-user.target
 EOF
 
 # Путь к node может отличаться — проверьте `which node`.
-# Создать логи и включить сервис
 touch /var/log/mediaraf-api.log /var/log/mediaraf-api.err.log
 chown www:www /var/log/mediaraf-api.log /var/log/mediaraf-api.err.log
 systemctl daemon-reload
@@ -1412,8 +1574,10 @@ scripts/deploy.sh              # Деплой на прод (вызываетс�
 - **CORS** — настраивается на конкретный домен, а не `origin: true`.
 - **Загружаемые файлы** — лимит 200 МБ, изображения сжимаются через `sharp` до 1920px.
 - **Path traversal защищён в `/admin/backups/*`.** `DELETE`, `GET /download` и `POST /restore` используют `path.basename` + проверку расширения (`.dump`/`.sql`) + `startsWith(BACKUPS_DIR)`. **Не удаляй эти проверки при рефакторинге.**
+- **Path traversal защищён в `/admin/maintenance/orphaned-files/:filename`.** `safeUnlinkOrphan` делает `path.basename` + whitelist расширений + `path.resolve` + `startsWith(UPLOADS_DIR)`. Дополнительно 409 если файл за это время «привязался» к посту/сообщению.
 - **Харденинг геймификации** — все операции `awardXp`/`deductXp` устойчивы к удалению пользователя во время выполнения (`P2025`/`P2003` не падают, а тихо возвращают `null`).
 - **Харденинг модерации** — `lib/moderation.js` бросает ошибки через `Object.assign(new Error(msg), { status })`, чтобы глобальный `errorHandler` возвращал 400/404 вместо 500 на ожидаемых ситуациях.
+- **Swagger UI (`/api/docs`) открыт без авторизации.** Это норма для внутреннего проекта, но если планируется более чувствительный API — стоит решить одно из трёх: (а) оставить как есть, (б) закрыть в проде через `if (process.env.NODE_ENV !== 'production')`, (в) обернуть в `auth + requireRole('ADMIN')`. Пока открыт осознанно.
 - **Self-hosted runner — только для `push` в main.** Workflow деплоя не имеет триггера `pull_request`. В Settings → Actions включено «Require approval for first-time contributors». Это защищает от запуска деплоя из PR-из-форков.
 - **PostgreSQL слушает только `127.0.0.1:5432`** — снаружи недоступен.
 - **`.env`, `.env.local`, `.env.test` — не в git.** Если случайно закоммитили — немедленно:
@@ -1426,374 +1590,46 @@ scripts/deploy.sh              # Деплой на прод (вызываетс�
 
 ## 🗺 Дорожная карта: улучшение админ-панели
 
-Админка функциональна, но накопился UX-долг: 17 вкладок в одну горизонтальную строку, монолитные табы, `alert()` вместо тостов, всё в одном бандле. Ниже — план улучшений, разбитый по приоритету. Каждый пункт — независимый PR, можно останавливаться на любом.
+Админка функциональна и уже прошла серию улучшений. Ниже — что сделано и что осталось.
 
-### Сводная таблица
+### ✅ Что сделано
 
-| # | Задача | Влияние | Усилия | PR |
-|---|---|---|---|---|
-| 1 | Lazy loading вкладок | 🔥 Высокое | 2 часа | 1 |
-| 2 | Toast-уведомления вместо `alert()` | Среднее | полдня | 1 |
-| 3 | Sidebar + mobile drawer | 🔥 Высокое | 2 дня | 2 |
-| 4 | Persist фильтров в URL | Среднее | полдня | 2 |
-| 5 | Undo для деструктивных операций | 🔥 Высокое | 1 день | 3 |
-| 6 | Command palette (⌘K) | 🔥 Высокое | 1 день | 4 |
-| 7 | Массовые операции в Users | 🔥 Высокое | 1 день | 5 |
-| 8 | Дашборд-2.0 (графики, recent, quick actions) | 🔥 Высокое | 2–3 дня | 6 |
-| 9 | Global search | 🔥 Высокое | 2 дня | 7 |
-| 10 | Real-time бейджи и тосты | Среднее | 1 день | 8 |
-| 11 | Skeletons + единый `FiltersBar` | Среднее | 1 день | 9 |
-| 12 | Notification center для админа | Среднее | 1 день | 10 |
+| # | Задача | Что дало |
+|---|---|---|
+| 1 | **Lazy loading вкладок + скелетоны** | –30–40% бандла, старт быстрее |
+| 2 | **Toast-система вместо `alert()`** | Убрано ~40 блокирующих диалогов, тосты с action-кнопкой «Отменить» |
+| 3 | **Sidebar + mobile drawer** | 18 разделов сгруппированы в 6 смысловых блоков, на мобильном — overlay-drawer |
+| 4 | **URL-фильтры** в Moderation, Users, Actions | Ссылка на отфильтрованный список shareable, «Назад» работает ожидаемо |
+| 5 | **Undo-удаление** (30 сек) | Защита от случайных кликов + три события в журнале аудита (`schedule`/`undo`/`execute`) |
+| 6 | **Command palette ⌘K** | Быстрый переход по разделам, поиск по users/courses/posts/certs/wiki через сервер с debounce 300 мс |
+| 7 | **Дашборд-2.0** | Sparklines за 7/30 дней, quick actions, recent activity, alerts по здоровью сервера |
+| 8 | **Global search** | `GET /admin/search?q=...` с параллельным поиском по 5 типам сущностей |
+| 9 | **Детализация осиротевших файлов** | Раскрывающийся список с превью, размерами, датами, per-file delete + batch purge |
+| 10 | **Вкладка «История действий»** | Фильтры (action/adminId/from/to/failed), пагинация, раскрывающийся payload, автоочистка |
+| 11 | **Автоочистка `AdminAction`** | Cron раз в сутки в 06:00, минимум 7 дней, dry-run |
+| 12 | **Массовые операции в Users** | Выделение чекбоксами, роль/бан/разбан/удаление одним кликом |
 
-### Рекомендуемый порядок
+### ⏳ Что осталось (бэклог)
 
-**Спринт 1 (быстро и ощутимо, ~3 дня):** PR #1 + PR #2
-- Lazy loading → бандл падает на 30–40%, старт быстрее.
-- Toast'ы → ошибки перестают лезть `alert()`-ом.
-- Sidebar → 17 вкладок влезают на экран с иерархией.
-- URL-фильтры → ссылки на отфильтрованные списки shareable.
+| # | Задача | Влияние | Усилия |
+|---|---|---|---|
+| 1 | **Undo для Post / Comment / Wiki** | Среднее | ~1 час (инфраструктура готова) |
+| 2 | **Real-time обновления** через Socket.IO | Высокое | 1 день |
+| 3 | **Notification center для админа** | Среднее | 1 день |
+| 4 | **Единый `FiltersBar`** | Среднее | полдня |
+| 5 | **Virtual scrolling** в Users и Actions | Среднее | 1 день |
+| 6 | **Хлебные крошки** | Низкое | 2 часа |
+| 7 | **Экспорт журнала в CSV/JSON** | Низкое | 3 часа |
 
-**Спринт 2 (защита от ошибок, ~2–3 дня):** PR #3 + PR #4 + PR #5
-- Undo для удаления → 30-секундное окно отмены.
-- Command palette → быстрый доступ ко всему.
-- Массовые операции в Users → экономия часов ручной работы.
+### 🔧 Технический долг (не срочно)
 
-**Спринт 3 (обзор и скорость, ~5 дней):** PR #6 + PR #7 + PR #8
-- Дашборд-2.0 с графиками и recent activity.
-- Global search.
-- Real-time обновления через Socket.IO.
-
-**Спринт 4 (полировка, ~3 дня):** PR #9 + PR #10
-- Skeletons, единый `FiltersBar`, виртуальный скролл.
-- Notification center для админа.
+- **Рефакторинг 21 места записи в `AdminAction`** на единый `lib/adminLog.js`. Сейчас каждый роут пишет инлайн.
+- **`npm ci` вместо `npm install`** в CI-job `server` — улучшит воспроизводимость.
+- **Кэш `collectUsedFiles()`** на 60 секунд — если на проде `/uploads/` станет большим.
+- **Детализация остальных категорий в `MaintenanceBlock`** — сейчас раскрыт только `orphanFiles`; можно так же сделать для чатов, дублей, битых ссылок.
+- **Swagger для admin-роутов** — покрытие `/admin/*` пока нулевое (25 модулей).
 
 ---
-
-### 1. Навигация
-
-#### 1.1. Sidebar вместо чипов
-**Влияние: высокое · Усилия: средние (~2 дня)**
-
-Заменить горизонтальную полоску из 17 чипов на фиксированный sidebar слева с группами:
-Обзор → Dashboard, Analytics, Actions
-Контент → Moderation, Wiki, Courses, Certificates
-Люди → Users, Password Resets, Push, Broadcast
-Обучение → Practicals+Homework, Gamification
-Система → Backups, Modules, Site Design, Settings
-
-Плюсы: влезает всё, визуальная иерархия, проще добавлять разделы. На мобильном — hamburger → drawer. Бейджи (`moderation`, `password-resets`) переезжают на пункты меню.
-
-#### 1.2. Command palette (⌘K / Ctrl+K)
-**Влияние: высокое · Усилия: средние (~1 день)**
-
-Один хоткей открывает модалку поиска:
-- **Переходы**: «пользователи», «модерация» → открывает таб.
-- **Сущности**: «Иван Петров» → карточка, `MRR-2025-ABC123` → сертификат.
-- **Действия**: «забанить @user», «сделать бэкап», «пересчитать прогресс».
-
-Реализация: `cmdk` или простой `<input>` + фильтр по массиву. `SearchSelect.jsx` уже есть — можно расширить.
-
-#### 1.3. Хлебные крошки
-**Влияние: среднее · Усилия: низкие (~2 часа)**
-
-`Админка / Пользователи / Иван Петров`. Мелочь, но помогает в глубокой вложенности.
-
----
-
-### 2. Обзор
-
-#### 2.1. Дашборд-2.0
-**Влияние: высокое · Усилия: высокие (~2–3 дня)**
-
-Из «6 цифр + метрики сервера» превратить в пульт управления:
-- **Sparkline-графики** за 7/30 дней: новые пользователи, посты, сообщения, записи на курсы (Recharts уже подключён).
-- **Quick actions**: 6 больших кнопок — найти пользователя, последние жалобы, бэкап, проверка БД, рассылка, загрузка курса.
-- **Recent activity**: последние 10 записей из `AdminAction`.
-- **Alerts**: красный баннер при CPU > 85% или диск > 90%.
-
-#### 2.2. Global search
-**Влияние: высокое · Усилия: высокие (~2 дня)**
-
-Один инпут в шапке ищет по: Users (username, fullName, phone, email), Courses (slug, title), Posts (content), Certificates (serial), Wiki (title, slug). Результаты сгруппированы по типу. Требует бэкенд-роут `GET /api/admin/search?q=...`.
-
----
-
-### 3. UX существующих вкладок
-
-#### 3.1. Единый компонент `FiltersBar`
-**Влияние: среднее · Усилия: средние (~1 день)**
-
-Декларативный компонент для всех табов:
-
-```jsx
-<FiltersBar
-  fields={[
-    { type: 'select', key: 'status', label: 'Статус', options: [...] },
-    { type: 'date',   key: 'from',   label: 'С' },
-    { type: 'toggle', key: 'failed', label: 'Только с ошибками' },
-  ]}
-  onChange={...}
-/>
-
-Плюсы: влезает всё, визуальная иерархия, проще добавлять разделы. На мобильном — hamburger → drawer. Бейджи (`moderation`, `password-resets`) переезжают на пункты меню.
-
-#### 1.2. Command palette (⌘K / Ctrl+K)
-**Влияние: высокое · Усилия: средние (~1 день)**
-
-Один хоткей открывает модалку поиска:
-- **Переходы**: «пользователи», «модерация» → открывает таб.
-- **Сущности**: «Иван Петров» → карточка, `MRR-2025-ABC123` → сертификат.
-- **Действия**: «забанить @user», «сделать бэкап», «пересчитать прогресс».
-
-Реализация: `cmdk` или простой `<input>` + фильтр по массиву. `SearchSelect.jsx` уже есть — можно расширить.
-
-#### 1.3. Хлебные крошки
-**Влияние: среднее · Усилия: низкие (~2 часа)**
-
-`Админка / Пользователи / Иван Петров`. Мелочь, но помогает в глубокой вложенности.
-
----
-
-### 2. Обзор
-
-#### 2.1. Дашборд-2.0
-**Влияние: высокое · Усилия: высокие (~2–3 дня)**
-
-Из «6 цифр + метрики сервера» превратить в пульт управления:
-- **Sparkline-графики** за 7/30 дней: новые пользователи, посты, сообщения, записи на курсы (Recharts уже подключён).
-- **Quick actions**: 6 больших кнопок — найти пользователя, последние жалобы, бэкап, проверка БД, рассылка, загрузка курса.
-- **Recent activity**: последние 10 записей из `AdminAction`.
-- **Alerts**: красный баннер при CPU > 85% или диск > 90%.
-
-#### 2.2. Global search
-**Влияние: высокое · Усилия: высокие (~2 дня)**
-
-Один инпут в шапке ищет по: Users (username, fullName, phone, email), Courses (slug, title), Posts (content), Certificates (serial), Wiki (title, slug). Результаты сгруппированы по типу. Требует бэкенд-роут `GET /api/admin/search?q=...`.
-
----
-
-### 3. UX существующих вкладок
-
-#### 3.1. Единый компонент `FiltersBar`
-**Влияние: среднее · Усилия: средние (~1 день)**
-
-Декларативный компонент для всех табов:
-
-```jsx
-<FiltersBar
-  fields={[
-    { type: 'select', key: 'status', label: 'Статус', options: [...] },
-    { type: 'date',   key: 'from',   label: 'С' },
-    { type: 'toggle', key: 'failed', label: 'Только с ошибками' },
-  ]}
-  onChange={...}
-/>
-Плюсы: влезает всё, визуальная иерархия, проще добавлять разделы. На мобильном — hamburger → drawer. Бейджи (`moderation`, `password-resets`) переезжают на пункты меню.
-
-#### 1.2. Command palette (⌘K / Ctrl+K)
-**Влияние: высокое · Усилия: средние (~1 день)**
-
-Один хоткей открывает модалку поиска:
-- **Переходы**: «пользователи», «модерация» → открывает таб.
-- **Сущности**: «Иван Петров» → карточка, `MRR-2025-ABC123` → сертификат.
-- **Действия**: «забанить @user», «сделать бэкап», «пересчитать прогресс».
-
-Реализация: `cmdk` или простой `<input>` + фильтр по массиву. `SearchSelect.jsx` уже есть — можно расширить.
-
-#### 1.3. Хлебные крошки
-**Влияние: среднее · Усилия: низкие (~2 часа)**
-
-`Админка / Пользователи / Иван Петров`. Мелочь, но помогает в глубокой вложенности.
-
----
-
-### 2. Обзор
-
-#### 2.1. Дашборд-2.0
-**Влияние: высокое · Усилия: высокие (~2–3 дня)**
-
-Из «6 цифр + метрики сервера» превратить в пульт управления:
-- **Sparkline-графики** за 7/30 дней: новые пользователи, посты, сообщения, записи на курсы (Recharts уже подключён).
-- **Quick actions**: 6 больших кнопок — найти пользователя, последние жалобы, бэкап, проверка БД, рассылка, загрузка курса.
-- **Recent activity**: последние 10 записей из `AdminAction`.
-- **Alerts**: красный баннер при CPU > 85% или диск > 90%.
-
-#### 2.2. Global search
-**Влияние: высокое · Усилия: высокие (~2 дня)**
-
-Один инпут в шапке ищет по: Users (username, fullName, phone, email), Courses (slug, title), Posts (content), Certificates (serial), Wiki (title, slug). Результаты сгруппированы по типу. Требует бэкенд-роут `GET /api/admin/search?q=...`.
-
----
-
-### 3. UX существующих вкладок
-
-#### 3.1. Единый компонент `FiltersBar`
-**Влияние: среднее · Усилия: средние (~1 день)**
-
-Декларативный компонент для всех табов:
-
-```jsx
-<FiltersBar
-  fields={[
-    { type: 'select', key: 'status', label: 'Статус', options: [...] },
-    { type: 'date',   key: 'from',   label: 'С' },
-    { type: 'toggle', key: 'failed', label: 'Только с ошибками' },
-  ]}
-  onChange={...}
-/>
-Плюс — сохранение фильтров в URL. Ссылку можно скинуть коллеге, и он увидит то же самое.
-
-3.2. Toast-уведомления вместо alert()
-Влияние: среднее · Усилия: низкие (~полдня)
-
-Заменить alert(e.message) и inline <div className="text-pink"> на ToastProvider:
-
-Успех — зелёный, автозакрытие через 3 сек.
-
-Ошибка — красный, до закрытия.
-
-Стек до 3 одновременно.
-
-Реализация: react-hot-toast или свои 100 строк на Context + портале.
-
-3.3. Undo для деструктивных операций
-Влияние: высокое · Усилия: средние (~1 день с сервером)
-
-Soft-delete на 30 секунд:
-
-Админ удаляет.
-
-Сервер ставит deletedAt, физически не удаляет.
-
-Фронт показывает toast: «Удалено. Отменить? (30)».
-
-Через 30 сек — реальное удаление (или cron).
-
-Если «Отменить» — deletedAt = null.
-
-Спасает от случайных кликов. Особенно важно после появления массовых удалений файлов.
-
-3.4. Массовые операции в Users
-Влияние: высокое · Усилия: средние (~1 день)
-
-Чекбоксы + «Выделить все». Действия: забанить/разбанить, выдать роль, сбросить пароль, удалить, отправить push. Всё пишется в AdminAction.
-
-3.5. Skeleton loaders
-Влияние: среднее · Усилия: низкие (~полдня)
-
-Заменить {loading ? '⏳' : ...} на skeleton-карточки. Субъективно ускоряет восприятие.
-
-3.6. Inline editing
-Влияние: среднее · Усилия: высокие (~2 дня)
-
-Users: редактирование имени/группы на месте.
-
-Course lessons: drag-n-drop для order.
-
-Wiki: WYSIWYG вместо markdown-textarea.
-
-3.7. Предпросмотр
-Влияние: низкое · Усилия: низкие (~2 часа)
-
-Hover на юзера → мини-карточка.
-
-Везде URL картинки → превью 40×40.
-
-Везде serial сертификата → ссылка на /verify/:serial.
-
-4. Технические улучшения
-4.1. Lazy loading вкладок
-Влияние: высокое · Усилия: низкие (~2 часа)
-
-Сейчас все 17 табов в одном бандле. Заменить:
-
-jsx
-const Dashboard = lazy(() => import('./tabs/Dashboard.jsx'));
-// ...
-<Suspense fallback={<AdminSkeleton />}>
-  {tab === 'dash' && <Dashboard ... />}
-</Suspense>
-Экономия — 30–40% бандла. Ощущается на медленных сетях.
-
-4.2. Persist filter state в URL
-Влияние: среднее · Усилия: низкие (~полдня)
-
-Заменить useState в табах на useSearchParams. Ссылка shareable, «Назад» работает ожидаемо.
-
-4.3. Virtual scrolling
-Влияние: среднее · Усилия: средние (~1 день)
-
-В Users и Actions списки могут быть 1000+. @tanstack/react-virtual решает за 20 строк.
-
-4.4. Real-time обновления
-Влияние: высокое · Усилия: средние (~1 день)
-
-Socket.IO уже подключён. Подписать админку на каналы:
-
-admin:new_report → бейдж + toast.
-
-admin:new_password_reset → то же.
-
-admin:backup_done → toast «Бэкап готов».
-
-admin:long_task_progress → прогресс-бар в углу.
-
-Сейчас всё делается polling'ом раз в 30 сек.
-
-4.5. Web Worker для тяжёлых экспортов
-Влияние: низкое · Усилия: средние (~полдня)
-
-Экспорт CSV/JSON больших данных фризит UI. Вынести в worker.
-
-5. Мобильная адаптация
-Drawer-навигация — hamburger выкатывает список (вместе с sidebar).
-
-Bottom action bar — фиксированная панель снизу на карточке поста/юзера.
-
-Свайп-жесты — влево на уведомлении → пометить прочитанным. Pull-to-refresh (usePullToRefresh уже есть).
-
-6. Мониторинг и observability
-6.1. Панель «Здоровье системы»
-Влияние: среднее · Усилия: средние (~1 день)
-
-Отдельная мини-вкладка:
-
-API uptime за 24ч.
-
-Средний response time по роутам.
-
-Очередь cron-задач.
-
-Ошибки 5xx за сутки (из AdminAction.error).
-
-6.2. Notification center для админа
-Влияние: высокое · Усилия: средние (~1 день)
-
-Иконка 🔔 в шапке админки:
-
-«Новая жалоба», «Новый сброс пароля» (бейджи уже есть).
-
-«Долгая операция завершена» — экспорт, импорт курса.
-
-«Cron упал», «Диск заполнен > 90%».
-
-Источник данных — AdminAction, которую мы уже ведём.
-
-Технический долг (не срочно)
-Рефакторинг 21 места записи в AdminAction на единый lib/adminLog.js. Сейчас каждый роут пишет сам.
-
-Cron-cleanup для AdminAction — сейчас таблица растёт бесконечно.
-
-npm ci вместо npm install в CI-job server — улучшит воспроизводимость.
-
-Кэш collectUsedFiles() на 60 секунд — если на проде станет медленно.
-
-Что уже сделано
-✅ Детализация осиротевших файлов в обслуживании БД (scan.details.orphanFiles.items, per-file delete, batch purge, «Старше 30 дн.»).
-
-✅ Аудит удалений — каждое действие пишется в AdminAction.
-
-✅ Вкладка «История действий» — фильтры (action, adminId, from, to, failed), пагинация, раскрывающийся payload.
 
 ## 🐛 Известные ограничения
 
@@ -1801,9 +1637,13 @@ npm ci вместо npm install в CI-job server — улучшит воспро
 - **ffmpeg** обязателен для генерации waveform голосовых. Без него используется fallback.
 - **`pg_dump` и PostgreSQL должны совпадать по мажорной версии.** На проде PostgreSQL 18, а системный `pg_dump` в Ubuntu 24.04 — 16. `scripts/deploy.sh` автоматически ищет `pg_dump` от 18-й версии (aaPanel-овский `/www/server/pgsql/bin/pg_dump`).
 - **npm-зеркала.** aaPanel ставит глобально `registry.npmmirror.com`, где периодически нет свежих пакетов. `scripts/deploy.sh` принудительно переключает registry на `https://registry.npmjs.org/`.
+- **`swagger-jsdoc@7.0.0-rc.6`** — это RC-версия, стабильной v7 пока нет. Она использует top-level await (ESM) и не требует `.cjs`-обёртки. Если RC-версия сломается — план Б: откатиться на `swagger-jsdoc@6.3.0` через `.cjs`-конфиг с `createRequire`.
 - **VAPID-ключи** были в истории git (в `.env.test`). Формально скомпрометированы. Для полной чистоты нужна ротация (сломает существующие push-подписки — все пользователи должны подписаться заново). Пока отложено.
 - **PDF-экспорт сертификатов** работает на клиенте через `html-to-image` + `jsPDF`.
 - **Порты Docker vs прод.** Локально Postgres — на 5434 (чтобы не конфликтовать с системным). В CI — на 5432 (стандартный для GitHub Actions). Sanity-check в `tests/setup.js` учитывает это через `if (!process.env.CI)`.
+- **`prisma migrate dev` и прод-URL.** Prisma читает `server/.env`, где локально прописан прод-URL. Для локальных команд используйте алиас `prisma-local` (см. «Переменные окружения»), иначе получите `P1001: Can't reach database server at localhost:5432`.
+- **Покрытие Swagger неполное.** Задокументированы только `System`, `Auth`, `Users`, `Posts`. Остальные роуты (`chats`, `courses`, `admin/*` и т.д.) — по мере надобности.
+- **`PendingDeletion` растёт только на время окна отмены.** Каждая запись живёт 30 секунд, потом удаляется воркером. Отдельный cleanup не нужен.
 
 ---
 
