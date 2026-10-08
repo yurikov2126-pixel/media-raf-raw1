@@ -13,6 +13,7 @@ import { scheduleInactivityCharge } from './lib/gamificationCron.js';
 import { scheduleDeadlineReminders } from './lib/deadlineCron.js';
 import { scheduleDripUnlockNotifications } from './lib/dripCron.js';
 import { startPendingDeletionWorker } from './lib/pendingDeletion.js';
+import { scheduleActionCleanup } from './lib/adminActionCleanupCron.js';
 
 
 /* ─────────── HTTP-сервер + Socket.IO ─────────── */
@@ -38,6 +39,7 @@ scheduleInactivityCharge();
 scheduleDeadlineReminders();
 scheduleDripUnlockNotifications();
 startPendingDeletionWorker();
+scheduleActionCleanup();
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () =>

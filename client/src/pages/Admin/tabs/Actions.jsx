@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../../api/client.js';
+import { useToast } from '../../../store/toast.jsx';
 import Avatar from '../../../components/Avatar.jsx';
 
 const FAILED_CHIP = 'bg-pink/20 text-pink';
@@ -28,6 +29,7 @@ function shortAction(a) {
 }
 
 export default function Actions({ token }) {
+    const toast = useToast();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -395,6 +397,267 @@ export default function Actions({ token }) {
                         </div>
                     )}
                 </>
+            )}
+
+            <ActionsCleanupBlock token={token} />
+        </div>
+    );
+}
+
+/* ═══════════ Автоочистка журнала ═══════════ */
+
+function ActionsCleanupBlock({ token }) {
+    const [state, setState] = useState(null);
+    const [draft, setDraft] = useState({ enabled: false, days: 180 });
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState('');
+    const [confirmRun, setConfirmRun] = useState(false);
+
+    const load = async () => {
+        try {
+            const r = await api('/admin/actions/cleanup-settings', { token });
+            setState(r);
+            setDraft({ enabled: r.enabled, days: r.days });
+        } catch {
+            setState(null);
+        }
+    };
+
+    useEffect(() => {
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token]);
+
+    if (!state) return null;
+
+    const dirty =
+        draft.enabled !== state.enabled || draft.days !== state.days;
+
+    const saveSettings = async () => {
+        if (!dirty) return;
+        setBusy(true);
+        setMsg('');
+        try {
+            await api('/admin/settings', {
+                method: 'PUT',
+                token,
+                body: {
+                    actions_cleanup_enabled: draft.enabled ? 'true' : 'false',
+                    actions_cleanup_days: String(draft.days),
+                },
+            });
+            await load();
+            setMsg('✓ Настройки сохранены');
+            setTimeout(() => setMsg(''), 2500);
+        } catch (e) {
+            setMsg('Ошибка: ' + e.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const cancelDraft = () => {
+        setDraft({ enabled: state.enabled, days: state.days });
+        setMsg('');
+    };
+
+    const runDry = async () => {
+        setBusy(true);
+        setMsg('');
+        try {
+            const r = await api('/admin/actions/cleanup-now', {
+                method: 'POST',
+                token,
+                body: { dryRun: true },
+            });
+            setMsg(
+                r.wouldDelete > 0
+                    ? `🔍 Будет удалено: ${r.wouldDelete} записей (старше ${r.days} дн.)`
+                    : '✓ Нечего удалять'
+            );
+        } catch (e) {
+            setMsg('Ошибка: ' + e.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const runReal = async () => {
+        setConfirmRun(false);
+        setBusy(true);
+        setMsg('');
+        try {
+            const r = await api('/admin/actions/cleanup-now', {
+                method: 'POST',
+                token,
+                body: { dryRun: false },
+            });
+            setMsg(
+                r.deleted > 0
+                    ? `🗑️ Удалено: ${r.deleted} записей (старше ${r.days} дн.)`
+                    : '✓ Нечего удалять'
+            );
+            await load();
+        } catch (e) {
+            setMsg('Ошибка: ' + e.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="card p-5">
+            <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                <div>
+                    <div className="font-bold text-lg">🧹 Автоочистка журнала</div>
+                    <div className="text-sm text-white/50 mt-1">
+                        Удаляет старые записи AdminAction. Минимум{' '}
+                        {state.minDays} дней — защита от случайной очистки свежего.
+                        Запуск раз в сутки в 06:00.
+                    </div>
+                </div>
+                {dirty && (
+                    <span className="chip bg-orange-500/20 text-orange-300 text-[10px] shrink-0">
+                        ● Есть несохранённые изменения
+                    </span>
+                )}
+            </div>
+
+            <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                <input
+                    type="checkbox"
+                    checked={draft.enabled}
+                    disabled={busy}
+                    onChange={(e) =>
+                        setDraft((d) => ({ ...d, enabled: e.target.checked }))
+                    }
+                />
+                <span>Включить автоочистку</span>
+            </label>
+
+            <div className="grid sm:grid-cols-[240px_1fr] gap-3 items-start">
+                <div>
+                    <label className="text-xs text-white/40 uppercase tracking-wider block mb-1">
+                        Хранить (дней)
+                    </label>
+                    <input
+                        type="number"
+                        min={state.minDays}
+                        max={state.maxDays}
+                        disabled={busy}
+                        className="input"
+                        value={draft.days}
+                        onChange={(e) =>
+                            setDraft((d) => ({
+                                ...d,
+                                days: Number(e.target.value) || state.minDays,
+                            }))
+                        }
+                    />
+                    <div className="text-[11px] text-white/40 mt-1">
+                        От {state.minDays} до {state.maxDays}. По умолчанию — 180.
+                    </div>
+                </div>
+
+                <div className="rounded-2xl bg-ink-700/50 p-3">
+                    <div className="text-xs text-white/40 uppercase tracking-wider mb-1">
+                        Состояние сейчас
+                    </div>
+                    <div className="text-sm space-y-0.5">
+                        <div>
+                            Всего записей:{' '}
+                            <b>{state.total.toLocaleString('ru-RU')}</b>
+                        </div>
+                        {state.oldest && (
+                            <div className="text-white/50">
+                                Самая старая:{' '}
+                                {new Date(state.oldest).toLocaleDateString('ru-RU')}
+                            </div>
+                        )}
+                        {state.stale > 0 && (
+                            <div className="text-orange-300">
+                                Под очистку сейчас:{' '}
+                                <b>{state.stale.toLocaleString('ru-RU')}</b>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-4">
+                <button
+                    onClick={saveSettings}
+                    disabled={busy || !dirty}
+                    className="btn-primary !py-2 text-sm"
+                >
+                    {busy ? '⏳' : '💾 Сохранить настройки'}
+                </button>
+                {dirty && (
+                    <button
+                        onClick={cancelDraft}
+                        disabled={busy}
+                        className="btn-ghost !py-2 text-sm"
+                    >
+                        Отмена
+                    </button>
+                )}
+                <div className="flex-1" />
+                <button
+                    onClick={runDry}
+                    disabled={busy}
+                    className="btn-ghost !py-2 text-sm"
+                >
+                    {busy ? '⏳' : '🔍 Проверить'}
+                </button>
+                <button
+                    onClick={() => setConfirmRun(true)}
+                    disabled={busy || state.stale === 0}
+                    className="btn-primary !bg-pink !py-2 text-sm"
+                >
+                    🗑️ Запустить сейчас
+                </button>
+            </div>
+
+            {msg && (
+                <div className="mt-3 text-sm bg-white/5 rounded-xl p-3">{msg}</div>
+            )}
+
+            {confirmRun && (
+                <div
+                    className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm grid place-items-center p-4"
+                    onClick={() => !busy && setConfirmRun(false)}
+                >
+                    <div
+                        className="card max-w-lg w-full p-5"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="text-2xl mb-2">⚠️</div>
+                        <h3 className="text-xl font-bold mb-3">
+                            Удалить старые записи журнала?
+                        </h3>
+                        <p className="text-sm text-white/70 mb-4">
+                            Будут удалены записи старше {state.days} дней. Сейчас
+                            под критерий попадает <b>{state.stale}</b> из{' '}
+                            {state.total}. Действие необратимо.
+                        </p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => setConfirmRun(false)}
+                                disabled={busy}
+                                className="btn-ghost"
+                            >
+                                Отмена
+                            </button>
+                            <button
+                                onClick={runReal}
+                                disabled={busy}
+                                className="btn-primary !bg-pink"
+                            >
+                                {busy ? '…' : 'Удалить'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

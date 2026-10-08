@@ -194,4 +194,97 @@ describe('GET /api/admin/actions/meta', () => {
         // Админ с действиями есть в списке
         expect(res.body.admins.find((a) => a.id === user.id)).toBeTruthy();
     });
+    describe('GET /api/admin/actions/cleanup-settings', () => {
+        it('403 для обычного пользователя', async () => {
+            const { token } = await createUser();
+            const res = await request(app)
+                .get(`${API}/cleanup-settings`)
+                .set('Authorization', `Bearer ${token}`);
+            expect(res.status).toBe(403);
+        });
+
+        it('200 — возвращает дефолты при пустых настройках', async () => {
+            // Чистим настройки, чтобы получить дефолты
+            await prisma.setting.deleteMany({
+                where: {
+                    key: { in: ['actions_cleanup_enabled', 'actions_cleanup_days'] },
+                },
+            });
+
+            const { token } = await createAdmin();
+            const res = await request(app)
+                .get(`${API}/cleanup-settings`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.enabled).toBe(false);
+            expect(res.body.days).toBe(180);
+            expect(res.body.minDays).toBe(7);
+            expect(typeof res.body.total).toBe('number');
+        });
+    });
+
+    describe('POST /api/admin/actions/cleanup-now', () => {
+        it('dry-run не удаляет записи', async () => {
+            const { user, token } = await createAdmin();
+            const unique = `action_${Date.now()}`;
+            const old = new Date(Date.now() - 400 * 86_400_000);
+            await seedAction({ adminId: user.id, action: unique, createdAt: old });
+
+            const res = await request(app)
+                .post(`${API}/cleanup-now`)
+                .set('Authorization', `Bearer ${token}`)
+                .send({ dryRun: true });
+
+            expect(res.status).toBe(200);
+            expect(res.body.dryRun).toBe(true);
+            expect(res.body.wouldDelete).toBeGreaterThanOrEqual(1);
+
+            const stillThere = await prisma.adminAction.findFirst({
+                where: { action: unique },
+            });
+            expect(stillThere).toBeTruthy();
+        });
+
+        it('реальная очистка удаляет только старше N дней', async () => {
+            const { user, token } = await createAdmin();
+            const unique = `action_${Date.now()}`;
+            const veryOld = new Date(Date.now() - 500 * 86_400_000);
+            const fresh = new Date();
+            await seedAction({ adminId: user.id, action: unique, createdAt: veryOld });
+            await seedAction({ adminId: user.id, action: unique, createdAt: fresh });
+
+            // Устанавливаем порог 30 дней + включаем
+            await prisma.setting.upsert({
+                where: { key: 'actions_cleanup_enabled' },
+                update: { value: 'true' },
+                create: { key: 'actions_cleanup_enabled', value: 'true' },
+            });
+            await prisma.setting.upsert({
+                where: { key: 'actions_cleanup_days' },
+                update: { value: '30' },
+                create: { key: 'actions_cleanup_days', value: '30' },
+            });
+
+            const res = await request(app)
+                .post(`${API}/cleanup-now`)
+                .set('Authorization', `Bearer ${token}`)
+                .send({ dryRun: false });
+
+            expect(res.status).toBe(200);
+            expect(res.body.deleted).toBeGreaterThanOrEqual(1);
+
+            // Свежая запись осталась.
+            const freshStill = await prisma.adminAction.findFirst({
+                where: { action: unique, createdAt: { gte: new Date(Date.now() - 86_400_000) } },
+            });
+            expect(freshStill).toBeTruthy();
+
+            // Старая — удалена.
+            const oldGone = await prisma.adminAction.findFirst({
+                where: { action: unique, createdAt: veryOld },
+            });
+            expect(oldGone).toBeNull();
+        });
+    });
 });
