@@ -9,7 +9,7 @@ import PostReactions from './PostReactions.jsx';
 import CommentSection from './CommentSection.jsx';
 import ReportButton from './ReportButton.jsx';
 
-export default function PostCard({ post, author, onChanged, onDeleted, compact = false }) {
+export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false }) {
     const { user, token } = useAuth();
     const [editing, setEditing] = useState(false);
     const [text, setText] = useState(post.content || '');
@@ -42,6 +42,17 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
         } finally {
             setBusy(false);
         }
+    };
+
+    const togglePin = async () => {
+        setBusy(true);
+        setMenuOpen(false);
+        try {
+            const result = await api(`/posts/${post.id}/pin`, { method: 'PATCH', token, body: { pinned: !post.pinnedAt } });
+            onChanged?.({ ...post, pinnedAt: result.pinnedAt });
+            onPinned?.();
+        } catch (error) { alert(error.message || 'Не удалось изменить закрепление'); }
+        finally { setBusy(false); }
     };
 
     const remove = async () => {
@@ -157,6 +168,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                                         >
                                             ✏️ Редактировать
                                         </button>
+                                        {isOwner && <button type="button" disabled={busy} onClick={togglePin} className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5">{post.pinnedAt ? '📌 Открепить' : '📌 Закрепить в профиле'}</button>}
                                         {images.length > 0 && <button type="button" className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5" onClick={beginMediaEdit}>🖼️ Изменить фотографии</button>}
                                         <button
                                             onClick={() => {
@@ -175,6 +187,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                 </div>
             )}
 
+            {post.pinnedAt && <div className="flex items-center gap-1 text-xs font-medium text-violet-300 mb-3" aria-label="Закреплённая публикация">📌 Закреплённая публикация</div>}
             {/* Автор */}
             <Link
                 to={`/app/u/${author?.username}`}
