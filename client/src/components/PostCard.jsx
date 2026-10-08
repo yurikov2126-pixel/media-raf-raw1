@@ -47,7 +47,15 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
     };
 
     const commentCount = post._count?.comments ?? 0;
-    const images = post.mediaUrls?.length ? post.mediaUrls : (post.mediaUrl ? [post.mediaUrl] : []);
+    const images = (() => {
+        if (post.mediaUrls?.length) return post.mediaUrls;
+        if (!post.mediaUrl) return [];
+        if (post.mediaType === 'gallery') {
+            try { const parsed = JSON.parse(post.mediaUrl); return Array.isArray(parsed) ? parsed : []; }
+            catch { return []; }
+        }
+        return [post.mediaUrl];
+    })();
     const [activeImage, setActiveImage] = useState(null);
 
     const cardPadding = compact ? 'p-3' : 'p-5';
