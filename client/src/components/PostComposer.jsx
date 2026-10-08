@@ -7,7 +7,6 @@ import Avatar from './Avatar.jsx';
 
 export default function PostComposer({ onPublished, onClose }) {
     const { user, token } = useAuth();
-    const [gallery, setGallery] = useState([]);
     const [cropping, setCropping] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [publishing, setPublishing] = useState(false);
@@ -146,7 +145,6 @@ export default function PostComposer({ onPublished, onClose }) {
                             </div>
                             {text.trim() && <p className="whitespace-pre-wrap break-words text-white/90">{text}</p>}
                             {items.filter((item) => item.status === 'done').map((item, index) => <img key={item.id} className="w-full max-h-96 object-contain rounded-xl mt-3" src={resolveUrl(item.url)} alt={`Фото ${index + 1}`} />)}
-                            {image && <img className="w-full max-h-96 object-contain rounded-xl mt-3" src={image} alt="Предпросмотр фотографии" />}
                             {!text.trim() && !items.length && <p className="text-white/40 text-sm">Добавьте текст или фотографию для предпросмотра.</p>}
                         </div>
                     )}
@@ -157,11 +155,11 @@ export default function PostComposer({ onPublished, onClose }) {
                         <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn-ghost" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? "Скрыть предпросмотр" : "Предпросмотр"}</button>
                             <button type="button" className="btn-ghost" onClick={() => onClose?.()} disabled={publishing || uploading}>Закрыть</button>
-                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !gallery.length)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
+                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || items.some((item) => item.status !== 'done') || (!text.trim() && !items.length)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
                         </div>
                     </div>
                 </section>
-            {cropping && <ImageCropper file={cropping.file} aspect={4 / 3} outputWidth={1280} outputHeight={960} title="Обрезка фото — перемещайте и масштабируйте" onDone={onCrop} onCancel={() => setCropping(null)} />}
+            {cropping && <ImageCropper file={cropping.file} aspect={4 / 3} outputWidth={1280} outputHeight={960} title="Обрезка фото — перемещайте и масштабируйте" onDone={onCrop} onCancel={() => { setCropping(null); setEditingId(null); }} />}
 
 
         </>
