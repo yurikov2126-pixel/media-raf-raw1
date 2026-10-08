@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar.jsx';
 import ProfileEditor from '../components/ProfileEditor.jsx';
 import PostComposer from '../components/PostComposer.jsx';
 import PostCard from '../components/PostCard.jsx';
+import ProfilePhotoGallery from '../components/ProfilePhotoGallery.jsx';
 import ReportButton from '../components/ReportButton.jsx';
 import LevelBadge from '../components/LevelBadge.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
@@ -296,6 +297,7 @@ export default function Profile() {
                 <div className="mt-6 border-b border-white/10 flex gap-4 overflow-x-auto no-scrollbar">
                     {[
                         ['posts', 'Публикации'],
+                        ['photos', '📷 Фотографии'],
                         ['courses', 'Курсы'],
                         ['certificates', 'Сертификаты'],
                         ...(showQuestsTab ? [['quests', '⚔️ Квесты']] : []),
@@ -329,6 +331,7 @@ export default function Profile() {
                                         posts: pr.posts.map((x) => (x.id === u.id ? u : x)),
                                     }))
                                 }
+                                onPinned={load}
                                 onDeleted={(id) =>
                                     setProfile((pr) => ({
                                         ...pr,
@@ -344,6 +347,8 @@ export default function Profile() {
                         )}
                     </div>
                 )}
+
+                {tab === 'photos' && <ProfilePhotoGallery posts={profile.posts || []} />}
 
                 {tab === 'courses' && (
                     <div className="py-6 grid gap-3">
