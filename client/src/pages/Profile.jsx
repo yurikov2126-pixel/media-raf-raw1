@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { api, uploadBlob } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useGamification } from '../store/gamification.jsx';
@@ -84,6 +84,7 @@ function SocialLink({ network, value }) {
 
 export default function Profile() {
     const { username } = useParams();
+    const location = useLocation();
     const { user: me, token } = useAuth();
     const gamifStore = useGamification();
 
@@ -112,6 +113,13 @@ export default function Profile() {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [username, token]);
+
+    useEffect(() => {
+        if (!isMe || !location.state?.compose) return;
+        setTab('posts');
+        setTimeout(() => document.querySelector('.profile-v2 textarea')?.focus(), 50);
+        window.history.replaceState({}, document.title, window.location.href);
+    }, [isMe, location.state?.compose]);
 
     useEffect(() => {
         if (!token || !profile) return;
