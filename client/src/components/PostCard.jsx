@@ -47,6 +47,8 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
     };
 
     const commentCount = post._count?.comments ?? 0;
+    const images = post.mediaUrls?.length ? post.mediaUrls : (post.mediaUrl ? [post.mediaUrl] : []);
+    const [activeImage, setActiveImage] = useState(null);
 
     const cardPadding = compact ? 'p-3' : 'p-5';
     const avatarSize = compact ? 32 : 44;
@@ -151,17 +153,29 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
             )}
 
             {/* Медиа */}
-            {post.mediaUrl && (
+            {images.length > 0 && (
                 <div className={`${compact ? 'mt-2' : 'mt-3'} rounded-2xl overflow-hidden`}>
-                    <img
-                        src={resolveUrl(post.mediaUrl)}
-                        alt=""
-                        className={`w-full object-cover ${mediaMaxH}`}
-                        loading="lazy"
-                    />
+                    <div className={images.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
+                        {images.map((url, index) => (
+                            <button key={index} type="button" className="block w-full overflow-hidden rounded-xl" onClick={() => setActiveImage(index)} aria-label={`Открыть фото ${index + 1}`}>
+                                <img src={resolveUrl(url)} alt={`Фото ${index + 1}`} className={`w-full object-cover ${images.length > 1 ? 'h-44 md:h-64' : mediaMaxH}`} loading="lazy" />
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
 
+            {activeImage !== null && (
+                <div className="fixed inset-0 z-[230] bg-black/95 flex flex-col items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="Просмотр фотографий">
+                    <button type="button" className="absolute top-4 right-4 btn-ghost" onClick={() => setActiveImage(null)}>Закрыть ✕</button>
+                    <img src={resolveUrl(images[activeImage])} alt={`Фото ${activeImage + 1}`} className="max-w-full max-h-[78vh] object-contain" />
+                    <div className="flex gap-4 items-center mt-4">
+                        <button type="button" className="btn-ghost" disabled={activeImage === 0} onClick={() => setActiveImage((i) => i - 1)}>←</button>
+                        <span>{activeImage + 1} / {images.length}</span>
+                        <button type="button" className="btn-ghost" disabled={activeImage === images.length - 1} onClick={() => setActiveImage((i) => i + 1)}>→</button>
+                    </div>
+                </div>
+            )}
             {/* Реакции */}
             <div className={reactionsMargin}>
                 <PostReactions
