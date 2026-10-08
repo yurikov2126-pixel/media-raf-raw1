@@ -128,6 +128,7 @@ router.get('/feed', auth, async (req, res) => {
             mediaType: p.mediaType,
             createdAt: p.createdAt,
             editedAt: p.editedAt,
+            pinnedAt: p.pinnedAt,
             author: p.author,
             reactions: Object.values(grouped),
             myReactions,
@@ -289,6 +290,19 @@ router.patch('/:id', auth, async (req, res) => {
         mediaUrl: updated.mediaType === 'gallery' ? postImages(updated)[0] || null : updated.mediaUrl,
         mediaUrls: postImages(updated),
     });
+});
+
+/* Закрепить или открепить собственную публикацию. Один закреплённый пост на автора. */
+router.patch('/:id/pin', auth, async (req, res) => {
+    const post = await prisma.post.findUnique({ where: { id: req.params.id } });
+    if (!post) return res.status(404).json({ error: 'Пост не найден' });
+    if (post.authorId !== req.user.id) return res.status(403).json({ error: 'Закреплять публикации может только автор' });
+    const pin = req.body?.pinned === true;
+    const updated = await prisma.$transaction(async (tx) => {
+        if (pin) await tx.post.updateMany({ where: { authorId: req.user.id, pinnedAt: { not: null } }, data: { pinnedAt: null } });
+        return tx.post.update({ where: { id: post.id }, data: { pinnedAt: pin ? new Date() : null } });
+    });
+    res.json({ id: updated.id, pinnedAt: updated.pinnedAt });
 });
 
 /* ─────────── Удалить пост ─────────── */
