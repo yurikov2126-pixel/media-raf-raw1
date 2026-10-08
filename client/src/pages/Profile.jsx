@@ -204,7 +204,7 @@ export default function Profile() {
     const showQuestsTab = isMe && gamifStore.enabled && gamifStore.questsEnabled;
 
     return (
-        <div className="max-w-4xl mx-auto profile-v2">
+        <div className="ui-profile-page profile-v2">
             <div className="relative h-44 md:h-60 overflow-hidden rounded-b-3xl">
                 {profile.cover ? (
                     <img
