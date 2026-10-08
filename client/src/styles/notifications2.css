@@ -1,1 +1,61 @@
 .notifications-page{padding-bottom:56px}.notifications-page .card{border-radius:24px!important}.notifications-page [data-notification-item]{min-height:72px}.notifications-page [data-notification-item]:hover{background:rgba(255,255,255,.045)}
+
+.notifications-page {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.notifications-page > * {
+  min-width: 0;
+}
+
+.notifications-page [data-notification-item] {
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.notifications-page [data-notification-item] > div {
+  min-width: 0;
+}
+
+.notifications-page [data-notification-item] .text-sm,
+.notifications-page [data-notification-item] .text-xs,
+.notifications-page [data-notification-item] .text-\[10px\] {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .notifications-page {
+    padding-inline: 12px;
+    padding-bottom: 18px;
+  }
+
+  .notifications-page > .flex:first-child {
+    align-items: stretch;
+  }
+
+  .notifications-page > .flex:first-child > div:first-child {
+    width: 100%;
+  }
+
+  .notifications-page > .flex:first-child > div:last-child {
+    width: 100%;
+  }
+
+  .notifications-page > .flex:first-child > div:last-child > button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .notifications-page > .flex:first-child > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .notifications-page > .flex:first-child > div:last-child > button {
+    width: 100%;
+  }
+}
