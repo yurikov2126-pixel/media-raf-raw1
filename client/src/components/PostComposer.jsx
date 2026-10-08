@@ -80,7 +80,7 @@ export default function PostComposer({ onPublished, onClose }) {
 
     return (
         <>
-                <section id="feed-composer" className="card p-4 md:p-6 mb-6" aria-label="Создание публикации">
+                <section className="card p-4 md:p-6 mb-6" data-post-composer="true" aria-label="Создание публикации">
                     <textarea autoFocus className="input resize-none w-full" rows={4} placeholder="Что нового у команды?" value={text} onChange={(e) => setText(e.target.value)} />
                     {draft.hasDraft && <p className="text-xs text-white/40 mt-2">Черновик сохраняется автоматически</p>}
                     {selectedFile && !cropping && (
@@ -134,7 +134,7 @@ export default function PostComposer({ onPublished, onClose }) {
                         }} />
                         <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn-ghost" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? "Скрыть предпросмотр" : "Предпросмотр"}</button>
-                            <button type="button" className="btn-ghost" onClick={() => onClose?.()} disabled={publishing}>Закрыть</button>
+                            <button type="button" className="btn-ghost" onClick={() => onClose?.()} disabled={publishing || uploading}>Закрыть</button>
                             <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !gallery.length)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
                         </div>
                     </div>
