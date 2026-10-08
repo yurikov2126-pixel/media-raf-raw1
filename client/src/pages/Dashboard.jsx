@@ -5,27 +5,9 @@ import { useAuth } from '../store/auth.jsx';
 import { useGamification } from '../store/gamification.jsx';
 import { useNotifications } from '../store/notifications.jsx';
 import { useSettings } from '../store/settings.jsx';
-import Avatar from '../components/Avatar.jsx';
 import Icon from '../components/Icon.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
-import NotificationBell from '../components/NotificationBell.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 6) return 'Доброй ночи';
-  if (h < 12) return 'Доброе утро';
-  if (h < 18) return 'Добрый день';
-  return 'Добрый вечер';
-}
-
-function formatDate(date) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(date);
-}
 
 const NOTIFICATION_ICON = {
   message: 'message',
@@ -45,7 +27,7 @@ const NOTIFICATION_ICON = {
 
 export default function Dashboard() {
   const { user, token } = useAuth();
-  const { dashboard, brand, commandPalette } = useSettings();
+  const { dashboard, brand } = useSettings();
   const gamif = useGamification();
   const notifications = useNotifications();
   const navigate = useNavigate();
@@ -93,10 +75,6 @@ export default function Dashboard() {
   const firstName = user?.fullName?.split(' ')?.[0] || 'участник';
   const show = (value) => value !== false;
 
-  const openCommand = () => {
-    window.dispatchEvent(new Event('mrr:command-open'));
-  };
-
   const createPost = () => {
     navigate(`/app/u/${user.username}`, { state: { compose: true } });
   };
@@ -131,29 +109,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="ui-page">
-      <div className="ui-topbar">
-        <div className="min-w-0">
-          <div className="ui-kicker">Рабочее пространство</div>
-          <div className="ui-page-title">Главная</div>
-          <div className="ui-page-subtitle">{greeting()}, {firstName} · {formatDate(new Date())}</div>
-        </div>
-        <div className="ui-topbar__actions">
-          {commandPalette.enabled && (
-            <button type="button" className="ui-command-trigger" onClick={openCommand}>
-              <Icon name="search" size={17} />
-              <span className="hidden sm:inline">Поиск и переход</span>
-              <kbd>{commandPalette.shortcutLabel}</kbd>
-            </button>
-          )}
-          <NotificationBell align="right" />
-          <Link to={`/app/u/${user.username}`} className="ui-topbar__avatar" aria-label="Открыть профиль">
-            <Avatar user={user} size={40} />
-          </Link>
-        </div>
-      </div>
-
-      <section className="ui-hero">
+    <div className="ui-page">      <section className="ui-hero">
         <div className="ui-eyebrow"><Icon name="sparkles" size={13} /> {brand.logoText}</div>
         <h1 className="ui-hero__title">
           {dashboard.welcomeTitle.split('контент').map((part, i) => (
@@ -174,7 +130,7 @@ export default function Dashboard() {
                     <span className="ui-action__title">{action.label}</span>
                     <span className="ui-action__sub">{action.sub}</span>
                   </span>
-                  {!action.onClick && <Icon name="chevronRight" size={15} />}
+                  <span className="ui-action__arrow" aria-hidden="true"><Icon name="chevronRight" size={15} /></span>
                 </>
               );
 
