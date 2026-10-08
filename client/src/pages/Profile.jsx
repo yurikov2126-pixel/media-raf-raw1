@@ -92,6 +92,7 @@ export default function Profile() {
     const [profile, setProfile] = useState(null);
     const [tab, setTab] = useState('posts');
     const [editorOpen, setEditorOpen] = useState(false);
+    const [composerOpen, setComposerOpen] = useState(false);
     const [gamif, setGamif] = useState(null);
 
     const isMe = me.username === username;
@@ -113,6 +114,7 @@ export default function Profile() {
     useEffect(() => {
         if (!isMe || !location.state?.compose) return;
         setTab('posts');
+        setComposerOpen(true);
         setTimeout(() => document.querySelector('.profile-v2 textarea')?.focus(), 50);
         window.history.replaceState({}, document.title, window.location.href);
     }, [isMe, location.state?.compose]);
@@ -325,7 +327,10 @@ export default function Profile() {
 
                 {tab === 'posts' && (
                     <div className="py-6 space-y-4">
-                        {isMe && <PostComposer onPublished={() => { load(); gamifStore.reload?.(); gamifStore.reloadQuests?.(); }} />}
+                        {isMe && (composerOpen
+                            ? <PostComposer onClose={() => setComposerOpen(false)} onPublished={() => { setComposerOpen(false); load(); gamifStore.reload?.(); gamifStore.reloadQuests?.(); }} />
+                            : <button type="button" className="btn-primary w-full" onClick={() => setComposerOpen(true)}>✏️ Создать публикацию</button>
+                        )}
                         {sortedPosts.map((p) => (
                             <PostCard
                                 key={p.id}

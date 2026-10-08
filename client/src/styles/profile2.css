@@ -126,3 +126,11 @@
     grid-auto-rows: 190px;
   }
 }
+
+/* Profile tabs and their last controls must scroll clear of the floating PWA navigation. */
+@media (max-width: 900px) {
+  .ui-profile-page {
+    padding-bottom: calc(210px + env(safe-area-inset-bottom, 0px));
+  }
+  .ui-profile-page .profile-v2 > *:last-child { scroll-margin-bottom: 140px; }
+}
