@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { api, uploadBlob } from '../api/client.js';
+import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useGamification } from '../store/gamification.jsx';
 import Avatar from '../components/Avatar.jsx';
 import ProfileEditor from '../components/ProfileEditor.jsx';
-import ImageCropper from '../components/ImageCropper.jsx';
+import PostComposer from '../components/PostComposer.jsx';
 import PostCard from '../components/PostCard.jsx';
 import ReportButton from '../components/ReportButton.jsx';
 import LevelBadge from '../components/LevelBadge.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
 import AchievementCard from '../components/AchievementCard.jsx';
 import QuestCard from '../components/QuestCard.jsx';
-import usePostDraft from '../hooks/usePostDraft.js';
 import usePageMeta from '../hooks/usePageMeta.js';
 import ProfilePortfolioStrip from '../components/ProfilePortfolioStrip.jsx';
 
@@ -90,19 +89,10 @@ export default function Profile() {
 
     const [profile, setProfile] = useState(null);
     const [tab, setTab] = useState('posts');
-    const [postImage, setPostImage] = useState('');
-    const [cropping, setCropping] = useState(null);
-    const [uploadingImage, setUploadingImage] = useState(false);
-    const [publishing, setPublishing] = useState(false);
     const [editorOpen, setEditorOpen] = useState(false);
     const [gamif, setGamif] = useState(null);
-    const fileRef = useRef(null);
 
     const isMe = me.username === username;
-
-    const draft = usePostDraft(isMe ? me.id : null);
-    const postText = draft.text;
-    const setPostText = draft.setText;
 
     const load = () =>
         api(`/users/${username}`, { token })
@@ -134,50 +124,6 @@ export default function Profile() {
         image: profile?.avatar,
         type: 'profile',
     });
-
-    const pickPostImage = (e) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file || !file.type.startsWith('image/')) return;
-        setCropping({ file });
-    };
-
-    const handleCropped = async (blob) => {
-        setCropping(null);
-        try {
-            setUploadingImage(true);
-            const res = await uploadBlob(blob, `post-${Date.now()}.jpg`, token);
-            setPostImage(res.absoluteUrl);
-        } catch (e) {
-            alert(e.message);
-        } finally {
-            setUploadingImage(false);
-        }
-    };
-
-    const publish = async () => {
-        if (!postText.trim() && !postImage) return;
-        setPublishing(true);
-        try {
-            await api('/posts', {
-                method: 'POST',
-                token,
-                body: {
-                    content: postText,
-                    mediaUrl: postImage || null,
-                    mediaType: postImage ? 'image' : null,
-                },
-            });
-            setPostText('');
-            setPostImage('');
-            draft.clear();
-            load();
-            gamifStore.reload?.();
-            gamifStore.reloadQuests?.();
-        } finally {
-            setPublishing(false);
-        }
-    };
 
     const openChat = async () => {
         const chat = await api('/chats/direct', {
@@ -371,69 +317,7 @@ export default function Profile() {
 
                 {tab === 'posts' && (
                     <div className="py-6 space-y-4">
-                        {isMe && (
-                            <div className="card p-4">
-                                <textarea
-                                    className="input resize-none"
-                                    rows={3}
-                                    placeholder="Что нового?"
-                                    value={postText}
-                                    onChange={(e) => setPostText(e.target.value)}
-                                />
-                                {draft.hasDraft && (
-                                    <div className="text-[11px] text-white/40 mt-1 flex items-center gap-1">
-                                        <span>💾</span>
-                                        <span>Черновик сохраняется автоматически</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => draft.clear()}
-                                            className="ml-auto text-white/30 hover:text-pink transition"
-                                        >
-                                            Очистить
-                                        </button>
-                                    </div>
-                                )}
-                                {postImage && (
-                                    <div className="relative mt-3 rounded-2xl overflow-hidden">
-                                        <img
-                                            src={postImage}
-                                            alt=""
-                                            className="w-full max-h-72 object-cover"
-                                        />
-                                        <button
-                                            onClick={() => setPostImage('')}
-                                            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                )}
-                                <div className="mt-3 flex items-center justify-between">
-                                    <button
-                                        type="button"
-                                        onClick={() => fileRef.current?.click()}
-                                        className="btn-ghost !py-2 !px-3 text-sm"
-                                        disabled={uploadingImage}
-                                    >
-                                        {uploadingImage ? 'Загрузка…' : '📷 Фото'}
-                                    </button>
-                                    <input
-                                        ref={fileRef}
-                                        type="file"
-                                        accept="image/*"
-                                        hidden
-                                        onChange={pickPostImage}
-                                    />
-                                    <button
-                                        onClick={publish}
-                                        disabled={publishing || (!postText.trim() && !postImage)}
-                                        className="btn-primary !py-2"
-                                    >
-                                        {publishing ? '…' : 'Опубликовать'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        {isMe && <PostComposer onPublished={() => { load(); gamifStore.reload?.(); gamifStore.reloadQuests?.(); }} />}
                         {profile.posts?.map((p) => (
                             <PostCard
                                 key={p.id}
@@ -590,17 +474,7 @@ export default function Profile() {
                     onSaved={(u) => setProfile((p) => ({ ...p, ...u }))}
                 />
             )}
-            {cropping && (
-                <ImageCropper
-                    file={cropping.file}
-                    aspect={4 / 3}
-                    outputWidth={1280}
-                    outputHeight={960}
-                    title="Обрезка изображения для поста"
-                    onCancel={() => setCropping(null)}
-                    onDone={handleCropped}
-                />
-            )}
+
         </div>
     );
 }
