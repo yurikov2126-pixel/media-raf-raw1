@@ -16,6 +16,7 @@ import AchievementCard from '../components/AchievementCard.jsx';
 import QuestCard from '../components/QuestCard.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
 import ProfilePortfolioStrip from '../components/ProfilePortfolioStrip.jsx';
+import ProfilePortfolio3 from '../components/ProfilePortfolio3.jsx';
 
 const DIR = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
@@ -306,6 +307,7 @@ export default function Profile() {
                         ['posts', 'Публикации'],
                         ['photos', '📷 Фотографии'],
                         ['albums', '🗂️ Альбомы'],
+                        ['portfolio', '✨ Портфолио'],
                         ['courses', 'Курсы'],
                         ['certificates', 'Сертификаты'],
                         ...(showQuestsTab ? [['quests', '⚔️ Квесты']] : []),
@@ -362,6 +364,8 @@ export default function Profile() {
                 {tab === 'photos' && <ProfilePhotoGallery posts={profile.posts || []} />}
 
                 {tab === 'albums' && <ProfileAlbums username={username} posts={profile.posts || []} isMe={isMe} />}
+
+                {tab === 'portfolio' && <ProfilePortfolio3 username={username} posts={profile.posts || []} isMe={isMe} />}
 
                 {tab === 'courses' && (
                     <div className="py-6 grid gap-3">
