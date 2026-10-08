@@ -8,6 +8,7 @@ import { useSettings } from '../store/settings.jsx';
 import Avatar from '../components/Avatar.jsx';
 import Icon from '../components/Icon.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
+import NotificationBell from '../components/NotificationBell.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
 
 function greeting() {
@@ -133,17 +134,23 @@ export default function Dashboard() {
     <div className="ui-page">
       <div className="ui-topbar">
         <div className="min-w-0">
-          <div className="ui-kicker">MEDIA·RAF·RAW · рабочее пространство</div>
-          <div className="ui-page-title">{greeting()}, {firstName}</div>
-          <div className="ui-page-subtitle">{formatDate(new Date())}</div>
+          <div className="ui-kicker">Рабочее пространство</div>
+          <div className="ui-page-title">Главная</div>
+          <div className="ui-page-subtitle">{greeting()}, {firstName} · {formatDate(new Date())}</div>
         </div>
-        {commandPalette.enabled && (
-          <button type="button" className="ui-command-trigger" onClick={openCommand}>
-            <Icon name="search" size={17} />
-            <span className="hidden sm:inline">Что ищем?</span>
-            <kbd>{commandPalette.shortcutLabel}</kbd>
-          </button>
-        )}
+        <div className="ui-topbar__actions">
+          {commandPalette.enabled && (
+            <button type="button" className="ui-command-trigger" onClick={openCommand}>
+              <Icon name="search" size={17} />
+              <span className="hidden sm:inline">Поиск и переход</span>
+              <kbd>{commandPalette.shortcutLabel}</kbd>
+            </button>
+          )}
+          <NotificationBell align="right" />
+          <Link to={`/app/u/${user.username}`} className="ui-topbar__avatar" aria-label="Открыть профиль">
+            <Avatar user={user} size={40} />
+          </Link>
+        </div>
       </div>
 
       <section className="ui-hero">
