@@ -99,6 +99,29 @@ async function uploadFormData(fd, token) {
     return data;
 }
 
+export function uploadFileWithProgress(file, token, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${BASE}/uploads`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) onProgress?.(Math.round(event.loaded / event.total * 100));
+        };
+        xhr.onload = () => {
+            emitNetworkOk();
+            let data;
+            try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+            else reject(new ApiError(data.error || 'Ошибка загрузки', xhr.status, data));
+        };
+        xhr.onerror = () => { emitNetworkError(); reject(new ApiError('Сетевая ошибка', 0, null)); };
+        xhr.onabort = () => reject(new ApiError('Загрузка отменена', 0, null));
+        const form = new FormData();
+        form.append('file', file);
+        xhr.send(form);
+    });
+}
+
 export async function uploadFile(file, token) {
     const fd = new FormData();
     fd.append('file', file);
