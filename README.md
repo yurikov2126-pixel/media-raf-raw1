@@ -1043,7 +1043,8 @@ export const myCourse = {
 ```
 Authorization: Bearer <JWT>
 ```
-
+ 
+ычы
 ### Основные роуты
 
 | Роут | Описание |
