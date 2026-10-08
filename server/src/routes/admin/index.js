@@ -23,6 +23,7 @@ import homeworkRouter from './homework.js';
 import settingsRouter from './settings.js';
 import dashboardRouter from './dashboard.js';
 import undoRouter from './undo.js';
+import searchRouter from './search.js';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use(auth, requireRole('ADMIN'));
 router.use(statsRouter);
 router.use(systemRouter);
 router.use(actionsRouter);
+router.use(searchRouter);
 router.use(undoRouter);
 router.use(dashboardRouter);  // ← добавлено
 router.use(analyticsRouter);

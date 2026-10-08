@@ -272,8 +272,7 @@ export default function Admin() {
 
             {paletteOpen && (
                 <AdminCommandPalette
-                    users={users}
-                    courses={courses}
+                    token={token}
                     onClose={() => setPaletteOpen(false)}
                 />
             )}
