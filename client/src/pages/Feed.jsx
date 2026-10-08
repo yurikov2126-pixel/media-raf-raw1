@@ -182,13 +182,13 @@ export default function Feed() {
                         <div className="card p-3 mt-3 flex flex-wrap gap-2 items-center justify-between">
                             <span className="text-sm min-w-0 break-all">📷 {selectedFile.name}</span>
                             <div className="flex gap-2 flex-wrap">
-                                <button type="button" className="btn-ghost" disabled={uploading} onClick={() => setCropping({ file: selectedFile })}>Обрезать</button>
+                                <button type="button" className="btn-ghost" disabled={uploading} onClick={() => setCropping({ file: selectedFile })}>Обрезать (4:3)</button>
                                 <button type="button" className="btn-primary" disabled={uploading} onClick={uploadOriginal}>{uploading ? 'Загрузка…' : 'Загрузить без обрезки'}</button>
                                 <button type="button" className="btn-ghost" disabled={uploading} onClick={() => setSelectedFile(null)}>Убрать</button>
                             </div>
                         </div>
                     )}
-                    {image && <div className="relative mt-3"><img src={image} alt="Фото к публикации" className="max-h-80 w-full object-contain rounded-xl" /><button type="button" className="btn-ghost mt-2" onClick={() => setImage('')}>Удалить фото</button></div>}
+                    {image && <div className="relative mt-3"><img src={image} alt="Фото к публикации" className="max-h-80 w-full object-contain rounded-xl" /><button type="button" className="btn-ghost mt-2" onClick={() => { setImage(''); setSelectedFile(null); }}>Удалить фото</button></div>}
                     {preview && (
                         <div className="ui-compose-preview mt-4" aria-label="Предпросмотр публикации">
                             <div className="text-xs text-white/40 mb-3 uppercase tracking-wider">Так публикация будет выглядеть в ленте</div>
@@ -213,7 +213,7 @@ export default function Feed() {
                     </div>
                 </section>
             )}
-            {cropping && <ImageCropper file={cropping.file} aspect={4 / 3} outputWidth={1280} outputHeight={960} title="Обрезка изображения для поста" onDone={onCrop} onCancel={() => setCropping(null)} />}
+            {cropping && <ImageCropper file={cropping.file} aspect={4 / 3} outputWidth={1280} outputHeight={960} title="Обрезка фото — перемещайте и масштабируйте" onDone={onCrop} onCancel={() => setCropping(null)} />}
 
             {loading && (
                 <div className="card p-10 text-center text-white/40">Загрузка ленты…</div>
