@@ -175,7 +175,11 @@ describe('PATCH /api/admin/users/:id/password', () => {
     });
 });
 
-/* ═══════════ DELETE /api/admin/users/:id ═══════════ */
+/* ═══════════ DELETE /api/admin/users/:id ═══════════
+ * Удаление теперь отложенное: роут ставит запись в PendingDeletion
+ * и возвращает undoToken. Реальное удаление делает воркер
+ * processPendingDeletions() после истечения окна (30 сек).
+ * В тестах окно форсируется через executeAt в прошлое. */
 
 describe('DELETE /api/admin/users/:id', () => {
     it('400 — нельзя удалить самого себя', async () => {
@@ -188,8 +192,9 @@ describe('DELETE /api/admin/users/:id', () => {
         expect(res.status).toBe(400);
         expect(res.body.error).toMatch(/собственный аккаунт/i);
 
-        // Проверяем, что админ не удалился
-        const stillThere = await prisma.user.findUnique({ where: { id: admin.user.id } });
+        const stillThere = await prisma.user.findUnique({
+            where: { id: admin.user.id },
+        });
         expect(stillThere).not.toBeNull();
     });
 
@@ -203,7 +208,7 @@ describe('DELETE /api/admin/users/:id', () => {
         expect(res.status).toBe(404);
     });
 
-    it('200 — удаляет пользователя и его данные', async () => {
+    it('200 — ставит удаление в очередь, воркер выполняет', async () => {
         const { token } = await createAdmin();
         const { user } = await createUser();
 
@@ -218,11 +223,103 @@ describe('DELETE /api/admin/users/:id', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.ok).toBe(true);
+        expect(res.body.undoToken).toBeTruthy();
+        expect(typeof res.body.undoWindowMs).toBe('number');
 
+        // Юзер пока на месте — удаление отложено.
+        const stillThere = await prisma.user.findUnique({ where: { id: user.id } });
+        expect(stillThere).not.toBeNull();
+
+        // Запись в очереди существует.
+        const pending = await prisma.pendingDeletion.findUnique({
+            where: { id: res.body.undoToken },
+        });
+        expect(pending).toMatchObject({
+            entityType: 'user',
+            entityId: user.id,
+        });
+
+        // Форсируем истечение окна и запускаем воркер вручную.
+        await prisma.pendingDeletion.update({
+            where: { id: res.body.undoToken },
+            data: { executeAt: new Date(Date.now() - 1000) },
+        });
+
+        const { processPendingDeletions } = await import(
+            '../src/lib/pendingDeletion.js'
+            );
+        await processPendingDeletions();
+
+        // Теперь юзера нет.
         const gone = await prisma.user.findUnique({ where: { id: user.id } });
         expect(gone).toBeNull();
 
         const posts = await prisma.post.findMany({ where: { authorId: user.id } });
         expect(posts).toHaveLength(0);
+
+        // Очередь пуста.
+        const stillPending = await prisma.pendingDeletion.findUnique({
+            where: { id: res.body.undoToken },
+        });
+        expect(stillPending).toBeNull();
+    });
+
+    it('POST /undo/:token — отменяет удаление, юзер остаётся', async () => {
+        const { token } = await createAdmin();
+        const { user } = await createUser();
+
+        const del = await request(app)
+            .delete(`${API}/users/${user.id}`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(del.status).toBe(200);
+
+        const undo = await request(app)
+            .post(`/api/admin/undo/${del.body.undoToken}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(undo.status).toBe(200);
+        expect(undo.body.ok).toBe(true);
+        expect(undo.body.entityId).toBe(user.id);
+
+        // Юзер на месте.
+        const stillThere = await prisma.user.findUnique({ where: { id: user.id } });
+        expect(stillThere).not.toBeNull();
+
+        // Очередь пуста.
+        const pending = await prisma.pendingDeletion.findUnique({
+            where: { id: del.body.undoToken },
+        });
+        expect(pending).toBeNull();
+    });
+
+    it('POST /undo/:token — 404 для неизвестного токена', async () => {
+        const { token } = await createAdmin();
+
+        const res = await request(app)
+            .post('/api/admin/undo/nonexistent_token_xyz')
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(res.status).toBe(404);
+    });
+
+    it('POST /undo/:token — 410 если время истекло', async () => {
+        const { token } = await createAdmin();
+        const { user } = await createUser();
+
+        const del = await request(app)
+            .delete(`${API}/users/${user.id}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        // Состариваем запись в очереди
+        await prisma.pendingDeletion.update({
+            where: { id: del.body.undoToken },
+            data: { executeAt: new Date(Date.now() - 1000) },
+        });
+
+        const undo = await request(app)
+            .post(`/api/admin/undo/${del.body.undoToken}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(undo.status).toBe(410);
     });
 });
