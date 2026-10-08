@@ -1449,85 +1449,36 @@ select {
     flex: 1 1 auto;
   }
 }
-/* Let the document remain the only vertical scroller on mobile/PWA. */
-@media (max-width: 900px) {
-  .ui-shell, .ui-main, .ui-feed-page { overflow-y: visible; }
-  .ui-feed-page { touch-action: pan-y; }
-}
-
-/* Extra scroll runway keeps the final feed card above the fixed PWA bottom bar. */
-@media (max-width: 900px) {
-  .ui-feed-page { padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
-}
-
-/* Every app page must be able to scroll its last interactive element
-   fully above the fixed bottom navigation (including standalone PWA safe area).
-   A real trailing element is used instead of relying on nested padding. */
-.ui-mobile-content-clearance { display: none; }
-@media (max-width: 900px) {
-  .ui-main > .page-enter > .ui-mobile-content-clearance {
-    display: block;
-    width: 100%;
-    height: calc(120px + env(safe-area-inset-bottom, 0px));
-    flex: 0 0 auto;
-    pointer-events: none;
-  }
-}
-
-/* Mobile layout: reserve REAL document space for navigation rather than
-   painting a fixed overlay above the last feed/profile controls.
-   The nav is the final flex item and sticks to the viewport bottom while
-   participating in normal flow at the end of the document. */
-@media (max-width: 900px) {
-  .ui-shell {
-    display: flex;
-    flex-direction: column;
-    min-height: 100dvh;
-    height: auto;
-    overflow: visible;
-  }
-  .ui-shell > .ui-main {
-    flex: 1 0 auto;
-    width: 100%;
-    min-height: 0;
-    padding-bottom: 0 !important;
-    overflow: visible;
-  }
-  .ui-shell > .ui-mobile-nav {
-    position: sticky;
-    left: auto;
-    right: auto;
-    bottom: 0;
-    width: calc(100% - 20px);
-    margin: 0 10px;
-    padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
-    flex: 0 0 auto;
-    align-self: center;
-    z-index: 70;
-  }
-  .ui-main > .page-enter > .ui-mobile-content-clearance {
-    display: none;
-  }
-  .ui-feed-page { padding-bottom: 24px; }
-}
-
-/* Keep bottom navigation viewport-fixed on mobile, including standalone PWA.
-   Reserve actual scrollable room AFTER route content; sticky navigation moved
-   together with the document and is not suitable for the app shell. */
+/* Mobile/PWA: one fixed bottom bar and one scrollable document.
+   Avoid conflicting sticky/fixed overrides and route-specific padding hacks. */
 @media (max-width: 900px) {
   .ui-shell {
     display: flex;
     flex-direction: row;
     min-height: 100dvh;
+    height: auto;
+    overflow: visible;
   }
   .ui-shell > .ui-main {
     flex: 1 1 auto;
-    min-width: 0;
     width: 100%;
+    min-width: 0;
+    min-height: 100dvh;
     padding-bottom: 0 !important;
+    overflow: visible;
+  }
+  .ui-main > .page-enter {
+    display: flow-root;
+  }
+  .ui-main > .page-enter > .ui-mobile-content-clearance {
+    display: block;
+    clear: both;
+    width: 100%;
+    height: calc(128px + env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
   }
   .ui-shell > .ui-mobile-nav {
-    position: fixed !important;
+    position: fixed;
     left: 10px;
     right: 10px;
     bottom: max(10px, env(safe-area-inset-bottom, 0px));
@@ -1536,15 +1487,12 @@ select {
     padding: 7px;
     z-index: 70;
   }
-  .ui-main > .page-enter {
-    display: flow-root;
+  .ui-feed-page {
+    overflow-y: visible;
+    touch-action: pan-y;
+    padding-bottom: 24px;
   }
-  .ui-main > .page-enter > .ui-mobile-content-clearance {
-    display: block !important;
-    height: calc(180px + env(safe-area-inset-bottom, 0px));
-    width: 100%;
-    min-height: 180px;
-    pointer-events: none;
-    clear: both;
-  }
+}
+@media (min-width: 901px) {
+  .ui-mobile-content-clearance { display: none; }
 }
