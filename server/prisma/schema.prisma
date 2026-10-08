@@ -36,6 +36,8 @@ model User {
 
   // Базовые связи
   albums        PhotoAlbum[]
+  portfolio     PortfolioProfile?
+  creativeProjects CreativeProject[]
   posts         Post[]
   comments      Comment[]
   postReactions PostReaction[]
@@ -648,6 +650,39 @@ model PhotoAlbum {
   description String   @default("")
   photos      String   @default("[]")
   coverUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt])
+}
+
+model PortfolioProfile {
+  id             String   @id @default(cuid())
+  ownerId        String   @unique
+  headline       String   @default("")
+  about          String   @default("")
+  specialization String   @default("")
+  skills         String   @default("[]")
+  links          String   @default("[]")
+  featuredPostIds String  @default("[]")
+  accent         String   @default("violet")
+  layout         String   @default("grid")
+  updatedAt      DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
+model CreativeProject {
+  id          String   @id @default(cuid())
+  ownerId     String
+  title       String
+  description String   @default("")
+  coverUrl    String?
+  role        String   @default("")
+  collaborators String @default("")
+  link        String   @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
