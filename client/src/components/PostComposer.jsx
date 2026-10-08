@@ -16,6 +16,36 @@ export default function PostComposer({ onPublished, onClose }) {
     const itemsRef = useRef([]);
     const busyRef = useRef(false);
     const [editingId, setEditingId] = useState(null);
+    const dragRef = useRef(null);
+    const [draggingId, setDraggingId] = useState(null);
+    const photoRefs = useRef(new Map());
+    const reorderById = (sourceId, targetId) => {
+        if (!sourceId || !targetId || sourceId === targetId) return;
+        setItems((previous) => {
+            const from = previous.findIndex((item) => item.id === sourceId);
+            const to = previous.findIndex((item) => item.id === targetId);
+            if (from < 0 || to < 0) return previous;
+            const next = [...previous];
+            next.splice(to, 0, next.splice(from, 1)[0]);
+            return next;
+        });
+    };
+    const startDrag = (event, id) => {
+        if (uploading || publishing || event.button !== undefined && event.button !== 0) return;
+        dragRef.current = { id, x: event.clientX, y: event.clientY, active: false };
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+    const updateDrag = (event) => {
+        const drag = dragRef.current;
+        if (!drag) return;
+        if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 9) return;
+        drag.active = true;
+        setDraggingId(drag.id);
+        const element = document.elementFromPoint(event.clientX, event.clientY);
+        const target = element?.closest('[data-photo-id]')?.getAttribute('data-photo-id');
+        if (target) reorderById(drag.id, target);
+    };
+    const endDrag = () => { dragRef.current = null; setDraggingId(null); };
     useEffect(() => { itemsRef.current = items; }, [items]);
     useEffect(() => () => { itemsRef.current.forEach((item) => URL.revokeObjectURL(item.thumbnail)); }, []);
     const changeItem = (id, patch) => setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...patch } : item));
@@ -81,8 +111,7 @@ export default function PostComposer({ onPublished, onClose }) {
             items.forEach((item) => URL.revokeObjectURL(item.thumbnail));
             setItems([]);
             setPreview(false);
-            setSelectedFile(null);
-            await onPublished?.();
+            try { await onPublished?.(); } catch (refreshError) { console.error('Post created, but refresh failed:', refreshError); }
         } catch (e) {
             setComposeError(e.message || 'Не удалось опубликовать запись');
         } finally {
@@ -115,7 +144,7 @@ export default function PostComposer({ onPublished, onClose }) {
                     {items.length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
                             {items.map((item, index) => (
-                                <div key={item.id} className="relative rounded-xl overflow-hidden bg-white/5 p-2">
+                                <div key={item.id} data-photo-id={item.id} ref={(node) => { if (node) photoRefs.current.set(item.id, node); else photoRefs.current.delete(item.id); }} className={`relative rounded-xl overflow-hidden bg-white/5 p-2 ${draggingId === item.id ? 'opacity-60 ring-2 ring-violet-400' : ''}`}>
                                     <div className="relative">
                                         <img src={item.thumbnail} alt={`Фото ${index + 1}`} className="h-32 w-full object-cover rounded-lg" />
                                         {item.status === 'uploading' && (
@@ -128,8 +157,7 @@ export default function PostComposer({ onPublished, onClose }) {
                                     </div>
                                     <div className="flex flex-wrap gap-1 mt-2">
                                         <button type="button" className="btn-ghost !p-1 text-xs" disabled={uploading || item.status !== 'done'} onClick={() => editPhoto(item)}>Редактировать</button>
-                                        <button type="button" className="btn-ghost !p-1" disabled={uploading || index === 0} onClick={() => movePhoto(index, -1)} aria-label="Сдвинуть влево">←</button>
-                                        <button type="button" className="btn-ghost !p-1" disabled={uploading || index === items.length - 1} onClick={() => movePhoto(index, 1)} aria-label="Сдвинуть вправо">→</button>
+                                        <button type="button" className="btn-ghost !p-1 cursor-grab active:cursor-grabbing select-none touch-none" disabled={uploading || publishing} onPointerDown={(event) => startDrag(event, item.id)} onPointerMove={updateDrag} onPointerUp={endDrag} onPointerCancel={endDrag} aria-label={`Перетащить фото ${index + 1} для изменения порядка`} title="Удерживайте и перетащите">⠿ Переместить</button>
                                         <button type="button" className="btn-ghost !p-1" disabled={uploading} onClick={() => { URL.revokeObjectURL(item.thumbnail); setItems((prev) => prev.filter((photo) => photo.id !== item.id)); }} aria-label="Удалить фото">✕</button>
                                     </div>
                                 </div>

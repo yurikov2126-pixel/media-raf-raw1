@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Avatar from './Avatar.jsx';
 import { api, resolveUrl } from '../api/client.js';
@@ -57,6 +57,37 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
         return [post.mediaUrl];
     })();
     const [activeImage, setActiveImage] = useState(null);
+    const gestureStart = useRef(null);
+    useEffect(() => {
+        if (activeImage === null) return;
+        const onKey = (event) => {
+            if (event.key === 'Escape') setActiveImage(null);
+            if (event.key === 'ArrowRight') setActiveImage((index) => Math.min(images.length - 1, index + 1));
+            if (event.key === 'ArrowLeft') setActiveImage((index) => Math.max(0, index - 1));
+        };
+        window.addEventListener('keydown', onKey);
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [activeImage, images.length]);
+    const onViewerTouchStart = (event) => {
+        if (event.touches.length !== 1) { gestureStart.current = null; return; }
+        gestureStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    };
+    const onViewerTouchEnd = (event) => {
+        if (!gestureStart.current || !event.changedTouches.length) return;
+        const dx = event.changedTouches[0].clientX - gestureStart.current.x;
+        const dy = event.changedTouches[0].clientY - gestureStart.current.y;
+        gestureStart.current = null;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 55) return;
+        if (Math.abs(dy) > Math.abs(dx) * 1.2) setActiveImage(null);
+        else if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+            setActiveImage((index) => Math.max(0, Math.min(images.length - 1, index + (dx < 0 ? 1 : -1))));
+        }
+    };
 
     const cardPadding = compact ? 'p-3' : 'p-5';
     const avatarSize = compact ? 32 : 44;
@@ -174,7 +205,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
             )}
 
             {activeImage !== null && (
-                <div className="fixed inset-0 z-[230] bg-black/95 flex flex-col items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="Просмотр фотографий">
+                <div className="fixed inset-0 z-[230] bg-black/95 flex flex-col items-center justify-center p-3" style={{ touchAction: 'pan-x pan-y' }} onTouchStart={onViewerTouchStart} onTouchEnd={onViewerTouchEnd} onTouchCancel={() => { gestureStart.current = null; }} role="dialog" aria-modal="true" aria-label="Просмотр фотографий">
                     <button type="button" className="absolute top-4 right-4 btn-ghost" onClick={() => setActiveImage(null)}>Закрыть ✕</button>
                     <img src={resolveUrl(images[activeImage])} alt={`Фото ${activeImage + 1}`} className="max-w-full max-h-[78vh] object-contain" />
                     <div className="flex gap-4 items-center mt-4">
