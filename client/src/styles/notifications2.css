@@ -59,3 +59,53 @@
     width: 100%;
   }
 }
+
+
+/* UI 2.1 notification workspace */
+.ui-notifications-page {
+  width: min(100%, 1160px);
+  margin: 0 auto;
+  padding: 30px 32px 64px;
+}
+
+.ui-notifications-page > .flex:first-child {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.ui-notifications-page > .flex:first-child h1 {
+  letter-spacing: -.045em;
+}
+
+.ui-notifications-page [data-notification-item] {
+  padding: 16px 18px;
+  border-radius: 16px;
+  transition: background-color var(--ui-motion) ease, transform var(--ui-motion) ease;
+}
+
+@media (min-width: 901px) {
+  .ui-notifications-page > .flex:first-child {
+    align-items: flex-end;
+  }
+
+  .ui-notifications-page > .flex:first-child > div:first-child {
+    min-width: 0;
+  }
+
+  .ui-notifications-page > .flex:first-child > div:last-child {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 900px) {
+  .ui-notifications-page {
+    width: 100%;
+    padding: 18px 13px 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ui-notifications-page {
+    padding-inline: 12px;
+  }
+}
