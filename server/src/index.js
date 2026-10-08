@@ -12,6 +12,8 @@ import { schedulePasswordResetCleanup } from './lib/passwordResetCron.js';
 import { scheduleInactivityCharge } from './lib/gamificationCron.js';
 import { scheduleDeadlineReminders } from './lib/deadlineCron.js';
 import { scheduleDripUnlockNotifications } from './lib/dripCron.js';
+import { startPendingDeletionWorker } from './lib/pendingDeletion.js';
+
 
 /* ─────────── HTTP-сервер + Socket.IO ─────────── */
 const server = http.createServer(app);
@@ -35,6 +37,7 @@ schedulePasswordResetCleanup();
 scheduleInactivityCharge();
 scheduleDeadlineReminders();
 scheduleDripUnlockNotifications();
+startPendingDeletionWorker();
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () =>
