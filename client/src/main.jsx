@@ -14,6 +14,8 @@ import { OnboardingProvider } from './store/onboarding.jsx';
 import { GamificationProvider } from './store/gamification.jsx';
 import './styles/index.css';
 import './styles/ui2.css';
+import './styles/profile2.css';
+import './styles/notifications2.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
