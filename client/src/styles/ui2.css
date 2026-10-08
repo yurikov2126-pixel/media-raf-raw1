@@ -1473,3 +1473,40 @@ select {
     pointer-events: none;
   }
 }
+
+/* Mobile layout: reserve REAL document space for navigation rather than
+   painting a fixed overlay above the last feed/profile controls.
+   The nav is the final flex item and sticks to the viewport bottom while
+   participating in normal flow at the end of the document. */
+@media (max-width: 900px) {
+  .ui-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    height: auto;
+    overflow: visible;
+  }
+  .ui-shell > .ui-main {
+    flex: 1 0 auto;
+    width: 100%;
+    min-height: 0;
+    padding-bottom: 0 !important;
+    overflow: visible;
+  }
+  .ui-shell > .ui-mobile-nav {
+    position: sticky;
+    left: auto;
+    right: auto;
+    bottom: 0;
+    width: calc(100% - 20px);
+    margin: 0 10px;
+    padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
+    flex: 0 0 auto;
+    align-self: center;
+    z-index: 70;
+  }
+  .ui-main > .page-enter > .ui-mobile-content-clearance {
+    display: none;
+  }
+  .ui-feed-page { padding-bottom: 24px; }
+}
