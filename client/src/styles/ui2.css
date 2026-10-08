@@ -1386,3 +1386,22 @@ select {
     color: var(--text-muted);
   }
 }
+
+
+/* Responsive boundary fix: mobile chrome must never render on desktop. */
+@media (min-width: 901px) {
+  .ui-mobile-topbar,
+  .ui-mobile-nav {
+    display: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .ui-mobile-topbar {
+    display: flex !important;
+  }
+
+  .ui-mobile-nav {
+    display: grid !important;
+  }
+}
