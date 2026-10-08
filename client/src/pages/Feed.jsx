@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, uploadBlob } from '../api/client.js';
+import { api, uploadBlob, uploadFile } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import PostCard from '../components/PostCard.jsx';
 import ImageCropper from '../components/ImageCropper.jsx';
@@ -27,6 +27,7 @@ export default function Feed() {
     const [publishing, setPublishing] = useState(false);
     const [composeError, setComposeError] = useState('');
     const [preview, setPreview] = useState(false);
+    const [selectedFile, setSelectedFile] = useState(null);
     const fileRef = useRef(null);
     const draft = usePostDraft(user?.id);
     const text = draft.text;
@@ -52,6 +53,7 @@ export default function Feed() {
             setImage('');
             setComposeOpen(false);
             setPreview(false);
+            setSelectedFile(null);
             await loadInitial();
         } catch (e) {
             setComposeError(e.message || 'Не удалось опубликовать запись');
@@ -66,7 +68,27 @@ export default function Feed() {
         setComposeError('');
         try {
             const uploaded = await uploadBlob(blob, `post-${Date.now()}.jpg`, token);
-            setImage(uploaded.absoluteUrl);
+            const url = uploaded.absoluteUrl || uploaded.url || uploaded.path;
+            if (!url) throw new Error('Сервер не вернул адрес фотографии');
+            setImage(url);
+            setSelectedFile(null);
+        } catch (e) {
+            setComposeError(e.message || 'Не удалось загрузить фото');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const uploadOriginal = async () => {
+        if (!selectedFile || uploading) return;
+        setUploading(true);
+        setComposeError('');
+        try {
+            const uploaded = await uploadFile(selectedFile, token);
+            const url = uploaded.absoluteUrl || uploaded.url || uploaded.path;
+            if (!url) throw new Error('Сервер не вернул адрес фотографии');
+            setImage(url);
+            setSelectedFile(null);
         } catch (e) {
             setComposeError(e.message || 'Не удалось загрузить фото');
         } finally {
@@ -156,6 +178,16 @@ export default function Feed() {
                 <section id="feed-composer" className="card p-4 md:p-6 mb-6" aria-label="Создание публикации">
                     <textarea autoFocus className="input resize-none w-full" rows={4} placeholder="Что нового у команды?" value={text} onChange={(e) => setText(e.target.value)} />
                     {draft.hasDraft && <p className="text-xs text-white/40 mt-2">Черновик сохраняется автоматически</p>}
+                    {selectedFile && !cropping && (
+                        <div className="card p-3 mt-3 flex flex-wrap gap-2 items-center justify-between">
+                            <span className="text-sm min-w-0 break-all">📷 {selectedFile.name}</span>
+                            <div className="flex gap-2 flex-wrap">
+                                <button type="button" className="btn-ghost" disabled={uploading} onClick={() => setCropping({ file: selectedFile })}>Обрезать</button>
+                                <button type="button" className="btn-primary" disabled={uploading} onClick={uploadOriginal}>{uploading ? 'Загрузка…' : 'Загрузить без обрезки'}</button>
+                                <button type="button" className="btn-ghost" disabled={uploading} onClick={() => setSelectedFile(null)}>Убрать</button>
+                            </div>
+                        </div>
+                    )}
                     {image && <div className="relative mt-3"><img src={image} alt="Фото к публикации" className="max-h-80 w-full object-contain rounded-xl" /><button type="button" className="btn-ghost mt-2" onClick={() => setImage('')}>Удалить фото</button></div>}
                     {preview && (
                         <div className="ui-compose-preview mt-4" aria-label="Предпросмотр публикации">
@@ -172,11 +204,11 @@ export default function Feed() {
                     {composeError && <p role="alert" className="text-pink text-sm mt-2">{composeError}</p>}
                     <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
                         <button type="button" className="btn-ghost" disabled={uploading || publishing} onClick={() => fileRef.current?.click()}>{uploading ? 'Загрузка…' : '📷 Добавить фото'}</button>
-                        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file?.type.startsWith('image/')) setCropping({ file }); }} />
+                        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file?.type.startsWith('image/')) { setSelectedFile(file); setComposeError(''); } else if (file) setComposeError('Выберите изображение'); }} />
                         <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn-ghost" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? "Скрыть предпросмотр" : "Предпросмотр"}</button>
                             <button type="button" className="btn-ghost" onClick={() => setComposeOpen(false)} disabled={publishing}>Закрыть</button>
-                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || (!text.trim() && !image)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
+                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !image)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
                         </div>
                     </div>
                 </section>
