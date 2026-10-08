@@ -94,6 +94,10 @@ export default function Profile() {
     const [gamif, setGamif] = useState(null);
 
     const isMe = me.username === username;
+    const sortedPosts = [...(profile?.posts || [])].sort((a, b) => {
+        if (Boolean(a.pinnedAt) !== Boolean(b.pinnedAt)) return a.pinnedAt ? -1 : 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
     const load = () =>
         api(`/users/${username}`, { token })
@@ -320,7 +324,7 @@ export default function Profile() {
                 {tab === 'posts' && (
                     <div className="py-6 space-y-4">
                         {isMe && <PostComposer onPublished={() => { load(); gamifStore.reload?.(); gamifStore.reloadQuests?.(); }} />}
-                        {profile.posts?.map((p) => (
+                        {sortedPosts.map((p) => (
                             <PostCard
                                 key={p.id}
                                 post={p}

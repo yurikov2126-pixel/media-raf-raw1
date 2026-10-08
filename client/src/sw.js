@@ -9,7 +9,7 @@ import { NetworkOnly, CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { clientsClaim } from 'workbox-core';
 
-self.skipWaiting();
+// Activate the waiting worker only after the user accepts the update.
 clientsClaim();
 
 cleanupOutdatedCaches();
