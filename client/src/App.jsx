@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './store/auth.jsx';
 import { useNetwork } from './store/network.jsx';
 import Layout from './components/Layout.jsx';
+import PwaUpdateNotice from './components/PwaUpdateNotice.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
 import OnboardingModal from './components/OnboardingModal.jsx';
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
 
+            <PwaUpdateNotice />
             {user && <GlobalCommandPalette />}
             {user && <OnboardingModal />}
             {user && <AchievementToast />}
