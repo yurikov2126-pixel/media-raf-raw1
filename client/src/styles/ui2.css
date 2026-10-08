@@ -1454,3 +1454,8 @@ select {
   .ui-shell, .ui-main, .ui-feed-page { overflow-y: visible; }
   .ui-feed-page { touch-action: pan-y; }
 }
+
+/* Extra scroll runway keeps the final feed card above the fixed PWA bottom bar. */
+@media (max-width: 900px) {
+  .ui-feed-page { padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+}

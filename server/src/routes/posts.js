@@ -269,12 +269,26 @@ router.patch('/:id', auth, async (req, res) => {
     if (post.authorId !== req.user.id && req.user.role !== 'ADMIN') {
         return res.status(403).json({ error: 'Нет прав' });
     }
-    const { content } = req.body;
-    const updated = await prisma.post.update({
-        where: { id: post.id },
-        data: { content: content ?? post.content, editedAt: new Date() },
+    const { content, mediaUrls } = req.body;
+    const data = { content: content ?? post.content, editedAt: new Date() };
+    if (mediaUrls !== undefined) {
+        if (!Array.isArray(mediaUrls)) return res.status(400).json({ error: 'mediaUrls должен быть массивом' });
+        const images = normalizePostImages(mediaUrls, null);
+        if (!images) return res.status(400).json({ error: 'Некорректный список фотографий (максимум 10)' });
+        const current = postImages(post);
+        if (images.some((url) => !current.includes(url)) || new Set(images).size !== images.length) {
+            return res.status(400).json({ error: 'Можно только удалять или переставлять уже опубликованные фотографии' });
+        }
+        if (!(data.content || '').trim() && !images.length) return res.status(400).json({ error: 'Публикация не может быть пустой' });
+        data.mediaUrl = images.length > 1 ? JSON.stringify(images) : (images[0] || null);
+        data.mediaType = images.length > 1 ? 'gallery' : (images.length ? 'image' : null);
+    }
+    const updated = await prisma.post.update({ where: { id: post.id }, data });
+    res.json({
+        ...updated,
+        mediaUrl: updated.mediaType === 'gallery' ? postImages(updated)[0] || null : updated.mediaUrl,
+        mediaUrls: postImages(updated),
     });
-    res.json(updated);
 });
 
 /* ─────────── Удалить пост ─────────── */
