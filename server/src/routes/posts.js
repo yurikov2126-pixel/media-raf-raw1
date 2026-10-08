@@ -191,7 +191,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     const post = await prisma.post.create({
-        data: { authorId: req.user.id, content: content || '', mediaUrl: images.length > 1 ? JSON.stringify(images) : (images[0] || null), mediaType: images.length > 1 ? 'gallery' : (images.length ? 'image' : null) },
+        data: { authorId: req.user.id, content: content || '', mediaUrl: images.length > 1 ? JSON.stringify(images) : (images[0] || null), mediaType: images.length > 1 ? 'gallery' : (images.length ? (mediaType || 'image') : null) },
     });
 
     // Уведомления всем (не блокирует)
