@@ -16,7 +16,7 @@ export const useModules = () =>
    и авто-редиректа с отключённых разделов. */
 export function moduleKeyForPath(path) {
     if (!path) return null;
-    if (path === '/app' || path === '/app/') return 'feed';
+    if (path === '/app' || path === '/app/' || path.startsWith('/app/feed')) return 'feed';
     if (path.startsWith('/app/chats')) return 'chats';
     if (path.startsWith('/app/courses')) return 'courses';
     if (path.startsWith('/app/certificates')) return 'courses';

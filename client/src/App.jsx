@@ -6,9 +6,11 @@ import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
 import OnboardingModal from './components/OnboardingModal.jsx';
 import AchievementToast from './components/AchievementToast.jsx';
+import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Feed from './pages/Feed.jsx';
+import Dashboard from './pages/Dashboard.jsx';
 import Profile from './pages/Profile.jsx';
 import Messenger from './pages/Messenger.jsx';
 import Notifications from './pages/Notifications.jsx';
@@ -52,14 +54,8 @@ export default function App() {
         <>
             <Routes>
                 <Route path="/" element={<RootGate />} />
-                <Route
-                    path="/login"
-                    element={<div className="page-enter"><Login /></div>}
-                />
-                <Route
-                    path="/verify/:serial"
-                    element={<div className="page-enter"><Verify /></div>}
-                />
+                <Route path="/login" element={<div className="page-enter"><Login /></div>} />
+                <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
 
                 <Route
                     path="/app"
@@ -69,7 +65,8 @@ export default function App() {
                         </Private>
                     }
                 >
-                    <Route index element={<Feed />} />
+                    <Route index element={<Dashboard />} />
+                    <Route path="feed" element={<Feed />} />
                     <Route path="u/:username" element={<Profile />} />
                     <Route path="chats" element={<Messenger />} />
                     <Route path="chats/:chatId" element={<Messenger />} />
@@ -94,7 +91,7 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
 
-            {/* Онбординг и попапы достижений — поверх всего, только для авторизованных */}
+            {user && <GlobalCommandPalette />}
             {user && <OnboardingModal />}
             {user && <AchievementToast />}
         </>

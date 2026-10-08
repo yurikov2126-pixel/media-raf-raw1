@@ -4,7 +4,7 @@ export default function MenuEditor({ settings, update }) {
     })();
 
     const updateItem = (idx, patch) => update({ nav_items: JSON.stringify(items.map((it, i) => i === idx ? { ...it, ...patch } : it)) });
-    const addItem = () => update({ nav_items: JSON.stringify([...items, { to: '/app/new', label: 'Новый раздел', icon: '✨' }]) });
+    const addItem = () => update({ nav_items: JSON.stringify([...items, { to: '/app/new', label: 'Новый раздел', icon: 'sparkles' }]) });
     const removeItem = (idx) => update({ nav_items: JSON.stringify(items.filter((_, i) => i !== idx)) });
     const moveItem = (idx, dir) => {
         const arr = [...items];
@@ -16,7 +16,7 @@ export default function MenuEditor({ settings, update }) {
 
     return (
         <div className="space-y-3">
-            <div className="text-xs text-white/50">Пункты меню в сайдбаре и нижней навигации.</div>
+            <div className="text-xs text-white/50">Пункты меню в сайдбаре. Для новых пунктов используйте имена иконок Design System: dashboard, feed, message, book, bell, trophy, users, settings.</div>
             <div className="space-y-2">
                 {items.map((it, i) => (
                     <div key={i} className="card p-3 grid grid-cols-[60px_1fr_1fr_auto_auto_auto] gap-2 items-center">

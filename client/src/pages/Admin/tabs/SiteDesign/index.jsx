@@ -6,6 +6,7 @@ import MenuEditor from './MenuEditor.jsx';
 import FooterEditor from './FooterEditor.jsx';
 import CertificateEditor from './CertificateEditor.jsx';
 import ThemeEditor from './ThemeEditor.jsx';
+import AppExperienceEditor from './AppExperienceEditor.jsx';
 
 const SUBS = [
     ['brand', '🎨 Брендинг'],
@@ -14,6 +15,7 @@ const SUBS = [
     ['footer', '📄 Футер'],
     ['certificate', '🏆 Сертификаты'],
     ['theme', '🌓 Тема'],
+    ['experience', '✨ Интерфейс'],
 ];
 
 export default function SiteDesign({ settings, setSettings, token, onSaved }) {
@@ -76,6 +78,7 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
             {sub === 'footer' && <FooterEditor settings={settings} update={update} />}
             {sub === 'certificate' && <CertificateEditor settings={settings} update={update} />}
             {sub === 'theme' && <ThemeEditor settings={settings} update={update} />}
+            {sub === 'experience' && <AppExperienceEditor settings={settings} update={update} />}
         </div>
     );
 }

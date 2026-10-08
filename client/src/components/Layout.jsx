@@ -11,37 +11,44 @@ import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import NetworkBanner from './NetworkBanner.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import Icon from './Icon.jsx';
 
 const FALLBACK_LINKS = [
-    { to: '/app', label: 'Лента', end: true, icon: '🏠' },
-    { to: '/app/chats', label: 'Чаты', icon: '💬' },
-    { to: '/app/courses', label: 'Обучение', icon: '🎓' },
-    { to: '/app/wiki', label: 'Вики', icon: '📖' },
+    { to: '/app', label: 'Главная', end: true, icon: 'dashboard' },
+    { to: '/app/feed', label: 'Лента', icon: 'feed' },
+    { to: '/app/chats', label: 'Чаты', icon: 'message' },
+    { to: '/app/courses', label: 'Обучение', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
 ];
 
 const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
 
+function normalizeLinks(items) {
+    const legacy = { '🏠': 'dashboard', '💬': 'message', '🎓': 'book', '📖': 'book', '🏆': 'trophy', '⚙️': 'settings' };
+    return items.map((item) => ({
+        ...item,
+        icon: legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles'),
+    }));
+}
+
 export default function Layout() {
     const { user, logout } = useAuth();
-    const { brand, nav } = useSettings();
+    const { brand, nav, commandPalette } = useSettings();
     const { modules, isEnabled } = useModules();
     const { enabled: gamifEnabled } = useGamification();
     const navigate = useNavigate();
     const location = useLocation();
     const outlet = useOutlet();
-
     const [modalOpen, setModalOpen] = useState(() => isAnyModalOpen());
 
-    useEffect(() => {
-        return subscribeModalState(setModalOpen);
-    }, []);
+    useEffect(() => subscribeModalState(setModalOpen), []);
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     const isAdmin = user?.role === 'ADMIN';
     const isMentor = user?.role === 'MENTOR' || user?.role === 'ADMIN';
 
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
-    const links = rawLinks.filter((l) => {
+    const links = normalizeLinks(rawLinks).filter((l) => {
         const key = moduleKeyForPath(l.to);
         return !key || isEnabled(key);
     });
@@ -53,181 +60,121 @@ export default function Layout() {
         if (!currentKey) return;
         if (isEnabled(currentKey)) return;
         const target = MODULE_ORDER.find((k) => isEnabled(k));
-        if (target === 'feed') navigate('/app', { replace: true });
+        if (target === 'feed') navigate('/app/feed', { replace: true });
         else if (target) navigate(`/app/${target}`, { replace: true });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.pathname, modules]);
+    }, [location.pathname, modules, isEnabled, navigate]);
 
     const handlePanEnd = (_e, info) => {
-        // Не свайпаем, когда открыта любая модалка
-        if (modalOpen) return;
-
-        if (info.pointerType !== 'touch') return;
-        if (
-            typeof window !== 'undefined' &&
-            window.matchMedia('(min-width: 768px)').matches
-        ) {
-            return;
-        }
-
+        if (modalOpen || info.pointerType !== 'touch') return;
+        if (window.matchMedia('(min-width: 768px)').matches) return;
         const dx = info.offset.x;
         const dy = info.offset.y;
         if (Math.abs(dy) > Math.abs(dx)) return;
-
-        const i = SWIPE_ORDER.findIndex(
-            (p) => location.pathname === p || location.pathname.startsWith(p + '/')
-        );
+        const i = SWIPE_ORDER.findIndex((p) => location.pathname === p || location.pathname.startsWith(p + '/'));
         if (i < 0) return;
-
         if (dx < -80 && i < SWIPE_ORDER.length - 1) navigate(SWIPE_ORDER[i + 1]);
         else if (dx > 80 && i > 0) navigate(SWIPE_ORDER[i - 1]);
     };
 
+    const openCommand = () => window.dispatchEvent(new Event('mrr:command-open'));
+
     return (
-        <div className="min-h-screen flex">
-            {/* Сайдбар — ПК */}
-            <aside className="hidden md:flex flex-col w-64 p-5 gap-2 border-r border-white/5 sticky top-0 h-screen">
-                <div className="mb-4">
-                    <div
-                        className="text-2xl font-bold bg-clip-text text-transparent"
-                        style={{ backgroundImage: 'var(--brand-gradient)' }}
-                    >
-                        {brand.logoText}
+        <div className="min-h-screen flex ui-shell">
+            <aside className="ui-sidebar hidden md:flex flex-col">
+                <div className="ui-brand">
+                    <div className="ui-brand__mark"><Icon name="sparkles" size={20} /></div>
+                    <div className="min-w-0">
+                        <div className="ui-brand__name bg-clip-text text-transparent" style={{ backgroundImage: 'var(--brand-gradient)' }}>
+                            {brand.logoText}
+                        </div>
+                        <div className="ui-brand__sub">{brand.logoSubtitle}</div>
                     </div>
-                    <div className="text-xs text-white/40 mt-1">{brand.logoSubtitle}</div>
                 </div>
 
-                {links.map((l) => (
-                    <NavLink
-                        key={l.to}
-                        to={l.to}
-                        end={l.end}
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
-                            }`
-                        }
-                    >
-                        <span className="text-xl">{l.icon}</span>
-                        <span className="font-semibold">{l.label}</span>
-                    </NavLink>
-                ))}
+                <nav className="ui-nav" aria-label="Основная навигация">
+                    {links.map((l) => (
+                        <NavLink
+                            key={l.to}
+                            to={l.to}
+                            end={l.end}
+                            className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}
+                        >
+                            <span className="ui-nav-item__icon"><Icon name={l.icon} size={19} /></span>
+                            <span className="ui-nav-item__label">{l.label}</span>
+                        </NavLink>
+                    ))}
+                    {gamifEnabled && (
+                        <NavLink to="/app/leaderboard" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
+                            <span className="ui-nav-item__icon"><Icon name="trophy" size={19} /></span>
+                            <span className="ui-nav-item__label">Рейтинг</span>
+                        </NavLink>
+                    )}
+                    {isMentor && (
+                        <NavLink to="/app/mentor" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
+                            <span className="ui-nav-item__icon"><Icon name="users" size={19} /></span>
+                            <span className="ui-nav-item__label">Руководителю</span>
+                        </NavLink>
+                    )}
+                    {isAdmin && (
+                        <NavLink to="/app/admin" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
+                            <span className="ui-nav-item__icon"><Icon name="settings" size={19} /></span>
+                            <span className="ui-nav-item__label">Админка</span>
+                        </NavLink>
+                    )}
+                </nav>
 
-                {gamifEnabled && (
-                    <NavLink
-                        to="/app/leaderboard"
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
-                            }`
-                        }
-                    >
-                        <span className="text-xl">🏆</span>
-                        <span className="font-semibold">Рейтинг</span>
-                    </NavLink>
-                )}
+                <div className="mt-auto">
+                    {commandPalette.enabled && (
+                        <button type="button" className="ui-command-trigger w-full mb-2" onClick={openCommand}>
+                            <Icon name="search" size={16} />
+                            <span className="flex-1 text-left">Поиск и переход</span>
+                            <kbd>{commandPalette.shortcutLabel}</kbd>
+                        </button>
+                    )}
 
-                {isMentor && (
-                    <NavLink
-                        to="/app/mentor"
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
-                            }`
-                        }
-                    >
-                        <span className="text-xl">🧑‍🏫</span>
-                        <span className="font-semibold">Руководителю</span>
-                    </NavLink>
-                )}
-
-                {isAdmin && (
-                    <NavLink
-                        to="/app/admin"
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                                isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
-                            }`
-                        }
-                    >
-                        <span className="text-xl">⚙️</span>
-                        <span className="font-semibold">Админка</span>
-                    </NavLink>
-                )}
-
-                <div className="mt-auto min-w-0">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-1">
                             <NotificationBell align="left" />
                             <ThemeToggle />
                         </div>
-                        <button
-                            onClick={logout}
-                            className="text-xs text-white/40 hover:text-pink px-3"
-                        >
-                            Выйти
+                        <button onClick={logout} className="ui-icon-button !w-10 !h-10" title="Выйти" aria-label="Выйти">
+                            <Icon name="logOut" size={17} />
                         </button>
                     </div>
-                    <button
-                        onClick={() => navigate(`/app/u/${user.username}`)}
-                        className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 min-w-0"
-                    >
-                        <div className="shrink-0">
-                            <Avatar user={user} size={40} />
-                        </div>
-                        <div className="text-left min-w-0 flex-1">
-                            <div className="text-sm font-semibold truncate">{user.fullName}</div>
-                            <div className="text-xs text-white/40 truncate">@{user.username}</div>
-                        </div>
+
+                    <button onClick={() => navigate(`/app/u/${user.username}`)} className="ui-user">
+                        <Avatar user={user} size={38} />
+                        <span className="ui-user__meta">
+                            <span className="ui-user__name">{user.fullName}</span>
+                            <span className="ui-user__handle">@{user.username}</span>
+                        </span>
+                        <Icon name="chevronRight" size={16} className="text-white/25" />
                     </button>
                 </div>
             </aside>
 
-            <motion.main
-                onPanEnd={handlePanEnd}
-                className="flex-1 min-w-0 pb-20 md:pb-0 safe-top"
-            >
+            <motion.main onPanEnd={handlePanEnd} className="ui-main min-w-0 pb-24 md:pb-0 safe-top">
                 {!isChatRoom && (
-                    <div className="md:hidden sticky top-0 z-30 bg-ink-800/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 py-2">
-                        <div
-                            className="text-lg font-bold bg-clip-text text-transparent"
-                            style={{ backgroundImage: 'var(--brand-gradient)' }}
-                        >
+                    <div className="ui-mobile-topbar md:hidden">
+                        <button type="button" className="ui-mobile-topbar__brand" onClick={() => navigate('/app')}>
                             {brand.logoText}
-                        </div>
-
+                        </button>
                         <div className="flex items-center gap-1">
+                            {commandPalette.enabled && (
+                                <button className="ui-icon-button" onClick={openCommand} title="Поиск" aria-label="Поиск">
+                                    <Icon name="search" size={18} />
+                                </button>
+                            )}
                             <ThemeToggle />
-                            {isMentor && !isAdmin && (
-                                <Link
-                                    to="/app/mentor"
-                                    className="w-9 h-9 grid place-items-center rounded-full text-lg text-white/70 hover:text-white hover:bg-white/10 transition"
-                                    title="Кабинет руководителя"
-                                    aria-label="Кабинет руководителя"
-                                >
-                                    🧑‍🏫
-                                </Link>
-                            )}
-                            {isAdmin && (
-                                <Link
-                                    to="/app/admin"
-                                    className="w-9 h-9 grid place-items-center rounded-full text-lg text-white/70 hover:text-white hover:bg-white/10 transition"
-                                    title="Админ-панель"
-                                    aria-label="Админ-панель"
-                                >
-                                    ⚙️
-                                </Link>
-                            )}
+                            {isMentor && !isAdmin && <Link to="/app/mentor" className="ui-icon-button" title="Руководителю"><Icon name="users" size={18} /></Link>}
+                            {isAdmin && <Link to="/app/admin" className="ui-icon-button" title="Админка"><Icon name="settings" size={18} /></Link>}
                             <NotificationBell align="right" />
                         </div>
                     </div>
                 )}
 
                 <NetworkBanner />
-
-                <div key={location.pathname} className="page-enter">
-                    {outlet}
-                </div>
+                <div key={location.pathname} className="page-enter">{outlet}</div>
             </motion.main>
 
             <MobileNav links={links} user={user} />

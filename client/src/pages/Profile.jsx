@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { api, uploadBlob } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useGamification } from '../store/gamification.jsx';
@@ -14,6 +14,7 @@ import AchievementCard from '../components/AchievementCard.jsx';
 import QuestCard from '../components/QuestCard.jsx';
 import usePostDraft from '../hooks/usePostDraft.js';
 import usePageMeta from '../hooks/usePageMeta.js';
+import ProfilePortfolioStrip from '../components/ProfilePortfolioStrip.jsx';
 
 const DIR = { photo: '📸 Фото', video: '🎥 Видео', radio: '📻 Радио', sound: '🎚️ Звук' };
 
@@ -83,6 +84,7 @@ function SocialLink({ network, value }) {
 
 export default function Profile() {
     const { username } = useParams();
+    const location = useLocation();
     const { user: me, token } = useAuth();
     const gamifStore = useGamification();
 
@@ -111,6 +113,13 @@ export default function Profile() {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [username, token]);
+
+    useEffect(() => {
+        if (!isMe || !location.state?.compose) return;
+        setTab('posts');
+        setTimeout(() => document.querySelector('.profile-v2 textarea')?.focus(), 50);
+        window.history.replaceState({}, document.title, window.location.href);
+    }, [isMe, location.state?.compose]);
 
     useEffect(() => {
         if (!token || !profile) return;
@@ -195,7 +204,7 @@ export default function Profile() {
     const showQuestsTab = isMe && gamifStore.enabled && gamifStore.questsEnabled;
 
     return (
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-4xl mx-auto profile-v2">
             <div className="relative h-44 md:h-60 overflow-hidden rounded-b-3xl">
                 {profile.cover ? (
                     <img
@@ -334,6 +343,8 @@ export default function Profile() {
                         <XpProgressBar progress={gamif.progress} />
                     </div>
                 )}
+
+                <ProfilePortfolioStrip profile={profile} gamif={gamif} gamifEnabled={gamifStore.enabled} />
 
                 {/* ─── Табы ─── */}
                 <div className="mt-6 border-b border-white/10 flex gap-4 overflow-x-auto no-scrollbar">
