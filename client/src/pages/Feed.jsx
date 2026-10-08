@@ -208,12 +208,12 @@ export default function Feed() {
                     )}
                     {composeError && <p role="alert" className="text-pink text-sm mt-2">{composeError}</p>}
                     <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-                        <button type="button" className="btn-ghost" disabled={uploading || publishing} onClick={() => fileRef.current?.click()} disabled={uploading || publishing || gallery.length >= 10}>{uploading ? 'Загрузка…' : '📷 Добавить фото'}</button>
+                        <button type="button" className="btn-ghost" disabled={uploading || publishing || gallery.length >= 10} onClick={() => fileRef.current?.click()}>{uploading ? 'Загрузка…' : '📷 Добавить фото'}</button>
                         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file?.type.startsWith('image/')) { setSelectedFile(file); setComposeError(''); } else if (file) setComposeError('Выберите изображение'); }} />
                         <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn-ghost" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? "Скрыть предпросмотр" : "Предпросмотр"}</button>
                             <button type="button" className="btn-ghost" onClick={() => setComposeOpen(false)} disabled={publishing}>Закрыть</button>
-                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !image)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
+                            <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || !!selectedFile || (!text.trim() && !image && !gallery.length)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
                         </div>
                     </div>
                 </section>
