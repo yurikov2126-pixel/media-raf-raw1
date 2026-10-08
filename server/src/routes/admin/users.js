@@ -78,6 +78,21 @@ router.delete(
             action: 'delete_user',
         });
 
+        await prisma.adminAction
+            .create({
+                data: {
+                    adminId: req.user.id,
+                    action: 'schedule_delete_user',
+                    payload: JSON.stringify({
+                        entityId: userId,
+                        undoToken: row.id,
+                        executeAt: row.executeAt,
+                    }),
+                    affected: 1,
+                },
+            })
+            .catch(() => {});
+
         res.json({
             ok: true,
             undoToken: row.id,

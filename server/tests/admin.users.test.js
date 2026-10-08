@@ -292,6 +292,31 @@ describe('DELETE /api/admin/users/:id', () => {
         expect(pending).toBeNull();
     });
 
+    it('POST /undo/:token — пишет AdminAction с action=undo_delete_user', async () => {
+        const { user: admin, token } = await createAdmin();
+        const { user } = await createUser();
+
+        const del = await request(app)
+            .delete(`${API}/users/${user.id}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        await request(app)
+            .post(`/api/admin/undo/${del.body.undoToken}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        const actions = await prisma.adminAction.findMany({
+            where: {
+                adminId: admin.id,
+                action: { in: ['schedule_delete_user', 'undo_delete_user'] },
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+        expect(actions.map((a) => a.action)).toEqual([
+            'schedule_delete_user',
+            'undo_delete_user',
+        ]);
+    });
+
     it('POST /undo/:token — 404 для неизвестного токена', async () => {
         const { token } = await createAdmin();
 
