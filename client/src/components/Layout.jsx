@@ -80,7 +80,7 @@ export default function Layout() {
 
     return (
         <div className="min-h-screen flex ui-shell">
-            <aside className="ui-sidebar hidden md:flex flex-col">
+            <aside className="ui-sidebar flex-col">
                 <div className="ui-brand">
                     <div className="ui-brand__mark"><Icon name="sparkles" size={20} /></div>
                     <div className="min-w-0">
@@ -155,7 +155,7 @@ export default function Layout() {
 
             <motion.main onPanEnd={handlePanEnd} className="ui-main min-w-0 pb-24 md:pb-0 safe-top">
                 {!isChatRoom && (
-                    <div className="ui-mobile-topbar md:hidden">
+                    <div className="ui-mobile-topbar">
                         <button type="button" className="ui-mobile-topbar__brand" onClick={() => navigate('/app')}>
                             {brand.logoText}
                         </button>
