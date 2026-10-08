@@ -1264,3 +1264,30 @@ select {
 @media (min-width: 901px) {
   .ui-sidebar .ui-command-trigger { justify-content: flex-start; }
 }
+
+
+.ui-topbar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ui-topbar__avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border);
+  transition: border-color var(--ui-motion) ease, transform var(--ui-motion) ease;
+}
+
+.ui-topbar__avatar:hover {
+  border-color: var(--ui-border-strong);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  .ui-topbar__actions { width: 100%; }
+}
