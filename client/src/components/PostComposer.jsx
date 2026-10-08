@@ -21,7 +21,7 @@ export default function PostComposer({ onPublished, onClose }) {
 
 
     const publish = async () => {
-        if ((!text.trim() && !gallery.length) || uploading || publishing) return;
+        if ((!text.trim() && !gallery.length) || uploading || publishing || selectedFile) return;
         setPublishing(true);
         setComposeError('');
         try {
@@ -30,7 +30,6 @@ export default function PostComposer({ onPublished, onClose }) {
                 token,
                 body: { content: text, mediaUrl: gallery[0] || null, mediaUrls: gallery, mediaType: gallery.length > 1 ? 'gallery' : (gallery.length ? 'image' : null) },
             });
-            setText('');
             draft.clear();
             setGallery([]);
             setPreview(false);
