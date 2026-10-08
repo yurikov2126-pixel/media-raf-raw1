@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import PostCard from '../components/PostCard.jsx';
+import { Link } from 'react-router-dom';
+import Icon from '../components/Icon.jsx';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator.jsx';
 import usePullToRefresh from '../hooks/usePullToRefresh.js';
 import useLocalStorage from '../hooks/useLocalStorage.js';
@@ -83,12 +85,12 @@ export default function Feed() {
     });
 
     return (
-        <div ref={scrollRef} className="p-5 md:p-10 max-w-3xl mx-auto">
+        <div ref={scrollRef} className="ui-feed-page">
             <PullToRefreshIndicator pull={pull} refreshing={refreshing} threshold={threshold} />
 
-            <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+            <div className="ui-feed-heading">
                 <h1 className="text-3xl md:text-5xl font-bold">
-                    Привет, {user.fullName.split(' ')[0]} 👋
+                    Лента команды
                 </h1>
                 <button
                     onClick={() => setCompact((c) => !c)}
@@ -98,7 +100,8 @@ export default function Feed() {
                     {compact ? '▤ Компактно' : '▥ Развёрнуто'}
                 </button>
             </div>
-            <p className="text-white/50 mb-8">Свежие публикации команды MEDIA-RAF-RAW</p>
+            <p className="ui-feed-subtitle">Свежие публикации MEDIA·RAF·RAW — идеи, проекты и события команды.</p>
+            <Link className="ui-feed-compose" to={`/app/u/${user.username}`} state={{ compose: true }}><Icon name="plus" size={19} /> Новая публикация <Icon name="chevronRight" size={16} /></Link>
 
             {loading && (
                 <div className="card p-10 text-center text-white/40">Загрузка ленты…</div>
@@ -119,7 +122,7 @@ export default function Feed() {
                 </div>
             )}
 
-            <div className={compact ? 'space-y-2' : 'space-y-4'}>
+            <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
                 {posts.map((post) => (
                     <PostCard
                         key={post.id}
