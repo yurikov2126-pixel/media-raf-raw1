@@ -1510,3 +1510,41 @@ select {
   }
   .ui-feed-page { padding-bottom: 24px; }
 }
+
+/* Keep bottom navigation viewport-fixed on mobile, including standalone PWA.
+   Reserve actual scrollable room AFTER route content; sticky navigation moved
+   together with the document and is not suitable for the app shell. */
+@media (max-width: 900px) {
+  .ui-shell {
+    display: flex;
+    flex-direction: row;
+    min-height: 100dvh;
+  }
+  .ui-shell > .ui-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    padding-bottom: 0 !important;
+  }
+  .ui-shell > .ui-mobile-nav {
+    position: fixed !important;
+    left: 10px;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    width: auto;
+    margin: 0;
+    padding: 7px;
+    z-index: 70;
+  }
+  .ui-main > .page-enter {
+    display: flow-root;
+  }
+  .ui-main > .page-enter > .ui-mobile-content-clearance {
+    display: block !important;
+    height: calc(180px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    min-height: 180px;
+    pointer-events: none;
+    clear: both;
+  }
+}
