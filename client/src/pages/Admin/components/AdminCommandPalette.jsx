@@ -1,98 +1,153 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { api } from '../../../api/client.js';
 import Avatar from '../../../components/Avatar.jsx';
 import { TABS } from '../constants.js';
 
-export default function AdminCommandPalette({ users = [], courses = [], onClose }) {
+const DEBOUNCE_MS = 300;
+
+export default function AdminCommandPalette({ token, onClose }) {
     const [, setSearchParams] = useSearchParams();
+    const navigate = useNavigate();
+
     const [query, setQuery] = useState('');
+    const [serverResults, setServerResults] = useState(null);
+    const [loading, setLoading] = useState(false);
     const [activeIndex, setActiveIndex] = useState(0);
+
     const inputRef = useRef(null);
     const listRef = useRef(null);
+    const debounceRef = useRef(null);
 
+    // Фокус при открытии
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
+    // Дебаунс-запрос к серверу
+    useEffect(() => {
+        const q = query.trim();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        if (q.length < 2) {
+            setServerResults(null);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        debounceRef.current = setTimeout(async () => {
+            try {
+                const r = await api(`/admin/search?q=${encodeURIComponent(q)}`, { token });
+                setServerResults(r);
+            } catch {
+                setServerResults(null);
+            } finally {
+                setLoading(false);
+            }
+        }, DEBOUNCE_MS);
+
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [query, token]);
+
     const items = useMemo(() => {
         const q = query.trim().toLowerCase();
-        const result = [];
+        const out = [];
 
-        // ─── Разделы ───
-        const tabs = TABS.filter(
-            ([, label]) => !q || label.toLowerCase().includes(q)
-        );
-        for (const [key, label, icon] of tabs.slice(0, 10)) {
-            result.push({
+        // ─── Разделы админки (всегда, при пустом или любом запросе) ───
+        const tabs = TABS.filter(([, label]) => !q || label.toLowerCase().includes(q));
+        for (const [key, label, icon] of tabs.slice(0, q ? 5 : 10)) {
+            out.push({
                 kind: 'tab',
                 key: `tab:${key}`,
                 section: 'Разделы',
                 icon,
                 label,
-                onSelect: () => {
-                    setSearchParams({ tab: key }, { replace: true });
-                },
+                onSelect: () => setSearchParams({ tab: key }, { replace: true }),
             });
         }
 
-        // Пользователей и курсы ищем только при непустом запросе,
-        // чтобы не заваливать список «всеми подряд» на пустом инпуте.
-        if (q) {
-            const matchedUsers = users
-                .filter(
-                    (u) =>
-                        u.fullName.toLowerCase().includes(q) ||
-                        u.username.toLowerCase().includes(q)
-                )
-                .slice(0, 5);
-            for (const u of matchedUsers) {
-                result.push({
+        // ─── Результаты с сервера ───
+        if (serverResults) {
+            for (const u of serverResults.users || []) {
+                out.push({
                     kind: 'user',
                     key: `user:${u.id}`,
                     section: 'Пользователи',
                     user: u,
                     label: u.fullName,
-                    sub: `@${u.username}`,
-                    onSelect: () => {
-                        // Переходим на вкладку Users и подставляем поиск.
-                        // URL-фильтры в Users.jsx уже читают ?q=…
-                        setSearchParams(
-                            { tab: 'users', q: u.username },
-                            { replace: true }
-                        );
-                    },
+                    sub: `@${u.username}${u.isBanned ? ' · забанен' : ''}`,
+                    onSelect: () =>
+                        setSearchParams({ tab: 'users', q: u.username }, { replace: true }),
                 });
             }
 
-            const matchedCourses = courses
-                .filter(
-                    (c) =>
-                        c.title.toLowerCase().includes(q) ||
-                        (c.slug || '').toLowerCase().includes(q)
-                )
-                .slice(0, 5);
-            for (const c of matchedCourses) {
-                result.push({
+            for (const c of serverResults.courses || []) {
+                out.push({
                     kind: 'course',
                     key: `course:${c.id}`,
                     section: 'Курсы',
                     icon: '📚',
                     label: c.title,
-                    sub: c.slug,
+                    sub: `${c.slug}${c.published ? '' : ' · черновик'}`,
+                    onSelect: () => setSearchParams({ tab: 'courses' }, { replace: true }),
+                });
+            }
+
+            for (const p of serverResults.posts || []) {
+                out.push({
+                    kind: 'post',
+                    key: `post:${p.id}`,
+                    section: 'Посты',
+                    icon: '📝',
+                    label: p.excerpt || '(без текста)',
+                    sub: `@${p.author.username}${p.hasMedia ? ' · с медиа' : ''}`,
+                    onSelect: () =>
+                        setSearchParams(
+                            { tab: 'users', q: p.author.username },
+                            { replace: true }
+                        ),
+                });
+            }
+
+            for (const cert of serverResults.certificates || []) {
+                out.push({
+                    kind: 'certificate',
+                    key: `cert:${cert.id}`,
+                    section: 'Сертификаты',
+                    icon: '🏆',
+                    label: cert.serial,
+                    sub: `${cert.user.fullName} · ${cert.course.title}`,
                     onSelect: () => {
-                        setSearchParams({ tab: 'courses' }, { replace: true });
+                        navigate(`/verify/${cert.serial}`);
+                    },
+                });
+            }
+
+            for (const w of serverResults.wiki || []) {
+                out.push({
+                    kind: 'wiki',
+                    key: `wiki:${w.id}`,
+                    section: 'Wiki',
+                    icon: '📖',
+                    label: w.title,
+                    sub: `${w.slug}${w.published ? '' : ' · черновик'}`,
+                    onSelect: () => {
+                        navigate(`/app/wiki/${w.slug}`);
                     },
                 });
             }
         }
 
-        return result;
-    }, [query, users, courses, setSearchParams]);
+        return out;
+    }, [query, serverResults, setSearchParams, navigate]);
 
     // Сброс активного индекса при новом списке
     useEffect(() => {
         setActiveIndex(0);
-    }, [query]);
+    }, [query, serverResults]);
 
     // Автоскролл к активному пункту
     useEffect(() => {
@@ -120,7 +175,7 @@ export default function AdminCommandPalette({ users = [], courses = [], onClose 
         }
     };
 
-    // Группировка по секциям для рендера: сохраняем исходный порядок items.
+    // Группировка по секциям, сохраняя порядок items
     const grouped = useMemo(() => {
         const map = new Map();
         items.forEach((it, idx) => {
@@ -140,13 +195,15 @@ export default function AdminCommandPalette({ users = [], courses = [], onClose 
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
-                    <span className="text-xl shrink-0">🔍</span>
+                    <span className="text-xl shrink-0">
+                        {loading ? '⏳' : '🔍'}
+                    </span>
                     <input
                         ref={inputRef}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKey}
-                        placeholder="Раздел, пользователь, курс…"
+                        placeholder="Раздел, пользователь, курс, пост, сертификат, вики…"
                         className="flex-1 bg-transparent border-0 outline-none text-white text-base placeholder:text-white/30"
                     />
                     <kbd className="text-[10px] text-white/40 px-1.5 py-0.5 rounded border border-white/10 shrink-0">
@@ -155,9 +212,14 @@ export default function AdminCommandPalette({ users = [], courses = [], onClose 
                 </div>
 
                 <div ref={listRef} className="max-h-[60vh] overflow-y-auto py-2">
-                    {items.length === 0 && (
+                    {items.length === 0 && !loading && query.length >= 2 && (
                         <div className="px-4 py-8 text-center text-white/40 text-sm">
                             Ничего не найдено
+                        </div>
+                    )}
+                    {items.length === 0 && !loading && query.length < 2 && (
+                        <div className="px-4 py-8 text-center text-white/40 text-sm">
+                            Начните вводить для поиска
                         </div>
                     )}
                     {grouped.map(([section, list]) => (
@@ -178,9 +240,7 @@ export default function AdminCommandPalette({ users = [], courses = [], onClose 
                                             onClose();
                                         }}
                                         className={`w-full flex items-center gap-3 px-4 py-2 text-left transition ${
-                                            active
-                                                ? 'bg-violet/20'
-                                                : 'hover:bg-white/5'
+                                            active ? 'bg-violet/20' : 'hover:bg-white/5'
                                         }`}
                                     >
                                         {it.user ? (
@@ -191,9 +251,7 @@ export default function AdminCommandPalette({ users = [], courses = [], onClose 
                                             </span>
                                         )}
                                         <div className="flex-1 min-w-0">
-                                            <div className="text-sm truncate">
-                                                {it.label}
-                                            </div>
+                                            <div className="text-sm truncate">{it.label}</div>
                                             {it.sub && (
                                                 <div className="text-xs text-white/40 truncate">
                                                     {it.sub}
