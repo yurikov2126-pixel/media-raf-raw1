@@ -34,6 +34,7 @@
 <div className="card p-5">…</div>
 ```
 
+
 - Фон: `ink-800/60`.
 - Граница: `white/5`.
 - Радиус: `1rem` (rounded-2xl).
