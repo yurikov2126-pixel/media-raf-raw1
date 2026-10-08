@@ -86,6 +86,7 @@ model Post {
 
   @@index([createdAt])
   @@index([authorId, createdAt])
+  @@index([authorId, pinnedAt])
 }
 
 model Comment {
