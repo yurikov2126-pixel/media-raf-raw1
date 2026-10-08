@@ -1121,3 +1121,268 @@ select {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* Desktop UI 2.1: intentional desktop hierarchy */
+@media (min-width: 901px) {
+  .ui-sidebar {
+    width: 272px;
+    flex-basis: 272px;
+    padding: 24px 18px 20px;
+  }
+
+  .ui-main { min-height: 100dvh; }
+
+  .ui-page {
+    width: min(100%, 1480px);
+    margin: 0 auto;
+    padding: 30px clamp(28px, 4vw, 64px) 64px;
+  }
+
+  .ui-topbar {
+    min-height: 58px;
+    margin-bottom: 28px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--ui-border);
+  }
+
+  .ui-topbar .ui-kicker {
+    font-size: .65rem;
+    letter-spacing: .12em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .ui-topbar .ui-page-title {
+    margin-top: 3px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+  }
+
+  .ui-topbar .ui-page-subtitle {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: .72rem;
+  }
+
+  .ui-topbar > .ui-command-trigger {
+    min-width: 164px;
+    justify-content: center;
+    border-radius: 12px;
+  }
+
+  .ui-hero {
+    padding: 40px;
+    border-radius: 28px;
+  }
+
+  .ui-hero__title {
+    max-width: 900px;
+    font-size: clamp(2.8rem, 4.4vw, 4.6rem);
+  }
+
+  .ui-hero__subtitle {
+    max-width: 760px;
+    font-size: 1rem;
+  }
+
+  .ui-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    max-width: 900px;
+    margin-top: 28px;
+  }
+
+  .ui-action {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 72px;
+    padding: 13px 15px;
+    gap: 13px;
+  }
+
+  .ui-action__copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .ui-action__title,
+  .ui-action__sub {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .ui-action__title {
+    font-size: .88rem;
+    line-height: 1.25;
+  }
+
+  .ui-action__sub {
+    margin-top: 0;
+    font-size: .72rem;
+    line-height: 1.35;
+  }
+
+  .ui-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .ui-stat {
+    min-height: 128px;
+    padding: 20px;
+  }
+
+  .ui-two-col {
+    grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
+    gap: 16px;
+  }
+
+  .ui-card2 { padding: 22px; }
+}
+
+@media (min-width: 1280px) {
+  .ui-quick-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: none;
+  }
+
+  .ui-action { min-height: 82px; }
+
+  .ui-page {
+    padding-inline: clamp(34px, 4vw, 72px);
+  }
+}
+
+/* Desktop sidebar is the navigation source of truth; topbar stays utility-only. */
+@media (min-width: 901px) {
+  .ui-sidebar .ui-command-trigger { justify-content: flex-start; }
+}
+
+
+.ui-topbar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ui-topbar__avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border);
+  transition: border-color var(--ui-motion) ease, transform var(--ui-motion) ease;
+}
+
+.ui-topbar__avatar:hover {
+  border-color: var(--ui-border-strong);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 900px) {
+  .ui-topbar__actions { width: 100%; }
+}
+
+
+/* Desktop UI 2.2: quick actions are structurally isolated to prevent text collisions. */
+@media (min-width: 901px) {
+  .ui-action {
+    grid-template-columns: 40px minmax(0, 1fr) 18px;
+    grid-template-rows: minmax(0, 1fr);
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .ui-action__icon {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .ui-action__copy {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 3px;
+    overflow: hidden;
+  }
+
+  .ui-action__title,
+  .ui-action__sub {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    margin: 0;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .ui-action__title {
+    line-height: 1.25;
+  }
+
+  .ui-action__sub {
+    line-height: 1.35;
+  }
+
+  .ui-action__arrow {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: var(--text-muted);
+  }
+}
+
+/* Keep mobile action cards safe as well. */
+@media (max-width: 900px) {
+  .ui-action__copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .ui-action__title,
+  .ui-action__sub {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .ui-action__arrow {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: var(--text-muted);
+  }
+}
