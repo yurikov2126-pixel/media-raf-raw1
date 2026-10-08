@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import Avatar from './Avatar.jsx';
 import { api, resolveUrl } from '../api/client.js';
@@ -15,6 +16,12 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
     const [busy, setBusy] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [showComments, setShowComments] = useState(!compact);
+    const [mediaEditing, setMediaEditing] = useState(false);
+    const [mediaDraft, setMediaDraft] = useState(null);
+    const [mediaError, setMediaError] = useState('');
+    const [mediaSaving, setMediaSaving] = useState(false);
+    const mediaDrag = useRef(null);
+    const [draggingMedia, setDraggingMedia] = useState(null);
 
     const isOwner = author?.id === user.id || post.authorId === user.id;
     const isAdmin = user.role === 'ADMIN';
@@ -57,6 +64,20 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
         }
         return [post.mediaUrl];
     })();
+    const beginMediaEdit = () => { setMediaDraft([...images]); setMediaError(''); setMediaEditing(true); setMenuOpen(false); };
+    const reorderMedia = (source, target) => setMediaDraft((prev) => {
+        if (!prev || source === target || !prev.includes(source) || !prev.includes(target)) return prev;
+        const next = [...prev]; next.splice(next.indexOf(target), 0, next.splice(next.indexOf(source), 1)[0]); return next;
+    });
+    const saveMedia = async () => {
+        setMediaSaving(true); setMediaError('');
+        try {
+            const updated = await api(`/posts/${post.id}`, { method: 'PATCH', token, body: { mediaUrls: mediaDraft } });
+            onChanged?.({ ...post, ...updated });
+            setMediaEditing(false);
+        } catch (error) { setMediaError(error.message || 'Не удалось сохранить фотографии'); }
+        finally { setMediaSaving(false); }
+    };
     const [activeImage, setActiveImage] = useState(null);
     const gestureStart = useRef(null);
     const reduceMotion = useReducedMotion();
@@ -136,6 +157,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                                         >
                                             ✏️ Редактировать
                                         </button>
+                                        {images.length > 0 && <button type="button" className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5" onClick={beginMediaEdit}>🖼️ Изменить фотографии</button>}
                                         <button
                                             onClick={() => {
                                                 setMenuOpen(false);
@@ -198,6 +220,28 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                 post.content && <p className={contentClass}>{post.content}</p>
             )}
 
+            {mediaEditing && mediaDraft && (
+                <div className="mt-3 rounded-2xl border border-violet-400/30 bg-violet-500/5 p-3">
+                    <div className="font-semibold mb-2">Редактирование фотографий</div>
+                    <p className="text-xs text-white/50 mb-3">Перетащите фото за ручку, чтобы изменить порядок. Удаление применяется после сохранения.</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {mediaDraft.map((url, index) => (
+                            <div key={url} data-media-url={url} className={`rounded-xl bg-white/5 p-2 ${draggingMedia === url ? 'ring-2 ring-violet-400 opacity-70' : ''}`}>
+                                <img src={resolveUrl(url)} alt={`Фото ${index + 1}`} className="w-full h-28 object-cover rounded-lg" />
+                                <div className="flex items-center justify-between mt-2">
+                                    <button type="button" aria-label={`Переместить фото ${index + 1}`} className="touch-none cursor-grab rounded-lg bg-white/10 px-3 py-2" onPointerDown={(e) => { if (mediaSaving) return; mediaDrag.current = url; setDraggingMedia(url); e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={(e) => { if (!mediaDrag.current) return; const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-media-url]')?.getAttribute('data-media-url'); if (target) reorderMedia(mediaDrag.current, target); }} onPointerUp={() => { mediaDrag.current = null; setDraggingMedia(null); }} onPointerCancel={() => { mediaDrag.current = null; setDraggingMedia(null); }}>⠿</button>
+                                    <button type="button" className="text-pink text-xs px-2 py-2" disabled={mediaSaving} onClick={() => setMediaDraft((prev) => prev.filter((u) => u !== url))}>Удалить</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {mediaError && <p role="alert" className="text-pink text-sm mt-2">{mediaError}</p>}
+                    <div className="flex gap-2 justify-end mt-3">
+                        <button type="button" className="btn-ghost" disabled={mediaSaving} onClick={() => setMediaEditing(false)}>Отмена</button>
+                        <button type="button" className="btn-primary" disabled={mediaSaving || (!mediaDraft.length && !post.content?.trim())} onClick={saveMedia}>{mediaSaving ? 'Сохраняем…' : 'Сохранить фото'}</button>
+                    </div>
+                </div>
+            )}
             {/* Медиа */}
             {images.length > 0 && (
                 <div className={`${compact ? 'mt-2' : 'mt-3'} rounded-2xl overflow-hidden`}>
@@ -211,7 +255,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                 </div>
             )}
 
-            <AnimatePresence>
+            {createPortal(<AnimatePresence>
                 {activeImage !== null && (
                     <motion.div
                         key="photo-viewer"
@@ -256,7 +300,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                         </div>
                     </motion.div>
                 )}
-            </AnimatePresence>
+            </AnimatePresence>, document.body)}
             {/* Реакции */}
             <div className={reactionsMargin}>
                 <PostReactions
