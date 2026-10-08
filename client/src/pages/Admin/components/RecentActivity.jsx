@@ -30,9 +30,7 @@ export default function RecentActivity({ items = [], onOpenAll }) {
                 )}
             </div>
             {items.length === 0 ? (
-                <div className="text-center text-white/40 py-6 text-sm">
-                    Пока пусто
-                </div>
+                <div className="text-center text-white/40 py-6 text-sm">Пока пусто</div>
             ) : (
                 <div className="space-y-0">
                     {items.map((it) => (

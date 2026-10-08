@@ -115,9 +115,7 @@ export default function Dashboard({ stats, token, onReload }) {
                 />
             </div>
 
-            {error && (
-                <div className="card p-4 text-pink bg-pink/10">{error}</div>
-            )}
+            {error && <div className="card p-4 text-pink bg-pink/10">{error}</div>}
 
             <ServerInfoBlock token={token} />
             <MaintenanceBlock token={token} onReload={onReload} />
@@ -147,7 +145,8 @@ function StatsCards({ stats = {} }) {
     );
 }
 
-/* ─────────── Информация о сервере ─────────── */
+/* ─────────── Информация о сервере ───────────
+   Без изменений относительно предыдущей версии. */
 function ServerInfoBlock({ token }) {
     const toast = useToast();
     const [info, setInfo] = useState(null);
@@ -327,7 +326,8 @@ function ServerInfoBlock({ token }) {
     );
 }
 
-/* ─────────── Обслуживание БД ─────────── */
+/* ─────────── Обслуживание БД ───────────
+   Без изменений относительно предыдущей версии. */
 function MaintenanceBlock({ token, onReload }) {
     const [scan, setScan] = useState(null);
     const [scanning, setScanning] = useState(false);
