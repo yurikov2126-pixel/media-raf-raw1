@@ -5,6 +5,7 @@ import PostCard from '../components/PostCard.jsx';
 import ImageCropper from '../components/ImageCropper.jsx';
 import usePostDraft from '../hooks/usePostDraft.js';
 import Icon from '../components/Icon.jsx';
+import Avatar from '../components/Avatar.jsx';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator.jsx';
 import usePullToRefresh from '../hooks/usePullToRefresh.js';
 import useLocalStorage from '../hooks/useLocalStorage.js';
@@ -25,6 +26,7 @@ export default function Feed() {
     const [uploading, setUploading] = useState(false);
     const [publishing, setPublishing] = useState(false);
     const [composeError, setComposeError] = useState('');
+    const [preview, setPreview] = useState(false);
     const fileRef = useRef(null);
     const draft = usePostDraft(user?.id);
     const text = draft.text;
@@ -49,6 +51,7 @@ export default function Feed() {
             draft.clear();
             setImage('');
             setComposeOpen(false);
+            setPreview(false);
             await loadInitial();
         } catch (e) {
             setComposeError(e.message || 'Не удалось опубликовать запись');
@@ -154,11 +157,24 @@ export default function Feed() {
                     <textarea autoFocus className="input resize-none w-full" rows={4} placeholder="Что нового у команды?" value={text} onChange={(e) => setText(e.target.value)} />
                     {draft.hasDraft && <p className="text-xs text-white/40 mt-2">Черновик сохраняется автоматически</p>}
                     {image && <div className="relative mt-3"><img src={image} alt="Фото к публикации" className="max-h-80 w-full object-contain rounded-xl" /><button type="button" className="btn-ghost mt-2" onClick={() => setImage('')}>Удалить фото</button></div>}
+                    {preview && (
+                        <div className="ui-compose-preview mt-4" aria-label="Предпросмотр публикации">
+                            <div className="text-xs text-white/40 mb-3 uppercase tracking-wider">Так публикация будет выглядеть в ленте</div>
+                            <div className="flex items-center gap-3 mb-3">
+                                <Avatar user={user} size={40} />
+                                <div className="min-w-0"><div className="font-semibold truncate">{user.fullName}</div><div className="text-xs text-white/40">@{user.username} · сейчас</div></div>
+                            </div>
+                            {text.trim() && <p className="whitespace-pre-wrap break-words text-white/90">{text}</p>}
+                            {image && <img className="w-full max-h-96 object-contain rounded-xl mt-3" src={image} alt="Предпросмотр фотографии" />}
+                            {!text.trim() && !image && <p className="text-white/40 text-sm">Добавьте текст или фотографию для предпросмотра.</p>}
+                        </div>
+                    )}
                     {composeError && <p role="alert" className="text-pink text-sm mt-2">{composeError}</p>}
                     <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
                         <button type="button" className="btn-ghost" disabled={uploading || publishing} onClick={() => fileRef.current?.click()}>{uploading ? 'Загрузка…' : '📷 Добавить фото'}</button>
                         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file?.type.startsWith('image/')) setCropping({ file }); }} />
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" className="btn-ghost" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? "Скрыть предпросмотр" : "Предпросмотр"}</button>
                             <button type="button" className="btn-ghost" onClick={() => setComposeOpen(false)} disabled={publishing}>Закрыть</button>
                             <button type="button" className="btn-primary" onClick={publish} disabled={publishing || uploading || (!text.trim() && !image)}>{publishing ? 'Публикуем…' : 'Опубликовать'}</button>
                         </div>
