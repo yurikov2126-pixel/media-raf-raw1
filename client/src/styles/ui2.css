@@ -1426,3 +1426,7 @@ select {
 .ui-feed-posts .post-stack{min-width:0;overflow-wrap:anywhere;border-radius:22px}
 .ui-feed-posts .post-stack img{max-width:100%}
 @media(max-width:900px){.ui-feed-page{padding:18px 14px 36px}.ui-feed-compose{padding:15px 16px;border-radius:16px}.ui-feed-posts .post-stack{border-radius:18px}}
+
+/* Feed composer preview */
+.ui-compose-preview{border:1px solid var(--ui-border-strong);background:var(--ui-surface);border-radius:18px;padding:20px;min-width:0;overflow-wrap:anywhere}
+@media(max-width:640px){.ui-compose-preview{padding:14px;border-radius:14px}}
