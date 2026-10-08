@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import Avatar from './Avatar.jsx';
 import { api, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -58,12 +59,18 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
     })();
     const [activeImage, setActiveImage] = useState(null);
     const gestureStart = useRef(null);
+    const reduceMotion = useReducedMotion();
+    const [slideDirection, setSlideDirection] = useState(0);
+    const navigatePhoto = (delta) => {
+        setSlideDirection(delta);
+        setActiveImage((index) => Math.max(0, Math.min(images.length - 1, index + delta)));
+    };
     useEffect(() => {
         if (activeImage === null) return;
         const onKey = (event) => {
             if (event.key === 'Escape') setActiveImage(null);
-            if (event.key === 'ArrowRight') setActiveImage((index) => Math.min(images.length - 1, index + 1));
-            if (event.key === 'ArrowLeft') setActiveImage((index) => Math.max(0, index - 1));
+            if (event.key === 'ArrowRight') navigatePhoto(1);
+            if (event.key === 'ArrowLeft') navigatePhoto(-1);
         };
         window.addEventListener('keydown', onKey);
         const previousOverflow = document.body.style.overflow;
@@ -85,7 +92,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
         if (Math.max(Math.abs(dx), Math.abs(dy)) < 55) return;
         if (Math.abs(dy) > Math.abs(dx) * 1.2) setActiveImage(null);
         else if (Math.abs(dx) > Math.abs(dy) * 1.2) {
-            setActiveImage((index) => Math.max(0, Math.min(images.length - 1, index + (dx < 0 ? 1 : -1))));
+            navigatePhoto(dx < 0 ? 1 : -1);
         }
     };
 
@@ -204,17 +211,52 @@ export default function PostCard({ post, author, onChanged, onDeleted, compact =
                 </div>
             )}
 
-            {activeImage !== null && (
-                <div className="fixed inset-0 z-[230] bg-black/95 flex flex-col items-center justify-center p-3" style={{ touchAction: 'pan-x pan-y' }} onTouchStart={onViewerTouchStart} onTouchEnd={onViewerTouchEnd} onTouchCancel={() => { gestureStart.current = null; }} role="dialog" aria-modal="true" aria-label="Просмотр фотографий">
-                    <button type="button" className="absolute top-4 right-4 btn-ghost" onClick={() => setActiveImage(null)}>Закрыть ✕</button>
-                    <img src={resolveUrl(images[activeImage])} alt={`Фото ${activeImage + 1}`} className="max-w-full max-h-[78vh] object-contain" />
-                    <div className="flex gap-4 items-center mt-4">
-                        <button type="button" className="btn-ghost" disabled={activeImage === 0} onClick={() => setActiveImage((i) => i - 1)}>←</button>
-                        <span>{activeImage + 1} / {images.length}</span>
-                        <button type="button" className="btn-ghost" disabled={activeImage === images.length - 1} onClick={() => setActiveImage((i) => i + 1)}>→</button>
-                    </div>
-                </div>
-            )}
+            <AnimatePresence>
+                {activeImage !== null && (
+                    <motion.div
+                        key="photo-viewer"
+                        initial={reduceMotion ? false : { opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: reduceMotion ? 0 : 0.22 }}
+                        className="fixed inset-0 z-[230] bg-[#080811]/95 backdrop-blur-xl flex flex-col items-center justify-center px-3 py-8"
+                        style={{ touchAction: 'none' }}
+                        onTouchStart={onViewerTouchStart}
+                        onTouchEnd={onViewerTouchEnd}
+                        onTouchCancel={() => { gestureStart.current = null; }}
+                        role="dialog" aria-modal="true" aria-label="Просмотр фотографий"
+                    >
+                        <button type="button" className="absolute top-5 right-5 z-10 grid place-items-center w-11 h-11 rounded-full bg-white/10 border border-white/15 text-white hover:bg-violet-500/25 transition-colors" onClick={() => setActiveImage(null)} aria-label="Закрыть просмотр">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        </button>
+                        <div className="relative flex-1 w-full flex items-center justify-center min-h-0 overflow-hidden">
+                            <AnimatePresence initial={false} custom={slideDirection} mode="wait">
+                                <motion.img
+                                    key={activeImage}
+                                    src={resolveUrl(images[activeImage])}
+                                    alt={`Фото ${activeImage + 1}`}
+                                    custom={slideDirection}
+                                    initial={reduceMotion ? false : { opacity: 0, x: slideDirection * 64, scale: 0.965 }}
+                                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: slideDirection * -64, scale: 0.965 }}
+                                    transition={{ duration: reduceMotion ? 0 : 0.24, ease: 'easeOut' }}
+                                    className="max-w-full max-h-full object-contain rounded-xl select-none"
+                                    draggable={false}
+                                />
+                            </AnimatePresence>
+                        </div>
+                        <div className="flex items-center gap-5 mt-5 shrink-0">
+                            <button type="button" className="grid place-items-center w-12 h-12 rounded-2xl border border-white/15 bg-white/10 text-white shadow-lg backdrop-blur-md transition-all hover:bg-violet-500/25 hover:border-violet-400/50 disabled:opacity-25 disabled:cursor-not-allowed active:scale-95" disabled={activeImage === 0} onClick={() => navigatePhoto(-1)} aria-label="Предыдущее фото">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            </button>
+                            <span className="min-w-16 text-center text-sm font-semibold tracking-wider text-white/75" aria-live="polite">{activeImage + 1} / {images.length}</span>
+                            <button type="button" className="grid place-items-center w-12 h-12 rounded-2xl border border-white/15 bg-white/10 text-white shadow-lg backdrop-blur-md transition-all hover:bg-violet-500/25 hover:border-violet-400/50 disabled:opacity-25 disabled:cursor-not-allowed active:scale-95" disabled={activeImage === images.length - 1} onClick={() => navigatePhoto(1)} aria-label="Следующее фото">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             {/* Реакции */}
             <div className={reactionsMargin}>
                 <PostReactions
