@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../../api/client.js';
 import { useToast } from '../../../store/toast.jsx';
+import { deleteWithUndo } from '../utils.js';
 import ChangePasswordModal from '../../../components/ChangePasswordModal.jsx';
 
 const ROLES = ['STUDENT', 'MENTOR', 'ADMIN'];
@@ -79,15 +80,21 @@ export default function Users({ users, setUsers, token }) {
         }
     };
 
+    const reloadUsers = () => {
+        api('/admin/users', { token }).then(setUsers).catch(() => {});
+    };
+
     const deleteUser = async (id) => {
         if (!confirm('Удалить пользователя со всеми данными?')) return;
-        try {
-            await api(`/admin/users/${id}`, { method: 'DELETE', token });
-            setUsers((prev) => prev.filter((x) => x.id !== id));
-            toast.success('Пользователь удалён');
-        } catch (e) {
-            toast.error(e.message);
-        }
+        await deleteWithUndo({
+            token,
+            url: `/admin/users/${id}`,
+            toast,
+            successMessage: 'Пользователь удалён',
+            onSuccess: () => setUsers((prev) => prev.filter((x) => x.id !== id)),
+            // Если админ нажал «Отменить» — возвращаем юзера в список.
+            onUndo: reloadUsers,
+        });
     };
 
     const toggleSelect = (id) => {
@@ -115,6 +122,8 @@ export default function Users({ users, setUsers, token }) {
             for (const id of ids) {
                 try {
                     if (action === 'delete') {
+                        // Bulk-delete без undo: множественная отмена — UX-кошмар,
+                        // а confirm с числом выше уже защищает от случайности.
                         await api(`/admin/users/${id}`, { method: 'DELETE', token });
                         setUsers((prev) => prev.filter((x) => x.id !== id));
                     } else {
@@ -245,9 +254,7 @@ export default function Users({ users, setUsers, token }) {
                         Найдено: <b>{filtered.length}</b> из {users.length}
                     </div>
                     <button
-                        onClick={() =>
-                            updateFilters({ sort: sortDesc ? 'asc' : '' })
-                        }
+                        onClick={() => updateFilters({ sort: sortDesc ? 'asc' : '' })}
                         className="chip bg-white/5 hover:bg-white/10 text-xs"
                         title="Сортировка по дате регистрации"
                     >
@@ -269,7 +276,10 @@ export default function Users({ users, setUsers, token }) {
                             : '☐ Выбрать все'}
                     </button>
                     {anyFilter && (
-                        <button onClick={resetFilters} className="btn-ghost !py-1 text-xs ml-auto">
+                        <button
+                            onClick={resetFilters}
+                            className="btn-ghost !py-1 text-xs ml-auto"
+                        >
                             Сбросить фильтры
                         </button>
                     )}
@@ -323,7 +333,10 @@ export default function Users({ users, setUsers, token }) {
 
             <div className="card divide-y divide-white/5">
                 {filtered.map((u) => (
-                    <div key={u.id} className="p-4 flex items-center gap-3 flex-wrap">
+                    <div
+                        key={u.id}
+                        className="p-4 flex items-center gap-3 flex-wrap"
+                    >
                         <input
                             type="checkbox"
                             checked={selected.has(u.id)}

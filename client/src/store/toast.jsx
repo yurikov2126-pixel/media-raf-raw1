@@ -19,10 +19,10 @@ export function ToastProvider({ children }) {
     }, []);
 
     const push = useCallback(
-        (message, { type = 'info', duration = 4000 } = {}) => {
+        (message, { type = 'info', duration = 4000, action } = {}) => {
             const id = nextId++;
             setItems((list) => {
-                const next = [...list, { id, message, type }];
+                const next = [...list, { id, message, type, action }];
                 return next.slice(-3);
             });
             if (duration > 0) {
@@ -85,6 +85,17 @@ function ToastStack({ items, onDismiss }) {
                     <div className="flex-1 text-sm break-words whitespace-pre-line">
                         {t.message}
                     </div>
+                    {t.action && (
+                        <button
+                            onClick={() => {
+                                t.action.onClick?.();
+                                onDismiss(t.id);
+                            }}
+                            className="shrink-0 text-xs font-semibold underline hover:no-underline"
+                        >
+                            {t.action.label}
+                        </button>
+                    )}
                     <button
                         onClick={() => onDismiss(t.id)}
                         className="text-white/40 hover:text-white text-sm shrink-0"

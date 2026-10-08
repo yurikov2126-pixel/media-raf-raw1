@@ -623,3 +623,17 @@ model HomeworkSubmission {
   @@index([userId])
   @@index([reviewedBy])
 }
+
+model PendingDeletion {
+  id         String   @id @default(cuid())
+  entityType String // user | post | comment | wiki_article | course
+  entityId   String
+  adminId    String
+  action     String // 'delete_user' | 'delete_post' | ...
+  createdAt  DateTime @default(now())
+  executeAt  DateTime
+
+  @@unique([entityType, entityId])
+  @@index([executeAt])
+  @@index([adminId])
+}

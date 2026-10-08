@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
-import { cleanupAfterUserDelete } from '../../lib/chatCleanup.js';
+import { scheduleDeletion } from '../../lib/pendingDeletion.js';
 import { safe } from './_shared.js';
 
 const router = Router();
@@ -68,52 +68,22 @@ router.delete(
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
-        const affectedChatIds = (
-            await prisma.chatMember.findMany({
-                where: { userId },
-                select: { chatId: true },
-            })
-        ).map((m) => m.chatId);
-
-        await prisma.$transaction(async (tx) => {
-            const userMessages = await tx.message.findMany({
-                where: { senderId: userId },
-                select: { id: true },
-            });
-            const msgIds = userMessages.map((m) => m.id);
-
-            if (msgIds.length > 0) {
-                await tx.message.updateMany({
-                    where: { replyToId: { in: msgIds } },
-                    data: { replyToId: null },
-                });
-                await tx.chat.updateMany({
-                    where: { pinnedMessageId: { in: msgIds } },
-                    data: { pinnedMessageId: null },
-                });
-                await tx.reaction.deleteMany({ where: { messageId: { in: msgIds } } });
-                await tx.message.deleteMany({ where: { id: { in: msgIds } } });
-            }
-
-            await tx.comment.deleteMany({ where: { authorId: userId } });
-            await tx.postReaction.deleteMany({ where: { userId } });
-            await tx.reaction.deleteMany({ where: { userId } });
-            await tx.chatMember.deleteMany({ where: { userId } });
-            await tx.lessonProgress.deleteMany({ where: { userId } });
-            await tx.testAttempt.deleteMany({ where: { userId } });
-            await tx.enrollment.deleteMany({ where: { userId } });
-            await tx.certificate.deleteMany({ where: { userId } });
-            await tx.notification.deleteMany({ where: { userId } });
-            await tx.post.deleteMany({ where: { authorId: userId } });
-            await tx.chat.updateMany({
-                where: { createdBy: userId },
-                data: { createdBy: null },
-            });
-            await tx.user.delete({ where: { id: userId } });
+        // Не удаляем сразу — ставим в очередь на 30 сек.
+        // Реальное удаление делает воркер processPendingDeletions().
+        // Админ может отменить через POST /admin/undo/:token.
+        const row = await scheduleDeletion({
+            entityType: 'user',
+            entityId: userId,
+            adminId: req.user.id,
+            action: 'delete_user',
         });
 
-        const cleanup = await cleanupAfterUserDelete(affectedChatIds);
-        res.json({ ok: true, cleanedChats: cleanup.deleted });
+        res.json({
+            ok: true,
+            undoToken: row.id,
+            executeAt: row.executeAt,
+            undoWindowMs: 30_000,
+        });
     })
 );
 

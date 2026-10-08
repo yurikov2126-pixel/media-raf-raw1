@@ -22,6 +22,7 @@ import practicalsRouter from './practicals.js';
 import homeworkRouter from './homework.js';
 import settingsRouter from './settings.js';
 import dashboardRouter from './dashboard.js';
+import undoRouter from './undo.js';
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.use(auth, requireRole('ADMIN'));
 router.use(statsRouter);
 router.use(systemRouter);
 router.use(actionsRouter);
+router.use(undoRouter);
 router.use(dashboardRouter);  // ← добавлено
 router.use(analyticsRouter);
 router.use(moderationRouter);
