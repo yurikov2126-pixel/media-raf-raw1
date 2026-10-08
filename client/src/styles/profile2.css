@@ -74,3 +74,55 @@
     padding: 12px;
   }
 }
+
+
+/* UI 2.1 profile workspace */
+.ui-profile-page {
+  width: min(100%, 1160px);
+  margin: 0 auto;
+  padding: 26px 32px 64px;
+}
+
+.ui-profile-page > .relative {
+  border: 1px solid var(--ui-border);
+  box-shadow: 0 32px 90px -65px rgba(0,0,0,.85);
+}
+
+.ui-profile-page .profile-v2__portfolio {
+  margin-top: 24px !important;
+}
+
+.ui-profile-page .profile-v2__mosaic {
+  grid-auto-rows: 170px;
+}
+
+.ui-profile-page .profile-v2__stat {
+  min-height: 82px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .ui-profile-page {
+    width: 100%;
+    padding: 18px 0 36px;
+  }
+
+  .ui-profile-page > .relative {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0 0 24px 24px !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .ui-profile-page {
+    padding-inline: 42px;
+  }
+
+  .ui-profile-page .profile-v2__mosaic {
+    grid-auto-rows: 190px;
+  }
+}
