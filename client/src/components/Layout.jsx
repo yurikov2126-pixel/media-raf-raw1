@@ -24,9 +24,10 @@ const FALLBACK_LINKS = [
 const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
 
 function normalizeLinks(items) {
+    const legacy = { '🏠': 'dashboard', '💬': 'message', '🎓': 'book', '📖': 'book', '🏆': 'trophy', '⚙️': 'settings' };
     return items.map((item) => ({
         ...item,
-        icon: typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles',
+        icon: legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles'),
     }));
 }
 
