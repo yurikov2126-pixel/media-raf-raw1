@@ -134,3 +134,8 @@
   }
   .ui-profile-page .profile-v2 > *:last-child { scroll-margin-bottom: 140px; }
 }
+
+/* The mobile navigation now occupies layout space; remove obsolete giant spacer. */
+@media (max-width: 900px) {
+  .ui-profile-page { padding-bottom: 24px; }
+}
