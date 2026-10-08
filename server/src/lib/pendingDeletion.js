@@ -5,7 +5,12 @@ import { cleanupAfterUserDelete } from './chatCleanup.js';
    При DELETE-запросе мы не удаляем сразу, а создаём запись в PendingDeletion
    с executeAt = now + окно. Cron раз в 30 секунд сносит всё, что просрочено.
    Если админ успел нажать «Отменить» — запись из очереди удаляется,
-   реальные данные не тронуты. */
+   реальные данные не тронуты.
+
+   В журнал AdminAction пишутся три события:
+     - schedule_delete_<type> — админ нажал «удалить» (пишется в роуте)
+     - undo_delete_<type>     — админ нажал «отменить» (пишется в undo.js)
+     - execute_delete_<type>  — воркер реально выполнил удаление (тут) */
 
 export const UNDO_WINDOW_MS = 30_000;
 
@@ -117,8 +122,11 @@ export async function processPendingDeletions() {
             await prisma.pendingDeletion.delete({ where: { id: row.id } }).catch(() => {});
             continue;
         }
+
+        let success = false;
         try {
             await executor(row.entityId);
+            success = true;
             done++;
         } catch (e) {
             // P2025 — запись уже удалена другим способом. Это ок, не считаем ошибкой.
@@ -131,6 +139,24 @@ export async function processPendingDeletions() {
                 );
             }
         } finally {
+            // Аудит исполнения — только при успехе. Пишем в AdminAction
+            // от имени админа, который изначально запланировал удаление.
+            if (success) {
+                await prisma.adminAction
+                    .create({
+                        data: {
+                            adminId: row.adminId,
+                            action: `execute_delete_${row.entityType}`,
+                            payload: JSON.stringify({
+                                entityId: row.entityId,
+                                scheduledAt: row.createdAt,
+                            }),
+                            affected: 1,
+                        },
+                    })
+                    .catch(() => {});
+            }
+
             await prisma.pendingDeletion
                 .delete({ where: { id: row.id } })
                 .catch(() => {});

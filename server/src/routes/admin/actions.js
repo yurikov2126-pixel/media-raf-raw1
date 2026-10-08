@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { safe } from './_shared.js';
 import { prisma } from '../../lib/prisma.js';
+import {
+    cleanupOldActions,
+    getActionCleanupSettings,
+} from '../../lib/adminActionCleanup.js';
 
 const router = Router();
 
@@ -108,6 +112,30 @@ router.get(
             actions: actionsRaw.map((a) => a.action),
             admins,
         });
+    })
+);
+
+router.get(
+    '/actions/cleanup-settings',
+    safe(async (_req, res) => {
+        res.json(await getActionCleanupSettings());
+    })
+);
+
+/**
+ * Запустить очистку вручную.
+ * body: { dryRun?: boolean }
+ * Ручной запуск игнорирует enabled=false (это осознанное действие админа).
+ */
+router.post(
+    '/actions/cleanup-now',
+    safe(async (req, res) => {
+        const { dryRun } = req.body || {};
+        const r = await cleanupOldActions({
+            dryRun: !!dryRun,
+            trigger: 'manual-force',
+        });
+        res.json(r);
     })
 );
 
