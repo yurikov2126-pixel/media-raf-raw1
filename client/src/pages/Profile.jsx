@@ -8,6 +8,7 @@ import ProfileEditor from '../components/ProfileEditor.jsx';
 import PostComposer from '../components/PostComposer.jsx';
 import PostCard from '../components/PostCard.jsx';
 import ProfilePhotoGallery from '../components/ProfilePhotoGallery.jsx';
+import ProfileAlbums from '../components/ProfileAlbums.jsx';
 import ReportButton from '../components/ReportButton.jsx';
 import LevelBadge from '../components/LevelBadge.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
@@ -302,6 +303,7 @@ export default function Profile() {
                     {[
                         ['posts', 'Публикации'],
                         ['photos', '📷 Фотографии'],
+                        ['albums', '🗂️ Альбомы'],
                         ['courses', 'Курсы'],
                         ['certificates', 'Сертификаты'],
                         ...(showQuestsTab ? [['quests', '⚔️ Квесты']] : []),
@@ -353,6 +355,8 @@ export default function Profile() {
                 )}
 
                 {tab === 'photos' && <ProfilePhotoGallery posts={profile.posts || []} />}
+
+                {tab === 'albums' && <ProfileAlbums username={username} posts={profile.posts || []} isMe={isMe} />}
 
                 {tab === 'courses' && (
                     <div className="py-6 grid gap-3">
