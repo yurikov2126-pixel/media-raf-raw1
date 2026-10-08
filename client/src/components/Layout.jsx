@@ -174,7 +174,7 @@ export default function Layout() {
                 )}
 
                 <NetworkBanner />
-                <div key={location.pathname} className="page-enter">{outlet}</div>
+                <div key={location.pathname} className="page-enter">{outlet}{!isChatRoom && <div className="ui-mobile-content-clearance" aria-hidden="true" />}</div>
             </motion.main>
 
             <MobileNav links={links} user={user} />
