@@ -151,11 +151,10 @@ async function getHealth() {
 
 /**
  * Сводка для дашборда-2.0.
- * Query:
- *   period — 7 или 30 дней (по умолчанию 7)
+ * Query: period — 7 или 30 дней (по умолчанию 7).
  *
  * Счётчики (users/courses/…) НЕ дублируем — они уже в /admin/stats.
- * Dashboard принимает их пропсом, чтобы не делать два запроса.
+ * Фронт передаёт их в Dashboard пропсом.
  */
 router.get(
     '/dashboard/summary',
