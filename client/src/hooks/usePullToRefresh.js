@@ -19,10 +19,12 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
     const [refreshing, setRefreshing] = useState(false);
 
     const startYRef = useRef(null);
+    const scrollContainerRef = useRef(null);
     const pullingRef = useRef(false);
 
     const reset = useCallback(() => {
         startYRef.current = null;
+        scrollContainerRef.current = null;
         pullingRef.current = false;
         setPull(0);
     }, []);
@@ -31,7 +33,11 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
         (e) => {
             if (disabled || refreshing) return;
             const el = ref.current;
-            if (!el || el.scrollTop > 0) return;
+            if (!el || e.touches.length !== 1) return;
+            const scrolling = el.closest('[data-scroll-container]') || document.scrollingElement;
+            scrollContainerRef.current = scrolling;
+            if (scrolling?.scrollTop > 0 || window.scrollY > 0) return;
+            if (e.target.closest('textarea, input, select, [contenteditable="true"], [role="dialog"]')) return;
             startYRef.current = e.touches[0].clientY;
             pullingRef.current = false;
         },
@@ -44,7 +50,7 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
             const el = ref.current;
             if (!el) return;
 
-            if (el.scrollTop > 0) {
+            if ((scrollContainerRef.current?.scrollTop || 0) > 0 || window.scrollY > 0) {
                 reset();
                 return;
             }
@@ -61,8 +67,7 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
             const next = Math.min(MAX_PULL, dy * RESISTANCE);
             setPull(next);
 
-            // Блокируем нативный скролл, пока тянем
-            if (dy > 10 && e.cancelable) e.preventDefault();
+            // Не блокируем нативную прокрутку: iOS PWA может застрять при preventDefault.
         },
         [disabled, refreshing, ref, reset]
     );
@@ -86,7 +91,7 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
         if (!el) return;
 
         el.addEventListener('touchstart', handleTouchStart, { passive: true });
-        el.addEventListener('touchmove', handleTouchMove, { passive: false });
+        el.addEventListener('touchmove', handleTouchMove, { passive: true });
         el.addEventListener('touchend', handleTouchEnd);
         el.addEventListener('touchcancel', reset);
 
