@@ -1413,3 +1413,16 @@ select {
     display: grid !important;
   }
 }
+
+
+/* UI 2.1 — editorial feed */
+.ui-feed-page{width:min(100%,1020px);margin:0 auto;padding:32px clamp(16px,3vw,42px) 64px;min-width:0}
+.ui-feed-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.ui-feed-heading h1{font-size:clamp(2rem,3vw,3.25rem);line-height:1.1;letter-spacing:-.04em}
+.ui-feed-subtitle{color:var(--text-muted);margin:10px 0 22px;line-height:1.5}
+.ui-feed-compose{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:19px 22px;margin:0 0 24px;border:1px solid var(--ui-border-strong);border-radius:20px;background:var(--ui-surface);font-weight:700;transition:background .2s,border-color .2s}
+.ui-feed-compose:hover{background:rgba(124,58,237,.12);border-color:rgba(167,139,250,.45)}
+.ui-feed-posts{max-width:850px;margin:0 auto;min-width:0}
+.ui-feed-posts .post-stack{min-width:0;overflow-wrap:anywhere;border-radius:22px}
+.ui-feed-posts .post-stack img{max-width:100%}
+@media(max-width:900px){.ui-feed-page{padding:18px 14px 36px}.ui-feed-compose{padding:15px 16px;border-radius:16px}.ui-feed-posts .post-stack{border-radius:18px}}
