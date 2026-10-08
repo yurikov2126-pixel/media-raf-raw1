@@ -1386,3 +1386,30 @@ select {
     color: var(--text-muted);
   }
 }
+
+
+/* Responsive ownership: CSS controls the shell chrome, not utility visibility classes. */
+@media (min-width: 901px) {
+  .ui-sidebar {
+    display: flex !important;
+  }
+
+  .ui-mobile-topbar,
+  .ui-mobile-nav {
+    display: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .ui-sidebar {
+    display: none !important;
+  }
+
+  .ui-mobile-topbar {
+    display: flex !important;
+  }
+
+  .ui-mobile-nav {
+    display: grid !important;
+  }
+}
