@@ -165,7 +165,7 @@ export default function Feed() {
                     </div>
                 </section>
             )}
-            {cropping && <ImageCropper file={cropping.file} onCrop={onCrop} onCancel={() => setCropping(null)} />}
+            {cropping && <ImageCropper file={cropping.file} aspect={4 / 3} outputWidth={1280} outputHeight={960} title="Обрезка изображения для поста" onDone={onCrop} onCancel={() => setCropping(null)} />}
 
             {loading && (
                 <div className="card p-10 text-center text-white/40">Загрузка ленты…</div>
