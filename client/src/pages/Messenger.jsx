@@ -764,6 +764,17 @@ export default function Messenger() {
                                             </span>
                                         </div>
                                     )}
+                                    {firstUnreadId === m.id && (
+                                        <div role="separator" aria-label="Непрочитанные сообщения"
+                                            className="flex items-center gap-3 py-3" style={{ color: 'var(--text-secondary)' }}>
+                                            <span className="h-px flex-1" style={{ backgroundColor: 'var(--border-strong)' }} />
+                                            <span className="rounded-full px-3 py-1 text-xs font-semibold"
+                                                style={{ backgroundColor: 'var(--bg-elev-2)', border: '1px solid var(--border-strong)' }}>
+                                                Непрочитанные сообщения
+                                            </span>
+                                            <span className="h-px flex-1" style={{ backgroundColor: 'var(--border-strong)' }} />
+                                        </div>
+                                    )}
                                     <MessageBubble
                                     m={m}
                                     isOwn={m.sender.id === user.id}
