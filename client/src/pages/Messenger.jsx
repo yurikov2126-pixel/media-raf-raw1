@@ -333,11 +333,11 @@ export default function Messenger() {
             cancelAnimationFrame(raf);
             raf = requestAnimationFrame(() => { if (!userScrolled) el.scrollTop = el.scrollHeight; });
         };
+        const stopFollowing = () => { userScrolled = true; };
         const observer = new ResizeObserver(followBottom);
         const expiry = window.setTimeout(stopFollowing, 12000);
         Array.from(el.children).forEach((node) => observer.observe(node));
         const onMediaLoad = () => followBottom();
-        const stopFollowing = () => { userScrolled = true; };
         el.addEventListener('load', onMediaLoad, true);
         el.addEventListener('loadedmetadata', onMediaLoad, true);
         el.addEventListener('wheel', stopFollowing, { passive: true });
