@@ -83,7 +83,7 @@
   padding: 26px 32px 64px;
 }
 
-.ui-profile-page > .relative {
+.ui-profile-page > .relative:first-child {
   border: 1px solid var(--ui-border);
   box-shadow: 0 32px 90px -65px rgba(0,0,0,.85);
 }
@@ -110,7 +110,7 @@
     padding: 18px 0 36px;
   }
 
-  .ui-profile-page > .relative {
+  .ui-profile-page > .relative:first-child {
     border-left: 0;
     border-right: 0;
     border-radius: 0 0 24px 24px !important;
