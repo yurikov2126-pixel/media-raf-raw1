@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
  * Shared touch-only swipe action. Keeps the action hidden under an opaque,
  * theme-aware card until the user deliberately drags left.
  */
-export default function SwipeDismissRow({ children, onDismiss, onOpen, className = '' }) {
+export default function SwipeDismissRow({ children, onDismiss, onRead, onOpen, className = '' }) {
     const gesture = useRef(null);
     const suppressClick = useRef(false);
     const [offset, setOffset] = useState(0);
@@ -27,22 +27,25 @@ export default function SwipeDismissRow({ children, onDismiss, onOpen, className
         if (g.mode !== 'horizontal') return;
         g.dx = dx;
         suppressClick.current = true;
-        setOffset(Math.max(-120, Math.min(0, dx)));
+        setOffset(Math.max(-120, Math.min(onRead ? 120 : 0, dx)));
     };
     const end = async () => {
         const g = gesture.current;
         gesture.current = null;
         if (!g || g.mode !== 'horizontal') return;
-        if (g.dx > -85) {
+        if (g.dx > -85 && (!onRead || g.dx < 85)) {
             setOffset(0);
             return;
         }
+        const readAction = g.dx >= 85 && Boolean(onRead);
         setBusy(true);
-        setOffset(-120);
+        setOffset(readAction ? 120 : -120);
         try {
-            await onDismiss();
+            if (readAction) await onRead();
+            else await onDismiss();
+            setOffset(0);
         } catch {
-            setError('Не удалось удалить уведомление');
+            setError(readAction ? 'Не удалось отметить уведомление прочитанным' : 'Не удалось удалить уведомление');
             setOffset(0);
         } finally {
             setBusy(false);
@@ -62,6 +65,20 @@ export default function SwipeDismissRow({ children, onDismiss, onOpen, className
 
     return (
         <div className="relative overflow-hidden" style={{ background: 'var(--bg-elev-1)' }}>
+            {onRead && (
+                <div
+                    className="absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden whitespace-nowrap text-sm font-semibold text-white"
+                    style={{
+                        width: Math.max(0, offset) + 'px',
+                        background: '#15966e',
+                        opacity: Math.min(1, Math.max(0, offset) / 50),
+                        transition: gesture.current?.mode === 'horizontal' ? 'none' : 'width 180ms ease, opacity 180ms ease',
+                    }}
+                    aria-hidden="true"
+                >
+                    <span className="shrink-0">✓ Прочитано</span>
+                </div>
+            )}
             <div
                 className="absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden whitespace-nowrap text-sm font-semibold text-white"
                 style={{
