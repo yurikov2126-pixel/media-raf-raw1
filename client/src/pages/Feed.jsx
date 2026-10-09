@@ -13,16 +13,29 @@ const PAGE_SIZE = 20;
 // Keep only a few recent feed views in memory; never persist user posts.
 const feedSnapshots = new Map();
 const SNAPSHOT_TTL = 5 * 60 * 1000;
+const MAX_FEED_SNAPSHOTS = 3;
+function pruneSnapshots() {
+    const now = Date.now();
+    for (const [key, entry] of feedSnapshots) {
+        if (now - entry.savedAt > SNAPSHOT_TTL) feedSnapshots.delete(key);
+    }
+    while (feedSnapshots.size > MAX_FEED_SNAPSHOTS) {
+        feedSnapshots.delete(feedSnapshots.keys().next().value);
+    }
+}
 function readSnapshot(key) {
+    pruneSnapshots();
     const entry = feedSnapshots.get(key);
     if (!entry) return null;
-    if (Date.now() - entry.savedAt > SNAPSHOT_TTL) { feedSnapshots.delete(key); return null; }
+    // Recently revisited filters are kept ahead of less recently used views.
+    feedSnapshots.delete(key);
+    feedSnapshots.set(key, entry);
     return entry;
 }
 function saveSnapshot(key, value) {
     feedSnapshots.delete(key);
     feedSnapshots.set(key, { ...value, savedAt: Date.now() });
-    if (feedSnapshots.size > 6) feedSnapshots.delete(feedSnapshots.keys().next().value);
+    pruneSnapshots();
 }
 
 export default function Feed() {
