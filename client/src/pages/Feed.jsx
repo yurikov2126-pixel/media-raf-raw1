@@ -30,6 +30,8 @@ export default function Feed() {
     const linkedCommentId = params.get('comment') || '';
     const [linkedPost, setLinkedPost] = useState(null);
     const [linkedError, setLinkedError] = useState('');
+    const [focusedComment, setFocusedComment] = useState(null);
+    const [focusedCommentStatus, setFocusedCommentStatus] = useState('');
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -71,6 +73,34 @@ export default function Feed() {
             .catch((error) => { if (active) setLinkedError(error.message || 'Публикация недоступна'); });
         return () => { active = false; };
     }, [token, linkedPostId]);
+
+    useEffect(() => {
+        if (!token || !linkedPostId || !linkedCommentId) {
+            setFocusedComment(null);
+            setFocusedCommentStatus('');
+            return;
+        }
+        let active = true;
+        setFocusedComment(null);
+        setFocusedCommentStatus('loading');
+        api('/posts/' + encodeURIComponent(linkedPostId) + '/comments', { token })
+            .then((tree) => {
+                if (!active) return;
+                const find = (items) => {
+                    for (const item of items || []) {
+                        if (String(item.id) === String(linkedCommentId)) return item;
+                        const nested = find(item.replies);
+                        if (nested) return nested;
+                    }
+                    return null;
+                };
+                const found = find(tree);
+                setFocusedComment(found);
+                setFocusedCommentStatus(found ? 'found' : 'missing');
+            })
+            .catch(() => { if (active) setFocusedCommentStatus('error'); });
+        return () => { active = false; };
+    }, [token, linkedPostId, linkedCommentId]);
 
     /* Первичная загрузка */
     const loadInitial = useCallback(async () => {
@@ -220,6 +250,24 @@ export default function Feed() {
                 </div>
                 {linkedError && <p role="alert" className="text-sm opacity-70">{linkedError}</p>}
                 {!linkedPost && !linkedError && <p className="text-sm opacity-60">Загружаем публикацию…</p>}
+                {linkedPost && linkedCommentId && (
+                    <div className="mb-4 rounded-2xl border-2 border-violet-400/60 bg-violet-500/10 p-4" role="region" aria-label="Комментарий из уведомления">
+                        <div className="font-semibold text-sm mb-2">💬 Комментарий, в котором вас упомянули</div>
+                        {focusedCommentStatus === 'loading' && <div className="text-sm opacity-60">Загружаем комментарий…</div>}
+                        {focusedCommentStatus === 'found' && focusedComment && (
+                            <>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <span className="text-sm font-semibold">{focusedComment.author?.fullName || 'Участник'}</span>
+                                    <span className="text-xs opacity-60">{focusedComment.createdAt ? new Date(focusedComment.createdAt).toLocaleString('ru-RU') : ''}</span>
+                                </div>
+                                <p className="text-sm whitespace-pre-wrap break-words">{focusedComment.content}</p>
+                                <div className="text-xs opacity-60 mt-2">Полная ветка обсуждения находится ниже.</div>
+                            </>
+                        )}
+                        {focusedCommentStatus === 'missing' && <p className="text-sm opacity-60">Комментарий удалён или больше недоступен.</p>}
+                        {focusedCommentStatus === 'error' && <p className="text-sm opacity-60">Не удалось загрузить комментарий. Обновите страницу.</p>}
+                    </div>
+                )}
                 {linkedPost && <PostCard post={linkedPost} author={linkedPost.author} compact={compact} onTagClick={(value) => changeFilters({ tag: value, post: '' })} highlightCommentId={linkedCommentId} onChanged={(u) => setLinkedPost((prev) => ({ ...prev, ...u }))} onDeleted={() => { setLinkedPost(null); changeFilters({ post: '' }); }} onReposted={loadInitial} />}
             </section>}
             <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
