@@ -9,7 +9,7 @@ import PostReactions from './PostReactions.jsx';
 import CommentSection from './CommentSection.jsx';
 import ReportButton from './ReportButton.jsx';
 
-export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted }) {
+export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted, highlightCommentId = '' }) {
     const { user, token } = useAuth();
     const [editing, setEditing] = useState(false);
     const [socialBusy, setSocialBusy] = useState(false);
@@ -400,7 +400,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     )}
                     {showComments && (
                         <div className="mt-3">
-                            <CommentSection postId={post.id} initialCount={commentCount} />
+                            <CommentSection postId={post.id} initialCount={commentCount} highlightCommentId={highlightCommentId} />
                         </div>
                     )}
                 </>
