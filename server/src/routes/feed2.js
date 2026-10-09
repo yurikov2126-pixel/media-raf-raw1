@@ -51,7 +51,13 @@ router.get('/posts', async (req, res) => {
         where.createdAt = { gte: new Date(Date.now() - days * 86400000) };
     }
     if (q) where.OR = [{ content: { contains: q, mode: 'insensitive' } }, { author: { fullName: { contains: q, mode: 'insensitive' }, isBanned: false } }, { author: { username: { contains: q, mode: 'insensitive' }, isBanned: false } }];
-    if (tag) where.content = { contains: '#' + tag, mode: 'insensitive' };
+    if (tag) {
+        // Match complete hashtags (not prefixes): #photo must not match #photography.
+        // Prisma's contains cannot express token boundaries; use a parameterized PostgreSQL regex.
+        const pattern = '(^|[^[:alnum:]_])#' + tag + '([^[:alnum:]_]|$)';
+        const matching = await prisma.$queryRaw`SELECT "id" FROM "Post" WHERE "content" ~* ${pattern}`;
+        where.id = { in: matching.map((row) => row.id) };
+    }
     if (mode === 'saved') where.savedBy = { some: { userId: req.user.id } };
     // For recommended posts use a recent window and rank by engagement, with a recency boost.
     if (mode === 'recommended') {
@@ -92,6 +98,24 @@ router.post('/posts/:id/repost', async (req, res) => {
     if (content.length > 1000) return res.status(400).json({ error: 'Комментарий к репосту слишком длинный' });
     const post = await prisma.post.create({ data: { authorId: req.user.id, content, repostOfId: rootId } });
     res.status(201).json({ id: post.id });
+});
+router.get('/authors', async (req, res) => {
+    const q = String(req.query.q || '').trim().replace(/^@/, '').slice(0, 60);
+    if (q.length < 2) return res.json([]);
+    const authors = await prisma.user.findMany({
+        where: {
+            isBanned: false,
+            posts: { some: {} },
+            OR: [
+                { username: { contains: q, mode: 'insensitive' } },
+                { fullName: { contains: q, mode: 'insensitive' } },
+            ],
+        },
+        select: { id: true, username: true, fullName: true, avatar: true },
+        orderBy: { username: 'asc' },
+        take: 8,
+    });
+    res.json(authors);
 });
 router.get('/tags', async (req, res) => {
     const posts = await prisma.post.findMany({ where: { author: { isBanned: false }, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } }, select: { content: true }, orderBy: { createdAt: 'desc' }, take: 500 });
