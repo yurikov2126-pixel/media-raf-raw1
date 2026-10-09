@@ -746,6 +746,7 @@ export default function Messenger() {
                                     highlight={highlightId === m.id}
                                     onlineSet={onlineUsers}
                                     onReact={(emoji) => toggleReaction(m.id, emoji)}
+                                    onSwipeReply={(message) => { setReplyTo(message); setEditing(null); textareaRef.current?.focus(); }}
                                     onOpenImage={() => openViewer(m.id)}
                                     onOpenProfile={() => goProfile(m.sender.username)}
                                     onScrollToReply={(id) => scrollToMessage(id)}
@@ -946,21 +947,21 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <button type="button" className="fixed inset-0 z-[70] bg-black/40 md:bg-transparent cursor-default"
+                        <button type="button" className="fixed inset-0 z-[70] bg-black/30 md:bg-transparent cursor-default"
                             onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
                         {/* На телефоне — нижняя панель с большими зонами нажатия. */}
-                        <div className="fixed inset-x-0 bottom-0 z-[80] md:hidden rounded-t-3xl border-t border-white/10 shadow-2xl p-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] max-h-[80dvh] overflow-y-auto"
-                            style={{ backgroundColor: 'var(--bg-elev-1)', color: 'var(--text-primary)' }}
+                        <div className="mrr-message-actions fixed left-3 right-3 bottom-2 z-[80] md:hidden rounded-2xl border shadow-2xl p-2 pb-[calc(8px+env(safe-area-inset-bottom,0px))] max-h-[70dvh] max-w-sm mx-auto overflow-y-auto"
+                            style={{ backgroundColor: 'var(--bg-elev-1)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
                             role="dialog" aria-modal="true" aria-label="Действия с сообщением">
-                            <div className="w-10 h-1 rounded-full mx-auto mb-3" style={{ backgroundColor: 'var(--border-strong)' }} />
-                            <div className="flex items-center justify-between px-2 pb-2">
+                            <div className="w-8 h-1 rounded-full mx-auto mb-1" style={{ backgroundColor: 'var(--border-strong)' }} />
+                            <div className="flex items-center justify-between px-2 pb-1">
                                 <span className="font-semibold text-sm">Действия с сообщением</span>
-                                <button type="button" onClick={() => setContextMenu(null)} className="min-w-11 min-h-11 rounded-xl" aria-label="Закрыть меню">✕</button>
+                                <button type="button" onClick={() => setContextMenu(null)} className="min-w-9 min-h-9 rounded-xl" aria-label="Закрыть меню">✕</button>
                             </div>
                             <div className="grid grid-cols-1 gap-1">
                                 {actions.map((a) => (
                                     <button type="button" key={a.id} onClick={() => handler(a.id)}
-                                        className="w-full min-h-12 text-left px-4 py-3 text-base rounded-xl hover:bg-white/10 active:bg-white/15"
+                                        className="w-full min-h-10 text-left px-3 py-2 text-sm rounded-xl hover:bg-white/10 active:bg-white/15"
                                         style={a.danger ? { color: '#e94b78' } : undefined}>
                                         {a.label}
                                     </button>

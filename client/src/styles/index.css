@@ -1048,3 +1048,13 @@ html, body {
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+
+/* Compact message actions on mobile: slide up without layout shift. */
+@keyframes mrr-message-actions-in {
+    from { opacity: 0; transform: translateY(18px) scale(.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.mrr-message-actions { animation: mrr-message-actions-in 180ms cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+    .mrr-message-actions { animation: none; }
+}

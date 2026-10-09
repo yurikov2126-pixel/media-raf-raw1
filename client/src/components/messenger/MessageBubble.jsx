@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Avatar from '../Avatar.jsx';
 import MessageText from '../MessageText.jsx';
 import VoicePlayer from '../VoicePlayer.jsx';
@@ -7,10 +7,12 @@ import { Sticker } from '../../stickers/pack.jsx';
 
 export default function MessageBubble({
                                           m, isOwn, highlight, onlineSet,
-                                          onOpenImage, onOpenProfile, onScrollToReply, onLongPress, onReact,
+                                          onOpenImage, onOpenProfile, onScrollToReply, onLongPress, onReact, onSwipeReply,
                                       }) {
     const longPressTimer = useRef(null);
     const startPos = useRef(null);
+    const [swipeX, setSwipeX] = useState(0);
+    const swipeRef = useRef(0);
 
     const grouped = (m.reactions || []).reduce((acc, r) => {
         acc[r.emoji] = (acc[r.emoji] || 0) + 1;
@@ -21,6 +23,8 @@ export default function MessageBubble({
     const startLongPress = (e) => {
         const touch = e.touches?.[0];
         startPos.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+        swipeRef.current = 0;
+        setSwipeX(0);
         clearTimeout(longPressTimer.current);
         longPressTimer.current = setTimeout(() => {
             if (m.deletedAt) return;
@@ -30,14 +34,23 @@ export default function MessageBubble({
     const moveLongPress = (e) => {
         const touch = e.touches?.[0];
         if (!touch || !startPos.current) return;
-        if (
-            Math.abs(touch.clientX - startPos.current.x) > 8 ||
-            Math.abs(touch.clientY - startPos.current.y) > 8
-        )
-            clearTimeout(longPressTimer.current);
+        const dx = touch.clientX - startPos.current.x;
+        const dy = touch.clientY - startPos.current.y;
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(longPressTimer.current);
+        // Horizontal right swipe to reply. Ignore vertical scrolling and left swipes.
+        if (Math.abs(dx) > Math.abs(dy) * 1.3 && dx > 0 && !m.deletedAt) {
+            swipeRef.current = Math.min(72, dx);
+            setSwipeX(swipeRef.current);
+        } else if (swipeRef.current) {
+            swipeRef.current = 0;
+            setSwipeX(0);
+        }
     };
     const endLongPress = () => {
         clearTimeout(longPressTimer.current);
+        if (swipeRef.current >= 56 && !m.deletedAt) onSwipeReply?.(m);
+        swipeRef.current = 0;
+        setSwipeX(0);
         startPos.current = null;
     };
     const onCtx = (e) => {
@@ -72,16 +85,20 @@ export default function MessageBubble({
     return (
         <div
             id={`msg-${m.id}`}
-            className={`group flex gap-2 ${isOwn ? 'flex-row-reverse' : ''} rounded-2xl transition ${
+            className={`group relative flex gap-2 ${isOwn ? 'flex-row-reverse' : ''} rounded-2xl transition ${
                 highlight ? 'bg-violet/20 ring-2 ring-violet/60' : ''
             }`}
         >
+            {swipeX > 12 && (
+                <span className="absolute left-3 self-center text-violet-soft pointer-events-none text-xl" aria-hidden="true">↩</span>
+            )}
             {!isOwn && (
                 <button onClick={onOpenProfile} className="shrink-0 hover:opacity-80 transition">
                     <Avatar user={m.sender} size={34} online={onlineSet?.has(m.sender.id)} />
                 </button>
             )}
             <div
+                style={{ transform: `translateX(${swipeX}px)`, transition: swipeX ? 'none' : 'transform 180ms ease-out' }}
                 className={`max-w-[80%] md:max-w-[65%] ${
                     isOwn ? 'items-end' : 'items-start'
                 } flex flex-col`}
