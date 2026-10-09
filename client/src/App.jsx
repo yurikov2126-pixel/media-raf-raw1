@@ -6,6 +6,7 @@ import Layout from './components/Layout.jsx';
 import PwaUpdateNotice from './components/PwaUpdateNotice.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
+import NetworkBanner from './components/NetworkBanner.jsx';
 import OnboardingModal from './components/OnboardingModal.jsx';
 import AchievementToast from './components/AchievementToast.jsx';
 import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
@@ -103,6 +104,8 @@ export default function App() {
             {/* Keep the current route mounted while offline, so returning online
                 restores the same screen without losing navigation state. */}
             {user && isOffline && !sessionWasOnline && <OfflineScreen />}
+
+            {user && sessionWasOnline && <NetworkBanner />}
 
             <PwaUpdateNotice />
             {user && <GlobalCommandPalette />}

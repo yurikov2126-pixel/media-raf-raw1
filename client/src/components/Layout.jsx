@@ -9,7 +9,6 @@ import { isAnyModalOpen, subscribeModalState } from '../lib/modalStack.js';
 import MobileNav from './MobileNav.jsx';
 import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
-import NetworkBanner from './NetworkBanner.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import Icon from './Icon.jsx';
 
@@ -173,7 +172,6 @@ export default function Layout() {
                     </div>
                 )}
 
-                <NetworkBanner />
                 <div key={location.pathname} className="page-enter">{outlet}{!isChatRoom && <div className="ui-mobile-content-clearance" aria-hidden="true" />}</div>
             </motion.main>
 

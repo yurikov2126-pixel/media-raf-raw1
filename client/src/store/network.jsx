@@ -87,6 +87,16 @@ export function NetworkProvider({ children }) {
         };
     }, [runPing]);
 
+    /* While the app is visible, probe the API periodically even if the
+       browser still reports online. iOS PWA often misses offline events. */
+    useEffect(() => {
+        const probe = () => {
+            if (document.visibilityState === 'visible' && !isOffline) runPing();
+        };
+        const id = window.setInterval(probe, 12000);
+        return () => window.clearInterval(id);
+    }, [isOffline, runPing]);
+
     /* Пока считаем, что офлайн — периодически пингуем.
        Первый пинг почти сразу, дальше — раз в PING_INTERVAL_MS.
        Так мы восстанавливаемся даже если браузер не стрельнул `online`. */
