@@ -19,7 +19,7 @@ export default function PwaUpdateNotice() {
                 document.addEventListener('visibilitychange', check);
                 window.addEventListener('focus', check);
                 window.addEventListener('online', check);
-                const interval = window.setInterval(check, 60 * 1000);
+                const interval = window.setInterval(check, 15 * 60 * 1000);
                 cleanup = () => {
                     document.removeEventListener('visibilitychange', check);
                     window.removeEventListener('focus', check);
