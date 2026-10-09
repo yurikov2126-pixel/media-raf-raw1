@@ -651,15 +651,15 @@ export default function Messenger() {
                     </div>
                 ) : (
                     <>
-                        <header className="p-3 border-b border-white/5 flex items-center gap-2 shrink-0">
+                        <header className="px-3 py-2.5 md:px-4 border-b border-white/10 bg-ink-800/80 backdrop-blur flex items-center gap-2 shrink-0">
                             <button
-                                className="md:hidden btn-ghost !p-2"
+                                className="md:hidden btn-ghost !p-2 min-w-10 min-h-10 rounded-xl"
                                 onClick={() => nav('/app/chats')}
                                 aria-label="Назад к списку чатов"
                             >←</button>
                             <button
                                 onClick={() => activeChat?.type === 'GROUP' && setShowMembers((v) => !v)}
-                                className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-90"
+                                className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-90 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400"
                             >
                                 {activeChat?.type === 'GROUP' ? (
                                     <GroupAvatar members={activeChat.members} onlineSet={onlineUsers} />
@@ -681,17 +681,17 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             </button>
-                            <button className="btn-ghost !p-2" onClick={() => setShowGallery(true)} title="Медиа и файлы">🖼️</button>
+                            <button className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl" onClick={() => setShowGallery(true)} title="Медиа и файлы" aria-label="Открыть медиа и файлы">🖼️</button>
                             <button
-                                className={`btn-ghost !p-2 ${showMembers ? 'bg-white/10' : ''}`}
+                                className={`btn-ghost !p-2 min-w-10 min-h-10 rounded-xl ${showMembers ? 'bg-white/10' : ''}`}
                                 onClick={() => setShowMembers((v) => !v)}
-                                title="Участники"
+                                title="Участники" aria-label="Показать участников чата" aria-pressed={showMembers}
                             >ℹ️</button>
                             <div className="relative">
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setHeaderMenuOpen((v) => !v); }}
-                                    className={`btn-ghost !p-2 ${headerMenuOpen ? 'bg-white/10' : ''}`}
-                                >⋯</button>
+                                    className={`btn-ghost !p-2 min-w-10 min-h-10 rounded-xl ${headerMenuOpen ? 'bg-white/10' : ''}`}
+                                aria-label="Меню чата" aria-expanded={headerMenuOpen}>⋯</button>
                                 {headerMenuOpen && (
                                     <div
                                         className="absolute right-0 top-full mt-2 z-30 card p-1 w-56 animate-pop"
@@ -733,7 +733,7 @@ export default function Messenger() {
                         </div>
 
                         {/* Панель ввода */}
-                        <div className="border-t border-white/5 p-2 md:p-3 space-y-2 shrink-0 bg-ink-900/95 backdrop-blur relative">
+                        <div className="border-t border-white/10 p-2.5 md:p-3 space-y-2 shrink-0 bg-ink-900/95 backdrop-blur relative">
                             {replyTo && (
                                 <div className="flex items-center gap-2 bg-ink-700/60 rounded-2xl px-3 py-2 text-sm">
                                     <div className="w-1 h-8 rounded bg-violet" />
@@ -811,7 +811,7 @@ export default function Messenger() {
                                     <button
                                         className={`btn-ghost !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 ${panel ? 'bg-white/10' : ''}`}
                                         onClick={(e) => { e.stopPropagation(); setPanel((p) => (p ? null : 'emoji')); setAttachMenu(false); }}
-                                        title="Эмодзи и стикеры"
+                                        title="Эмодзи и стикеры" aria-label="Выбрать эмодзи или стикер" aria-expanded={Boolean(panel)}
                                     >😊</button>
 
                                     <textarea
@@ -824,14 +824,14 @@ export default function Messenger() {
                                             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
                                         }}
                                         placeholder="Написать сообщение…"
-                                        className="input flex-1 min-w-0 resize-none max-h-40 !py-2 md:!py-3 text-base"
+                                        className="input flex-1 min-w-0 resize-none max-h-40 !py-2.5 md:!py-3 text-base rounded-2xl" aria-label="Текст сообщения"
                                         autoComplete="off"
                                     />
 
                                     {text.trim() ? (
-                                        <button onClick={send} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0">➤</button>
+                                        <button onClick={send} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 min-w-11 min-h-11 rounded-2xl" aria-label="Отправить сообщение">➤</button>
                                     ) : (
-                                        <button onClick={startRecording} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0" title="Голосовое сообщение">🎤</button>
+                                        <button onClick={startRecording} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 min-w-11 min-h-11 rounded-2xl" title="Голосовое сообщение" aria-label="Записать голосовое сообщение">🎤</button>
                                     )}
                                 </div>
                             )}
