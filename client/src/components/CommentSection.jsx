@@ -97,6 +97,7 @@ function MentionInput({ value, onChange, onSubmit, placeholder }) {
 function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommentId = '', highlightedPath = [] }) {
     const { user, token } = useAuth();
     const [replying, setReplying] = useState(false);
+    const [linkCopied, setLinkCopied] = useState(false);
     const [replyText, setReplyText] = useState('');
     const [busy, setBusy] = useState(false);
     const [showReplies, setShowReplies] = useState(depth === 0 || highlightedPath.includes(comment.id));
@@ -136,6 +137,30 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommen
         }
     };
 
+    const shareComment = async () => {
+        const url = new URL('/app/feed', window.location.origin);
+        url.searchParams.set('post', comment.postId);
+        url.searchParams.set('comment', comment.id);
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: 'Комментарий MEDIA·RAF·RAW', url: url.toString() });
+            } else if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url.toString());
+                setLinkCopied(true);
+            } else {
+                window.prompt('Скопируйте ссылку на комментарий:', url.toString());
+            }
+        } catch (error) {
+            if (error?.name === 'AbortError') return;
+            try {
+                await navigator.clipboard.writeText(url.toString());
+                setLinkCopied(true);
+            } catch {
+                window.prompt('Скопируйте ссылку на комментарий:', url.toString());
+            }
+        }
+    };
+
     const repliesCount = comment.replies?.length || 0;
 
     return (
@@ -168,6 +193,14 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommen
                             className="hover:text-white"
                         >
                             Ответить
+                        </button>
+                        <button
+                            type="button"
+                            onClick={shareComment}
+                            className="hover:text-violet-400"
+                            aria-label="Поделиться ссылкой на комментарий"
+                        >
+                            {linkCopied ? '✓ Ссылка скопирована' : '🔗 Поделиться'}
                         </button>
                         {isMine && (
                             <button onClick={remove} className="hover:text-pink">
