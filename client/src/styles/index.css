@@ -95,6 +95,15 @@ html, body {
     overscroll-behavior-y: none;
 }
 
+/* PWA 2.0: allow scrolling but prevent accidental page pinch zoom.
+   Keep this at the document level so every app route behaves consistently. */
+@media (pointer: coarse) {
+    html, body, #root {
+        touch-action: pan-x pan-y;
+    }
+}
+
+
 @media (max-width: 767px) {
     input,
     textarea,
