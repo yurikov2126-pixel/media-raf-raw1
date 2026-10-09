@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
@@ -9,7 +9,7 @@ import PostReactions from './PostReactions.jsx';
 import CommentSection from './CommentSection.jsx';
 import ReportButton from './ReportButton.jsx';
 
-export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted, highlightCommentId = '' }) {
+function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted, highlightCommentId = '' }) {
     const { user, token } = useAuth();
     const [editing, setEditing] = useState(false);
     const [socialBusy, setSocialBusy] = useState(false);
@@ -414,3 +414,6 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
         </article>
     );
 }
+
+// Avoid rerendering unchanged feed cards when a different post is updated.
+export default memo(PostCard);
