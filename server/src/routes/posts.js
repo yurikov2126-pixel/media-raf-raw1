@@ -665,7 +665,27 @@ router.post('/:id/comments', auth, async (req, res) => {
     });
 
     try {
-        if (post.authorId !== req.user.id) {
+        const handles = new Set();
+        for (const match of content.matchAll(/@\[[^\]\n]{1,120}\]\(([\p{L}\p{N}_]{1,50})\)/gu)) handles.add(match[1].toLowerCase());
+        for (const match of content.matchAll(/(^|[^\p{L}\p{N}_@])@([\p{L}\p{N}_]{1,50})/gu)) handles.add(match[2].toLowerCase());
+        const notified = new Set();
+        if (handles.size) {
+            try {
+                const mentioned = await prisma.user.findMany({
+                    where: { isBanned: false, id: { not: req.user.id },
+                        OR: [...handles].map((username) => ({ username: { equals: username, mode: 'insensitive' } })) },
+                    select: { id: true },
+                });
+                for (const person of mentioned) {
+                    const notification = await createNotification(person.id, 'mention', {
+                        postId: post.id, commentId: comment.id, senderName: req.user.fullName,
+                        preview: content.slice(0, 120),
+                    });
+                    if (notification) notified.add(person.id);
+                }
+            } catch (error) { console.error('[comments] mention notify failed:', error); }
+        }
+        if (post.authorId !== req.user.id && !notified.has(post.authorId)) {
             await createNotification(post.authorId, 'system', {
                 title: 'Новый комментарий',
                 message: `${req.user.fullName}: ${content.slice(0, 80)}`,
@@ -674,7 +694,7 @@ router.post('/:id/comments', auth, async (req, res) => {
         }
         if (parentId) {
             const parent = await prisma.comment.findUnique({ where: { id: parentId } });
-            if (parent && parent.authorId !== req.user.id && parent.authorId !== post.authorId) {
+            if (parent && parent.authorId !== req.user.id && parent.authorId !== post.authorId && !notified.has(parent.authorId)) {
                 await createNotification(parent.authorId, 'system', {
                     title: 'Ответ на ваш комментарий',
                     message: `${req.user.fullName}: ${content.slice(0, 80)}`,

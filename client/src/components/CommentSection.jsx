@@ -4,6 +4,16 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import Avatar from './Avatar.jsx';
 
+
+function CommentText({ content }) {
+    return <>{String(content || '').split(/(@\[[^\]\n]{1,120}\]\([\p{L}\p{N}_]{1,50}\)|@[\p{L}\p{N}_]{1,50})/u).map((part, i) => {
+        const named = part.match(/^@\[([^\]\n]{1,120})\]\(([\p{L}\p{N}_]{1,50})\)$/u);
+        if (named) return <Link key={i} to={`/app/u/${named[2]}`} className="text-violet-500 font-semibold hover:underline">@{named[1]}</Link>;
+        if (/^@[\p{L}\p{N}_]{1,50}$/u.test(part)) return <Link key={i} to={`/app/u/${part.slice(1)}`} className="text-violet-500 font-semibold hover:underline">{part}</Link>;
+        return part;
+    })}</>;
+}
+
 function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
     const { user, token } = useAuth();
     const [replying, setReplying] = useState(false);
@@ -68,7 +78,7 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
                 })}
               </span>
                         </div>
-                        <div className="text-sm whitespace-pre-wrap break-words">{comment.content}</div>
+                        <div className="text-sm whitespace-pre-wrap break-words"><CommentText content={comment.content} /></div>
                     </div>
 
                     <div className="flex items-center gap-3 mt-1 px-1 text-xs text-white/50">
