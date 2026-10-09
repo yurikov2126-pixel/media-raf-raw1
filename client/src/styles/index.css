@@ -72,15 +72,13 @@ html {
     background-attachment: fixed;
     height: 100vh;
     height: 100dvh;
-    height: 100lvh;
-    min-height: 100lvh;
     transition: background-color .2s ease;
 }
 
 body {
     background-color: transparent;
     min-height: 100vh;
-    min-height: 100lvh;
+    min-height: 100dvh;
     color: var(--text-primary);
     @apply font-display antialiased;
 }
@@ -90,7 +88,7 @@ body {
     z-index: 1;
     background-color: transparent;
     min-height: 100vh;
-    min-height: 100lvh;
+    min-height: 100dvh;
 }
 
 html, body {
@@ -127,7 +125,6 @@ html, body {
 .chat-screen {
     height: 100vh;
     height: 100dvh;
-    height: 100lvh;
     padding-top: var(--safe-top);
     padding-bottom: var(--safe-bottom);
     box-sizing: border-box;
@@ -145,7 +142,6 @@ html, body {
     top: 0; left: 0; right: 0; bottom: 0;
     min-height: 100vh;
     min-height: 100dvh;
-    min-height: 100lvh;
     z-index: 9999;
     display: grid;
     place-items: center;
@@ -238,7 +234,6 @@ html, body {
     top: 0; left: 0; right: 0; bottom: 0;
     min-height: 100vh;
     min-height: 100dvh;
-    min-height: 100lvh;
     z-index: 9998;
     display: grid;
     place-items: center;
