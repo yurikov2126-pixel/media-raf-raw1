@@ -49,7 +49,7 @@ function payloadToPush(type, payload) {
     }
     if (type === 'mention') {
         return {
-            title: `${payload.senderName || 'Кто-то'} упомянул вас`,
+            title: `${payload.senderName || 'Кто-то'} упомянул вас${payload.commentId ? ' в комментарии' : payload.postId ? ' в публикации' : payload.chatId ? ' в чате' : ''}`,
             body: payload.preview || '',
             url: payload.postId ? `/app/feed?post=${encodeURIComponent(payload.postId)}${payload.commentId ? `&comment=${encodeURIComponent(payload.commentId)}` : ''}` : payload.chatId ? `/app/chats/${payload.chatId}` : '/app',
             tag: `mention-${payload.postId || payload.chatId || 'x'}`,
