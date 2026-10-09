@@ -17,7 +17,11 @@ export default function Feed() {
     const mode = ['latest', 'recommended', 'saved'].includes(params.get('mode')) ? params.get('mode') : 'latest';
     const tag = params.get('tag') || '';
     const query = params.get('q') || '';
+    const author = params.get('author') || '';
+    const period = params.get('period') || 'all';
+    const sort = params.get('sort') || 'newest';
     const [searchDraft, setSearchDraft] = useState(query);
+    const [authorDraft, setAuthorDraft] = useState(author);
     const [trending, setTrending] = useState([]);
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -31,9 +35,10 @@ export default function Feed() {
     const sentinelRef = useRef(null);
     const scrollRef = useRef(null);
 
-    const feedUrl = useCallback((page) => `/feed2/posts?limit=${PAGE_SIZE}&page=${page}&mode=${encodeURIComponent(mode)}${query ? `&q=${encodeURIComponent(query)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`, [mode, query, tag]);
+    const feedUrl = useCallback((page) => `/feed2/posts?limit=${PAGE_SIZE}&page=${page}&mode=${encodeURIComponent(mode)}${query ? `&q=${encodeURIComponent(query)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${author ? `&author=${encodeURIComponent(author)}` : ''}&period=${encodeURIComponent(period)}&sort=${encodeURIComponent(sort)}`, [mode, query, tag, author, period, sort]);
     const changeFilters = (patch) => { const next = new URLSearchParams(params); Object.entries(patch).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setParams(next); };
     useEffect(() => { setSearchDraft(query); }, [query]);
+    useEffect(() => { setAuthorDraft(author); }, [author]);
     useEffect(() => { if (!token) return; api('/feed2/tags', { token }).then(setTrending).catch(() => {}); }, [token]);
 
     /* Первичная загрузка */
@@ -114,11 +119,27 @@ export default function Feed() {
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Разделы ленты">
                     {[['latest', '🕒 Новые'], ['recommended', '✨ Рекомендуем'], ['saved', '🔖 Сохранённые']].map(([key, label]) => <button key={key} type="button" aria-pressed={mode === key} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${mode === key ? 'bg-violet-500/25 text-violet-100 border border-violet-400/30' : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'}`} onClick={() => changeFilters({ mode: key === 'latest' ? '' : key })}>{label}</button>)}
                 </div>
-                <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); changeFilters({ q: searchDraft.trim() }); }}>
+                <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); changeFilters({ q: searchDraft.trim(), author: authorDraft.trim().replace(/^@/, '') }); }}>
                     <input aria-label="Поиск по публикациям и авторам" className="input flex-1 min-w-0" value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} placeholder="Поиск по тексту, авторам, темам…" maxLength={100} />
                     <button type="submit" className="btn-primary shrink-0">Найти</button>
                     {query && <button type="button" className="btn-ghost" onClick={() => { setSearchDraft(''); changeFilters({ q: '' }); }} aria-label="Очистить поиск">✕</button>}
                 </form>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className="text-xs text-white/60 space-y-1">Автор (@username)
+                        <input className="input w-full" aria-label="Фильтр по автору" value={authorDraft} onChange={(e) => setAuthorDraft(e.target.value)} maxLength={60} placeholder="Например, admin" />
+                    </label>
+                    <label className="text-xs text-white/60 space-y-1">Период
+                        <select className="input w-full" aria-label="Период публикаций" value={period} onChange={(e) => changeFilters({ period: e.target.value === 'all' ? '' : e.target.value })}>
+                            <option value="all">За всё время</option><option value="7d">За 7 дней</option><option value="30d">За 30 дней</option><option value="90d">За 90 дней</option>
+                        </select>
+                    </label>
+                    <label className="text-xs text-white/60 space-y-1">Сортировка
+                        <select className="input w-full" aria-label="Сортировка публикаций" value={sort} onChange={(e) => changeFilters({ sort: e.target.value === 'newest' ? '' : e.target.value })}>
+                            <option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option><option value="popular">По реакциям</option>
+                        </select>
+                    </label>
+                </div>
+                {(query || author || tag || period !== 'all' || sort !== 'newest') && <button type="button" className="text-xs underline text-white/60" onClick={() => { setSearchDraft(''); setAuthorDraft(''); changeFilters({ q: '', author: '', tag: '', period: '', sort: '' }); }}>Сбросить все фильтры</button>}
                 {tag && <div className="flex items-center gap-3"><span className="text-sm text-violet-200"># {tag}</span><button type="button" className="text-xs underline text-white/60" onClick={() => changeFilters({ tag: '' })}>Сбросить хештег</button></div>}
                 {trending.length > 0 && <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-white/40 mr-1">Популярные темы</span>{trending.map(({ tag: t, count }) => <button type="button" key={t} className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs text-violet-200 hover:bg-white/10" onClick={() => changeFilters({ tag: t })}>#{t} <span className="text-white/35">{count}</span></button>)}</div>}
             </div>
