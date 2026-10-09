@@ -73,6 +73,7 @@ router.post('/projects/:id/members', async (req, res, next) => {
         const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, include: { members: true } });
         if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
         const { userId, role } = req.body;
+        if (project.createdById === userId && role !== 'MANAGER') return res.status(400).json({ error: 'Создатель должен оставаться руководителем' });
         if (typeof userId !== 'string' || !ROLES.includes(role)) return res.status(400).json({ error: 'Некорректный участник или роль' });
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isBanned: true } });
         if (!user || user.isBanned) return res.status(404).json({ error: 'Пользователь не найден' });
