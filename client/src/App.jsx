@@ -50,6 +50,7 @@ function RootGate() {
 
 export default function App() {
     const { user } = useAuth();
+    const { isOffline } = useNetwork();
 
     return (
         <>
@@ -91,6 +92,10 @@ export default function App() {
 
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+
+            {/* Keep the current route mounted while offline, so returning online
+                restores the same screen without losing navigation state. */}
+            {user && isOffline && <OfflineScreen />}
 
             <PwaUpdateNotice />
             {user && <GlobalCommandPalette />}
