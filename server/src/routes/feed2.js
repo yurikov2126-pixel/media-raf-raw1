@@ -41,13 +41,21 @@ router.get('/posts', async (req, res) => {
     const q = String(req.query.q || '').trim().slice(0, 100);
     const tag = String(req.query.tag || '').replace(/^#/, '').trim().slice(0, 50);
     if (tag && !HASHTAG.test(tag)) return res.status(400).json({ error: 'Некорректный хештег' });
+    const author = String(req.query.author || '').trim().replace(/^@/, '').slice(0, 60);
+    const period = ['all', '7d', '30d', '90d'].includes(req.query.period) ? req.query.period : 'all';
+    const sort = ['newest', 'oldest', 'popular'].includes(req.query.sort) ? req.query.sort : 'newest';
     const where = { author: { isBanned: false } };
+    if (author) where.author = { isBanned: false, username: { equals: author, mode: 'insensitive' } };
+    if (period !== 'all') {
+        const days = { '7d': 7, '30d': 30, '90d': 90 }[period];
+        where.createdAt = { gte: new Date(Date.now() - days * 86400000) };
+    }
     if (q) where.OR = [{ content: { contains: q, mode: 'insensitive' } }, { author: { fullName: { contains: q, mode: 'insensitive' }, isBanned: false } }, { author: { username: { contains: q, mode: 'insensitive' }, isBanned: false } }];
     if (tag) where.content = { contains: '#' + tag, mode: 'insensitive' };
     if (mode === 'saved') where.savedBy = { some: { userId: req.user.id } };
     // For recommended posts use a recent window and rank by engagement, with a recency boost.
     if (mode === 'recommended') {
-        const recent = await prisma.post.findMany({ where: { ...where, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } }, orderBy: { createdAt: 'desc' }, take: 300, include: postInclude(req.user.id) });
+        const recent = await prisma.post.findMany({ where: { ...where, createdAt: { gte: new Date(Math.max(Date.now() - 30 * 86400000, where.createdAt?.gte?.getTime() || 0)) } }, orderBy: { createdAt: 'desc' }, take: 300, include: postInclude(req.user.id) });
         const now = Date.now();
         const viewer = await prisma.user.findUnique({ where: { id: req.user.id }, select: { direction: true } });
         const ranked = recent.map((p) => ({ p, score: p.reactions.length * 2 + p._count.comments * 3 + p._count.savedBy * 2 + p._count.reposts * 4 + (viewer?.direction && p.author.direction === viewer.direction ? 5 : 0) + Math.max(0, 14 - (now - new Date(p.createdAt).getTime()) / 86400000) }));
@@ -55,7 +63,12 @@ router.get('/posts', async (req, res) => {
         const items = ranked.slice(page * limit, (page + 1) * limit).map(({ p }) => serialize(p, req.user.id));
         return res.json({ items, nextPage: (page + 1) * limit < ranked.length ? page + 1 : null, total: ranked.length });
     }
-    const posts = await prisma.post.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: page * limit, take: limit + 1, include: postInclude(req.user.id) });
+    const orderBy = sort === 'oldest'
+        ? [{ createdAt: 'asc' }, { id: 'asc' }]
+        : sort === 'popular'
+            ? [{ reactions: { _count: 'desc' } }, { createdAt: 'desc' }, { id: 'desc' }]
+            : [{ createdAt: 'desc' }, { id: 'desc' }];
+    const posts = await prisma.post.findMany({ where, orderBy, skip: page * limit, take: limit + 1, include: postInclude(req.user.id) });
     const hasMore = posts.length > limit;
     res.json({ items: posts.slice(0, limit).map((p) => serialize(p, req.user.id)), nextPage: hasMore ? page + 1 : null });
 });
