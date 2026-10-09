@@ -121,7 +121,8 @@ export default function Messenger() {
     const scrollToMessage = (id) => {
         const el = document.getElementById(`msg-${id}`);
         if (!el) return;
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        el.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' });
         setHighlightId(id);
         setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1800);
     };
@@ -275,7 +276,10 @@ export default function Messenger() {
             needsInitialScroll.current = false;
             return;
         }
-        if (messages.length > 0) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        if (messages.length > 0) {
+            const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? 'instant' : 'smooth' });
+        }
     }, [messages.length, firstUnreadId]);
 
     useEffect(() => {
