@@ -268,7 +268,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     </div>
                 </div>
             ) : (
-                post.content && <p className={contentClass}>{post.content.split(/(#[\p{L}\p{N}_]{1,50}|@[\p{L}\p{N}_]{1,50})/u).map((part, index) => /^#[\p{L}\p{N}_]{1,50}$/u.test(part) ? <button key={index} type="button" className="text-violet-500 hover:underline" onClick={() => onTagClick ? onTagClick(part.slice(1)) : window.location.assign(`/app/feed?tag=${encodeURIComponent(part.slice(1))}`)}>{part}</button> : /^@[\p{L}\p{N}_]{1,50}$/u.test(part) ? <Link key={index} className="text-violet-500 hover:underline font-semibold" to={`/app/u/${part.slice(1)}`}>{part}</Link> : part)}</p>
+                post.content && <p className={contentClass}>{post.content.split(/(@\[[^\]\n]{1,120}\]\([\p{L}\p{N}_]{1,50}\)|#[\p{L}\p{N}_]{1,50}|@[\p{L}\p{N}_]{1,50})/u).map((part, index) => /^@\[[^\]\n]{1,120}\]\([\p{L}\p{N}_]{1,50}\)$/u.test(part) ? <Link key={index} className="text-violet-500 hover:underline font-semibold" to={`/app/u/${part.slice(part.lastIndexOf('(') + 1, -1)}`}>@{part.slice(2, part.lastIndexOf(']'))}</Link> : /^#[\p{L}\p{N}_]{1,50}$/u.test(part) ? <button key={index} type="button" className="text-violet-500 hover:underline" onClick={() => onTagClick ? onTagClick(part.slice(1)) : window.location.assign(`/app/feed?tag=${encodeURIComponent(part.slice(1))}`)}>{part}</button> : /^@[\p{L}\p{N}_]{1,50}$/u.test(part) ? <Link key={index} className="text-violet-500 hover:underline font-semibold" to={`/app/u/${part.slice(1)}`}>{part}</Link> : part)}</p>
             )}
 
             {mediaEditing && mediaDraft && (
