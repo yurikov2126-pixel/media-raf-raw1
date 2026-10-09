@@ -4,6 +4,13 @@ import { prisma } from './prisma.js';
    default — состояние, если в БД настройки нет. */
 export const MODULES = [
     {
+        key: 'editorial',
+        label: 'Редакция',
+        icon: '🗂️',
+        default: false,
+        description: 'Проекты, задачи, редакционные материалы и согласования',
+    },
+    {
         key: 'feed',
         label: 'Лента',
         icon: '🏠',

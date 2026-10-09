@@ -107,6 +107,12 @@ export default function Layout() {
                             <span className="ui-nav-item__label">{l.label}</span>
                         </NavLink>
                     ))}
+                    {isEnabled('editorial') && Object.prototype.hasOwnProperty.call(modules, 'editorial') && (
+                        <NavLink to="/app/editorial" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
+                            <span className="ui-nav-item__icon"><Icon name="newspaper" size={19} /></span>
+                            <span className="ui-nav-item__label">Редакция</span>
+                        </NavLink>
+                    )}
                     {gamifEnabled && (
                         <NavLink to="/app/leaderboard" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
                             <span className="ui-nav-item__icon"><Icon name="trophy" size={19} /></span>
