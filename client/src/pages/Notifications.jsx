@@ -350,19 +350,36 @@ export default function Notifications() {
                                     {new Date(n.createdAt).toLocaleString('ru-RU')}
                                 </div>
                             </div>
-                            {!n.readAt && (
-                                <div className="w-2 h-2 rounded-full bg-pink shrink-0 mt-2" />
-                            )}
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    remove(n.id);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
-                                title="Удалить"
-                            >
-                                ✕
-                            </button>
+                            <div className="flex flex-col items-center justify-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                {!n.readAt && (
+                                    <button
+                                        type="button"
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try { await markRead(n.id); }
+                                            catch { flash('Не удалось отметить уведомление прочитанным'); }
+                                        }}
+                                        className="min-w-9 min-h-9 rounded-lg hover:bg-violet/15 flex items-center justify-center text-violet-soft"
+                                        title="Отметить прочитанным"
+                                        aria-label="Отметить уведомление прочитанным"
+                                    >
+                                        <span className="text-base" aria-hidden="true">✓</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try { await remove(n.id); }
+                                        catch { flash('Не удалось удалить уведомление'); }
+                                    }}
+                                    className="min-w-9 min-h-9 rounded-lg hover:bg-pink/10 flex items-center justify-center text-white/50 hover:text-pink transition"
+                                    title="Удалить уведомление"
+                                    aria-label="Удалить уведомление"
+                                >
+                                    <span aria-hidden="true">✕</span>
+                                </button>
+                            </div>
                         </div>
                         </div>
                     );
