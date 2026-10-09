@@ -25,6 +25,23 @@ const NOTIFICATION_ICON = {
   system: 'sparkles',
 };
 
+function notificationTitle(item) {
+  const p = item.payload || {};
+  switch (item.type) {
+    case 'mention': return p.commentId ? 'Вас упомянули в комментарии' : p.postId ? 'Вас упомянули в публикации' : 'Вас упомянули в чате';
+    case 'message': return 'Новое сообщение' + (p.senderName ? ' от ' + p.senderName : '');
+    case 'post': return 'Новая публикация' + (p.authorName ? ' от ' + p.authorName : '');
+    case 'certificate': return 'Новый сертификат';
+    case 'system': return p.title || 'Системное уведомление';
+    default: return p.title || 'Новое уведомление';
+  }
+}
+
+function notificationPreview(item) {
+  const p = item.payload || {};
+  return p.preview || p.message || (item.type === 'post' ? 'Открыть публикацию' : 'Открыть уведомление');
+}
+
 export default function Dashboard() {
   const { user, token } = useAuth();
   const { dashboard, brand } = useSettings();
@@ -275,19 +292,21 @@ export default function Dashboard() {
                     type="button"
                     onClick={() => {
                       const p = item.payload || {};
-                      if (item.type === 'message' || item.type === 'mention') navigate(`/app/chats/${p.chatId}`);
-                      else if (item.type === 'certificate') navigate(`/app/certificates/${p.certificateId}`);
-                      else if (item.type === 'post') navigate(`/app/u/${p.authorUsername}`);
+                      if (item.type === 'mention' && p.postId) navigate(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
+                      else if ((item.type === 'message' || item.type === 'mention') && p.chatId) navigate(`/app/chats/${encodeURIComponent(p.chatId)}`);
+                      else if (item.type === 'post' && p.postId) navigate(`/app/feed?post=${encodeURIComponent(p.postId)}`);
+                      else if (item.type === 'post' && p.authorUsername) navigate(`/app/u/${encodeURIComponent(p.authorUsername)}`);
+                      else if (item.type === 'certificate' && p.certificateId) navigate(`/app/certificates/${encodeURIComponent(p.certificateId)}`);
                       else navigate('/app/notifications');
                     }}
-                    className="ui-mini-list__item w-full text-left"
+                    className="ui-mini-list__item w-full text-left flex items-center gap-3 min-w-0"
                   >
-                    <span className="ui-mini-list__icon">
+                    <span className="ui-mini-list__icon shrink-0">
                       <Icon name={NOTIFICATION_ICON[item.type] || 'bell'} size={16} />
                     </span>
-                    <span className="ui-mini-list__copy">
-                      <span className="ui-mini-list__title">{item.payload?.title || item.type}</span>
-                      <span className="ui-mini-list__sub">{item.payload?.preview || item.payload?.message || 'Открыть уведомление'}</span>
+                    <span className="ui-mini-list__copy flex-1 min-w-0 flex flex-col gap-1">
+                      <span className="ui-mini-list__title block text-sm font-semibold leading-snug break-words">{notificationTitle(item)}</span>
+                      <span className="ui-mini-list__sub block text-xs leading-relaxed opacity-65 break-words line-clamp-2">{notificationPreview(item)}</span>
                     </span>
                     {!item.readAt && <span className="w-2 h-2 rounded-full bg-pink mt-3 shrink-0" />}
                   </button>
