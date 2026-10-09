@@ -26,6 +26,9 @@ export default function Feed() {
     const [authorDraft, setAuthorDraft] = useState(author);
     const [authorSuggestions, setAuthorSuggestions] = useState([]);
     const [trending, setTrending] = useState([]);
+    const linkedPostId = params.get('post') || '';
+    const [linkedPost, setLinkedPost] = useState(null);
+    const [linkedError, setLinkedError] = useState('');
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -56,6 +59,17 @@ export default function Feed() {
         return () => { active = false; clearTimeout(timer); };
     }, [authorDraft, filtersOpen, token]);
     useEffect(() => { if (!token) return; api('/feed2/tags', { token }).then(setTrending).catch(() => {}); }, [token]);
+
+    useEffect(() => {
+        if (!token || !linkedPostId) { setLinkedPost(null); setLinkedError(''); return; }
+        let active = true;
+        setLinkedPost(null);
+        setLinkedError('');
+        api(`/feed2/posts/${encodeURIComponent(linkedPostId)}`, { token })
+            .then((item) => { if (active) setLinkedPost(item); })
+            .catch((error) => { if (active) setLinkedError(error.message || 'Публикация недоступна'); });
+        return () => { active = false; };
+    }, [token, linkedPostId]);
 
     /* Первичная загрузка */
     const loadInitial = useCallback(async () => {
@@ -198,6 +212,15 @@ export default function Feed() {
             )}
 
             {mode === 'saved' && !loading && posts.length > 0 && <p className="text-sm opacity-65 mb-3">{sort === 'newest' ? 'Сначала недавно сохранённые' : sort === 'oldest' ? 'Сначала старые публикации' : 'Сначала публикации с большим числом реакций'}</p>}
+            {linkedPostId && <section className="mb-5 rounded-2xl border border-violet-400/30 p-3 sm:p-4" aria-label="Публикация по ссылке">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                    <span className="font-semibold text-sm">🔗 Публикация по ссылке</span>
+                    <button type="button" className="text-xs underline opacity-70" onClick={() => changeFilters({ post: '' })}>Закрыть</button>
+                </div>
+                {linkedError && <p role="alert" className="text-sm opacity-70">{linkedError}</p>}
+                {!linkedPost && !linkedError && <p className="text-sm opacity-60">Загружаем публикацию…</p>}
+                {linkedPost && <PostCard post={linkedPost} author={linkedPost.author} compact={compact} onTagClick={(value) => changeFilters({ tag: value, post: '' })} onChanged={(u) => setLinkedPost((prev) => ({ ...prev, ...u }))} onDeleted={() => { setLinkedPost(null); changeFilters({ post: '' }); }} onReposted={loadInitial} />}
+            </section>}
             <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
                 {posts.map((post) => (
                     <div key={post.id}>

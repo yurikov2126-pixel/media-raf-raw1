@@ -92,6 +92,14 @@ router.get('/posts', async (req, res) => {
     const hasMore = posts.length > limit;
     res.json({ items: posts.slice(0, limit).map((p) => serialize(p, req.user.id)), nextPage: hasMore ? page + 1 : null });
 });
+router.get('/posts/:id', async (req, res) => {
+    const post = await prisma.post.findUnique({
+        where: { id: req.params.id },
+        include: postInclude(req.user.id),
+    });
+    if (!post || post.author.isBanned) return res.status(404).json({ error: 'Публикация не найдена' });
+    res.json(serialize(post, req.user.id));
+});
 router.put('/posts/:id/save', async (req, res) => {
     const post = await prisma.post.findUnique({ where: { id: req.params.id }, select: { id: true, author: { select: { isBanned: true } } } });
     if (!post || post.author.isBanned) return res.status(404).json({ error: 'Публикация не найдена' });
