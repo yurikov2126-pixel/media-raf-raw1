@@ -38,6 +38,24 @@ function extFromMime(mime) {
     return 'audio';
 }
 
+// Group messages by the user's local calendar day, not by UTC date.
+function messageDayKey(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function messageDayLabel(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const today = new Date();
+    if (messageDayKey(date) === messageDayKey(today)) return 'Сегодня';
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (messageDayKey(date) === messageDayKey(yesterday)) return 'Вчера';
+    return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
 const TYPING_TTL_MS = 3000;
 
 export default function Messenger() {
@@ -713,9 +731,16 @@ export default function Messenger() {
                         />
 
                         <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0">
-                            {messages.map((m) => (
-                                <MessageBubble
-                                    key={m.id}
+                            {messages.map((m, index) => (
+                                <div key={m.id} className="space-y-2">
+                                    {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
+                                        <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
+                                            <span className="rounded-full border border-white/10 bg-ink-800/90 px-3 py-1 text-xs font-medium text-white/60 shadow-sm">
+                                                {messageDayLabel(m.createdAt)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <MessageBubble
                                     m={m}
                                     isOwn={m.sender.id === user.id}
                                     highlight={highlightId === m.id}
@@ -729,6 +754,7 @@ export default function Messenger() {
                                         setContextMenu({ x: clientX, y: clientY, message: m });
                                     }}
                                 />
+                                </div>
                             ))}
                         </div>
 
