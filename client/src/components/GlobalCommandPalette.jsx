@@ -76,8 +76,14 @@ export default function GlobalCommandPalette() {
     const close = () => {
         setOpen(false);
         setQuery('');
+        inputRef.current?.blur();
         setSelected(0); setCategory('all'); setResults(null);
     };
+
+    useEffect(() => {
+        window.dispatchEvent(new Event(open ? 'mrr:search-open' : 'mrr:search-close'));
+        return () => window.dispatchEvent(new Event('mrr:search-close'));
+    }, [open]);
 
     useEffect(() => {
         if (!commandPalette.enabled) return undefined;

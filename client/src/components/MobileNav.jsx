@@ -7,6 +7,7 @@ export default function MobileNav({ links, user }) {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const [typing, setTyping] = useState(false);
+    const [searchActive, setSearchActive] = useState(false);
     const blurFrame = useRef(null);
     useEffect(() => {
         const isEditor = (node) => node instanceof HTMLElement && (node.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, [contenteditable="true"]') || Boolean(node.closest('[contenteditable="true"]')));
@@ -15,6 +16,17 @@ export default function MobileNav({ links, user }) {
             blurFrame.current = null;
             if (isEditor(event.target)) { setTyping(true); setMoreOpen(false); }
         };
+        const onSearchOpen = () => setSearchActive(true);
+        const onSearchClose = () => {
+            setSearchActive(false);
+            if (blurFrame.current !== null) cancelAnimationFrame(blurFrame.current);
+            blurFrame.current = requestAnimationFrame(() => {
+                blurFrame.current = null;
+                setTyping(isEditor(document.activeElement));
+            });
+        };
+        window.addEventListener('mrr:search-open', onSearchOpen);
+        window.addEventListener('mrr:search-close', onSearchClose);
         const onFocusOut = () => {
             // Allow focus to move between inputs without flashing the navigation.
             if (blurFrame.current !== null) cancelAnimationFrame(blurFrame.current);
@@ -29,12 +41,23 @@ export default function MobileNav({ links, user }) {
         return () => {
             document.removeEventListener('focusin', onFocusIn);
             document.removeEventListener('focusout', onFocusOut);
+            window.removeEventListener('mrr:search-open', onSearchOpen);
+            window.removeEventListener('mrr:search-close', onSearchClose);
             if (blurFrame.current !== null) cancelAnimationFrame(blurFrame.current);
         };
     }, []);
 
+    useEffect(() => {
+        // Route transitions can unmount a focused search input without firing focusout.
+        const frame = requestAnimationFrame(() => {
+            const node = document.activeElement;
+            setTyping(node instanceof HTMLElement && (node.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, [contenteditable="true"]') || Boolean(node.closest('[contenteditable="true"]'))));
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [location.pathname]);
+
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
-    if (isChatRoom || typing) return null;
+    if (isChatRoom || typing || searchActive) return null;
 
     const primary = [
         { to: '/app', label: 'Главная', icon: 'dashboard', end: true },
