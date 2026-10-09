@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
@@ -105,7 +105,9 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
     };
 
     const commentCount = post._count?.comments ?? 0;
-    const images = (() => {
+    // A feed card rerenders for reactions, menus and comments. Keep gallery
+    // parsing and resolved image URLs stable unless the media actually changes.
+    const images = useMemo(() => {
         if (post.mediaUrls?.length) return post.mediaUrls;
         if (!post.mediaUrl) return [];
         if (post.mediaType === 'gallery') {
@@ -113,7 +115,8 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
             catch { return []; }
         }
         return [post.mediaUrl];
-    })();
+    }, [post.mediaUrls, post.mediaUrl, post.mediaType]);
+    const imageUrls = useMemo(() => images.map(resolveUrl), [images]);
     const beginMediaEdit = () => { setMediaDraft([...images]); setMediaError(''); setMediaEditing(true); setMenuOpen(false); };
     const reorderMedia = (source, target) => setMediaDraft((prev) => {
         if (!prev || source === target || !prev.includes(source) || !prev.includes(target)) return prev;
@@ -306,7 +309,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     <div className={images.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
                         {images.map((url, index) => (
                             <button key={index} type="button" className="block w-full overflow-hidden rounded-xl" onClick={() => setActiveImage(index)} aria-label={`Открыть фото ${index + 1}`}>
-                                <img src={resolveUrl(url)} alt={`Фото ${index + 1}`} decoding="async" className={`w-full object-cover ${images.length > 1 ? 'h-44 md:h-64' : mediaMaxH}`} loading="lazy" />
+                                <img src={imageUrls[index]} alt={`Фото ${index + 1}`} decoding="async" className={`w-full object-cover ${images.length > 1 ? 'h-44 md:h-64' : mediaMaxH}`} loading="lazy" />
                             </button>
                         ))}
                     </div>
@@ -335,7 +338,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                             <AnimatePresence initial={false} custom={slideDirection} mode="wait">
                                 <motion.img
                                     key={activeImage}
-                                    src={resolveUrl(images[activeImage])}
+                                    src={imageUrls[activeImage]}
                                     alt={`Фото ${activeImage + 1}`}
                                     custom={slideDirection}
                                     initial={reduceMotion ? false : { opacity: 0, x: slideDirection * 64, scale: 0.965 }}
