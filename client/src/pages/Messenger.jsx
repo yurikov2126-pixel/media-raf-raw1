@@ -182,7 +182,7 @@ export default function Messenger() {
         if (!chatId || !token) return;
         setFirstUnreadId(null);
         needsInitialScroll.current = true;
-        api(`/chats/${chatId}/messages`, { token }).then((r) => {
+        api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
             if (Array.isArray(r)) {
                 setMessages(r); setPinned(null); setMyRole('member');
             } else {
