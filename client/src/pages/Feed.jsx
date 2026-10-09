@@ -24,6 +24,7 @@ export default function Feed() {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [searchDraft, setSearchDraft] = useState(query);
     const [authorDraft, setAuthorDraft] = useState(author);
+    const [authorSuggestions, setAuthorSuggestions] = useState([]);
     const [trending, setTrending] = useState([]);
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -41,6 +42,19 @@ export default function Feed() {
     const changeFilters = (patch) => { const next = new URLSearchParams(params); Object.entries(patch).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setParams(next); };
     useEffect(() => { setSearchDraft(query); }, [query]);
     useEffect(() => { setAuthorDraft(author); }, [author]);
+    useEffect(() => {
+        if (!filtersOpen || !token || authorDraft.trim().replace(/^@/, '').length < 2) {
+            setAuthorSuggestions([]);
+            return;
+        }
+        let active = true;
+        const timer = setTimeout(() => {
+            api(`/feed2/authors?q=${encodeURIComponent(authorDraft.trim().replace(/^@/, ''))}`, { token })
+                .then((items) => { if (active) setAuthorSuggestions(items); })
+                .catch(() => { if (active) setAuthorSuggestions([]); });
+        }, 250);
+        return () => { active = false; clearTimeout(timer); };
+    }, [authorDraft, filtersOpen, token]);
     useEffect(() => { if (!token) return; api('/feed2/tags', { token }).then(setTrending).catch(() => {}); }, [token]);
 
     /* Первичная загрузка */
@@ -137,7 +151,13 @@ export default function Feed() {
                 </form>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <label className="text-xs text-white/60 space-y-1">Автор (@username)
-                        <input className="input w-full" aria-label="Фильтр по автору" value={authorDraft} onChange={(e) => setAuthorDraft(e.target.value)} maxLength={60} placeholder="Например, admin" />
+                        <input className="input w-full" aria-label="Фильтр по автору" value={authorDraft} onChange={(e) => setAuthorDraft(e.target.value)} maxLength={60} placeholder="Начните вводить имя или @username" autoComplete="off" />
+                        {authorSuggestions.length > 0 && <div className="mt-1 rounded-xl border border-white/10 bg-white/5 p-1 max-h-48 overflow-auto" role="listbox" aria-label="Подходящие авторы">
+                            {authorSuggestions.map((item) => <button type="button" role="option" aria-selected={author === item.username} key={item.id} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-violet-500/15 transition" onClick={() => { setAuthorDraft(item.username); setAuthorSuggestions([]); changeFilters({ author: item.username }); }}>
+                                <span className="block text-sm font-semibold">{item.fullName}</span>
+                                <span className="block text-xs opacity-60">@{item.username}</span>
+                            </button>)}
+                        </div>}
                     </label>
                     <label className="text-xs text-white/60 space-y-1">Период
                         <select className="input w-full" aria-label="Период публикаций" value={period} onChange={(e) => changeFilters({ period: e.target.value === 'all' ? '' : e.target.value })}>
