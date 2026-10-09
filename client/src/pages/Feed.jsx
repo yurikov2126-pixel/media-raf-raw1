@@ -63,6 +63,29 @@ export default function Feed() {
     currentFeedRef.current = { posts, nextPage, hasMore };
     const currentKeyRef = useRef(snapshotKey);
     const lastScrollYRef = useRef(cachedOnMount.current?.scrollY ?? 0);
+    const lastAnchorRef = useRef(cachedOnMount.current?.anchor ?? null);
+    const feedItemsRef = useRef(null);
+
+    const capturePosition = useCallback(() => {
+        lastScrollYRef.current = window.scrollY;
+        const items = feedItemsRef.current?.querySelectorAll('[data-feed-post-id]');
+        if (!items?.length) return;
+        const topEdge = Math.max(0, scrollRef.current?.getBoundingClientRect().top ?? 0);
+        let selected = null;
+        for (const item of items) {
+            const rect = item.getBoundingClientRect();
+            if (rect.bottom > topEdge + 1) { selected = { id: item.dataset.feedPostId, offset: rect.top - topEdge }; break; }
+        }
+        if (selected) lastAnchorRef.current = selected;
+    }, []);
+
+    const persistPosition = useCallback(() => {
+        capturePosition();
+        const state = currentFeedRef.current;
+        if (state?.posts.length) {
+            saveSnapshot(currentKeyRef.current, { ...state, scrollY: lastScrollYRef.current, anchor: lastAnchorRef.current });
+        }
+    }, [capturePosition]);
     const restoreYRef = useRef(cachedOnMount.current?.scrollY ?? null);
     const restorePendingRef = useRef(restoreYRef.current !== null);
 
@@ -70,11 +93,11 @@ export default function Feed() {
     // iOS Safari can reset document scroll before effect cleanups run.
     useEffect(() => {
         const onScroll = () => {
-            if (!restorePendingRef.current) lastScrollYRef.current = window.scrollY;
+            if (!restorePendingRef.current) capturePosition();
         };
         window.addEventListener('scroll', onScroll, { passive: true });
         return () => window.removeEventListener('scroll', onScroll);
-    }, []);
+    }, [capturePosition]);
 
     useEffect(() => {
         const key = snapshotKey;
@@ -82,31 +105,43 @@ export default function Feed() {
             if (currentKeyRef.current !== key) return;
             const state = currentFeedRef.current;
             if (state?.posts.length) {
-                saveSnapshot(key, { ...state, scrollY: lastScrollYRef.current });
+                saveSnapshot(key, { ...state, scrollY: lastScrollYRef.current, anchor: lastAnchorRef.current });
             }
         };
     }, [snapshotKey]);
 
-    // The cached posts must be mounted before restoring the document scroll.
-    // Two frames give WebKit time to calculate the page height after route change.
+    // Prefer a post anchor to an absolute pixel position: images and WebKit's
+    // deferred off-screen painting can change the height of preceding cards.
     useLayoutEffect(() => {
         if (restoreYRef.current === null) return;
         const y = restoreYRef.current;
-        let secondFrame = null;
-        const firstFrame = requestAnimationFrame(() => {
-            secondFrame = requestAnimationFrame(() => {
+        const anchor = cachedOnMount.current?.anchor || lastAnchorRef.current;
+        let frame1 = null;
+        let frame2 = null;
+        const restore = () => {
+            const node = Array.from(feedItemsRef.current?.querySelectorAll('[data-feed-post-id]') || [])
+                .find((item) => item.dataset.feedPostId === anchor?.id);
+            if (node) {
+                const topEdge = Math.max(0, scrollRef.current?.getBoundingClientRect().top ?? 0);
+                const delta = node.getBoundingClientRect().top - topEdge - anchor.offset;
+                window.scrollTo(0, Math.max(0, window.scrollY + delta));
+            } else {
                 window.scrollTo(0, y);
-                lastScrollYRef.current = y;
+            }
+        };
+        frame1 = requestAnimationFrame(() => {
+            frame2 = requestAnimationFrame(() => {
+                restore();
                 restorePendingRef.current = false;
                 restoreYRef.current = null;
+                capturePosition();
             });
         });
         return () => {
-            cancelAnimationFrame(firstFrame);
-            if (secondFrame !== null) cancelAnimationFrame(secondFrame);
+            if (frame1 !== null) cancelAnimationFrame(frame1);
+            if (frame2 !== null) cancelAnimationFrame(frame2);
         };
-    }, []);
-
+    }, [capturePosition]);
 
     const feedUrl = useCallback((page) => `/feed2/posts?limit=${PAGE_SIZE}&page=${page}&mode=${encodeURIComponent(mode)}${query ? `&q=${encodeURIComponent(query)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${author ? `&author=${encodeURIComponent(author)}` : ''}&period=${encodeURIComponent(period)}&sort=${encodeURIComponent(sort)}`, [mode, query, tag, author, period, sort]);
     const changeFilters = (patch) => { const next = new URLSearchParams(params); Object.entries(patch).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setParams(next); };
@@ -190,6 +225,7 @@ export default function Feed() {
         }
         currentKeyRef.current = snapshotKey;
         lastScrollYRef.current = 0;
+        lastAnchorRef.current = null;
         restorePendingRef.current = false;
         restoreYRef.current = null;
         setPosts([]);
@@ -236,7 +272,9 @@ export default function Feed() {
     });
 
     return (
-        <div ref={scrollRef} className="ui-feed-page">
+        <div ref={scrollRef} className="ui-feed-page" onClickCapture={(event) => {
+            if (event.target.closest('a[href^="/app/"]')) persistPosition();
+        }}>
             <PullToRefreshIndicator pull={pull} refreshing={refreshing} threshold={threshold} />
 
             <div className="ui-feed-heading">
@@ -346,9 +384,9 @@ export default function Feed() {
                 )}
                 {linkedPost && <PostCard post={linkedPost} author={linkedPost.author} compact={compact} onTagClick={(value) => changeFilters({ tag: value, post: '' })} highlightCommentId={linkedCommentId} onChanged={(u) => setLinkedPost((prev) => ({ ...prev, ...u }))} onDeleted={() => { setLinkedPost(null); changeFilters({ post: '' }); }} onReposted={loadInitial} />}
             </section>}
-            <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
+            <div ref={feedItemsRef} className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
                 {posts.map((post) => (
-                    <div key={post.id} className="mrr-feed-item">
+                    <div key={post.id} data-feed-post-id={post.id} className="mrr-feed-item">
                     {mode === 'saved' && post.savedAt && <div className="text-xs opacity-60 mb-2 px-2">🔖 Сохранено {new Date(post.savedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>}
                     <PostCard
                         post={post}
