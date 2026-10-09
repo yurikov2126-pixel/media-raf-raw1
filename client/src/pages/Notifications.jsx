@@ -70,6 +70,16 @@ function matchesFilter(n, filter) {
     return n.type === filter;
 }
 
+function notificationDay(dateValue, today = new Date()) {
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return 'Ранее';
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfYesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    if (date >= startOfToday) return 'Сегодня';
+    if (date >= startOfYesterday) return 'Вчера';
+    return 'Ранее';
+}
+
 export default function Notifications() {
     const {
         items, unread, readCount, total,
@@ -241,8 +251,8 @@ export default function Notifications() {
                 </div>
             )}
 
-            <div className="card p-0 overflow-hidden">
-                {filtered.map((n) => {
+            {filtered.length > 0 && <div className="card p-0 overflow-hidden">
+                {filtered.map((n, index) => {
                     const p = n.payload || {};
                     const subline = (() => {
                         if (n.type === 'mention') return mentionPreview(p);
@@ -310,9 +320,16 @@ export default function Notifications() {
                         }
                         return null;
                     })();
+                    const day = notificationDay(n.createdAt);
+                    const showDay = index === 0 || notificationDay(filtered[index - 1].createdAt) !== day;
                     return (
+                        <div key={n.id}>
+                        {showDay && (
+                            <div className="px-4 py-2.5 bg-violet/5 border-y border-white/5 text-xs font-semibold tracking-wide opacity-75" role="heading" aria-level={2}>
+                                {day}
+                            </div>
+                        )}
                         <div
-                            key={n.id}
                             data-notification-item
                             className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
                                 !n.readAt ? 'bg-violet/5' : ''
@@ -347,9 +364,10 @@ export default function Notifications() {
                                 ✕
                             </button>
                         </div>
+                        </div>
                     );
                 })}
-            </div>
+            </div>}
 
             <ConfirmDialog
                 open={!!confirm}
