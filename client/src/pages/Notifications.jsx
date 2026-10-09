@@ -50,6 +50,9 @@ const FILTERS = [
     { v: 'message', l: '💬 Сообщения' },
     { v: 'post', l: '📝 Посты' },
     { v: 'mention', l: '📣 Упоминания' },
+    { v: 'mention_post', l: '📝 В публикациях' },
+    { v: 'mention_comment', l: '💬 В комментариях' },
+    { v: 'mention_chat', l: '🗨️ В чатах' },
     { v: 'certificate', l: '🏆 Сертификаты' },
     { v: 'system', l: '📢 Система' },
     { v: 'password_reset', l: '🔑 Пароли' },
@@ -57,6 +60,15 @@ const FILTERS = [
     { v: 'homework_overdue', l: '⚠️ Просроченные' },
 
 ];
+
+function matchesFilter(n, filter) {
+    if (filter === 'all') return true;
+    if (filter === 'unread') return !n.readAt;
+    if (filter === 'mention_comment') return n.type === 'mention' && Boolean(n.payload?.commentId);
+    if (filter === 'mention_post') return n.type === 'mention' && Boolean(n.payload?.postId) && !n.payload?.commentId;
+    if (filter === 'mention_chat') return n.type === 'mention' && Boolean(n.payload?.chatId) && !n.payload?.postId;
+    return n.type === filter;
+}
 
 export default function Notifications() {
     const {
@@ -75,17 +87,17 @@ export default function Notifications() {
     }, [reload]);
 
     const filtered = useMemo(() => {
-        if (filter === 'all') return items;
-        if (filter === 'unread') return items.filter((n) => !n.readAt);
-        return items.filter((n) => n.type === filter);
+        return items.filter((n) => matchesFilter(n, filter));
     }, [items, filter]);
 
     const go = async (n) => {
         if (!n.readAt) await markRead(n.id);
         const p = n.payload || {};
         if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
-        else if (n.type === 'message' || n.type === 'mention') nav(`/app/chats/${p.chatId}`);
-        else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
+        else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);
+        else if (n.type === 'mention') nav('/app/notifications');
+        else if (n.type === 'post' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}`);
+        else if (n.type === 'post' && p.authorUsername) nav(`/app/u/${encodeURIComponent(p.authorUsername)}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
@@ -198,7 +210,7 @@ export default function Notifications() {
                             ? total
                             : f.v === 'unread'
                                 ? unread
-                                : items.filter((n) => n.type === f.v).length;
+                                : items.filter((n) => matchesFilter(n, f.v)).length;
                     if (count === 0 && f.v !== 'all' && f.v !== 'unread') return null;
                     return (
                         <button
