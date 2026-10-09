@@ -10,6 +10,20 @@ import usePullToRefresh from '../hooks/usePullToRefresh.js';
 import useLocalStorage from '../hooks/useLocalStorage.js';
 
 const PAGE_SIZE = 20;
+// Keep only a few recent feed views in memory; never persist user posts.
+const feedSnapshots = new Map();
+const SNAPSHOT_TTL = 5 * 60 * 1000;
+function readSnapshot(key) {
+    const entry = feedSnapshots.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.savedAt > SNAPSHOT_TTL) { feedSnapshots.delete(key); return null; }
+    return entry;
+}
+function saveSnapshot(key, value) {
+    feedSnapshots.delete(key);
+    feedSnapshots.set(key, { ...value, savedAt: Date.now() });
+    if (feedSnapshots.size > 6) feedSnapshots.delete(feedSnapshots.keys().next().value);
+}
 
 export default function Feed() {
     const { user, token } = useAuth();
@@ -32,17 +46,41 @@ export default function Feed() {
     const [linkedError, setLinkedError] = useState('');
     const [focusedComment, setFocusedComment] = useState(null);
     const [focusedCommentStatus, setFocusedCommentStatus] = useState('');
-    const [posts, setPosts] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const snapshotKey = JSON.stringify([user?.id, mode, tag, query, author, period, sort]);
+    const cachedOnMount = useRef(readSnapshot(snapshotKey));
+    const [posts, setPosts] = useState(() => cachedOnMount.current?.posts || []);
+    const [loading, setLoading] = useState(() => !cachedOnMount.current);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [nextPage, setNextPage] = useState(null);
-    const [hasMore, setHasMore] = useState(true);
+    const [nextPage, setNextPage] = useState(() => cachedOnMount.current?.nextPage ?? null);
+    const [hasMore, setHasMore] = useState(() => cachedOnMount.current?.hasMore ?? true);
     const [error, setError] = useState('');
     const [composeOpen, setComposeOpen] = useState(false);
     const [compact, setCompact] = useLocalStorage('mrr_feed_compact', false);
 
     const sentinelRef = useRef(null);
     const scrollRef = useRef(null);
+    const currentFeedRef = useRef(null);
+    currentFeedRef.current = { posts, nextPage, hasMore };
+    const currentKeyRef = useRef(snapshotKey);
+    const restoreY = useRef(cachedOnMount.current?.scrollY ?? null);
+
+    useEffect(() => {
+        const key = snapshotKey;
+        return () => {
+            if (currentKeyRef.current !== key) return;
+            const state = currentFeedRef.current;
+            if (state?.posts.length) saveSnapshot(key, { ...state, scrollY: window.scrollY });
+        };
+    }, [snapshotKey]);
+
+    useEffect(() => {
+        if (restoreY.current === null) return;
+        const y = restoreY.current;
+        restoreY.current = null;
+        const frame = requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }));
+        return () => cancelAnimationFrame(frame);
+    }, []);
+
 
     const feedUrl = useCallback((page) => `/feed2/posts?limit=${PAGE_SIZE}&page=${page}&mode=${encodeURIComponent(mode)}${query ? `&q=${encodeURIComponent(query)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${author ? `&author=${encodeURIComponent(author)}` : ''}&period=${encodeURIComponent(period)}&sort=${encodeURIComponent(sort)}`, [mode, query, tag, author, period, sort]);
     const changeFilters = (patch) => { const next = new URLSearchParams(params); Object.entries(patch).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setParams(next); };
@@ -120,8 +158,17 @@ export default function Feed() {
     }, [token, feedUrl]);
 
     useEffect(() => {
+        if (cachedOnMount.current && currentKeyRef.current === snapshotKey) {
+            cachedOnMount.current = null;
+            return;
+        }
+        currentKeyRef.current = snapshotKey;
+        setPosts([]);
+        setNextPage(null);
+        setHasMore(true);
+        window.scrollTo({ top: 0, behavior: 'instant' });
         loadInitial();
-    }, [loadInitial]);
+    }, [loadInitial, snapshotKey]);
 
     /* Подгрузка следующей страницы */
     const loadMore = useCallback(async () => {
