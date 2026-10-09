@@ -21,11 +21,16 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
     const startYRef = useRef(null);
     const scrollContainerRef = useRef(null);
     const pullingRef = useRef(false);
+    const pullRef = useRef(0);
+    const frameRef = useRef(null);
 
     const reset = useCallback(() => {
         startYRef.current = null;
         scrollContainerRef.current = null;
         pullingRef.current = false;
+        pullRef.current = 0;
+        if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
         setPull(0);
     }, []);
 
@@ -65,7 +70,14 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
 
             pullingRef.current = true;
             const next = Math.min(MAX_PULL, dy * RESISTANCE);
-            setPull(next);
+            pullRef.current = next;
+            // Coalesce high-frequency touchmove updates into one render per frame.
+            if (frameRef.current === null) {
+                frameRef.current = requestAnimationFrame(() => {
+                    frameRef.current = null;
+                    setPull(pullRef.current);
+                });
+            }
 
             // Не блокируем нативную прокрутку: iOS PWA может застрять при preventDefault.
         },
@@ -74,7 +86,7 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
 
     const handleTouchEnd = useCallback(async () => {
         if (startYRef.current === null) return;
-        const shouldRefresh = pullingRef.current && pull >= THRESHOLD;
+        const shouldRefresh = pullingRef.current && pullRef.current >= THRESHOLD;
         reset();
         if (!shouldRefresh) return;
 
@@ -84,7 +96,11 @@ export default function usePullToRefresh({ ref, onRefresh, disabled = false }) {
         } finally {
             setRefreshing(false);
         }
-    }, [pull, onRefresh, reset]);
+    }, [onRefresh, reset]);
+
+    useEffect(() => () => {
+        if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    }, []);
 
     useEffect(() => {
         const el = ref.current;

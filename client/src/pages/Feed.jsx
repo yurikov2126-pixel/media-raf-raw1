@@ -272,7 +272,7 @@ export default function Feed() {
             </section>}
             <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
                 {posts.map((post) => (
-                    <div key={post.id}>
+                    <div key={post.id} className="mrr-feed-item">
                     {mode === 'saved' && post.savedAt && <div className="text-xs opacity-60 mb-2 px-2">🔖 Сохранено {new Date(post.savedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>}
                     <PostCard
                         post={post}
