@@ -335,26 +335,22 @@ export default function Messenger() {
         };
         const stopFollowing = () => { userScrolled = true; };
         const observer = new ResizeObserver(followBottom);
-        // Observe the scroll content itself so newly appended messages and
-        // late media/layout changes are covered without a fixed timeout.
-        const content = el.firstElementChild || el;
-        observer.observe(content);
+        const expiry = window.setTimeout(stopFollowing, 12000);
         Array.from(el.children).forEach((node) => observer.observe(node));
         const onMediaLoad = () => followBottom();
         el.addEventListener('load', onMediaLoad, true);
         el.addEventListener('loadedmetadata', onMediaLoad, true);
         el.addEventListener('wheel', stopFollowing, { passive: true });
         el.addEventListener('touchstart', stopFollowing, { passive: true });
-        el.addEventListener('pointerdown', stopFollowing, { passive: true });
         followBottom();
         return () => {
             cancelAnimationFrame(raf);
+            clearTimeout(expiry);
             observer.disconnect();
             el.removeEventListener('load', onMediaLoad, true);
             el.removeEventListener('loadedmetadata', onMediaLoad, true);
             el.removeEventListener('wheel', stopFollowing);
             el.removeEventListener('touchstart', stopFollowing);
-            el.removeEventListener('pointerdown', stopFollowing);
         };
     }, [chatId, messages.length, firstUnreadId, linkedMessageId]);
 
