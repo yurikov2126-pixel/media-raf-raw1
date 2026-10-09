@@ -14,7 +14,7 @@ const PAGE_SIZE = 20;
 export default function Feed() {
     const { user, token } = useAuth();
     const [params, setParams] = useSearchParams();
-    const mode = ['latest', 'recommended', 'saved'].includes(params.get('mode')) ? params.get('mode') : 'latest';
+    const mode = ['latest', 'recommended', 'saved', 'mine'].includes(params.get('mode')) ? params.get('mode') : 'latest';
     const tag = params.get('tag') || '';
     const query = params.get('q') || '';
     const author = params.get('author') || '';
@@ -147,7 +147,7 @@ export default function Feed() {
             <p className="ui-feed-subtitle">Свежие публикации MEDIA·RAF·RAW — идеи, проекты и события команды.</p>
             <div className="rounded-2xl border border-white/10 bg-white/[.035] p-3 sm:p-4 space-y-4 mb-5">
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Разделы ленты">
-                    {[['latest', '🕒 Новые'], ['recommended', '✨ Рекомендуем'], ['saved', '🔖 Сохранённые']].map(([key, label]) => <button key={key} type="button" aria-pressed={mode === key} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${mode === key ? 'bg-violet-500/25 text-violet-100 border border-violet-400/30' : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'}`} onClick={() => changeFilters({ mode: key === 'latest' ? '' : key })}>{label}</button>)}
+                    {[['latest', '🕒 Новые'], ['recommended', '✨ Рекомендуем'], ['saved', '🔖 Сохранённые'], ['mine', '👤 Мои']].map(([key, label]) => <button key={key} type="button" aria-pressed={mode === key} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${mode === key ? 'bg-violet-500/25 text-violet-100 border border-violet-400/30' : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'}`} onClick={() => changeFilters({ mode: key === 'latest' ? '' : key })}>{label}</button>)}
                 </div>
                 <div className="flex items-center justify-between gap-3">
                     <button type="button" className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold hover:bg-white/10 transition" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} aria-controls="feed-advanced-filters">
@@ -207,7 +207,7 @@ export default function Feed() {
 
             {!loading && !error && posts.length === 0 && (
                 <div className="card p-10 text-center text-white/40">
-                    {mode === 'saved' ? 'Вы ещё не сохранили ни одной публикации.' : query || tag ? 'По вашему запросу публикаций не найдено.' : mode === 'recommended' ? 'Пока нет публикаций для рекомендаций за последние 30 дней.' : 'Пока нет публикаций. Создайте первую запись у себя в профиле.'}
+                    {mode === 'saved' ? 'Вы ещё не сохранили ни одной публикации.' : mode === 'mine' ? 'Вы ещё не опубликовали ни одной записи.' : query || tag ? 'По вашему запросу публикаций не найдено.' : mode === 'recommended' ? 'Пока нет публикаций для рекомендаций за последние 30 дней.' : 'Пока нет публикаций. Создайте первую запись у себя в профиле.'}
                 </div>
             )}
 
