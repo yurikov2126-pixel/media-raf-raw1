@@ -109,6 +109,8 @@ export default function Messenger() {
 
     const scrollRef = useRef(null);
     const nearBottomRef = useRef(true);
+    const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+    const [unseenCount, setUnseenCount] = useState(0);
     const chatListScrollRef = useRef(null);
     const typingTimeout = useRef(null);
     const typingClearTimers = useRef(new Map()); // key: chatId:userId
@@ -184,6 +186,8 @@ export default function Messenger() {
         setFirstUnreadId(null);
         needsInitialScroll.current = true;
         nearBottomRef.current = true;
+        setShowJumpToLatest(false);
+        setUnseenCount(0);
         api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
             if (Array.isArray(r)) {
                 setMessages(r); setPinned(null); setMyRole('member');
@@ -201,7 +205,10 @@ export default function Messenger() {
     useEffect(() => {
         if (!socket) return;
         const onNew = (m) => {
-            if (m.chatId === chatId) setMessages((prev) => [...prev, m]);
+            if (m.chatId === chatId) {
+                if (!nearBottomRef.current && m.senderId !== user.id && m.sender?.id !== user.id) setUnseenCount((n) => n + 1);
+                setMessages((prev) => prev.some((item) => item.id === m.id) ? prev : [...prev, m]);
+            }
             reloadChats();
         };
         const onEdited = (m) => setMessages((p) => p.map((x) => (x.id === m.id ? m : x)));
@@ -342,6 +349,7 @@ export default function Messenger() {
         setReportTarget(null);
         setTypingUsers([]);
         setMessageSearchOpen(false); setMessageQuery(''); setMessageMatchIndex(0);
+        setShowJumpToLatest(false); setUnseenCount(0);
     }, [chatId]);
 
     /* Pull-to-refresh на списке чатов */
@@ -749,7 +757,14 @@ export default function Messenger() {
                             onJump={() => pinned && scrollToMessage(pinned.id)}
                         />
 
-                        <div ref={scrollRef} onScroll={(event) => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120; }} className="relative z-0 flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0">
+                        <div className="relative z-0 flex-1 min-h-0">
+                        <div ref={scrollRef} onScroll={(event) => {
+                            const el = event.currentTarget;
+                            const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                            nearBottomRef.current = nearBottom;
+                            setShowJumpToLatest(!nearBottom);
+                            if (nearBottom) setUnseenCount(0);
+                        }} className="h-full overflow-y-auto px-3 md:px-6 py-4 space-y-2">
                             {messages.map((m, index) => (
                                 <div key={m.id} className="space-y-2">
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
@@ -776,6 +791,26 @@ export default function Messenger() {
                                 />
                                 </div>
                             ))}
+                        </div>
+                        {showJumpToLatest && (
+                            <button type="button"
+                                aria-label={unseenCount ? `К последним сообщениям, новых: ${unseenCount}` : 'К последним сообщениям'}
+                                title="К последним сообщениям"
+                                onClick={() => {
+                                    const el = scrollRef.current;
+                                    if (!el) return;
+                                    nearBottomRef.current = true;
+                                    setShowJumpToLatest(false);
+                                    setUnseenCount(0);
+                                    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? 'instant' : 'smooth' });
+                                }}
+                                className="absolute bottom-4 right-4 md:right-6 z-20 flex items-center gap-2 rounded-full border px-3 py-2.5 shadow-lg backdrop-blur-md transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet"
+                                style={{ backgroundColor: 'var(--bg-elev-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}>
+                                {unseenCount > 0 && <span className="rounded-full bg-violet px-2 py-0.5 text-xs font-bold text-white">{unseenCount > 99 ? '99+' : unseenCount}</span>}
+                                <span aria-hidden="true">↓</span>
+                            </button>
+                        )}
                         </div>
 
                         {/* Панель ввода */}
