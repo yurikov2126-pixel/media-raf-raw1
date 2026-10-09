@@ -199,8 +199,8 @@ router.post('/', auth, async (req, res) => {
     try {
         const mentionedHandles = new Set();
         const body = String(content || '');
-        for (const match of body.matchAll(/@\\[[^\\]\\n]{1,120}\\]\\(([\\p{L}\\p{N}_]{1,50})\\)/gu)) mentionedHandles.add(match[1].toLowerCase());
-        for (const match of body.matchAll(/(^|[^\\p{L}\\p{N}_@])@([\\p{L}\\p{N}_]{1,50})/gu)) mentionedHandles.add(match[2].toLowerCase());
+        for (const match of body.matchAll(/@\[[^\]\n]{1,120}\]\(([\p{L}\p{N}_]{1,50})\)/gu)) mentionedHandles.add(match[1].toLowerCase());
+        for (const match of body.matchAll(/(^|[^\p{L}\p{N}_@])@([\p{L}\p{N}_]{1,50})/gu)) mentionedHandles.add(match[2].toLowerCase());
         const mentionedUsers = mentionedHandles.size ? await prisma.user.findMany({
             where: { isBanned: false, id: { not: req.user.id }, username: { in: [...mentionedHandles], mode: 'insensitive' } },
             select: { id: true },
