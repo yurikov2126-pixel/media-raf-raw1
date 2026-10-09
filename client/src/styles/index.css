@@ -236,6 +236,10 @@ html, body {
     100% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
 }
 
+.mrr-netbanner--restored {
+    background: #15803d;
+}
+
 /* ─────────── Offline screen ─────────── */
 
 .mrr-offline {
