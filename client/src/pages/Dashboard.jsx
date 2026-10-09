@@ -6,6 +6,7 @@ import { useAuth } from '../store/auth.jsx';
 import { useGamification } from '../store/gamification.jsx';
 import { useNotifications } from '../store/notifications.jsx';
 import { useSettings } from '../store/settings.jsx';
+import { useModules } from '../store/modules.jsx';
 import Icon from '../components/Icon.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
@@ -47,6 +48,8 @@ function notificationPreview(item) {
 export default function Dashboard() {
   const { user, token } = useAuth();
   const { dashboard, brand } = useSettings();
+  const { isEnabled } = useModules();
+  const coursesEnabled = isEnabled('courses');
   const gamif = useGamification();
   const notifications = useNotifications();
   const navigate = useNavigate();
@@ -62,7 +65,7 @@ export default function Dashboard() {
 
   // Only fetch the sections that the administrator has enabled.
   // Course data also powers the quick action and the learning counter.
-  const needsCourses = dashboard.showLearning || dashboard.showQuickActions;
+  const needsCourses = coursesEnabled && (dashboard.showLearning || dashboard.showQuickActions);
   const needsFeed = dashboard.showFeedPreview;
 
   useEffect(() => {
@@ -128,12 +131,12 @@ export default function Dashboard() {
       icon: 'message',
       to: '/app/chats',
     },
-    {
+    ...(coursesEnabled ? [{
       label: 'Продолжить обучение',
       sub: enrolledCourse ? enrolledCourse.title : 'Выбрать курс',
       icon: 'book',
       to: enrolledCourse ? `/app/courses/${enrolledCourse.slug}` : '/app/courses',
-    },
+    }] : []),
     {
       label: 'Уведомления',
       sub: unread > 0 ? `${unread} непрочитанных` : 'Всё спокойно',
@@ -182,7 +185,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      {(dashboard.showNotifications || dashboard.showGamification || dashboard.showLearning) && (
+      {(dashboard.showNotifications || dashboard.showGamification || (dashboard.showLearning && coursesEnabled)) && (
         <section className="ui-section">
           <div className="ui-stat-grid">
             {dashboard.showNotifications && (
@@ -199,7 +202,7 @@ export default function Dashboard() {
                 <div className="ui-stat__hint">{gamif.stats.xp} XP</div>
               </Link>
             )}
-            {dashboard.showLearning && (
+            {dashboard.showLearning && coursesEnabled && (
               <Link to="/app/courses" className="ui-stat">
                 <div className="ui-stat__label">Обучение</div>
                 <div className="ui-stat__value">{courses.filter((c) => c.enrolled).length}</div>
