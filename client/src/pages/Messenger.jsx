@@ -94,6 +94,7 @@ export default function Messenger() {
     const [attachmentCaptions, setAttachmentCaptions] = useState({});
     const [attachmentProgress, setAttachmentProgress] = useState(0);
     const [attachmentIndex, setAttachmentIndex] = useState(0);
+    const attachmentRetriesRef = useRef(new Map());
     const [viewerIndex, setViewerIndex] = useState(null);
     const [showMembers, setShowMembers] = useState(false);
     const [showGallery, setShowGallery] = useState(false);
@@ -450,12 +451,15 @@ export default function Messenger() {
             const total = pendingFiles.length;
             for (const file of pendingFiles) {
                 const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-                const result = await uploadFileWithProgress(file, token, (percent) => {
+                const previous = attachmentRetriesRef.current.get(file);
+                const requestId = previous?.requestId || crypto.randomUUID();
+                const result = previous?.result || await uploadFileWithProgress(file, token, (percent) => {
                     setAttachmentProgress(Math.round(((completed + percent / 100) / total) * 100));
                 });
+                attachmentRetriesRef.current.set(file, { requestId, result });
                 await new Promise((resolve, reject) => {
                     socket.timeout(15000).emit('message:send', {
-                        chatId, content: result.url, type,
+                        chatId, content: result.url, type, clientMessageId: requestId,
                         caption: (attachmentCaptions[completed] || '').trim() || undefined,
                         replyToId: completed === 0 ? replyTo?.id : undefined,
                     }, (err, response) => {
@@ -463,6 +467,7 @@ export default function Messenger() {
                         else resolve();
                     });
                 });
+                attachmentRetriesRef.current.delete(file);
                 completed++;
                 setAttachmentIndex(completed);
                 setAttachmentProgress(Math.round(completed / total * 100));
