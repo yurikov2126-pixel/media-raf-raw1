@@ -939,6 +939,22 @@ export default function Messenger() {
             {/* Контекстное меню сообщения */}
             {contextMenu && (() => {
                 const { actions, handler } = contextActions(contextMenu.message);
+                const selected = contextMenu.message;
+                const rect = document.getElementById(`msg-${selected.id}`)?.getBoundingClientRect();
+                const mobileWidth = Math.min(320, window.innerWidth - 24);
+                const menuHeight = Math.min(350, actions.length * 43 + 16);
+                const previewHeight = 72;
+                const totalHeight = 54 + previewHeight + menuHeight + 18;
+                const top = Math.max(12, Math.min((rect?.top ?? contextMenu.y) - 54, window.innerHeight - totalHeight - 12));
+                const left = Math.max(12, Math.min(rect?.left ?? contextMenu.x - mobileWidth / 2, window.innerWidth - mobileWidth - 12));
+                const previewText = selected.deletedAt ? 'Сообщение удалено'
+                    : selected.type === 'image' ? '🖼️ Фотография'
+                    : selected.type === 'video' ? '🎥 Видео'
+                    : selected.type === 'voice' ? '🎤 Голосовое сообщение'
+                    : selected.type === 'sticker' ? '🎨 Стикер'
+                    : selected.type === 'file' ? '📎 Документ'
+                    : selected.content || '';
+                const quickReactions = ['❤️', '🤩', '👍', '👎', '🔥', '🥰', '👏'];
                 const style = {
                     position: 'fixed',
                     left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 208)),
@@ -947,19 +963,30 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <button type="button" className="fixed inset-0 z-[70] bg-black/30 md:bg-transparent cursor-default"
+                        <button type="button" className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[3px] md:bg-transparent md:backdrop-blur-none cursor-default"
                             onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
-                        {/* На телефоне — нижняя панель с большими зонами нажатия. */}
-                        <div className="mrr-message-actions fixed left-3 right-3 bottom-2 z-[80] md:hidden rounded-2xl border shadow-2xl p-2 pb-[calc(8px+env(safe-area-inset-bottom,0px))] max-h-[70dvh] max-w-sm mx-auto overflow-y-auto"
-                            style={{ backgroundColor: 'var(--bg-elev-1)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}
+                        {/* Telegram-inspired contextual popover with a selected-message preview. */}
+                        <div className="mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2"
+                            style={{ left, top, width: mobileWidth, maxHeight: 'calc(100dvh - 24px)' }}
                             role="dialog" aria-modal="true" aria-label="Действия с сообщением">
-                            <div className="w-8 h-1 rounded-full mx-auto mb-1" style={{ backgroundColor: 'var(--border-strong)' }} />
-                            <div className="flex items-center justify-between px-2 pb-1">
-                                <span className="font-semibold text-sm">Действия с сообщением</span>
-                                <button type="button" onClick={() => setContextMenu(null)} className="min-w-9 min-h-9 rounded-xl" aria-label="Закрыть меню">✕</button>
+                            {!selected.deletedAt && (
+                                <div className="flex items-center justify-between gap-1 rounded-full px-2 py-1 shadow-xl border"
+                                    style={{ backgroundColor: 'var(--bg-elev-1)', borderColor: 'var(--border-strong)' }}>
+                                    {quickReactions.map((emoji) => (
+                                        <button type="button" key={emoji} onClick={() => { toggleReaction(selected.id, emoji); setContextMenu(null); }}
+                                            className="text-xl flex-1 min-w-0 h-10 rounded-full active:scale-110 transition-transform"
+                                            aria-label={`Реакция ${emoji}`}>{emoji}</button>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="rounded-2xl px-3 py-3 shadow-lg border max-h-[72px] overflow-hidden"
+                                style={{ backgroundColor: selected.sender.id === user.id ? 'var(--bg-elev-3)' : 'var(--bg-elev-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}>
+                                <div className="text-xs font-semibold opacity-60 mb-1">{selected.sender.fullName}</div>
+                                <div className="text-sm line-clamp-2 break-words">{previewText}</div>
                             </div>
-                            <div className="grid grid-cols-1 gap-1">
-                                {actions.map((a) => (
+                            <div className="rounded-2xl border shadow-2xl p-1 overflow-y-auto min-h-0"
+                                style={{ backgroundColor: 'var(--bg-elev-1)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)', maxHeight: menuHeight }}>
+                                {actions.filter((a) => a.id !== 'react').map((a) => (
                                     <button type="button" key={a.id} onClick={() => handler(a.id)}
                                         className="w-full min-h-10 text-left px-3 py-2 text-sm rounded-xl hover:bg-white/10 active:bg-white/15"
                                         style={a.danger ? { color: '#e94b78' } : undefined}>
