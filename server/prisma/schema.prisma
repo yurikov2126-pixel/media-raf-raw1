@@ -159,6 +159,7 @@ model Message {
   type          String    @default("text")
   content       String
   caption       String?
+  clientMessageId String?
   replyToId     String?
   forwardedFrom String?
   editedAt      DateTime?
@@ -170,6 +171,8 @@ model Message {
   replyTo   Message?   @relation("Reply", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]  @relation("Reply")
   reactions Reaction[]
+
+  @@unique([senderId, clientMessageId])
 }
 
 model Reaction {
