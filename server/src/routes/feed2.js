@@ -122,6 +122,20 @@ router.post('/posts/:id/repost', async (req, res) => {
     const post = await prisma.post.create({ data: { authorId: req.user.id, content, repostOfId: rootId } });
     res.status(201).json({ id: post.id });
 });
+router.get('/mentions', async (req, res) => {
+    const q = String(req.query.q || '').trim().replace(/^@/, '').slice(0, 50);
+    if (!q) return res.json([]);
+    const people = await prisma.user.findMany({
+        where: { isBanned: false, OR: [
+            { username: { startsWith: q, mode: 'insensitive' } },
+            { fullName: { contains: q, mode: 'insensitive' } },
+        ] },
+        select: { id: true, username: true, fullName: true, avatar: true },
+        orderBy: { username: 'asc' },
+        take: 8,
+    });
+    res.json(people);
+});
 router.get('/authors', async (req, res) => {
     const q = String(req.query.q || '').trim().replace(/^@/, '').slice(0, 60);
     if (q.length < 2) return res.json([]);

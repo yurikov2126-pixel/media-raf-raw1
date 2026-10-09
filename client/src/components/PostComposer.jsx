@@ -94,6 +94,29 @@ export default function PostComposer({ onPublished, onClose }) {
     const draft = usePostDraft(user?.id);
     const text = draft.text;
     const setText = draft.setText;
+    const textareaRef = useRef(null);
+    const [mentionMatch, setMentionMatch] = useState(null);
+    const [mentionOptions, setMentionOptions] = useState([]);
+    const updateMentions = (value, caret) => {
+        setText(value);
+        const prefix = value.slice(0, caret);
+        const match = prefix.match(/(^|[^\\p{L}\\p{N}_])@([\\p{L}\\p{N}_]{1,50})$/u);
+        setMentionMatch(match ? { start: caret - match[2].length - 1, end: caret, query: match[2] } : null);
+    };
+    useEffect(() => {
+        if (!mentionMatch || !token) { setMentionOptions([]); return; }
+        let active = true;
+        const timer = setTimeout(() => api(`/feed2/mentions?q=${encodeURIComponent(mentionMatch.query)}`, { token }).then((list) => { if (active) setMentionOptions(list); }).catch(() => { if (active) setMentionOptions([]); }), 220);
+        return () => { active = false; clearTimeout(timer); };
+    }, [mentionMatch?.query, token]);
+    const selectMention = (person) => {
+        if (!mentionMatch) return;
+        const next = text.slice(0, mentionMatch.start) + `@${person.username} ` + text.slice(mentionMatch.end);
+        const caret = mentionMatch.start + person.username.length + 2;
+        setText(next);
+        setMentionMatch(null); setMentionOptions([]);
+        requestAnimationFrame(() => { textareaRef.current?.focus(); textareaRef.current?.setSelectionRange(caret, caret); });
+    };
 
 
     const publish = async () => {
@@ -139,7 +162,8 @@ export default function PostComposer({ onPublished, onClose }) {
     return (
         <>
                 <section className="card p-4 md:p-6 mb-6" data-post-composer="true" aria-label="Создание публикации">
-                    <textarea autoFocus className="input resize-none w-full" rows={4} placeholder="Что нового у команды?" value={text} onChange={(e) => setText(e.target.value)} />
+                    <textarea ref={textareaRef} autoFocus className="input resize-none w-full" rows={4} placeholder="Что нового у команды? Отметьте участника через @username" value={text} onChange={(e) => updateMentions(e.target.value, e.target.selectionStart)} onClick={(e) => updateMentions(e.target.value, e.target.selectionStart)} />
+                    {mentionMatch && mentionOptions.length > 0 && <div className="rounded-xl border border-violet-400/25 p-2 mt-2 space-y-1" aria-label="Подсказки упоминаний">{mentionOptions.map((person) => <button type="button" key={person.id} className="w-full text-left rounded-lg px-3 py-2 hover:bg-violet-500/10" onClick={() => selectMention(person)}><span className="font-semibold">{person.fullName}</span><span className="opacity-60 text-sm ml-2">@{person.username}</span></button>)}</div>}
                     {draft.hasDraft && <p className="text-xs text-white/40 mt-2">Черновик сохраняется автоматически</p>}
                     {items.length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
