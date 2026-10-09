@@ -111,7 +111,8 @@ export default function GlobalCommandPalette() {
             }
             if (event.key === 'Enter' && displayed[selected]) {
                 event.preventDefault();
-                navigate(displayed[selected].to);
+                if (displayed[selected].to) navigate(displayed[selected].to);
+                else if (displayed[selected].id === 'profile') navigate('/app/u/' + user.username);
                 close();
             }
         };
@@ -155,7 +156,7 @@ export default function GlobalCommandPalette() {
                     )}
                     <div className="ui-command__group">{query ? 'Результаты поиска' : 'Быстрый доступ'}</div>
                     {loading && <div className="px-4 py-2 text-sm" role="status">Ищем…</div>}
-                    {displayed.length === 0 ? (
+                    {displayed.length === 0 && !loading ? (
                         <div className="py-10 text-center text-sm text-white/35">
                             Ничего не найдено
                         </div>
@@ -167,7 +168,8 @@ export default function GlobalCommandPalette() {
                                 className={`ui-command__item ${index === selected ? 'is-selected' : ''}`}
                                 onMouseEnter={() => setSelected(index)}
                                 onClick={() => {
-                                    navigate(item.to);
+                                    if (item.to) navigate(item.to);
+                                    else if (item.id === 'profile') navigate('/app/u/' + user.username);
                                     close();
                                 }}
                             >
