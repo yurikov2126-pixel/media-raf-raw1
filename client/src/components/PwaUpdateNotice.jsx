@@ -44,7 +44,7 @@ export default function PwaUpdateNotice() {
     };
     if (!available) return null;
     return (
-        <div className="fixed z-[240] left-4 right-4 bottom-[calc(110px+env(safe-area-inset-bottom,0px))] md:bottom-6 md:left-auto md:right-6 md:max-w-sm rounded-2xl border border-violet-400/40 bg-[#191428]/95 backdrop-blur-xl shadow-2xl p-4 flex gap-3 items-center" role="status">
+        <div className="mrr-pwa-update-notice fixed z-[240] left-4 right-4 bottom-[calc(110px+env(safe-area-inset-bottom,0px))] md:bottom-6 md:left-auto md:right-6 md:max-w-sm rounded-2xl border border-violet-400/40 bg-[#191428]/95 backdrop-blur-xl shadow-2xl p-4 flex gap-3 items-center" role="status">
             <div className="flex-1 min-w-0"><div className="font-semibold text-sm">Доступно обновление</div><p className="text-xs text-white/60 mt-1">Новая версия готова. Обновите приложение, когда закончите редактирование.</p></div>
             <button type="button" className="btn-primary text-sm shrink-0" onClick={acceptUpdate} disabled={updating}>Обновить</button>
         </div>
