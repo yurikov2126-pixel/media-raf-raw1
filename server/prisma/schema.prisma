@@ -158,6 +158,7 @@ model Message {
   senderId      String
   type          String    @default("text")
   content       String
+  caption       String?
   replyToId     String?
   forwardedFrom String?
   editedAt      DateTime?

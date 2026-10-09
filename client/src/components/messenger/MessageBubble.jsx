@@ -198,6 +198,11 @@ export default function MessageBubble({
                         <MessageText text={m.content} highlights={highlights} />
                     )}
 
+                    {m.caption && ['image', 'video', 'file'].includes(m.type) && !m.deletedAt && (
+                        <div className="max-w-[280px] md:max-w-[340px] px-3 py-2 mt-1 rounded-xl bg-ink-700 text-white mrr-other-bubble whitespace-pre-wrap break-words text-sm">
+                            <MessageText text={m.caption} highlights={new Set()} />
+                        </div>
+                    )}
                     {m.editedAt && !m.deletedAt && (
                         <span className="text-[10px] opacity-60 ml-1">(изм.)</span>
                     )}
