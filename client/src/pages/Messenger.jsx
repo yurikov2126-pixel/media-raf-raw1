@@ -940,20 +940,40 @@ export default function Messenger() {
                 const { actions, handler } = contextActions(contextMenu.message);
                 const style = {
                     position: 'fixed',
-                    left: Math.min(contextMenu.x, window.innerWidth - 200),
-                    top: Math.min(contextMenu.y, window.innerHeight - 60 - actions.length * 44),
+                    left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 208)),
+                    top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 16 - actions.length * 44)),
                     zIndex: 80,
                 };
                 return (
                     <>
-                        <div className="fixed inset-0 z-[70]" onClick={() => setContextMenu(null)} />
-                        <div className="card p-1 w-48 animate-pop" style={style}>
+                        <button type="button" className="fixed inset-0 z-[70] bg-black/40 md:bg-transparent cursor-default"
+                            onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
+                        {/* На телефоне — нижняя панель с большими зонами нажатия. */}
+                        <div className="fixed inset-x-0 bottom-0 z-[80] md:hidden rounded-t-3xl border-t border-white/10 shadow-2xl p-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] max-h-[80dvh] overflow-y-auto"
+                            style={{ backgroundColor: 'var(--bg-elev-1)', color: 'var(--text-primary)' }}
+                            role="dialog" aria-modal="true" aria-label="Действия с сообщением">
+                            <div className="w-10 h-1 rounded-full mx-auto mb-3" style={{ backgroundColor: 'var(--border-strong)' }} />
+                            <div className="flex items-center justify-between px-2 pb-2">
+                                <span className="font-semibold text-sm">Действия с сообщением</span>
+                                <button type="button" onClick={() => setContextMenu(null)} className="min-w-11 min-h-11 rounded-xl" aria-label="Закрыть меню">✕</button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-1">
+                                {actions.map((a) => (
+                                    <button type="button" key={a.id} onClick={() => handler(a.id)}
+                                        className="w-full min-h-12 text-left px-4 py-3 text-base rounded-xl hover:bg-white/10 active:bg-white/15"
+                                        style={a.danger ? { color: '#e94b78' } : undefined}>
+                                        {a.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        {/* На компьютере оставляем контекстное меню у курсора. */}
+                        <div className="hidden md:block card p-1 w-48 animate-pop" style={style}>
                             {actions.map((a) => (
-                                <button
-                                    key={a.id}
-                                    onClick={() => handler(a.id)}
-                                    className={`w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 ${a.danger ? 'text-pink' : ''}`}
-                                >{a.label}</button>
+                                <button type="button" key={a.id} onClick={() => handler(a.id)}
+                                    className={`w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 ${a.danger ? 'text-pink' : ''}`}>
+                                    {a.label}
+                                </button>
                             ))}
                         </div>
                     </>
