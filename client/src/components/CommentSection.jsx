@@ -103,15 +103,18 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommen
     const [showReplies, setShowReplies] = useState(depth === 0 || highlightedPath.includes(comment.id));
     const targetRef = useRef(null);
     useEffect(() => {
-        if (highlightCommentId !== comment.id || !targetRef.current) return;
-        // The target may be mounted after parent replies expand. Scroll only after it exists.
-        let secondFrame;
-        const firstFrame = requestAnimationFrame(() => {
-            secondFrame = requestAnimationFrame(() => {
-                targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (highlightCommentId !== comment.id) return;
+        // Feed pagination and route scroll restoration can move the viewport after the
+        // comment has mounted. Retry briefly so the final position stays on the target.
+        const delays = [0, 150, 450, 1000, 1800];
+        const timers = delays.map((delay) => window.setTimeout(() => {
+            if (!targetRef.current) return;
+            targetRef.current.scrollIntoView({
+                behavior: delay >= 1000 ? 'smooth' : 'instant',
+                block: 'center',
             });
-        });
-        return () => { cancelAnimationFrame(firstFrame); if (secondFrame) cancelAnimationFrame(secondFrame); };
+        }, delay));
+        return () => timers.forEach(window.clearTimeout);
     }, [highlightCommentId, comment.id]);
     useEffect(() => { if (highlightedPath.includes(comment.id)) setShowReplies(true); }, [highlightedPath, comment.id]);
 
