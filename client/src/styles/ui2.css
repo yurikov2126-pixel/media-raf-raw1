@@ -1517,3 +1517,16 @@ select {
 [data-theme="light"] .mrr-pwa-update-notice .btn-primary {
   color: #fff !important;
 }
+
+/* PWA 2.0: honor iOS Reduce Motion without disabling useful feedback
+   for users who prefer animations. Keep the scope to the app shell. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-mobile-nav__item,
+  .ui-nav-item,
+  .ui-mobile-topbar,
+  .ui-more-sheet,
+  .ui-more-sheet-backdrop {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
