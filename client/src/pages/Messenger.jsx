@@ -124,6 +124,7 @@ export default function Messenger() {
     const mediaFileRef = useRef(null);
     const textareaRef = useRef(null);
     const needsInitialScroll = useRef(false);
+    const mediaFollowChatRef = useRef(null);
 
     const activeChat = chats.find((c) => c.id === chatId);
     const chatTitle = useMemo(() => {
@@ -323,7 +324,8 @@ export default function Messenger() {
     // scrolling from someone browsing the history.
     useEffect(() => {
         const el = scrollRef.current;
-        if (!el || !chatId || !messages.length || firstUnreadId || linkedMessageId) return;
+        if (!el || !chatId || !messages.length || firstUnreadId || linkedMessageId || mediaFollowChatRef.current === chatId) return;
+        mediaFollowChatRef.current = chatId;
         let userScrolled = false;
         let raf = 0;
         const followBottom = () => {
@@ -332,6 +334,7 @@ export default function Messenger() {
             raf = requestAnimationFrame(() => { if (!userScrolled) el.scrollTop = el.scrollHeight; });
         };
         const observer = new ResizeObserver(followBottom);
+        const expiry = window.setTimeout(stopFollowing, 12000);
         Array.from(el.children).forEach((node) => observer.observe(node));
         const onMediaLoad = () => followBottom();
         const stopFollowing = () => { userScrolled = true; };
@@ -342,6 +345,7 @@ export default function Messenger() {
         followBottom();
         return () => {
             cancelAnimationFrame(raf);
+            clearTimeout(expiry);
             observer.disconnect();
             el.removeEventListener('load', onMediaLoad, true);
             el.removeEventListener('loadedmetadata', onMediaLoad, true);
