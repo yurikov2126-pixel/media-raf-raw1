@@ -152,7 +152,9 @@ export default function NotificationBell({ align = 'right' }) {
         if (!n.readAt) await markRead(n.id);
         setOpen(false);
         const p = n.payload || {};
-        if (n.type === 'message' || n.type === 'mention') nav(`/app/chats/${p.chatId}`);
+        if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
+        else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);
+        else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
