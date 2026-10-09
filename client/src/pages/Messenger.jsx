@@ -740,25 +740,6 @@ export default function Messenger() {
                             </div>
                         </header>
 
-                        {messageSearchOpen && (
-                            <div className="relative z-20 flex flex-wrap items-center gap-2 px-3 py-2 border-b shrink-0"
-                                style={{ backgroundColor: 'var(--bg-elev-1)', borderColor: 'var(--border-subtle)' }}>
-                                <input type="search" autoFocus value={messageQuery}
-                                    onChange={(e) => { setMessageQuery(e.target.value); setMessageMatchIndex(0); }}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); goToMessageMatch(messageMatchIndex + (e.shiftKey ? -1 : 1)); } }}
-                                    placeholder="Найти сообщение…" aria-label="Поиск в текущей переписке"
-                                    className="input min-w-0 flex-1 !py-2 text-base" />
-                                <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-                                    {messageQuery.trim() ? (messageMatches.length ? `${messageMatchIndex + 1} из ${messageMatches.length}` : 'Не найдено') : 'По загруженным сообщениям'}
-                                </span>
-                                <button type="button" className="btn-ghost !p-2" disabled={!messageMatches.length}
-                                    onClick={() => goToMessageMatch(messageMatchIndex - 1)} aria-label="Предыдущее совпадение">↑</button>
-                                <button type="button" className="btn-ghost !p-2" disabled={!messageMatches.length}
-                                    onClick={() => goToMessageMatch(messageMatchIndex + 1)} aria-label="Следующее совпадение">↓</button>
-                                <button type="button" className="btn-ghost !p-2"
-                                    onClick={() => { setMessageSearchOpen(false); setMessageQuery(''); }} aria-label="Закрыть поиск">✕</button>
-                            </div>
-                        )}
                         <PinnedBar
                             message={pinned}
                             onUnpin={unpinMessage}
