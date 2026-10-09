@@ -60,26 +60,41 @@ export default function Dashboard() {
     description: 'Рабочее пространство MEDIA·RAF·RAW',
   });
 
+  // Only fetch the sections that the administrator has enabled.
+  // Course data also powers the quick action and the learning counter.
+  const needsCourses = dashboard.showLearning || dashboard.showQuickActions;
+  const needsFeed = dashboard.showFeedPreview;
+
   useEffect(() => {
-    if (!token) return;
-    let alive = true;
-
-    Promise.allSettled([
-      api('/courses', { token }),
-      api('/posts/feed?limit=3', { token }),
-    ]).then(([courseResult, postResult]) => {
-      if (!alive) return;
-      if (courseResult.status === 'fulfilled' && Array.isArray(courseResult.value)) {
-        setCourses(courseResult.value);
-      }
-      if (postResult.status === 'fulfilled') {
-        setPosts(postResult.value?.items || []);
-      }
+    if (!token) {
+      setCourses([]);
+      setPosts([]);
       setLoading(false);
-    });
+      return;
+    }
+    let alive = true;
+    setLoading(needsCourses || needsFeed);
+    if (!needsCourses) setCourses([]);
+    if (!needsFeed) setPosts([]);
 
+    const requests = [];
+    if (needsCourses) {
+      requests.push(api('/courses', { token }).then(
+        (data) => { if (alive) setCourses(Array.isArray(data) ? data : []); },
+        () => { if (alive) setCourses([]); }
+      ));
+    }
+    if (needsFeed) {
+      requests.push(api('/posts/feed?limit=3', { token }).then(
+        (data) => { if (alive) setPosts(data?.items || []); },
+        () => { if (alive) setPosts([]); }
+      ));
+    }
+    Promise.all(requests).finally(() => {
+      if (alive) setLoading(false);
+    });
     return () => { alive = false; };
-  }, [token]);
+  }, [token, needsCourses, needsFeed]);
 
   const enrolledCourse = useMemo(
     () =>
