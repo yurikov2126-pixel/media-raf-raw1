@@ -82,7 +82,7 @@ export default function Notifications() {
     const go = async (n) => {
         if (!n.readAt) await markRead(n.id);
         const p = n.payload || {};
-        if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}`);
+        if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
         else if (n.type === 'message' || n.type === 'mention') nav(`/app/chats/${p.chatId}`);
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
