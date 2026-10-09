@@ -197,15 +197,30 @@ router.post('/', auth, async (req, res) => {
 
     // Уведомления всем (не блокирует)
     try {
+        // A selected mention stores the display name and the canonical username.
+        // Prisma StringFilter.in does not support mode: 'insensitive'; use OR equals instead.
         const mentionedHandles = new Set();
         const body = String(content || '');
         for (const match of body.matchAll(/@\[[^\]\n]{1,120}\]\(([\p{L}\p{N}_]{1,50})\)/gu)) mentionedHandles.add(match[1].toLowerCase());
         for (const match of body.matchAll(/(^|[^\p{L}\p{N}_@])@([\p{L}\p{N}_]{1,50})/gu)) mentionedHandles.add(match[2].toLowerCase());
-        const mentionedUsers = mentionedHandles.size ? await prisma.user.findMany({
-            where: { isBanned: false, id: { not: req.user.id }, username: { in: [...mentionedHandles], mode: 'insensitive' } },
-            select: { id: true },
-        }) : [];
-        const mentionedIds = new Set(mentionedUsers.map((u) => u.id));
+        const mentionedIds = new Set();
+        if (mentionedHandles.size) {
+            try {
+                const mentionedUsers = await prisma.user.findMany({
+                    where: {
+                        isBanned: false,
+                        id: { not: req.user.id },
+                        OR: [...mentionedHandles].map((username) => ({
+                            username: { equals: username, mode: 'insensitive' },
+                        })),
+                    },
+                    select: { id: true },
+                });
+                mentionedUsers.forEach((u) => mentionedIds.add(u.id));
+            } catch (error) {
+                console.error('[posts] mention lookup failed:', error);
+            }
+        }
         const users = await prisma.user.findMany({
             where: { id: { not: req.user.id }, isBanned: false },
             select: { id: true },
