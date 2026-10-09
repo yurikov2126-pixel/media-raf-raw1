@@ -219,7 +219,7 @@ export default function Dashboard() {
       )}
 
       <section className="ui-section ui-two-col">
-        {dashboard.showLearning && (
+        {dashboard.showLearning && coursesEnabled && (
           <div className="ui-card2">
             <div className="ui-section-head">
               <div>
