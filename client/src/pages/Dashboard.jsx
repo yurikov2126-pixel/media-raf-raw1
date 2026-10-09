@@ -1,3 +1,4 @@
+import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
@@ -28,7 +29,7 @@ const NOTIFICATION_ICON = {
 function notificationTitle(item) {
   const p = item.payload || {};
   switch (item.type) {
-    case 'mention': return p.commentId ? 'Вас упомянули в комментарии' : p.postId ? 'Вас упомянули в публикации' : 'Вас упомянули в чате';
+    case 'mention': return mentionTitle(p);
     case 'message': return 'Новое сообщение' + (p.senderName ? ' от ' + p.senderName : '');
     case 'post': return 'Новая публикация' + (p.authorName ? ' от ' + p.authorName : '');
     case 'certificate': return 'Новый сертификат';
@@ -39,6 +40,7 @@ function notificationTitle(item) {
 
 function notificationPreview(item) {
   const p = item.payload || {};
+  if (item.type === 'mention') return mentionPreview(p) || 'Открыть упоминание';
   return p.preview || p.message || (item.type === 'post' ? 'Открыть публикацию' : 'Открыть уведомление');
 }
 

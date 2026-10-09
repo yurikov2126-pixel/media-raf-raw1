@@ -1,3 +1,4 @@
+import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../store/notifications.jsx';
@@ -22,7 +23,7 @@ const ICONS = {
 
 const TITLES = {
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
-    mention: (p) => `${p.senderName || 'Кто-то'} упомянул вас`,
+    mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
     certificate: (p) => p.title || 'Получен сертификат',
     system: (p) => p.title || 'Сообщение от администрации',
@@ -232,7 +233,8 @@ export default function Notifications() {
                 {filtered.map((n) => {
                     const p = n.payload || {};
                     const subline = (() => {
-                        if (n.type === 'message' || n.type === 'mention') {
+                        if (n.type === 'mention') return mentionPreview(p);
+                        if (n.type === 'message') {
                             return (
                                 <>
                                     {p.chatTitle && (

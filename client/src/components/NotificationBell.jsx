@@ -1,3 +1,4 @@
+import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -22,7 +23,7 @@ const ICONS = {
 
 const TITLES = {
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
-    mention: (p) => `${p.senderName || 'Кто-то'} упомянул вас`,
+    mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
     certificate: (p) => p.title || 'Получен сертификат',
     system: (p) => p.title || 'Сообщение от администрации',
@@ -300,7 +301,8 @@ export default function NotificationBell({ align = 'right' }) {
                     {items.map((n) => {
                         const p = n.payload || {};
                         const subline = (() => {
-                            if (n.type === 'message' || n.type === 'mention') {
+                            if (n.type === 'mention') return mentionPreview(p);
+                        if (n.type === 'message') {
                                 return (
                                     <>
                                         {p.chatTitle && (
