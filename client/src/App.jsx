@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAuth } from './store/auth.jsx';
 import { useNetwork } from './store/network.jsx';
 import Layout from './components/Layout.jsx';
@@ -30,7 +31,7 @@ const Private = ({ children, roles }) => {
     const { isOffline } = useNetwork();
     const showSplash = useSplashGate(loading);
 
-    if (isOffline) return <OfflineScreen />;
+    if (isOffline && !user) return <OfflineScreen />;
     if (showSplash) return <SplashScreen />;
     if (!user) return <Navigate to="/login" replace />;
     if (roles && !roles.includes(user.role)) return <Navigate to="/app" replace />;
@@ -51,6 +52,12 @@ function RootGate() {
 export default function App() {
     const { user } = useAuth();
     const { isOffline } = useNetwork();
+    // Only cold-start offline needs a blocking screen. After the user has
+    // opened the app online, preserve the mounted route during outages.
+    const [sessionWasOnline, setSessionWasOnline] = useState(() => !isOffline);
+    useEffect(() => {
+        if (!isOffline) setSessionWasOnline(true);
+    }, [isOffline]);
 
     return (
         <>
@@ -95,7 +102,7 @@ export default function App() {
 
             {/* Keep the current route mounted while offline, so returning online
                 restores the same screen without losing navigation state. */}
-            {user && isOffline && <OfflineScreen />}
+            {user && isOffline && !sessionWasOnline && <OfflineScreen />}
 
             <PwaUpdateNotice />
             {user && <GlobalCommandPalette />}
