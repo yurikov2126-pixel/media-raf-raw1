@@ -5,13 +5,13 @@ import { auth } from '../middleware/auth.js';
 const router = Router();
 router.use(auth);
 const authorSelect = { id: true, fullName: true, username: true, avatar: true, direction: true };
-const postInclude = {
+const postInclude = (userId) => ({
     author: { select: authorSelect },
     reactions: { select: { emoji: true, userId: true } },
     _count: { select: { comments: true } },
-    savedBy: { select: { userId: true } },
+    savedBy: { where: { userId }, select: { userId: true } },
     repostOf: { select: { id: true, content: true, mediaUrl: true, mediaType: true, createdAt: true, author: { select: authorSelect } } },
-};
+});
 function images(post) {
     if (post.mediaType === 'gallery' && post.mediaUrl) {
         try { const arr = JSON.parse(post.mediaUrl); return Array.isArray(arr) ? arr : []; } catch { return []; }
@@ -47,16 +47,14 @@ router.get('/posts', async (req, res) => {
     if (mode === 'saved') where.savedBy = { some: { userId: req.user.id } };
     // For recommended posts use a recent window and rank by engagement, with a small recency boost.
     if (mode === 'recommended') {
-        const recent = await prisma.post.findMany({ where: { ...where, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } }, orderBy: { createdAt: 'desc' }, take: 300, include: postInclude });
+        const recent = await prisma.post.findMany({ where: { ...where, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } }, orderBy: { createdAt: 'desc' }, take: 300, include: postInclude(req.user.id) });
         const now = Date.now();
-        const ranked = recent.map((p) => ({ p, score: p.reactions.length * 2 + p._count.comments * 3 + Math.max(0, 14 - (now - new Date(p.createdAt).getTime()) / 86400000) }));
+        const ranked = recent.map((p) => ({ p, score: p.reactions.length * 2 + p._count.comments * 3 + (p.author.direction && p.author.direction === req.user.direction ? 5 : 0) + Math.max(0, 14 - (now - new Date(p.createdAt).getTime()) / 86400000) }));
         ranked.sort((a, b) => b.score - a.score || new Date(b.p.createdAt) - new Date(a.p.createdAt));
         const items = ranked.slice(page * limit, (page + 1) * limit).map(({ p }) => serialize(p, req.user.id));
         return res.json({ items, nextPage: (page + 1) * limit < ranked.length ? page + 1 : null, total: ranked.length });
     }
-    const orderBy = mode === 'saved' ? [{ savedBy: { _count: 'desc' } }, { createdAt: 'desc' }] : [{ createdAt: 'desc' }, { id: 'desc' }];
-    // Saved entries are ordered by post date, avoiding unstable relation sorting.
-    const posts = await prisma.post.findMany({ where, orderBy: mode === 'saved' ? [{ createdAt: 'desc' }, { id: 'desc' }] : orderBy, skip: page * limit, take: limit + 1, include: postInclude });
+    const posts = await prisma.post.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: page * limit, take: limit + 1, include: postInclude });
     const hasMore = posts.length > limit;
     res.json({ items: posts.slice(0, limit).map((p) => serialize(p, req.user.id)), nextPage: hasMore ? page + 1 : null });
 });
