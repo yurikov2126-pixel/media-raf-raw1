@@ -91,7 +91,7 @@ export default function Messenger() {
     const [messageMatchIndex, setMessageMatchIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [pendingFiles, setPendingFiles] = useState([]);
-    const [attachmentCaption, setAttachmentCaption] = useState('');
+    const [attachmentCaptions, setAttachmentCaptions] = useState({});
     const [attachmentProgress, setAttachmentProgress] = useState(0);
     const [attachmentIndex, setAttachmentIndex] = useState(0);
     const [viewerIndex, setViewerIndex] = useState(null);
@@ -124,6 +124,7 @@ export default function Messenger() {
     const mediaFileRef = useRef(null);
     const textareaRef = useRef(null);
     const needsInitialScroll = useRef(false);
+    const mediaFollowChatRef = useRef(null);
 
     const activeChat = chats.find((c) => c.id === chatId);
     const chatTitle = useMemo(() => {
@@ -318,6 +319,41 @@ export default function Messenger() {
         };
     }, []);
 
+    // Late-loading media changes message heights after the initial scroll.
+    // Follow those changes only while entering a read chat; never steal
+    // scrolling from someone browsing the history.
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el || !chatId || !messages.length || firstUnreadId || linkedMessageId || mediaFollowChatRef.current === chatId) return;
+        mediaFollowChatRef.current = chatId;
+        let userScrolled = false;
+        let raf = 0;
+        const followBottom = () => {
+            if (userScrolled) return;
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => { if (!userScrolled) el.scrollTop = el.scrollHeight; });
+        };
+        const observer = new ResizeObserver(followBottom);
+        const expiry = window.setTimeout(stopFollowing, 12000);
+        Array.from(el.children).forEach((node) => observer.observe(node));
+        const onMediaLoad = () => followBottom();
+        const stopFollowing = () => { userScrolled = true; };
+        el.addEventListener('load', onMediaLoad, true);
+        el.addEventListener('loadedmetadata', onMediaLoad, true);
+        el.addEventListener('wheel', stopFollowing, { passive: true });
+        el.addEventListener('touchstart', stopFollowing, { passive: true });
+        followBottom();
+        return () => {
+            cancelAnimationFrame(raf);
+            clearTimeout(expiry);
+            observer.disconnect();
+            el.removeEventListener('load', onMediaLoad, true);
+            el.removeEventListener('loadedmetadata', onMediaLoad, true);
+            el.removeEventListener('wheel', stopFollowing);
+            el.removeEventListener('touchstart', stopFollowing);
+        };
+    }, [chatId, messages.length, firstUnreadId, linkedMessageId]);
+
     useEffect(() => {
         const el = scrollRef.current;
         if (!el) return;
@@ -420,7 +456,7 @@ export default function Messenger() {
                 await new Promise((resolve, reject) => {
                     socket.timeout(15000).emit('message:send', {
                         chatId, content: result.url, type,
-                        caption: attachmentCaption.trim() || undefined,
+                        caption: (attachmentCaptions[completed] || '').trim() || undefined,
                         replyToId: completed === 0 ? replyTo?.id : undefined,
                     }, (err, response) => {
                         if (err || response?.error) reject(new Error(response?.error || 'Сервер не подтвердил сообщение'));
@@ -432,10 +468,11 @@ export default function Messenger() {
                 setAttachmentProgress(Math.round(completed / total * 100));
             }
             setPendingFiles([]);
-            setAttachmentCaption('');
+            setAttachmentCaptions({});
             setReplyTo(null);
         } catch (error) {
             setPendingFiles((files) => files.slice(completed));
+            setAttachmentCaptions((captions) => Object.fromEntries(Object.entries(captions).filter(([i]) => Number(i) >= completed).map(([i, value]) => [Number(i) - completed, value])));
             setAttachmentProgress(0);
             alert('Не все файлы отправлены: ' + error.message);
         } finally { setUploading(false); }
@@ -904,24 +941,26 @@ export default function Messenger() {
                                 <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--border-strong)', backgroundColor: 'var(--bg-elev-2)' }}>
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="text-sm font-semibold">Вложения: {pendingFiles.length} из 20</span>
-                                        <button type="button" disabled={uploading} onClick={() => { setPendingFiles([]); setAttachmentCaption(''); }} aria-label="Отменить вложения">✕</button>
+                                        <button type="button" disabled={uploading} onClick={() => { setPendingFiles([]); setAttachmentCaptions({}); }} aria-label="Отменить вложения">✕</button>
                                     </div>
                                     <div className="flex gap-2 overflow-x-auto pb-1">
                                         {pendingFiles.map((file, index) => (
-                                            <div key={index + '-' + file.name} className="relative shrink-0 w-28 rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border-strong)' }}>
+                                            <div key={index + '-' + file.name} className="relative shrink-0 w-44 rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border-strong)' }}>
                                                 <AttachmentPreview file={file} />
                                                 <div className="truncate" title={file.name}>{file.name}</div>
                                                 <div className="opacity-60">{(file.size / 1024 / 1024).toFixed(1)} МБ</div>
+                                                <textarea rows={2} value={attachmentCaptions[index] || ''}
+                                                    onChange={(e) => setAttachmentCaptions((captions) => ({ ...captions, [index]: e.target.value }))}
+                                                    disabled={uploading} maxLength={2000}
+                                                    placeholder="Подпись…" aria-label={`Подпись для ${file.name}`}
+                                                    className="mt-2 w-full resize-none rounded-md border bg-transparent px-1.5 py-1 text-xs"
+                                                    style={{ borderColor: 'var(--border-strong)' }} />
                                                 <button type="button" disabled={uploading} aria-label={`Убрать ${file.name}`}
-                                                    onClick={() => setPendingFiles((files) => files.filter((_, i) => i !== index))}
+                                                    onClick={() => { setPendingFiles((files) => files.filter((_, i) => i !== index)); setAttachmentCaptions((captions) => Object.fromEntries(Object.entries(captions).filter(([i]) => Number(i) !== index).map(([i, value]) => [Number(i) > index ? Number(i) - 1 : Number(i), value]))); }}
                                                     className="absolute -top-1 -right-1 rounded-full px-1.5 bg-ink-700 text-white">✕</button>
                                             </div>
                                         ))}
                                     </div>
-                                    <input value={attachmentCaption} onChange={(e) => setAttachmentCaption(e.target.value)}
-                                        maxLength={2000} placeholder="Подпись к вложениям…"
-                                        aria-label="Подпись к вложениям" className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-                                        style={{ borderColor: 'var(--border-strong)' }} />
                                     {uploading && <div className="space-y-1" role="status" aria-live="polite">
                                         <div className="flex justify-between text-xs"><span>Загрузка: {attachmentIndex + 1} из {pendingFiles.length}</span><span>{attachmentProgress}%</span></div>
                                         <progress value={attachmentProgress} max="100" aria-label="Прогресс отправки вложений" className="w-full h-2 accent-violet" />
@@ -931,7 +970,7 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {recording ? (
+                            {pendingFiles.length > 0 ? null : recording ? (
                                 <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
                                     <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
                                     <div className="flex-1">
@@ -1007,7 +1046,7 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {panel && (
+                            {pendingFiles.length === 0 && panel && (
                                 <div className="card p-3 animate-pop" onClick={(e) => e.stopPropagation()}>
                                     <div className="flex gap-2 mb-3">
                                         <button onClick={() => setPanel('emoji')} className={`chip ${panel === 'emoji' ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}>😊 Эмодзи</button>
@@ -1032,7 +1071,7 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {mentionQuery && chatMembers.length > 0 && (
+                            {pendingFiles.length === 0 && mentionQuery && chatMembers.length > 0 && (
                                 <div className="absolute left-2 right-2 bottom-full mb-2">
                                     <MentionSuggest
                                         query={mentionQuery.query}
