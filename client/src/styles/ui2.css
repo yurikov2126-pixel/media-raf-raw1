@@ -1496,3 +1496,24 @@ select {
 @media (min-width: 901px) {
   .ui-mobile-content-clearance { display: none; }
 }
+
+/* Light-theme contrast for Feed 2.1 social controls and the dark PWA update toast. */
+.feed-save-button--active {
+  background: rgba(124, 58, 237, .18);
+  color: #ddd0ff;
+  border: 1px solid rgba(167, 139, 250, .28);
+}
+[data-theme="light"] .feed-save-button--active {
+  background: #eee6ff;
+  color: #5921a8 !important;
+  border-color: #c9b5f5;
+}
+[data-theme="light"] .mrr-pwa-update-notice {
+  color: #fff;
+}
+[data-theme="light"] .mrr-pwa-update-notice .text-white\\/60 {
+  color: rgba(255,255,255,.78) !important;
+}
+[data-theme="light"] .mrr-pwa-update-notice .btn-primary {
+  color: #fff !important;
+}
