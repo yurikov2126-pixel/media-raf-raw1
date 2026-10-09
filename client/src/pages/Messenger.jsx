@@ -669,7 +669,7 @@ export default function Messenger() {
                     </div>
                 ) : (
                     <>
-                        <header className="px-3 py-2.5 md:px-4 border-b border-white/10 bg-ink-800/80 backdrop-blur flex items-center gap-2 shrink-0">
+                        <header className="relative z-30 px-3 py-2.5 md:px-4 border-b border-white/10 bg-ink-800/80 backdrop-blur flex items-center gap-2 shrink-0">
                             <button
                                 className="md:hidden btn-ghost !p-2 min-w-10 min-h-10 rounded-xl"
                                 onClick={() => nav('/app/chats')}
@@ -712,7 +712,7 @@ export default function Messenger() {
                                 aria-label="Меню чата" aria-expanded={headerMenuOpen}>⋯</button>
                                 {headerMenuOpen && (
                                     <div
-                                        className="absolute right-0 top-full mt-2 z-30 card p-1 w-56 animate-pop"
+                                        className="absolute right-0 top-full mt-2 z-50 card p-1 w-56 animate-pop"
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <button
@@ -730,12 +730,12 @@ export default function Messenger() {
                             onJump={() => pinned && scrollToMessage(pinned.id)}
                         />
 
-                        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0">
+                        <div ref={scrollRef} className="relative z-0 flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0">
                             {messages.map((m, index) => (
                                 <div key={m.id} className="space-y-2">
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
                                         <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
-                                            <span className="rounded-full border border-white/10 bg-ink-800/90 px-3 py-1 text-xs font-medium text-white/60 shadow-sm">
+                                            <span className="rounded-full border px-3 py-1 text-xs font-semibold shadow-sm" style={{ backgroundColor: "var(--bg-elev-2)", color: "var(--text-secondary)", borderColor: "var(--border-strong)" }}>
                                                 {messageDayLabel(m.createdAt)}
                                             </span>
                                         </div>
