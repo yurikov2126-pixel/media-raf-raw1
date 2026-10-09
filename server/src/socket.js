@@ -68,25 +68,43 @@ export function initSocket(io) {
 
         socket.on('message:send', async (payload, cb) => {
             try {
-                const { chatId, content, type = 'text', replyToId, forwardedFrom, caption } = payload;
+                const { chatId, content, type = 'text', replyToId, forwardedFrom, caption, clientMessageId } = payload;
                 const member = await prisma.chatMember.findUnique({
                     where: { chatId_userId: { chatId, userId } },
                 });
                 if (!member) return cb?.({ error: 'Нет доступа' });
 
-                const message = await prisma.message.create({
+                const requestId = typeof clientMessageId === 'string' && /^[0-9a-f-]{36}$/i.test(clientMessageId) ? clientMessageId : null;
+                const includeMessage = {
+                    sender: { select: { id: true, fullName: true, username: true, avatar: true } },
+                    replyTo: { include: { sender: { select: { id: true, fullName: true } } } },
+                    reactions: true,
+                };
+                if (requestId) {
+                    const existing = await prisma.message.findUnique({
+                        where: { senderId_clientMessageId: { senderId: userId, clientMessageId: requestId } },
+                        include: includeMessage,
+                    });
+                    if (existing) return cb?.(existing.chatId === chatId ? { ok: true, message: existing, duplicate: true } : { error: 'Конфликт идентификатора сообщения' });
+                }
+
+                let message;
+                try {
+                    message = await prisma.message.create({
                     data: {
-                        chatId, senderId: userId, content, type,
+                        chatId, senderId: userId, content, type, clientMessageId: requestId,
                         caption: ['image', 'video', 'file'].includes(type) && typeof caption === 'string' ? caption.trim().slice(0, 2000) || null : null,
                         replyToId: replyToId || null,
                         forwardedFrom: forwardedFrom ? JSON.stringify(forwardedFrom) : null,
                     },
-                    include: {
-                        sender: { select: { id: true, fullName: true, username: true, avatar: true } },
-                        replyTo: { include: { sender: { select: { id: true, fullName: true } } } },
-                        reactions: true,
-                    },
-                });
+                    include: includeMessage,
+                    });
+                } catch (error) {
+                    if (error.code !== 'P2002' || !requestId) throw error;
+                    const existing = await prisma.message.findUnique({ where: { senderId_clientMessageId: { senderId: userId, clientMessageId: requestId } }, include: includeMessage });
+                    if (!existing || existing.chatId !== chatId) return cb?.({ error: 'Конфликт идентификатора сообщения' });
+                    return cb?.({ ok: true, message: existing, duplicate: true });
+                }
 
                 io.to(`chat:${chatId}`).emit('message:new', message);
 
