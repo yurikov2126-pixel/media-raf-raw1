@@ -16,17 +16,20 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
     const [shareOpen, setShareOpen] = useState(false);
     const [shareText, setShareText] = useState('');
     const [saved, setSaved] = useState(Boolean(post.isSaved));
+    const [savedCount, setSavedCount] = useState(post._count?.savedBy ?? null);
+    const [repostCount, setRepostCount] = useState(post._count?.reposts ?? null);
+    useEffect(() => { setSavedCount(post._count?.savedBy ?? null); setRepostCount(post._count?.reposts ?? null); }, [post._count?.savedBy, post._count?.reposts]);
     useEffect(() => { setSaved(Boolean(post.isSaved)); }, [post.isSaved]);
     const toggleSave = async () => {
         if (socialBusy) return;
         setSocialBusy(true);
-        try { const result = await api(`/feed2/posts/${post.id}/save`, { method: saved ? 'DELETE' : 'PUT', token }); setSaved(result.saved); onChanged?.({ id: post.id, isSaved: result.saved }); }
+        try { const result = await api(`/feed2/posts/${post.id}/save`, { method: saved ? 'DELETE' : 'PUT', token }); setSaved(result.saved); setSavedCount((n) => n === null ? n : Math.max(0, n + (result.saved ? 1 : -1))); onChanged?.({ id: post.id, isSaved: result.saved }); }
         catch (e) { alert(e.message || 'Не удалось изменить закладку'); } finally { setSocialBusy(false); }
     };
     const repost = async () => {
         if (socialBusy) return;
         setSocialBusy(true);
-        try { await api(`/feed2/posts/${post.id}/repost`, { method: 'POST', token, body: { content: shareText } }); setShareOpen(false); setShareText(''); onReposted?.(); }
+        try { await api(`/feed2/posts/${post.id}/repost`, { method: 'POST', token, body: { content: shareText } }); setShareOpen(false); setShareText(''); setRepostCount((n) => n === null ? n : n + 1); onReposted?.(); }
         catch (e) { alert(e.message || 'Не удалось сделать репост'); } finally { setSocialBusy(false); }
     };
     const [text, setText] = useState(post.content || '');
@@ -346,8 +349,8 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/10">
-                <button type="button" disabled={socialBusy} onClick={toggleSave} aria-pressed={saved} className={`chip text-xs ${saved ? 'bg-violet-500/20 text-violet-200' : 'bg-white/5 text-white/60'}`}>{saved ? '🔖 Сохранено' : '🔖 Сохранить'}</button>
-                <button type="button" onClick={() => setShareOpen((v) => !v)} aria-expanded={shareOpen} className="chip bg-white/5 text-white/60 text-xs">↗ Репост</button>
+                <button type="button" disabled={socialBusy} onClick={toggleSave} aria-pressed={saved} className={`chip text-xs ${saved ? 'bg-violet-500/20 text-violet-200' : 'bg-white/5 text-white/60'}`}>{saved ? '🔖 Сохранено' : '🔖 Сохранить'}{savedCount !== null ? ` · ${savedCount}` : ''}</button>
+                <button type="button" onClick={() => setShareOpen((v) => !v)} aria-expanded={shareOpen} className="chip bg-white/5 text-white/60 text-xs">↗ Репост{repostCount !== null ? ` · ${repostCount}` : ''}</button>
             </div>
             {shareOpen && <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
                 <label className="text-sm font-semibold block" htmlFor={`repost-${post.id}`}>Поделиться публикацией</label>

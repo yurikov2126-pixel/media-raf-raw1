@@ -8,7 +8,7 @@ const authorSelect = { id: true, fullName: true, username: true, avatar: true, d
 const postInclude = (userId) => ({
     author: { select: authorSelect },
     reactions: { select: { emoji: true, userId: true } },
-    _count: { select: { comments: true } },
+    _count: { select: { comments: true, savedBy: true, reposts: true } },
     savedBy: { where: { userId }, select: { userId: true } },
     repostOf: { select: { id: true, content: true, mediaUrl: true, mediaType: true, createdAt: true, author: { select: authorSelect } } },
 });
@@ -45,12 +45,13 @@ router.get('/posts', async (req, res) => {
     if (q) where.OR = [{ content: { contains: q, mode: 'insensitive' } }, { author: { fullName: { contains: q, mode: 'insensitive' }, isBanned: false } }, { author: { username: { contains: q, mode: 'insensitive' }, isBanned: false } }];
     if (tag) where.content = { contains: '#' + tag, mode: 'insensitive' };
     if (mode === 'saved') where.savedBy = { some: { userId: req.user.id } };
-    // For recommended posts use a recent window and rank by engagement, with a small recency boost.
+    // For recommended posts use a recent window and rank by engagement, with a recency boost.
     if (mode === 'recommended') {
         const recent = await prisma.post.findMany({ where: { ...where, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } }, orderBy: { createdAt: 'desc' }, take: 300, include: postInclude(req.user.id) });
         const now = Date.now();
-        const ranked = recent.map((p) => ({ p, score: p.reactions.length * 2 + p._count.comments * 3 + (p.author.direction && p.author.direction === req.user.direction ? 5 : 0) + Math.max(0, 14 - (now - new Date(p.createdAt).getTime()) / 86400000) }));
-        ranked.sort((a, b) => b.score - a.score || new Date(b.p.createdAt) - new Date(a.p.createdAt));
+        const viewer = await prisma.user.findUnique({ where: { id: req.user.id }, select: { direction: true } });
+        const ranked = recent.map((p) => ({ p, score: p.reactions.length * 2 + p._count.comments * 3 + p._count.savedBy * 2 + p._count.reposts * 4 + (viewer?.direction && p.author.direction === viewer.direction ? 5 : 0) + Math.max(0, 14 - (now - new Date(p.createdAt).getTime()) / 86400000) }));
+        ranked.sort((a, b) => b.score - a.score || new Date(b.p.createdAt) - new Date(a.p.createdAt) || a.p.id.localeCompare(b.p.id));
         const items = ranked.slice(page * limit, (page + 1) * limit).map(({ p }) => serialize(p, req.user.id));
         return res.json({ items, nextPage: (page + 1) * limit < ranked.length ? page + 1 : null, total: ranked.length });
     }
