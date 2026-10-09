@@ -9,7 +9,7 @@ import PostReactions from './PostReactions.jsx';
 import CommentSection from './CommentSection.jsx';
 import ReportButton from './ReportButton.jsx';
 
-export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted }) {
+export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted, highlightCommentId = '' }) {
     const { user, token } = useAuth();
     const [editing, setEditing] = useState(false);
     const [socialBusy, setSocialBusy] = useState(false);
@@ -53,7 +53,8 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
     const [text, setText] = useState(post.content || '');
     const [busy, setBusy] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [showComments, setShowComments] = useState(!compact);
+    const [showComments, setShowComments] = useState(!compact || Boolean(highlightCommentId));
+    useEffect(() => { if (highlightCommentId) setShowComments(true); }, [highlightCommentId]);
     const [mediaEditing, setMediaEditing] = useState(false);
     const [mediaDraft, setMediaDraft] = useState(null);
     const [mediaError, setMediaError] = useState('');
@@ -400,7 +401,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     )}
                     {showComments && (
                         <div className="mt-3">
-                            <CommentSection postId={post.id} initialCount={commentCount} />
+                            <CommentSection postId={post.id} initialCount={commentCount} highlightCommentId={highlightCommentId} />
                         </div>
                     )}
                 </>

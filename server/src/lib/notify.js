@@ -51,7 +51,7 @@ function payloadToPush(type, payload) {
         return {
             title: `${payload.senderName || 'Кто-то'} упомянул вас`,
             body: payload.preview || '',
-            url: payload.postId ? `/app/feed?post=${encodeURIComponent(payload.postId)}` : payload.chatId ? `/app/chats/${payload.chatId}` : '/app',
+            url: payload.postId ? `/app/feed?post=${encodeURIComponent(payload.postId)}${payload.commentId ? `&comment=${encodeURIComponent(payload.commentId)}` : ''}` : payload.chatId ? `/app/chats/${payload.chatId}` : '/app',
             tag: `mention-${payload.postId || payload.chatId || 'x'}`,
         };
     }

@@ -94,12 +94,13 @@ function MentionInput({ value, onChange, onSubmit, placeholder }) {
     );
 }
 
-function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
+function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommentId = '', highlightedPath = [] }) {
     const { user, token } = useAuth();
     const [replying, setReplying] = useState(false);
     const [replyText, setReplyText] = useState('');
     const [busy, setBusy] = useState(false);
-    const [showReplies, setShowReplies] = useState(depth === 0);
+    const [showReplies, setShowReplies] = useState(depth === 0 || highlightedPath.includes(comment.id));
+    useEffect(() => { if (highlightedPath.includes(comment.id)) setShowReplies(true); }, [highlightedPath, comment.id]);
 
     const isMine = comment.author.id === user.id || user.role === 'ADMIN';
     const maxDepth = 4;
@@ -138,7 +139,7 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
     const repliesCount = comment.replies?.length || 0;
 
     return (
-        <div className={`${depth > 0 ? 'ml-8 md:ml-10 border-l border-white/10 pl-3' : ''}`}>
+        <div data-comment-id={comment.id} className={`${depth > 0 ? 'ml-8 md:ml-10 border-l border-white/10 pl-3' : ''} ${highlightCommentId === comment.id ? 'rounded-xl ring-2 ring-violet-400 bg-violet-500/10' : ''}`}>
             <div className="flex gap-2 py-2">
                 <Link to={`/app/u/${comment.author.username}`} className="shrink-0">
                     <Avatar user={comment.author} size={32} />
@@ -207,6 +208,8 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
                             depth={nextDepth}
                             onChanged={onChanged}
                             onDeleted={onDeleted}
+                            highlightCommentId={highlightCommentId}
+                            highlightedPath={highlightedPath}
                         />
                     ))}
                 </div>
@@ -215,11 +218,11 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
     );
 }
 
-export default function CommentSection({ postId, initialCount = 0 }) {
+export default function CommentSection({ postId, initialCount = 0, highlightCommentId = '' }) {
     const { user, token } = useAuth();
     const [comments, setComments] = useState([]);
     const [text, setText] = useState('');
-    const [open, setOpen] = useState(initialCount > 0);
+    const [open, setOpen] = useState(initialCount > 0 || Boolean(highlightCommentId));
     const [busy, setBusy] = useState(false);
 
     const load = () => {
@@ -228,6 +231,26 @@ export default function CommentSection({ postId, initialCount = 0 }) {
     };
 
     useEffect(() => { load(); }, [postId, token]);
+
+    const highlightedPath = [];
+    const findPath = (list, ancestors = []) => {
+        for (const item of list) {
+            if (item.id === highlightCommentId) { highlightedPath.push(...ancestors); return true; }
+            if (findPath(item.replies || [], [...ancestors, item.id])) return true;
+        }
+        return false;
+    };
+    if (highlightCommentId) findPath(comments);
+    useEffect(() => {
+        if (!highlightCommentId) return;
+        setOpen(true);
+        const frame = requestAnimationFrame(() => {
+            const nodes = document.querySelectorAll('[data-comment-id]');
+            const target = Array.from(nodes).find((node) => node.getAttribute('data-comment-id') === highlightCommentId);
+            target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [highlightCommentId, comments]);
 
     const send = async () => {
         if (!text.trim()) return;
@@ -295,6 +318,8 @@ export default function CommentSection({ postId, initialCount = 0 }) {
                             comment={c}
                             onChanged={handleAdded}
                             onDeleted={handleDeleted}
+                            highlightCommentId={highlightCommentId}
+                            highlightedPath={highlightedPath}
                         />
                     ))}
 

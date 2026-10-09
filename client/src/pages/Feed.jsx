@@ -27,6 +27,7 @@ export default function Feed() {
     const [authorSuggestions, setAuthorSuggestions] = useState([]);
     const [trending, setTrending] = useState([]);
     const linkedPostId = params.get('post') || '';
+    const linkedCommentId = params.get('comment') || '';
     const [linkedPost, setLinkedPost] = useState(null);
     const [linkedError, setLinkedError] = useState('');
     const [posts, setPosts] = useState([]);
@@ -215,11 +216,11 @@ export default function Feed() {
             {linkedPostId && <section className="mb-5 rounded-2xl border border-violet-400/30 p-3 sm:p-4" aria-label="Публикация по ссылке">
                 <div className="flex items-center justify-between gap-3 mb-3">
                     <span className="font-semibold text-sm">🔗 Публикация по ссылке</span>
-                    <button type="button" className="text-xs underline opacity-70" onClick={() => changeFilters({ post: '' })}>Закрыть</button>
+                    <button type="button" className="text-xs underline opacity-70" onClick={() => changeFilters({ post: '', comment: '' })}>Закрыть</button>
                 </div>
                 {linkedError && <p role="alert" className="text-sm opacity-70">{linkedError}</p>}
                 {!linkedPost && !linkedError && <p className="text-sm opacity-60">Загружаем публикацию…</p>}
-                {linkedPost && <PostCard post={linkedPost} author={linkedPost.author} compact={compact} onTagClick={(value) => changeFilters({ tag: value, post: '' })} onChanged={(u) => setLinkedPost((prev) => ({ ...prev, ...u }))} onDeleted={() => { setLinkedPost(null); changeFilters({ post: '' }); }} onReposted={loadInitial} />}
+                {linkedPost && <PostCard post={linkedPost} author={linkedPost.author} compact={compact} onTagClick={(value) => changeFilters({ tag: value, post: '' })} highlightCommentId={linkedCommentId} onChanged={(u) => setLinkedPost((prev) => ({ ...prev, ...u }))} onDeleted={() => { setLinkedPost(null); changeFilters({ post: '' }); }} onReposted={loadInitial} />}
             </section>}
             <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
                 {posts.map((post) => (
