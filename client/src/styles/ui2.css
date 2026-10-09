@@ -1511,7 +1511,7 @@ select {
 [data-theme="light"] .mrr-pwa-update-notice {
   color: #fff;
 }
-[data-theme="light"] .mrr-pwa-update-notice .text-white\\/60 {
+[data-theme="light"] .mrr-pwa-update-notice p {
   color: rgba(255,255,255,.78) !important;
 }
 [data-theme="light"] .mrr-pwa-update-notice .btn-primary {
