@@ -40,6 +40,15 @@ export function SocketProvider({ children }) {
             setOnlineUsers(new Set(ids));
         });
 
+        // iOS can suspend the socket while the installed PWA is in the background.
+        // Reconnect when the app becomes visible, without remounting the screen.
+        const onResume = () => {
+            if (document.visibilityState === 'visible' && !s.connected) s.connect();
+        };
+        document.addEventListener('visibilitychange', onResume);
+        window.addEventListener('pageshow', onResume);
+        s.on('disconnect', () => setOnlineUsers(new Set()));
+
         // Запросим список онлайн при подключении
         s.on('connect', () => {
             s.emit('users:online', (res) => {
@@ -47,7 +56,11 @@ export function SocketProvider({ children }) {
             });
         });
 
-        return () => s.disconnect();
+        return () => {
+            document.removeEventListener('visibilitychange', onResume);
+            window.removeEventListener('pageshow', onResume);
+            s.disconnect();
+        };
     }, [token]);
 
     return (
