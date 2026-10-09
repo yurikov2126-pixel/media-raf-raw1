@@ -1,3 +1,4 @@
+import SwipeDismissRow from './SwipeDismissRow.jsx';
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -369,12 +370,11 @@ export default function NotificationBell({ align = 'right' }) {
                             return null;
                         })();
                         return (
-                            <div
+                            <SwipeDismissRow
                                 key={n.id}
-                                className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
-                                    !n.readAt ? 'bg-violet/5' : ''
-                                }`}
-                                onClick={() => handleClick(n)}
+                                onDismiss={() => remove(n.id)}
+                                onOpen={() => handleClick(n)}
+                                className={`group px-4 py-3 border-b border-white/5 hover:bg-white/5 cursor-pointer flex gap-3 ${!n.readAt ? 'ring-1 ring-inset ring-violet-400/15' : ''}`}
                             >
                                 <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
                                 <div className="flex-1 min-w-0">
@@ -403,7 +403,7 @@ export default function NotificationBell({ align = 'right' }) {
                                 >
                                     ✕
                                 </button>
-                            </div>
+                            </SwipeDismissRow>
                         );
                     })}
                 </div>
