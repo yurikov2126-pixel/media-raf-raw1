@@ -1,3 +1,4 @@
+import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
@@ -889,7 +890,8 @@ export default function Messenger() {
                                     <div className="flex gap-2 overflow-x-auto pb-1">
                                         {pendingFiles.map((file, index) => (
                                             <div key={index + '-' + file.name} className="relative shrink-0 w-28 rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border-strong)' }}>
-                                                <div className="truncate" title={file.name}>{file.type.startsWith('image/') ? '🖼️' : file.type.startsWith('video/') ? '🎥' : '📎'} {file.name}</div>
+                                                <AttachmentPreview file={file} />
+                                                <div className="truncate" title={file.name}>{file.name}</div>
                                                 <div className="opacity-60">{(file.size / 1024 / 1024).toFixed(1)} МБ</div>
                                                 <button type="button" disabled={uploading} aria-label={`Убрать ${file.name}`}
                                                     onClick={() => setPendingFiles((files) => files.filter((_, i) => i !== index))}
