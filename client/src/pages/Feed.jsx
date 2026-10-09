@@ -216,7 +216,7 @@ export default function Feed() {
             {linkedPostId && <section className="mb-5 rounded-2xl border border-violet-400/30 p-3 sm:p-4" aria-label="Публикация по ссылке">
                 <div className="flex items-center justify-between gap-3 mb-3">
                     <span className="font-semibold text-sm">🔗 Публикация по ссылке</span>
-                    <button type="button" className="text-xs underline opacity-70" onClick={() => changeFilters({ post: '' })}>Закрыть</button>
+                    <button type="button" className="text-xs underline opacity-70" onClick={() => changeFilters({ post: '', comment: '' })}>Закрыть</button>
                 </div>
                 {linkedError && <p role="alert" className="text-sm opacity-70">{linkedError}</p>}
                 {!linkedPost && !linkedError && <p className="text-sm opacity-60">Загружаем публикацию…</p>}
