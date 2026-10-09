@@ -130,6 +130,23 @@ router.get('/:id/messages', auth, async (req, res) => {
         },
     });
 
+    // Include a search deep-link target even when it falls outside the loaded window.
+    if (typeof req.query.focus === 'string' && req.query.focus.length < 128 &&
+        !messages.some(m => m.id === req.query.focus)) {
+        const target = await prisma.message.findFirst({
+            where: { id: req.query.focus, chatId: req.params.id },
+            include: {
+                sender: { select: { id: true, fullName: true, username: true, avatar: true } },
+                replyTo: { include: { sender: { select: { id: true, fullName: true } } } },
+                reactions: true,
+            },
+        });
+        if (target) {
+            messages.push(target);
+            messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        }
+    }
+
     // Первое сообщение, которое пользователь ещё не видел
     const firstUnread = messages.find(
         (m) =>
