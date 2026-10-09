@@ -142,6 +142,12 @@ export default function Messenger() {
             String(m.content || '').toLocaleLowerCase('ru').includes(query));
     }, [messages, messageQuery]);
 
+    useEffect(() => {
+        if (!messageSearchOpen || !messageQuery.trim() || !messageMatches.length) return;
+        const frame = requestAnimationFrame(() => scrollToMessage(messageMatches[0].id));
+        return () => cancelAnimationFrame(frame);
+    }, [messageQuery, messageSearchOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const goToMessageMatch = (index) => {
         if (!messageMatches.length) return;
         const normalized = (index + messageMatches.length) % messageMatches.length;
