@@ -83,13 +83,24 @@ export default function Feed() {
         lastScrollYRef.current = window.scrollY;
         const items = feedItemsRef.current?.querySelectorAll('[data-feed-post-id]');
         if (!items?.length) return;
+        // Feed cards are laid out in document order. Find the first visible
+        // card with logarithmic geometry checks instead of scanning every card
+        // on each scroll event (important for long feeds on mobile Safari).
         const topEdge = 0;
-        let selected = null;
-        for (const item of items) {
-            const rect = item.getBoundingClientRect();
-            if (rect.bottom > topEdge + 1) { selected = { id: item.dataset.feedPostId, offset: rect.top - topEdge }; break; }
+        let low = 0;
+        let high = items.length;
+        while (low < high) {
+            const middle = (low + high) >>> 1;
+            if (items[middle].getBoundingClientRect().bottom > topEdge + 1) {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
         }
-        if (selected) lastAnchorRef.current = selected;
+        if (low < items.length) {
+            const item = items[low];
+            lastAnchorRef.current = { id: item.dataset.feedPostId, offset: item.getBoundingClientRect().top - topEdge };
+        }
     }, []);
 
     const persistPosition = useCallback(() => {
