@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useAuth } from './store/auth.jsx';
 import { useNetwork } from './store/network.jsx';
 import Layout from './components/Layout.jsx';
@@ -12,20 +12,26 @@ import AchievementToast from './components/AchievementToast.jsx';
 import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
-import Feed from './pages/Feed.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Profile from './pages/Profile.jsx';
-import Messenger from './pages/Messenger.jsx';
-import Notifications from './pages/Notifications.jsx';
-import Courses from './pages/Courses.jsx';
-import CourseView from './pages/CourseView.jsx';
-import Leaderboard from './pages/Leaderboard.jsx';
-import Admin from './pages/Admin/index.jsx';
-import Certificate from './pages/Certificate.jsx';
-import Verify from './pages/Verify.jsx';
-import Wiki from './pages/Wiki.jsx';
-import WikiArticle from './pages/WikiArticle.jsx';
-import MentorReviews from './pages/MentorReviews.jsx';
+const Feed = lazy(() => import('./pages/Feed.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Profile = lazy(() => import('./pages/Profile.jsx'));
+const Messenger = lazy(() => import('./pages/Messenger.jsx'));
+const Notifications = lazy(() => import('./pages/Notifications.jsx'));
+const Courses = lazy(() => import('./pages/Courses.jsx'));
+const CourseView = lazy(() => import('./pages/CourseView.jsx'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard.jsx'));
+const Admin = lazy(() => import('./pages/Admin/index.jsx'));
+const Certificate = lazy(() => import('./pages/Certificate.jsx'));
+const Verify = lazy(() => import('./pages/Verify.jsx'));
+const Wiki = lazy(() => import('./pages/Wiki.jsx'));
+const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
+const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
+
+const LazyPage = ({ children }) => (
+    <Suspense fallback={<div className="min-h-[45vh] flex items-center justify-center text-sm text-white/50" role="status">Загружаем раздел…</div>}>
+        {children}
+    </Suspense>
+);
 
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
@@ -75,24 +81,24 @@ export default function App() {
                         </Private>
                     }
                 >
-                    <Route index element={<Dashboard />} />
-                    <Route path="feed" element={<Feed />} />
-                    <Route path="u/:username" element={<Profile />} />
-                    <Route path="chats" element={<Messenger />} />
-                    <Route path="chats/:chatId" element={<Messenger />} />
-                    <Route path="notifications" element={<Notifications />} />
-                    <Route path="courses" element={<Courses />} />
-                    <Route path="courses/:slug" element={<CourseView />} />
-                    <Route path="leaderboard" element={<Leaderboard />} />
-                    <Route path="wiki" element={<Wiki />} />
-                    <Route path="wiki/:slug" element={<WikiArticle />} />
-                    <Route path="certificates/:id" element={<Certificate />} />
-                    <Route path="mentor" element={<MentorReviews />} />
+                    <Route index element={<LazyPage><Dashboard /></LazyPage>} />
+                    <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
+                    <Route path="u/:username" element={<LazyPage><Profile /></LazyPage>} />
+                    <Route path="chats" element={<LazyPage><Messenger /></LazyPage>} />
+                    <Route path="chats/:chatId" element={<LazyPage><Messenger /></LazyPage>} />
+                    <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
+                    <Route path="courses" element={<LazyPage><Courses /></LazyPage>} />
+                    <Route path="courses/:slug" element={<LazyPage><CourseView /></LazyPage>} />
+                    <Route path="leaderboard" element={<LazyPage><Leaderboard /></LazyPage>} />
+                    <Route path="wiki" element={<LazyPage><Wiki /></LazyPage>} />
+                    <Route path="wiki/:slug" element={<LazyPage><WikiArticle /></LazyPage>} />
+                    <Route path="certificates/:id" element={<LazyPage><Certificate /></LazyPage>} />
+                    <Route path="mentor" element={<LazyPage><MentorReviews /></LazyPage>} />
                     <Route
                         path="admin"
                         element={
                             <Private roles={['ADMIN']}>
-                                <Admin />
+                                <LazyPage><Admin /></LazyPage>
                             </Private>
                         }
                     />
