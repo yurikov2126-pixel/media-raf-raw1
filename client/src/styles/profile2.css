@@ -127,3 +127,41 @@
   }
 }
 
+
+/* Portfolio uses a deliberately dark editorial hero in both themes.
+   Keep its foreground legible instead of inheriting global light-theme text overrides. */
+.profile-portfolio3__hero { color: #f9f7ff; }
+[data-theme="light"] .profile-portfolio3__hero,
+[data-theme="light"] .profile-portfolio3__dark-card { color: #f9f7ff; }
+[data-theme="light"] .profile-portfolio3__hero .profile-portfolio3__hero-subtitle {
+  color: rgba(255,255,255,.78) !important;
+}
+[data-theme="light"] .profile-portfolio3__hero .profile-portfolio3__hero-number {
+  color: #fff !important;
+}
+[data-theme="light"] .profile-portfolio3__hero .profile-portfolio3__hero-meta {
+  color: rgba(255,255,255,.72) !important;
+}
+[data-theme="light"] .profile-portfolio3__hero-button {
+  color: #fff;
+  background: rgba(255,255,255,.12) !important;
+  border-color: rgba(255,255,255,.35) !important;
+}
+[data-theme="light"] .profile-portfolio3__hero-button:hover {
+  background: rgba(255,255,255,.2) !important;
+}
+[data-theme="light"] .profile-portfolio3__dark-card .text-white {
+  color: #fff !important;
+}
+[data-theme="light"] .profile-portfolio3__dark-card .text-white\\/60 {
+  color: rgba(255,255,255,.78) !important;
+}
+[data-theme="light"] .profile-portfolio3__dark-card .text-white\\/40 {
+  color: rgba(255,255,255,.65) !important;
+}
+[data-theme="light"] .profile-portfolio3__dark-card .text-white\\/80 {
+  color: rgba(255,255,255,.86) !important;
+}
+[data-theme="light"] .profile-portfolio3__empty-description {
+  color: rgba(15,15,20,.68) !important;
+}
