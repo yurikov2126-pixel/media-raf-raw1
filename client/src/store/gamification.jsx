@@ -44,14 +44,27 @@ export function GamificationProvider({ children }) {
         if (!token || !user) return;
         setLoading(true);
         try {
-            const status = await api('/gamification/status', { token });
+            // Start both requests together to avoid an extra round trip at launch.
+            // Keep status authoritative: disabled gamification must not show stale stats.
+            const [status, meResult] = await Promise.all([
+                api('/gamification/status', { token }),
+                api('/gamification/me', { token }).then(
+                    (data) => ({ data }),
+                    (error) => ({ error })
+                ),
+            ]);
             setEnabled(status.enabled);
             setQuestsEnabled(status.questsEnabled);
             if (status.enabled) {
-                const me = await api('/gamification/me', { token });
+                if (meResult.error) throw meResult.error;
+                const me = meResult.data;
                 setStats(me.stats);
                 setProgress(me.progress);
                 setAchievements(me.achievements || []);
+            } else {
+                setStats(null);
+                setProgress(null);
+                setAchievements([]);
             }
         } catch (e) {
             console.error('[gamification] reload error:', e);
