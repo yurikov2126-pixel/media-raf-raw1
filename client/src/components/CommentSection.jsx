@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -12,6 +12,86 @@ function CommentText({ content }) {
         if (/^@[\p{L}\p{N}_]{1,50}$/u.test(part)) return <Link key={i} to={`/app/u/${part.slice(1)}`} className="text-violet-500 font-semibold hover:underline">{part}</Link>;
         return part;
     })}</>;
+}
+
+
+function MentionInput({ value, onChange, onSubmit, placeholder }) {
+    const { token } = useAuth();
+    const inputRef = useRef(null);
+    const [match, setMatch] = useState(null);
+    const [options, setOptions] = useState([]);
+    const [selected, setSelected] = useState(0);
+    const update = (next, caret) => {
+        onChange(next);
+        const found = next.slice(0, caret).match(/(^|[^\p{L}\p{N}_])@([\p{L}\p{N}_]{1,50})$/u);
+        setMatch(found ? { start: caret - found[2].length - 1, end: caret, query: found[2] } : null);
+        setSelected(0);
+    };
+    useEffect(() => {
+        if (!match || !token) { setOptions([]); return; }
+        let active = true;
+        const timer = setTimeout(() => {
+            api('/feed2/mentions?q=' + encodeURIComponent(match.query), { token })
+                .then((users) => { if (active) setOptions(users); })
+                .catch(() => { if (active) setOptions([]); });
+        }, 220);
+        return () => { active = false; clearTimeout(timer); };
+    }, [match?.query, token]);
+    const choose = (person) => {
+        if (!match) return;
+        const label = String(person.fullName || person.username).replace(/[\[\]()]/g, '');
+        const mention = '@[' + label + '](' + person.username + ')';
+        const next = value.slice(0, match.start) + mention + ' ' + value.slice(match.end);
+        const caret = match.start + mention.length + 1;
+        onChange(next);
+        setMatch(null);
+        setOptions([]);
+        requestAnimationFrame(() => {
+            inputRef.current?.focus();
+            inputRef.current?.setSelectionRange(caret, caret);
+        });
+    };
+    return (
+        <div className="relative flex-1 min-w-0">
+            <input
+                ref={inputRef}
+                className="input !py-2 text-sm w-full"
+                placeholder={placeholder}
+                value={value}
+                onChange={(e) => update(e.target.value, e.target.selectionStart)}
+                onClick={(e) => update(e.target.value, e.target.selectionStart)}
+                onKeyDown={(e) => {
+                    if (options.length && match && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                        e.preventDefault();
+                        setSelected((index) => (index + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (options.length && match) choose(options[selected] || options[0]);
+                        else onSubmit();
+                    } else if (e.key === 'Escape') {
+                        setMatch(null);
+                        setOptions([]);
+                    }
+                }}
+            />
+            {match && options.length > 0 && (
+                <div className="absolute z-50 bottom-full mb-2 left-0 right-0 max-h-56 overflow-y-auto rounded-xl border border-violet-400/30 bg-[var(--bg-elev-2)] shadow-xl p-1" aria-label="Подсказки упоминаний">
+                    {options.map((person, index) => (
+                        <button
+                            type="button"
+                            key={person.id}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => choose(person)}
+                            className={'w-full text-left rounded-lg px-3 py-2 text-sm ' + (index === selected ? 'bg-violet-500/15' : 'hover:bg-violet-500/10')}
+                        >
+                            <span className="font-semibold">{person.fullName || person.username}</span>
+                            <span className="opacity-60 ml-2">@{person.username}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 }
 
 function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
@@ -105,19 +185,7 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted }) {
 
                     {replying && (
                         <div className="mt-2 flex gap-2">
-                            <input
-                                className="input !py-2 text-sm"
-                                placeholder={`Ответ ${comment.author.fullName}…`}
-                                value={replyText}
-                                onChange={(e) => setReplyText(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        sendReply();
-                                    }
-                                }}
-                                autoFocus
-                            />
+                            <MentionInput value={replyText} onChange={setReplyText} onSubmit={sendReply} placeholder={'Ответ ' + comment.author.fullName + '…'} />
                             <button
                                 onClick={sendReply}
                                 disabled={busy || !replyText.trim()}
@@ -233,18 +301,7 @@ export default function CommentSection({ postId, initialCount = 0 }) {
                     {/* Форма нового комментария */}
                     <div className="flex gap-2 mt-3">
                         <Avatar user={user} size={32} />
-                        <input
-                            className="input !py-2 text-sm"
-                            placeholder="Написать комментарий…"
-                            value={text}
-                            onChange={(e) => setText(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    send();
-                                }
-                            }}
-                        />
+                        <MentionInput value={text} onChange={setText} onSubmit={send} placeholder="Написать комментарий… @участник" />
                         <button
                             onClick={send}
                             disabled={busy || !text.trim()}
