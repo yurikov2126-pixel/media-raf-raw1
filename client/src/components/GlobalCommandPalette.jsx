@@ -55,7 +55,7 @@ export default function GlobalCommandPalette() {
         const timer = setTimeout(() => {
             api('/search?q=' + encodeURIComponent(query.trim()), { token })
                 .then(data => { if (active) setResults(data); })
-                .catch(() => { if (active) setResults({ people: [], posts: [], chats: [], messages: [] }); })
+                .catch(() => { if (active) setResults({ people: [], posts: [], chats: [], messages: [], wiki: [] }); })
                 .finally(() => { if (active) setLoading(false); });
         }, 280);
         return () => { active = false; clearTimeout(timer); };
@@ -68,6 +68,7 @@ export default function GlobalCommandPalette() {
             ...(results.posts || []).map(p => ({ id: 'post-' + p.id, title: p.content.slice(0, 90) || 'Публикация', sub: 'Публикация · ' + p.author.fullName, to: '/app/feed?post=' + p.id, icon: 'feed', category: 'posts' })),
             ...(results.chats || []).map(c => ({ id: 'chat-' + c.id, title: c.title, sub: 'Чат', to: '/app/chats/' + c.id, icon: 'message', category: 'chats' })),
             ...(results.messages || []).map(m => ({ id: 'message-' + m.id, title: m.content.slice(0, 90), sub: 'Сообщение · ' + m.sender.fullName, to: '/app/chats/' + m.chatId + '?message=' + m.id, icon: 'message', category: 'messages' })),
+            ...(results.wiki || []).map(w => ({ id: 'wiki-' + w.id, title: w.title, sub: 'Wiki · ' + (w.category?.title || 'Статья') + (w.excerpt ? ' · ' + w.excerpt.slice(0, 65) : ''), to: '/app/wiki/' + w.slug, icon: 'book', category: 'wiki' })),
         ];
         return category === 'all' ? items : items.filter(i => i.category === category);
     }, [results, category]);
@@ -144,7 +145,7 @@ export default function GlobalCommandPalette() {
                         ref={inputRef}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Найти людей, публикации, чаты, сообщения…"
+                        placeholder="Поиск по платформе, включая Wiki…"
                         aria-label="Глобальный поиск"
                     />
                     <kbd className="ui-command__shortcut">ESC</kbd>
@@ -153,7 +154,7 @@ export default function GlobalCommandPalette() {
                 <div className="ui-command__list">
                     {query.trim().length >= 2 && (
                         <div className="flex gap-2 overflow-x-auto px-3 py-2" role="group" aria-label="Категории поиска">
-                            {[['all', 'Всё'], ['people', 'Люди'], ['posts', 'Публикации'], ['chats', 'Чаты'], ['messages', 'Сообщения']].map(([key, label]) => (
+                            {[['all', 'Всё'], ['people', 'Люди'], ['posts', 'Публикации'], ['chats', 'Чаты'], ['messages', 'Сообщения'], ['wiki', 'Wiki']].map(([key, label]) => (
                                 <button key={key} type="button" onClick={() => setCategory(key)} aria-pressed={category === key}
                                     className="rounded-full px-3 py-1.5 text-xs whitespace-nowrap"
                                     style={{ backgroundColor: category === key ? 'var(--bg-elev-3)' : 'var(--bg-elev-1)', color: 'var(--text-primary)' }}>{label}</button>
