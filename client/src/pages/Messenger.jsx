@@ -1,5 +1,6 @@
 import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
 import { uploadFileWithProgress } from '../api/client.js';
+import { sendAttachmentBatch } from '../lib/sendAttachmentBatch.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
@@ -446,40 +447,23 @@ export default function Messenger() {
         setUploading(true);
         setAttachmentProgress(0);
         setAttachmentIndex(0);
-        let completed = 0;
         try {
-            const total = pendingFiles.length;
-            for (const file of pendingFiles) {
-                const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-                const previous = attachmentRetriesRef.current.get(file);
-                const requestId = previous?.requestId || crypto.randomUUID();
-                const result = previous?.result || await uploadFileWithProgress(file, token, (percent) => {
-                    setAttachmentProgress(Math.round(((completed + percent / 100) / total) * 100));
-                });
-                attachmentRetriesRef.current.set(file, { requestId, result });
-                await new Promise((resolve, reject) => {
-                    socket.timeout(15000).emit('message:send', {
-                        chatId, content: result.url, type, clientMessageId: requestId,
-                        caption: (attachmentCaptions[completed] || '').trim() || undefined,
-                        replyToId: completed === 0 ? replyTo?.id : undefined,
-                    }, (err, response) => {
-                        if (err || response?.error) reject(new Error(response?.error || 'Сервер не подтвердил сообщение'));
-                        else resolve();
-                    });
-                });
-                attachmentRetriesRef.current.delete(file);
-                completed++;
-                setAttachmentIndex(completed);
-                setAttachmentProgress(Math.round(completed / total * 100));
+            const outcome = await sendAttachmentBatch({
+                files: pendingFiles, captions: attachmentCaptions, replyToId: replyTo?.id,
+                chatId, token, socket, upload: uploadFileWithProgress,
+                retryCache: attachmentRetriesRef.current,
+                onProgress: setAttachmentProgress, onFileSent: setAttachmentIndex,
+            });
+            if (outcome.error) {
+                setPendingFiles(outcome.remaining);
+                setAttachmentCaptions(outcome.captions);
+                setAttachmentProgress(0);
+                alert('Не все файлы отправлены: ' + outcome.error.message);
+            } else {
+                setPendingFiles([]);
+                setAttachmentCaptions({});
+                setReplyTo(null);
             }
-            setPendingFiles([]);
-            setAttachmentCaptions({});
-            setReplyTo(null);
-        } catch (error) {
-            setPendingFiles((files) => files.slice(completed));
-            setAttachmentCaptions((captions) => Object.fromEntries(Object.entries(captions).filter(([i]) => Number(i) >= completed).map(([i, value]) => [Number(i) - completed, value])));
-            setAttachmentProgress(0);
-            alert('Не все файлы отправлены: ' + error.message);
         } finally { setUploading(false); }
     };
 
