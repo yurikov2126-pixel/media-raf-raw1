@@ -26,6 +26,7 @@ import gamificationRouter from './routes/gamification.js';
 import practicalsRouter from './routes/practicals.js';
 import homeworkRouter from './routes/homework.js';
 import { prisma } from './lib/prisma.js';
+import { isModuleEnabled } from './lib/modules.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/swagger.js';
@@ -119,27 +120,43 @@ app.get('/api/settings/public', async (_req, res) => {
     }
 });
 
+/* Feature switches are enforced server-side as well as in navigation.
+   Admin endpoints remain available so disabled modules can be configured.
+   No data is deleted when a module is disabled. */
+const requireModule = (key) => async (_req, res, next) => {
+    try {
+        if (await isModuleEnabled(key)) return next();
+        return res.status(503).json({
+            error: 'Модуль временно отключён администратором',
+            code: 'MODULE_DISABLED',
+            module: key,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 /* ─────────── API-роуты ─────────── */
 app.use('/api/reports', reportsRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/courses', courseRoutes);
+app.use('/api/chats', requireModule('chats'), chatRoutes);
+app.use('/api/courses', requireModule('courses'), courseRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/feed2', feed2Routes);
+app.use('/api/posts', requireModule('feed'), postRoutes);
+app.use('/api/feed2', requireModule('feed'), feed2Routes);
 app.use('/api/albums', albumRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/push', pushRoutes);
-app.use('/api/wiki', wikiRoutes);
+app.use('/api/wiki', requireModule('wiki'), wikiRoutes);
 app.use('/api/modules', modulesRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/api/gamification', gamificationRouter);
-app.use('/api/practicals', practicalsRouter);
-app.use('/api/homework', homeworkRouter);
+app.use('/api/practicals', requireModule('courses'), practicalsRouter);
+app.use('/api/homework', requireModule('courses'), homeworkRouter);
 
 /* ─────────── Swagger / OpenAPI ─────────── */
 app.get('/api/docs.json', (_req, res) => {
