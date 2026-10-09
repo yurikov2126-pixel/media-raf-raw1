@@ -349,7 +349,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/10">
-                <button type="button" disabled={socialBusy} onClick={toggleSave} aria-pressed={saved} className={`chip text-xs ${saved ? 'bg-violet-500/20 text-violet-200' : 'bg-white/5 text-white/60'}`}>{saved ? '🔖 Сохранено' : '🔖 Сохранить'}{savedCount !== null ? ` · ${savedCount}` : ''}</button>
+                <button type="button" disabled={socialBusy} onClick={toggleSave} aria-pressed={saved} className={`chip text-xs feed-save-button ${saved ? 'feed-save-button--active' : 'bg-white/5 text-white/60'}`}>{saved ? '🔖 Сохранено' : '🔖 Сохранить'}{savedCount !== null ? ` · ${savedCount}` : ''}</button>
                 <button type="button" onClick={() => setShareOpen((v) => !v)} aria-expanded={shareOpen} className="chip bg-white/5 text-white/60 text-xs">↗ Репост{repostCount !== null ? ` · ${repostCount}` : ''}</button>
             </div>
             {shareOpen && <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
