@@ -348,7 +348,7 @@ export default function Notifications() {
                                     {new Date(n.createdAt).toLocaleString('ru-RU')}
                                 </div>
                             </div>
-                            <div className="flex flex-col items-center justify-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="hidden md:flex flex-col items-center justify-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                                 {!n.readAt && (
                                     <button
                                         type="button"
