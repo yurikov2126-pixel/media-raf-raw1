@@ -597,25 +597,6 @@ export default function Messenger() {
                             Непрочитанные {unreadChatCount > 0 && <span className="ml-1 font-semibold">{unreadChatCount}</span>}
                         </button>
                     </div>
-                    {searchOpen && (
-                        <div className="relative mt-3">
-                            <input
-                                autoFocus
-                                className="input pr-10"
-                                placeholder="Поиск по чатам и сообщениям…"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                            {search && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearch('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/60 text-xs transition"
-                                    aria-label="Очистить"
-                                >✕</button>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 <div
