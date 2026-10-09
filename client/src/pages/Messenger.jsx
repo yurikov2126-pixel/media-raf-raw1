@@ -108,6 +108,7 @@ export default function Messenger() {
     const recTimerRef = useRef(null);
 
     const scrollRef = useRef(null);
+    const nearBottomRef = useRef(true);
     const chatListScrollRef = useRef(null);
     const typingTimeout = useRef(null);
     const typingClearTimers = useRef(new Map()); // key: chatId:userId
@@ -182,6 +183,7 @@ export default function Messenger() {
         if (!chatId || !token) return;
         setFirstUnreadId(null);
         needsInitialScroll.current = true;
+        nearBottomRef.current = true;
         api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
             if (Array.isArray(r)) {
                 setMessages(r); setPinned(null); setMyRole('member');
@@ -320,11 +322,12 @@ export default function Messenger() {
             needsInitialScroll.current = false;
             return;
         }
-        if (messages.length > 0) {
+        // Do not yank the reader away from older messages when a new message arrives.
+        if (messages.length > 0 && nearBottomRef.current && !linkedMessageId) {
             const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
             el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? 'instant' : 'smooth' });
         }
-    }, [messages.length, firstUnreadId]);
+    }, [messages.length, firstUnreadId, linkedMessageId]);
 
     useEffect(() => {
         if (!linkedMessageId || !messages.some(m => m.id === linkedMessageId)) return;
@@ -746,7 +749,7 @@ export default function Messenger() {
                             onJump={() => pinned && scrollToMessage(pinned.id)}
                         />
 
-                        <div ref={scrollRef} className="relative z-0 flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0">
+                        <div ref={scrollRef} onScroll={(event) => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120; }} className="relative z-0 flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2 min-h-0">
                             {messages.map((m, index) => (
                                 <div key={m.id} className="space-y-2">
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
