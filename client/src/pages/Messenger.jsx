@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useSocket, useOnlineUsers } from '../store/socket.jsx';
@@ -60,6 +60,8 @@ const TYPING_TTL_MS = 3000;
 
 export default function Messenger() {
     const { chatId } = useParams();
+    const [urlParams] = useSearchParams();
+    const linkedMessageId = urlParams.get('message');
     const { user, token } = useAuth();
     const socket = useSocket();
     const onlineUsers = useOnlineUsers();
@@ -323,6 +325,12 @@ export default function Messenger() {
             el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? 'instant' : 'smooth' });
         }
     }, [messages.length, firstUnreadId]);
+
+    useEffect(() => {
+        if (!linkedMessageId || !messages.some(m => m.id === linkedMessageId)) return;
+        const frame = requestAnimationFrame(() => scrollToMessage(linkedMessageId));
+        return () => cancelAnimationFrame(frame);
+    }, [linkedMessageId, messages, chatId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         setShowMembers(false); setContextMenu(null); setMentionQuery(null);
