@@ -1,14 +1,27 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 
 export default function MobileNav({ links, user }) {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
+    const [typing, setTyping] = useState(false);
+    useEffect(() => {
+        const isEditor = (node) => node instanceof HTMLElement && (node.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, [contenteditable="true"]') || Boolean(node.closest('[contenteditable="true"]')));
+        const onFocusIn = (event) => { if (isEditor(event.target)) { setTyping(true); setMoreOpen(false); } };
+        const onFocusOut = () => {
+            // Allow focus to move between inputs without flashing the navigation.
+            requestAnimationFrame(() => setTyping(isEditor(document.activeElement)));
+        };
+        document.addEventListener('focusin', onFocusIn);
+        document.addEventListener('focusout', onFocusOut);
+        setTyping(isEditor(document.activeElement));
+        return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); };
+    }, []);
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
-    if (isChatRoom) return null;
+    if (isChatRoom || typing) return null;
 
     const primary = [
         { to: '/app', label: 'Главная', icon: 'dashboard', end: true },

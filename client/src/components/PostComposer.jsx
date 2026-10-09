@@ -111,8 +111,9 @@ export default function PostComposer({ onPublished, onClose }) {
     }, [mentionMatch?.query, token]);
     const selectMention = (person) => {
         if (!mentionMatch) return;
-        const next = text.slice(0, mentionMatch.start) + `@${person.username} ` + text.slice(mentionMatch.end);
-        const caret = mentionMatch.start + person.username.length + 2;
+        const mentionText = `@[${person.fullName.replace(/[\[\]()]/g, '')}](${person.username})`;
+        const next = text.slice(0, mentionMatch.start) + mentionText + ' ' + text.slice(mentionMatch.end);
+        const caret = mentionMatch.start + mentionText.length + 1;
         setText(next);
         setMentionMatch(null); setMentionOptions([]);
         requestAnimationFrame(() => { textareaRef.current?.focus(); textareaRef.current?.setSelectionRange(caret, caret); });
