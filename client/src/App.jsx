@@ -27,6 +27,12 @@ const Wiki = lazy(() => import('./pages/Wiki.jsx'));
 const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
 const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
 
+const LazyPage = ({ children }) => (
+    <Suspense fallback={<div className="min-h-[45vh] flex items-center justify-center text-sm text-white/50" role="status">Загружаем раздел…</div>}>
+        {children}
+    </Suspense>
+);
+
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
     const { isOffline } = useNetwork();
@@ -62,7 +68,6 @@ export default function App() {
 
     return (
         <>
-            <Suspense fallback={<div className="min-h-[45vh] flex items-center justify-center text-sm text-white/50" role="status">Загружаем раздел…</div>}>
             <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/login" element={<div className="page-enter"><Login /></div>} />
@@ -76,24 +81,24 @@ export default function App() {
                         </Private>
                     }
                 >
-                    <Route index element={<Dashboard />} />
-                    <Route path="feed" element={<Feed />} />
-                    <Route path="u/:username" element={<Profile />} />
-                    <Route path="chats" element={<Messenger />} />
-                    <Route path="chats/:chatId" element={<Messenger />} />
-                    <Route path="notifications" element={<Notifications />} />
-                    <Route path="courses" element={<Courses />} />
-                    <Route path="courses/:slug" element={<CourseView />} />
-                    <Route path="leaderboard" element={<Leaderboard />} />
-                    <Route path="wiki" element={<Wiki />} />
-                    <Route path="wiki/:slug" element={<WikiArticle />} />
-                    <Route path="certificates/:id" element={<Certificate />} />
-                    <Route path="mentor" element={<MentorReviews />} />
+                    <Route index element={<LazyPage><Dashboard /></LazyPage>} />
+                    <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
+                    <Route path="u/:username" element={<LazyPage><Profile /></LazyPage>} />
+                    <Route path="chats" element={<LazyPage><Messenger /></LazyPage>} />
+                    <Route path="chats/:chatId" element={<LazyPage><Messenger /></LazyPage>} />
+                    <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
+                    <Route path="courses" element={<LazyPage><Courses /></LazyPage>} />
+                    <Route path="courses/:slug" element={<LazyPage><CourseView /></LazyPage>} />
+                    <Route path="leaderboard" element={<LazyPage><Leaderboard /></LazyPage>} />
+                    <Route path="wiki" element={<LazyPage><Wiki /></LazyPage>} />
+                    <Route path="wiki/:slug" element={<LazyPage><WikiArticle /></LazyPage>} />
+                    <Route path="certificates/:id" element={<LazyPage><Certificate /></LazyPage>} />
+                    <Route path="mentor" element={<LazyPage><MentorReviews /></LazyPage>} />
                     <Route
                         path="admin"
                         element={
                             <Private roles={['ADMIN']}>
-                                <Admin />
+                                <LazyPage><Admin /></LazyPage>
                             </Private>
                         }
                     />
@@ -101,7 +106,6 @@ export default function App() {
 
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            </Suspense>
 
             {/* Keep the current route mounted while offline, so returning online
                 restores the same screen without losing navigation state. */}
