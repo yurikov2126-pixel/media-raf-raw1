@@ -153,15 +153,18 @@
 [data-theme="light"] .profile-portfolio3__dark-card .text-white {
   color: #fff !important;
 }
-[data-theme="light"] .profile-portfolio3__dark-card .text-white\\/60 {
+[data-theme="light"] .profile-portfolio3__dark-card .text-white\/60 {
   color: rgba(255,255,255,.78) !important;
 }
-[data-theme="light"] .profile-portfolio3__dark-card .text-white\\/40 {
+[data-theme="light"] .profile-portfolio3__dark-card .text-white\/40 {
   color: rgba(255,255,255,.65) !important;
 }
-[data-theme="light"] .profile-portfolio3__dark-card .text-white\\/80 {
+[data-theme="light"] .profile-portfolio3__dark-card .text-white\/80 {
   color: rgba(255,255,255,.86) !important;
 }
 [data-theme="light"] .profile-portfolio3__empty-description {
   color: rgba(15,15,20,.68) !important;
 }
+
+[data-theme="light"] .profile-portfolio3__dark-card p:not([style]) { color: rgba(255,255,255,.8) !important; }
+[data-theme="light"] .profile-portfolio3__dark-card button { color: #fff; }
