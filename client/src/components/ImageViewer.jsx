@@ -24,6 +24,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
     const [imgLoaded, setImgLoaded] = useState(false);
     const [chromeVisible, setChromeVisible] = useState(true);
     const [zoom, setZoom] = useState(1);
+    const zoomRef = useRef(1);
 
     const stageRef = useRef(null);       // контейнер, который трансформируется при свайпе
     const backdropRef = useRef(null);    // затемнение, гаснет при свайпе вниз
@@ -61,6 +62,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
     useEffect(() => {
         setImgLoaded(false);
         setZoom(1);
+        zoomRef.current = 1;
         drag.current.panX = 0;
         drag.current.panY = 0;
 
@@ -159,6 +161,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
         el.style.opacity = String(opacity);
     };
     const setImg = (x, y, scale, transition = false) => {
+        zoomRef.current = scale;
         const el = imgRef.current;
         if (!el) return;
         el.style.transition = transition
@@ -235,12 +238,21 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
         }
 
         /* Пан внутри увеличенного изображения */
-        if (zoom > 1.02 && drag.current.axis === 'x') {
-            const nx = drag.current.panStartX + dx;
-            const ny = drag.current.panStartY + dy;
+        if (zoomRef.current > 1.02) {
+            // Zoomed photos pan freely in both axes. Never move the slide or backdrop.
+            // Clamp to the visible bounds so the image cannot drift out of view.
+            const img = imgRef.current;
+            const rect = img?.getBoundingClientRect();
+            const scale = zoomRef.current;
+            const baseW = rect ? rect.width / scale : window.innerWidth;
+            const baseH = rect ? rect.height / scale : window.innerHeight;
+            const maxX = Math.max(0, (baseW * scale - window.innerWidth) / 2);
+            const maxY = Math.max(0, (baseH * scale - window.innerHeight) / 2);
+            const nx = clamp(drag.current.panStartX + dx, -maxX, maxX);
+            const ny = clamp(drag.current.panStartY + dy, -maxY, maxY);
             drag.current.panX = nx;
             drag.current.panY = ny;
-            setImg(nx, ny, zoom);
+            setImg(nx, ny, scale);
             return;
         }
 
@@ -309,6 +321,8 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
             handleTap(drag.current.startX, drag.current.startY);
             return;
         }
+
+        if (zoomRef.current > 1.02) return;
 
         /* Горизонтальный свайп */
         if (drag.current.axis === 'x') {
