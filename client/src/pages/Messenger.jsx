@@ -656,7 +656,7 @@ export default function Messenger() {
 
     return (
         <div
-            className={isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex overflow-hidden bg-ink-900' : 'flex'}
+            className={isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'}
             style={isChatRoom ? {
                 paddingTop: 'env(safe-area-inset-top, 0px)',
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -855,7 +855,7 @@ export default function Messenger() {
                             nearBottomRef.current = nearBottom;
                             setShowJumpToLatest(!nearBottom);
                             if (nearBottom) setUnseenCount(0);
-                        }} className="h-full overflow-y-auto px-3 md:px-6 py-4 space-y-2">
+                        }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-x-none overscroll-y-contain touch-pan-y px-3 md:px-6 py-4 space-y-2">
                             {messages.map((m, index) => (
                                 <div key={m.id} className="space-y-2">
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
