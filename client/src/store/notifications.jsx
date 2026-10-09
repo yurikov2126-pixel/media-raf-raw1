@@ -32,6 +32,26 @@ export function NotificationsProvider({ children }) {
         reload();
     }, [reload]);
 
+    // Refresh missed notifications when returning to a suspended iOS PWA.
+    // Throttle focus/pageshow duplicates and avoid background requests.
+    useEffect(() => {
+        if (!token) return;
+        let lastRefresh = Date.now();
+        const refreshOnResume = () => {
+            if (document.visibilityState !== 'visible') return;
+            const now = Date.now();
+            if (now - lastRefresh < 15000) return;
+            lastRefresh = now;
+            reload();
+        };
+        document.addEventListener('visibilitychange', refreshOnResume);
+        window.addEventListener('pageshow', refreshOnResume);
+        return () => {
+            document.removeEventListener('visibilitychange', refreshOnResume);
+            window.removeEventListener('pageshow', refreshOnResume);
+        };
+    }, [token, reload]);
+
     useEffect(() => {
         if (!user) return;
         getPushState().then(setPushState).catch(() => {});
