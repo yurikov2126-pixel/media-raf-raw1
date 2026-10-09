@@ -693,7 +693,13 @@ export default function Messenger() {
                                 aria-label="Назад к списку чатов"
                             >←</button>
                             <button
-                                onClick={() => activeChat?.type === 'GROUP' && setShowMembers((v) => !v)}
+                                onClick={() => {
+                                    if (activeChat?.type === 'GROUP') setShowMembers(true);
+                                    else {
+                                        const other = activeChat?.members.find((m) => m.id !== user.id);
+                                        if (other?.username) nav(`/app/u/${other.username}`);
+                                    }
+                                }}
                                 className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-90 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400"
                             >
                                 {activeChat?.type === 'GROUP' ? (
@@ -716,12 +722,6 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             </button>
-                            <button className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl" onClick={() => setShowGallery(true)} title="Медиа и файлы" aria-label="Открыть медиа и файлы">🖼️</button>
-                            <button
-                                className={`btn-ghost !p-2 min-w-10 min-h-10 rounded-xl ${showMembers ? 'bg-white/10' : ''}`}
-                                onClick={() => setShowMembers((v) => !v)}
-                                title="Участники" aria-label="Показать участников чата" aria-pressed={showMembers}
-                            >ℹ️</button>
                             <div className="relative">
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setHeaderMenuOpen((v) => !v); }}
@@ -732,6 +732,23 @@ export default function Messenger() {
                                         className="absolute right-0 top-full mt-2 z-50 card p-1 w-56 animate-pop"
                                         onClick={(e) => e.stopPropagation()}
                                     >
+                                        <button type="button"
+                                            onClick={() => { setHeaderMenuOpen(false); setShowGallery(true); }}
+                                            className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 flex items-center gap-2"
+                                        >🖼️ Медиа и файлы</button>
+                                        {activeChat?.type === 'GROUP' && (
+                                            <button type="button"
+                                                onClick={() => { setHeaderMenuOpen(false); setShowMembers(true); }}
+                                                className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 flex items-center gap-2"
+                                            >👥 Участники чата</button>
+                                        )}
+                                        {pinned && (
+                                            <button type="button"
+                                                onClick={() => { setHeaderMenuOpen(false); scrollToMessage(pinned.id); }}
+                                                className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 flex items-center gap-2"
+                                            >📌 Закреплённое сообщение</button>
+                                        )}
+                                        <div className="my-1 border-t border-white/10" />
                                         <button
                                             onClick={() => { setHeaderMenuOpen(false); deleteChat(activeChat); }}
                                             className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 text-pink"
