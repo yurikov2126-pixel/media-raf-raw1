@@ -13,6 +13,7 @@ export default function MessageBubble({
     const startPos = useRef(null);
     const [swipeX, setSwipeX] = useState(0);
     const swipeRef = useRef(0);
+    const gestureAxis = useRef(null);
 
     const grouped = (m.reactions || []).reduce((acc, r) => {
         acc[r.emoji] = (acc[r.emoji] || 0) + 1;
@@ -24,6 +25,7 @@ export default function MessageBubble({
         const touch = e.touches?.[0];
         startPos.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
         swipeRef.current = 0;
+        gestureAxis.current = null;
         setSwipeX(0);
         clearTimeout(longPressTimer.current);
         longPressTimer.current = setTimeout(() => {
@@ -37,8 +39,12 @@ export default function MessageBubble({
         const dx = touch.clientX - startPos.current.x;
         const dy = touch.clientY - startPos.current.y;
         if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(longPressTimer.current);
-        // Horizontal right swipe to reply. Ignore vertical scrolling and left swipes.
-        if (Math.abs(dx) > Math.abs(dy) * 1.3 && dx > 0 && !m.deletedAt) {
+        // Safari must not start a page-level horizontal gesture on messages.
+        if (!gestureAxis.current && Math.max(Math.abs(dx), Math.abs(dy)) > 10) {
+            gestureAxis.current = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.3 ? 'reply' : 'scroll';
+        }
+        if (gestureAxis.current === 'reply' && !m.deletedAt) {
+            if (e.cancelable) e.preventDefault();
             swipeRef.current = Math.min(72, dx);
             setSwipeX(swipeRef.current);
         } else if (swipeRef.current) {
@@ -46,12 +52,13 @@ export default function MessageBubble({
             setSwipeX(0);
         }
     };
-    const endLongPress = () => {
+    const endLongPress = (e) => {
         clearTimeout(longPressTimer.current);
-        if (swipeRef.current >= 56 && !m.deletedAt) onSwipeReply?.(m);
+        if (e?.type !== 'touchcancel' && gestureAxis.current === 'reply' && swipeRef.current >= 56 && !m.deletedAt) onSwipeReply?.(m);
         swipeRef.current = 0;
         setSwipeX(0);
         startPos.current = null;
+        gestureAxis.current = null;
     };
     const onCtx = (e) => {
         e.preventDefault();
