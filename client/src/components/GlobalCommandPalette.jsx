@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useSettings } from '../store/settings.jsx';
 import { useAuth } from '../store/auth.jsx';
 import Icon from './Icon.jsx';
+import { api } from '../api/client.js';
 
 const baseCommands = [
     { id: 'home', title: 'Главная', sub: 'Рабочее пространство', icon: 'dashboard', to: '/app', keywords: 'главная dashboard' },
@@ -17,12 +18,15 @@ const baseCommands = [
 
 export default function GlobalCommandPalette() {
     const { commandPalette } = useSettings();
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [selected, setSelected] = useState(0);
+    const [category, setCategory] = useState('all');
+    const [results, setResults] = useState(null);
+    const [loading, setLoading] = useState(false);
     const inputRef = useRef(null);
 
     const commands = useMemo(() => {
@@ -44,10 +48,35 @@ export default function GlobalCommandPalette() {
         );
     }, [commands, query]);
 
+    useEffect(() => {
+        if (!open || query.trim().length < 2 || !token) { setResults(null); setLoading(false); return; }
+        let active = true;
+        setLoading(true); setResults(null);
+        const timer = setTimeout(() => {
+            api('/search?q=' + encodeURIComponent(query.trim()), { token })
+                .then(data => { if (active) setResults(data); })
+                .catch(() => { if (active) setResults({ people: [], posts: [], chats: [], messages: [] }); })
+                .finally(() => { if (active) setLoading(false); });
+        }, 280);
+        return () => { active = false; clearTimeout(timer); };
+    }, [open, query, token]);
+
+    const resultItems = useMemo(() => {
+        if (!results) return [];
+        const items = [
+            ...(results.people || []).map(p => ({ id: 'person-' + p.id, title: p.fullName, sub: '@' + p.username, to: '/app/u/' + p.username, icon: 'user', category: 'people' })),
+            ...(results.posts || []).map(p => ({ id: 'post-' + p.id, title: p.content.slice(0, 90) || 'Публикация', sub: 'Публикация · ' + p.author.fullName, to: '/app/feed?post=' + p.id, icon: 'feed', category: 'posts' })),
+            ...(results.chats || []).map(c => ({ id: 'chat-' + c.id, title: c.title, sub: 'Чат', to: '/app/chats/' + c.id, icon: 'message', category: 'chats' })),
+            ...(results.messages || []).map(m => ({ id: 'message-' + m.id, title: m.content.slice(0, 90), sub: 'Сообщение · ' + m.sender.fullName, to: '/app/chats/' + m.chatId + '?message=' + m.id, icon: 'message', category: 'messages' })),
+        ];
+        return category === 'all' ? items : items.filter(i => i.category === category);
+    }, [results, category]);
+    const displayed = query.trim().length >= 2 ? resultItems : filtered;
+
     const close = () => {
         setOpen(false);
         setQuery('');
-        setSelected(0);
+        setSelected(0); setCategory('all'); setResults(null);
     };
 
     useEffect(() => {
@@ -74,26 +103,27 @@ export default function GlobalCommandPalette() {
             if (event.key === 'Escape') close();
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                setSelected((value) => Math.min(value + 1, Math.max(0, filtered.length - 1)));
+                setSelected((value) => Math.min(value + 1, Math.max(0, displayed.length - 1)));
             }
             if (event.key === 'ArrowUp') {
                 event.preventDefault();
                 setSelected((value) => Math.max(value - 1, 0));
             }
-            if (event.key === 'Enter' && filtered[selected]) {
+            if (event.key === 'Enter' && displayed[selected]) {
                 event.preventDefault();
-                navigate(filtered[selected].to);
+                if (displayed[selected].to) navigate(displayed[selected].to);
+                else if (displayed[selected].id === 'profile') navigate('/app/u/' + user.username);
                 close();
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [open, filtered, selected, navigate]);
+    }, [open, displayed, selected, navigate]);
 
     useEffect(() => {
         if (!open) return;
         setSelected(0);
-    }, [query, open]);
+    }, [query, open, category]);
 
     if (!commandPalette.enabled || !open) return null;
 
@@ -108,27 +138,38 @@ export default function GlobalCommandPalette() {
                         ref={inputRef}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Куда перейти или что открыть?"
-                        aria-label="Поиск по командам"
+                        placeholder="Найти людей, публикации, чаты, сообщения…"
+                        aria-label="Глобальный поиск"
                     />
                     <kbd className="ui-command__shortcut">ESC</kbd>
                 </div>
 
                 <div className="ui-command__list">
-                    <div className="ui-command__group">{query ? 'Результаты' : 'Быстрый доступ'}</div>
-                    {filtered.length === 0 ? (
+                    {query.trim().length >= 2 && (
+                        <div className="flex gap-2 overflow-x-auto px-3 py-2" role="group" aria-label="Категории поиска">
+                            {[['all', 'Всё'], ['people', 'Люди'], ['posts', 'Публикации'], ['chats', 'Чаты'], ['messages', 'Сообщения']].map(([key, label]) => (
+                                <button key={key} type="button" onClick={() => setCategory(key)} aria-pressed={category === key}
+                                    className="rounded-full px-3 py-1.5 text-xs whitespace-nowrap"
+                                    style={{ backgroundColor: category === key ? 'var(--bg-elev-3)' : 'var(--bg-elev-1)', color: 'var(--text-primary)' }}>{label}</button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="ui-command__group">{query ? 'Результаты поиска' : 'Быстрый доступ'}</div>
+                    {loading && <div className="px-4 py-2 text-sm" role="status">Ищем…</div>}
+                    {displayed.length === 0 && !loading ? (
                         <div className="py-10 text-center text-sm text-white/35">
                             Ничего не найдено
                         </div>
                     ) : (
-                        filtered.map((item, index) => (
+                        displayed.map((item, index) => (
                             <button
                                 key={item.id}
                                 type="button"
                                 className={`ui-command__item ${index === selected ? 'is-selected' : ''}`}
                                 onMouseEnter={() => setSelected(index)}
                                 onClick={() => {
-                                    navigate(item.to);
+                                    if (item.to) navigate(item.to);
+                                    else if (item.id === 'profile') navigate('/app/u/' + user.username);
                                     close();
                                 }}
                             >

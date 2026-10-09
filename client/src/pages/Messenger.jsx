@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useSocket, useOnlineUsers } from '../store/socket.jsx';
@@ -60,6 +60,8 @@ const TYPING_TTL_MS = 3000;
 
 export default function Messenger() {
     const { chatId } = useParams();
+    const [urlParams] = useSearchParams();
+    const linkedMessageId = urlParams.get('message');
     const { user, token } = useAuth();
     const socket = useSocket();
     const onlineUsers = useOnlineUsers();
@@ -180,7 +182,7 @@ export default function Messenger() {
         if (!chatId || !token) return;
         setFirstUnreadId(null);
         needsInitialScroll.current = true;
-        api(`/chats/${chatId}/messages`, { token }).then((r) => {
+        api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
             if (Array.isArray(r)) {
                 setMessages(r); setPinned(null); setMyRole('member');
             } else {
@@ -323,6 +325,12 @@ export default function Messenger() {
             el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? 'instant' : 'smooth' });
         }
     }, [messages.length, firstUnreadId]);
+
+    useEffect(() => {
+        if (!linkedMessageId || !messages.some(m => m.id === linkedMessageId)) return;
+        const frame = requestAnimationFrame(() => scrollToMessage(linkedMessageId));
+        return () => cancelAnimationFrame(frame);
+    }, [linkedMessageId, messages, chatId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         setShowMembers(false); setContextMenu(null); setMentionQuery(null);
@@ -572,10 +580,10 @@ export default function Messenger() {
                         <h2 className="text-xl font-bold">Чаты</h2>
                         <button
                             type="button"
-                            onClick={toggleSearch}
+                            onClick={() => window.dispatchEvent(new Event("mrr:command-open"))}
                             className={`ml-auto btn-ghost !p-2 text-base ${searchOpen ? 'bg-white/10' : ''}`}
                             aria-expanded={searchOpen}
-                            title={searchOpen ? 'Закрыть поиск' : 'Поиск'}
+                            title="Глобальный поиск" aria-label="Глобальный поиск"
                         >🔍</button>
                         <NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} />
                     </div>
@@ -589,25 +597,6 @@ export default function Messenger() {
                             Непрочитанные {unreadChatCount > 0 && <span className="ml-1 font-semibold">{unreadChatCount}</span>}
                         </button>
                     </div>
-                    {searchOpen && (
-                        <div className="relative mt-3">
-                            <input
-                                autoFocus
-                                className="input pr-10"
-                                placeholder="Поиск по чатам и сообщениям…"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                            {search && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearch('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/60 text-xs transition"
-                                    aria-label="Очистить"
-                                >✕</button>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 <div
@@ -724,8 +713,8 @@ export default function Messenger() {
                                 </div>
                             </button>
                             <button type="button" className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl"
-                                onClick={() => { setMessageSearchOpen((v) => !v); setMessageQuery(''); setMessageMatchIndex(0); }}
-                                aria-label="Поиск по сообщениям" title="Поиск по сообщениям" aria-expanded={messageSearchOpen}>⌕</button>
+                                onClick={() => window.dispatchEvent(new Event("mrr:command-open"))}
+                                aria-label="Глобальный поиск" title="Глобальный поиск">⌕</button>
                             <button className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl" onClick={() => setShowGallery(true)} title="Медиа и файлы" aria-label="Открыть медиа и файлы">🖼️</button>
                             <button
                                 className={`btn-ghost !p-2 min-w-10 min-h-10 rounded-xl ${showMembers ? 'bg-white/10' : ''}`}
@@ -751,25 +740,6 @@ export default function Messenger() {
                             </div>
                         </header>
 
-                        {messageSearchOpen && (
-                            <div className="relative z-20 flex flex-wrap items-center gap-2 px-3 py-2 border-b shrink-0"
-                                style={{ backgroundColor: 'var(--bg-elev-1)', borderColor: 'var(--border-subtle)' }}>
-                                <input type="search" autoFocus value={messageQuery}
-                                    onChange={(e) => { setMessageQuery(e.target.value); setMessageMatchIndex(0); }}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); goToMessageMatch(messageMatchIndex + (e.shiftKey ? -1 : 1)); } }}
-                                    placeholder="Найти сообщение…" aria-label="Поиск в текущей переписке"
-                                    className="input min-w-0 flex-1 !py-2 text-base" />
-                                <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-                                    {messageQuery.trim() ? (messageMatches.length ? `${messageMatchIndex + 1} из ${messageMatches.length}` : 'Не найдено') : 'По загруженным сообщениям'}
-                                </span>
-                                <button type="button" className="btn-ghost !p-2" disabled={!messageMatches.length}
-                                    onClick={() => goToMessageMatch(messageMatchIndex - 1)} aria-label="Предыдущее совпадение">↑</button>
-                                <button type="button" className="btn-ghost !p-2" disabled={!messageMatches.length}
-                                    onClick={() => goToMessageMatch(messageMatchIndex + 1)} aria-label="Следующее совпадение">↓</button>
-                                <button type="button" className="btn-ghost !p-2"
-                                    onClick={() => { setMessageSearchOpen(false); setMessageQuery(''); }} aria-label="Закрыть поиск">✕</button>
-                            </div>
-                        )}
                         <PinnedBar
                             message={pinned}
                             onUnpin={unpinMessage}
