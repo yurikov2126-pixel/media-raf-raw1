@@ -589,14 +589,7 @@ export default function Messenger() {
                 <div className="p-4 border-b border-white/5 shrink-0">
                     <div className="flex items-center gap-1">
                         <h2 className="text-xl font-bold">Чаты</h2>
-                        <button
-                            type="button"
-                            onClick={() => window.dispatchEvent(new Event("mrr:command-open"))}
-                            className={`ml-auto btn-ghost !p-2 text-base ${searchOpen ? 'bg-white/10' : ''}`}
-                            aria-expanded={searchOpen}
-                            title="Глобальный поиск" aria-label="Глобальный поиск"
-                        >🔍</button>
-                        <NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} />
+                        <div className="ml-auto"><NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} /></div>
                     </div>
                     <div className="flex items-center gap-2 mt-3" role="group" aria-label="Фильтр чатов">
                         <button type="button" onClick={() => setChatFilter('all')} aria-pressed={chatFilter === 'all'}
@@ -723,9 +716,6 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             </button>
-                            <button type="button" className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl"
-                                onClick={() => window.dispatchEvent(new Event("mrr:command-open"))}
-                                aria-label="Глобальный поиск" title="Глобальный поиск">⌕</button>
                             <button className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl" onClick={() => setShowGallery(true)} title="Медиа и файлы" aria-label="Открыть медиа и файлы">🖼️</button>
                             <button
                                 className={`btn-ghost !p-2 min-w-10 min-h-10 rounded-xl ${showMembers ? 'bg-white/10' : ''}`}
