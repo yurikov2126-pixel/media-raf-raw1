@@ -35,7 +35,7 @@ function serialize(p, myId) {
 }
 const HASHTAG = /^[\p{L}\p{N}_]{1,50}$/u;
 router.get('/posts', async (req, res) => {
-    const mode = ['latest', 'recommended', 'saved'].includes(req.query.mode) ? req.query.mode : 'latest';
+    const mode = ['latest', 'recommended', 'saved', 'mine'].includes(req.query.mode) ? req.query.mode : 'latest';
     const page = Math.max(0, Math.min(10000, Number.parseInt(req.query.page, 10) || 0));
     const limit = Math.max(1, Math.min(30, Number.parseInt(req.query.limit, 10) || 20));
     const q = String(req.query.q || '').trim().slice(0, 100);
@@ -45,6 +45,7 @@ router.get('/posts', async (req, res) => {
     const period = ['all', '7d', '30d', '90d'].includes(req.query.period) ? req.query.period : 'all';
     const sort = ['newest', 'oldest', 'popular'].includes(req.query.sort) ? req.query.sort : 'newest';
     const where = { author: { isBanned: false } };
+    if (mode === 'mine') where.authorId = req.user.id;
     if (author) where.author = { isBanned: false, username: { equals: author, mode: 'insensitive' } };
     if (period !== 'all') {
         const days = { '7d': 7, '30d': 30, '90d': 90 }[period];
