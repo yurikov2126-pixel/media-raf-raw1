@@ -54,7 +54,7 @@ router.get('/posts', async (req, res) => {
         const items = ranked.slice(page * limit, (page + 1) * limit).map(({ p }) => serialize(p, req.user.id));
         return res.json({ items, nextPage: (page + 1) * limit < ranked.length ? page + 1 : null, total: ranked.length });
     }
-    const posts = await prisma.post.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: page * limit, take: limit + 1, include: postInclude });
+    const posts = await prisma.post.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: page * limit, take: limit + 1, include: postInclude(req.user.id) });
     const hasMore = posts.length > limit;
     res.json({ items: posts.slice(0, limit).map((p) => serialize(p, req.user.id)), nextPage: hasMore ? page + 1 : null });
 });
