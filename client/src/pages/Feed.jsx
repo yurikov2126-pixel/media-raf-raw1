@@ -20,6 +20,8 @@ export default function Feed() {
     const author = params.get('author') || '';
     const period = params.get('period') || 'all';
     const sort = params.get('sort') || 'newest';
+    const hasActiveFilters = Boolean(query || author || tag || period !== 'all' || sort !== 'newest');
+    const [filtersOpen, setFiltersOpen] = useState(false);
     const [searchDraft, setSearchDraft] = useState(query);
     const [authorDraft, setAuthorDraft] = useState(author);
     const [trending, setTrending] = useState([]);
@@ -119,6 +121,15 @@ export default function Feed() {
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Разделы ленты">
                     {[['latest', '🕒 Новые'], ['recommended', '✨ Рекомендуем'], ['saved', '🔖 Сохранённые']].map(([key, label]) => <button key={key} type="button" aria-pressed={mode === key} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${mode === key ? 'bg-violet-500/25 text-violet-100 border border-violet-400/30' : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'}`} onClick={() => changeFilters({ mode: key === 'latest' ? '' : key })}>{label}</button>)}
                 </div>
+                <div className="flex items-center justify-between gap-3">
+                    <button type="button" className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold hover:bg-white/10 transition" onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} aria-controls="feed-advanced-filters">
+                        <span aria-hidden="true">⌕</span> Поиск и фильтры
+                        {hasActiveFilters && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs text-violet-500">Активны</span>}
+                        <span aria-hidden="true">{filtersOpen ? '▴' : '▾'}</span>
+                    </button>
+                    {hasActiveFilters && !filtersOpen && <button type="button" className="text-xs underline text-white/60" onClick={() => { setSearchDraft(''); setAuthorDraft(''); changeFilters({ q: '', author: '', tag: '', period: '', sort: '' }); }}>Сбросить</button>}
+                </div>
+                {filtersOpen && <div id="feed-advanced-filters" className="space-y-3 pt-2 border-t border-white/10">
                 <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); changeFilters({ q: searchDraft.trim(), author: authorDraft.trim().replace(/^@/, '') }); }}>
                     <input aria-label="Поиск по публикациям и авторам" className="input flex-1 min-w-0" value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} placeholder="Поиск по тексту, авторам, темам…" maxLength={100} />
                     <button type="submit" className="btn-primary shrink-0">Найти</button>
@@ -142,6 +153,7 @@ export default function Feed() {
                 {(query || author || tag || period !== 'all' || sort !== 'newest') && <button type="button" className="text-xs underline text-white/60" onClick={() => { setSearchDraft(''); setAuthorDraft(''); changeFilters({ q: '', author: '', tag: '', period: '', sort: '' }); }}>Сбросить все фильтры</button>}
                 {tag && <div className="flex items-center gap-3"><span className="text-sm text-violet-200"># {tag}</span><button type="button" className="text-xs underline text-white/60" onClick={() => changeFilters({ tag: '' })}>Сбросить хештег</button></div>}
                 {trending.length > 0 && <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-white/40 mr-1">Популярные темы</span>{trending.map(({ tag: t, count }) => <button type="button" key={t} className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs text-violet-200 hover:bg-white/10" onClick={() => changeFilters({ tag: t })}>#{t} <span className="text-white/35">{count}</span></button>)}</div>}
+                </div>}
             </div>
             <button type="button" className="ui-feed-compose" onClick={() => setComposeOpen((v) => !v)} aria-expanded={composeOpen} aria-controls="feed-composer"><Icon name="plus" size={19} /> Новая публикация <Icon name="chevronRight" size={16} /></button>
             {composeOpen && <PostComposer onClose={() => setComposeOpen(false)} onPublished={() => { setComposeOpen(false); return loadInitial(); }} />}
