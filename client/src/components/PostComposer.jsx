@@ -100,7 +100,7 @@ export default function PostComposer({ onPublished, onClose }) {
     const updateMentions = (value, caret) => {
         setText(value);
         const prefix = value.slice(0, caret);
-        const match = prefix.match(/(^|[^\\p{L}\\p{N}_])@([\\p{L}\\p{N}_]{1,50})$/u);
+        const match = prefix.match(/(^|[^\p{L}\p{N}_])@([\p{L}\p{N}_]{1,50})$/u);
         setMentionMatch(match ? { start: caret - match[2].length - 1, end: caret, query: match[2] } : null);
     };
     useEffect(() => {
