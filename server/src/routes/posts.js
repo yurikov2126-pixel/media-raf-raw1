@@ -197,6 +197,15 @@ router.post('/', auth, async (req, res) => {
 
     // Уведомления всем (не блокирует)
     try {
+        const mentionedHandles = new Set();
+        const body = String(content || '');
+        for (const match of body.matchAll(/@\\[[^\\]\\n]{1,120}\\]\\(([\\p{L}\\p{N}_]{1,50})\\)/gu)) mentionedHandles.add(match[1].toLowerCase());
+        for (const match of body.matchAll(/(^|[^\\p{L}\\p{N}_@])@([\\p{L}\\p{N}_]{1,50})/gu)) mentionedHandles.add(match[2].toLowerCase());
+        const mentionedUsers = mentionedHandles.size ? await prisma.user.findMany({
+            where: { isBanned: false, id: { not: req.user.id }, username: { in: [...mentionedHandles], mode: 'insensitive' } },
+            select: { id: true },
+        }) : [];
+        const mentionedIds = new Set(mentionedUsers.map((u) => u.id));
         const users = await prisma.user.findMany({
             where: { id: { not: req.user.id }, isBanned: false },
             select: { id: true },
@@ -204,9 +213,10 @@ router.post('/', auth, async (req, res) => {
         const preview =
             images.length && !content ? '🖼️ Изображение' : (content || '').slice(0, 120);
         for (const u of users) {
-            await createNotification(u.id, 'post', {
+            await createNotification(u.id, mentionedIds.has(u.id) ? 'mention' : 'post', {
                 postId: post.id,
                 authorId: req.user.id,
+                senderName: req.user.fullName,
                 authorName: req.user.fullName,
                 authorUsername: req.user.username,
                 preview,
