@@ -398,7 +398,7 @@ export default function NotificationBell({ align = 'right' }) {
                                         e.stopPropagation();
                                         remove(n.id);
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
+                                    className="hidden md:block opacity-0 group-hover:opacity-100 transition text-white/30 hover:text-pink text-sm shrink-0"
                                     title="Удалить"
                                 >
                                     ✕
