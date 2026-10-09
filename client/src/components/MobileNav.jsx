@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 
@@ -7,17 +7,30 @@ export default function MobileNav({ links, user }) {
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const [typing, setTyping] = useState(false);
+    const blurFrame = useRef(null);
     useEffect(() => {
         const isEditor = (node) => node instanceof HTMLElement && (node.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, [contenteditable="true"]') || Boolean(node.closest('[contenteditable="true"]')));
-        const onFocusIn = (event) => { if (isEditor(event.target)) { setTyping(true); setMoreOpen(false); } };
+        const onFocusIn = (event) => {
+            if (blurFrame.current !== null) cancelAnimationFrame(blurFrame.current);
+            blurFrame.current = null;
+            if (isEditor(event.target)) { setTyping(true); setMoreOpen(false); }
+        };
         const onFocusOut = () => {
             // Allow focus to move between inputs without flashing the navigation.
-            requestAnimationFrame(() => setTyping(isEditor(document.activeElement)));
+            if (blurFrame.current !== null) cancelAnimationFrame(blurFrame.current);
+            blurFrame.current = requestAnimationFrame(() => {
+                blurFrame.current = null;
+                setTyping(isEditor(document.activeElement));
+            });
         };
         document.addEventListener('focusin', onFocusIn);
         document.addEventListener('focusout', onFocusOut);
         setTyping(isEditor(document.activeElement));
-        return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); };
+        return () => {
+            document.removeEventListener('focusin', onFocusIn);
+            document.removeEventListener('focusout', onFocusOut);
+            if (blurFrame.current !== null) cancelAnimationFrame(blurFrame.current);
+        };
     }, []);
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
