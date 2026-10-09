@@ -34,6 +34,9 @@ model User {
   onboardingVersion Int       @default(0)
   passwordChangedAt DateTime?
 
+  editorialProjectsCreated EditorialProject[] @relation("EditorialProjectCreator")
+  editorialProjectMemberships EditorialProjectMember[]
+
   // Базовые связи
   albums        PhotoAlbum[]
   portfolio     PortfolioProfile?
@@ -710,4 +713,34 @@ model SavedPost {
 
   @@id([userId, postId])
   @@index([userId, createdAt])
+}
+
+model EditorialProject {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  visibility  String   @default("CLOSED")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User @relation("EditorialProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members   EditorialProjectMember[]
+
+  @@index([createdById])
+  @@index([visibility])
+}
+
+model EditorialProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      String   @default("PARTICIPANT")
+  joinedAt  DateTime @default(now())
+
+  project EditorialProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
 }
