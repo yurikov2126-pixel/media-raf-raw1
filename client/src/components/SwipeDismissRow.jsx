@@ -62,9 +62,17 @@ export default function SwipeDismissRow({ children, onDismiss, onOpen, className
 
     return (
         <div className="relative overflow-hidden" style={{ background: 'var(--bg-elev-1)' }}>
-            <div className="absolute inset-y-0 right-0 w-[120px] flex items-center justify-center text-sm font-semibold text-white"
-                 style={{ background: '#db345a' }} aria-hidden="true">
-                🗑 Удалить
+            <div
+                className="absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden whitespace-nowrap text-sm font-semibold text-white"
+                style={{
+                    width: Math.max(0, -offset) + 'px',
+                    background: '#db345a',
+                    opacity: Math.min(1, Math.max(0, -offset) / 50),
+                    transition: gesture.current?.mode === 'horizontal' ? 'none' : 'width 180ms ease, opacity 180ms ease',
+                }}
+                aria-hidden="true"
+            >
+                <span className="shrink-0">🗑 Удалить</span>
             </div>
             <div
                 className={className}
