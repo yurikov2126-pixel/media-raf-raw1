@@ -53,7 +53,8 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
     const [text, setText] = useState(post.content || '');
     const [busy, setBusy] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [showComments, setShowComments] = useState(!compact);
+    const [showComments, setShowComments] = useState(!compact || Boolean(highlightCommentId));
+    useEffect(() => { if (highlightCommentId) setShowComments(true); }, [highlightCommentId]);
     const [mediaEditing, setMediaEditing] = useState(false);
     const [mediaDraft, setMediaDraft] = useState(null);
     const [mediaError, setMediaError] = useState('');
