@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useAuth } from './store/auth.jsx';
 import { useNetwork } from './store/network.jsx';
+import { useModules } from './store/modules.jsx';
 import Layout from './components/Layout.jsx';
 import PwaUpdateNotice from './components/PwaUpdateNotice.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
@@ -11,6 +12,8 @@ import OnboardingModal from './components/OnboardingModal.jsx';
 import AchievementToast from './components/AchievementToast.jsx';
 import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
 import Landing from './pages/Landing.jsx';
+import { EditorialSection } from './pages/Editorial.jsx';
+const Editorial = lazy(() => import('./pages/Editorial.jsx'));
 import Login from './pages/Login.jsx';
 const Feed = lazy(() => import('./pages/Feed.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
@@ -32,6 +35,14 @@ const LazyPage = ({ children }) => (
         {children}
     </Suspense>
 );
+
+const EditorialGate = ({ children }) => {
+    const { modules, loading } = useModules();
+    if (loading || !Object.prototype.hasOwnProperty.call(modules, 'editorial')) {
+        return <div role="status" className="p-6">Проверяем доступ к редакции…</div>;
+    }
+    return modules.editorial ? children : <Navigate to="/app" replace />;
+};
 
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
@@ -83,6 +94,16 @@ export default function App() {
                 >
                     <Route index element={<LazyPage><Dashboard /></LazyPage>} />
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
+                    <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
+                        <Route index element={<EditorialSection title="Обзор" />} />
+                        {['projects', 'calendar', 'files', 'shares', 'reviews', 'ideas', 'content'].map((section) => (
+                            <Route key={section} path={section} element={<EditorialSection title={{
+                                projects: 'Проекты', calendar: 'Календарь', files: 'Файлы',
+                                shares: 'Общий доступ', reviews: 'На проверке',
+                                ideas: 'Идеи', content: 'Контент-план',
+                            }[section]} />} />
+                        ))}
+                    </Route>
                     <Route path="u/:username" element={<LazyPage><Profile /></LazyPage>} />
                     <Route path="chats" element={<LazyPage><Messenger /></LazyPage>} />
                     <Route path="chats/:chatId" element={<LazyPage><Messenger /></LazyPage>} />
