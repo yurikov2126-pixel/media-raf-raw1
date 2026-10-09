@@ -1530,3 +1530,12 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* PWA 2.0: allow WebKit to skip off-screen post painting while keeping
+   an estimated layout footprint for long, infinitely loaded feeds. */
+@supports (content-visibility: auto) {
+  .mrr-feed-item {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 420px;
+  }
+}
