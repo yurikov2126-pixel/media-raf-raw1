@@ -24,10 +24,10 @@ registerRoute(
 );
 
 registerRoute(
-    ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/uploads/'),
+    ({ request, url, sameOrigin }) => request.method === 'GET' && sameOrigin && url.pathname.startsWith('/uploads/'),
     new CacheFirst({
-        cacheName: 'uploads-v4',
-        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+        cacheName: 'uploads-v5',
+        plugins: [new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 })],
     })
 );
 
