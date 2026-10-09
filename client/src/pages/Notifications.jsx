@@ -1,5 +1,5 @@
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../store/notifications.jsx';
 import ConfirmDialog from './Admin/components/ConfirmDialog.jsx';
@@ -91,6 +91,44 @@ export default function Notifications() {
     const [confirm, setConfirm] = useState(null);
     const [message, setMessage] = useState('');
     const nav = useNavigate();
+    const swipeStart = useRef(null);
+    const preventClickUntil = useRef(0);
+    const [swipe, setSwipe] = useState({ id: null, x: 0 });
+    const [dismissing, setDismissing] = useState(null);
+    const onSwipeStart = (event, id) => {
+        if (event.touches.length !== 1 || dismissing) return;
+        swipeStart.current = { id, x: event.touches[0].clientX, y: event.touches[0].clientY, horizontal: false };
+    };
+    const onSwipeMove = (event, id) => {
+        const start = swipeStart.current;
+        if (!start || start.id !== id || event.touches.length !== 1) return;
+        const dx = event.touches[0].clientX - start.x;
+        const dy = event.touches[0].clientY - start.y;
+        if (!start.horizontal && Math.abs(dy) > Math.abs(dx)) {
+            swipeStart.current = null;
+            return;
+        }
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.25) start.horizontal = true;
+        if (start.horizontal) setSwipe({ id, x: Math.max(-160, Math.min(0, dx)) });
+    };
+    const onSwipeEnd = async (id) => {
+        const start = swipeStart.current;
+        swipeStart.current = null;
+        if (!start || start.id !== id) return;
+        const distance = swipe.id === id ? swipe.x : 0;
+        if (start.horizontal) preventClickUntil.current = Date.now() + 600;
+        if (start.horizontal && distance <= -90) {
+            setDismissing(id);
+            setSwipe({ id, x: -400 });
+            try { await remove(id); }
+            catch { flash('Не удалось закрыть уведомление'); }
+            finally {
+                setDismissing(null);
+                setSwipe({ id: null, x: 0 });
+            }
+        } else setSwipe({ id: null, x: 0 });
+    };
+
 
     useEffect(() => {
         reload();
@@ -329,12 +367,19 @@ export default function Notifications() {
                                 {day}
                             </div>
                         )}
+                        <div className="relative overflow-hidden">
+                        <div className="absolute inset-y-0 right-0 w-40 flex items-center justify-center bg-rose-600/80 text-white text-sm font-semibold pointer-events-none" aria-hidden="true">🗑 Закрыть</div>
                         <div
                             data-notification-item
-                            className={`group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
+                            onTouchStart={(e) => onSwipeStart(e, n.id)}
+                            onTouchMove={(e) => onSwipeMove(e, n.id)}
+                            onTouchEnd={() => onSwipeEnd(n.id)}
+                            onTouchCancel={() => { swipeStart.current = null; setSwipe({ id: null, x: 0 }); }}
+                            style={{ transform: swipe.id === n.id ? `translateX(${swipe.x}px)` : undefined, transition: swipeStart.current?.id === n.id ? 'none' : 'transform 180ms ease', touchAction: 'pan-y' }}
+                            className={`relative bg-[var(--surface,#171526)] group px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 cursor-pointer flex gap-3 ${
                                 !n.readAt ? 'bg-violet/5' : ''
                             }`}
-                            onClick={() => go(n)}
+                            onClick={() => { if (Date.now() >= preventClickUntil.current && dismissing !== n.id) go(n); }}
                         >
                             <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
                             <div className="flex-1 min-w-0">
@@ -380,6 +425,7 @@ export default function Notifications() {
                                     <span aria-hidden="true">✕</span>
                                 </button>
                             </div>
+                        </div>
                         </div>
                         </div>
                     );
