@@ -1,4 +1,5 @@
 import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
+import { uploadFileWithProgress } from '../api/client.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
@@ -91,6 +92,8 @@ export default function Messenger() {
     const [uploading, setUploading] = useState(false);
     const [pendingFiles, setPendingFiles] = useState([]);
     const [attachmentCaption, setAttachmentCaption] = useState('');
+    const [attachmentProgress, setAttachmentProgress] = useState(0);
+    const [attachmentIndex, setAttachmentIndex] = useState(0);
     const [viewerIndex, setViewerIndex] = useState(null);
     const [showMembers, setShowMembers] = useState(false);
     const [showGallery, setShowGallery] = useState(false);
@@ -404,20 +407,36 @@ export default function Messenger() {
     const sendPendingFiles = async () => {
         if (!pendingFiles.length || uploading || !chatId || !socket) return;
         setUploading(true);
+        setAttachmentProgress(0);
+        setAttachmentIndex(0);
         let completed = 0;
         try {
+            const total = pendingFiles.length;
             for (const file of pendingFiles) {
                 const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-                const result = await uploadFile(file, token);
-                socket.emit('message:send', { chatId, content: result.url, type, replyToId: completed === 0 ? replyTo?.id : undefined });
+                const result = await uploadFileWithProgress(file, token, (percent) => {
+                    setAttachmentProgress(Math.round(((completed + percent / 100) / total) * 100));
+                });
+                await new Promise((resolve, reject) => {
+                    socket.timeout(15000).emit('message:send', {
+                        chatId, content: result.url, type,
+                        caption: attachmentCaption.trim() || undefined,
+                        replyToId: completed === 0 ? replyTo?.id : undefined,
+                    }, (err, response) => {
+                        if (err || response?.error) reject(new Error(response?.error || 'Сервер не подтвердил сообщение'));
+                        else resolve();
+                    });
+                });
                 completed++;
+                setAttachmentIndex(completed);
+                setAttachmentProgress(Math.round(completed / total * 100));
             }
-            if (attachmentCaption.trim()) socket.emit('message:send', { chatId, content: attachmentCaption.trim(), type: 'text' });
             setPendingFiles([]);
             setAttachmentCaption('');
             setReplyTo(null);
         } catch (error) {
             setPendingFiles((files) => files.slice(completed));
+            setAttachmentProgress(0);
             alert('Не все файлы отправлены: ' + error.message);
         } finally { setUploading(false); }
     };
@@ -900,9 +919,13 @@ export default function Messenger() {
                                         ))}
                                     </div>
                                     <input value={attachmentCaption} onChange={(e) => setAttachmentCaption(e.target.value)}
-                                        maxLength={2000} placeholder="Подпись к материалам (отдельным сообщением)…"
+                                        maxLength={2000} placeholder="Подпись к вложениям…"
                                         aria-label="Подпись к вложениям" className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
                                         style={{ borderColor: 'var(--border-strong)' }} />
+                                    {uploading && <div className="space-y-1" role="status" aria-live="polite">
+                                        <div className="flex justify-between text-xs"><span>Загрузка: {attachmentIndex + 1} из {pendingFiles.length}</span><span>{attachmentProgress}%</span></div>
+                                        <progress value={attachmentProgress} max="100" aria-label="Прогресс отправки вложений" className="w-full h-2 accent-violet" />
+                                    </div>}
                                     <button type="button" disabled={uploading} onClick={sendPendingFiles}
                                         className="btn-primary w-full !py-2 text-sm">{uploading ? 'Отправляем…' : `Отправить ${pendingFiles.length} файл(ов)`}</button>
                                 </div>
