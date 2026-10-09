@@ -70,7 +70,7 @@ export default function Feed() {
         lastScrollYRef.current = window.scrollY;
         const items = feedItemsRef.current?.querySelectorAll('[data-feed-post-id]');
         if (!items?.length) return;
-        const topEdge = Math.max(0, scrollRef.current?.getBoundingClientRect().top ?? 0);
+        const topEdge = 0;
         let selected = null;
         for (const item of items) {
             const rect = item.getBoundingClientRect();
@@ -122,7 +122,7 @@ export default function Feed() {
             const node = Array.from(feedItemsRef.current?.querySelectorAll('[data-feed-post-id]') || [])
                 .find((item) => item.dataset.feedPostId === anchor?.id);
             if (node) {
-                const topEdge = Math.max(0, scrollRef.current?.getBoundingClientRect().top ?? 0);
+                const topEdge = 0;
                 const delta = node.getBoundingClientRect().top - topEdge - anchor.offset;
                 window.scrollTo(0, Math.max(0, window.scrollY + delta));
             } else {
