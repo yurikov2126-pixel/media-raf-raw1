@@ -17,6 +17,18 @@ import './styles/ui2.css';
 import './styles/profile2.css';
 import './styles/notifications2.css';
 
+// iOS Safari / standalone PWA may still handle WebKit gesture events even
+// when touch-action disables page pinch zoom. Cancel only page-level gestures;
+// do not cancel ordinary touchstart/touchmove (scrolling and swipe actions).
+if (typeof document !== 'undefined') {
+    document.addEventListener('gesturestart', (event) => {
+        event.preventDefault();
+    }, { passive: false });
+    document.addEventListener('gesturechange', (event) => {
+        event.preventDefault();
+    }, { passive: false });
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
         <ToastProvider>
