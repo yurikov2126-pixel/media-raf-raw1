@@ -9,9 +9,26 @@ import PostReactions from './PostReactions.jsx';
 import CommentSection from './CommentSection.jsx';
 import ReportButton from './ReportButton.jsx';
 
-export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false }) {
+export default function PostCard({ post, author, onChanged, onDeleted, onPinned, compact = false, onTagClick, onReposted }) {
     const { user, token } = useAuth();
     const [editing, setEditing] = useState(false);
+    const [socialBusy, setSocialBusy] = useState(false);
+    const [shareOpen, setShareOpen] = useState(false);
+    const [shareText, setShareText] = useState('');
+    const [saved, setSaved] = useState(Boolean(post.isSaved));
+    useEffect(() => { setSaved(Boolean(post.isSaved)); }, [post.isSaved]);
+    const toggleSave = async () => {
+        if (socialBusy) return;
+        setSocialBusy(true);
+        try { const result = await api(`/feed2/posts/${post.id}/save`, { method: saved ? 'DELETE' : 'PUT', token }); setSaved(result.saved); onChanged?.({ id: post.id, isSaved: result.saved }); }
+        catch (e) { alert(e.message || 'Не удалось изменить закладку'); } finally { setSocialBusy(false); }
+    };
+    const repost = async () => {
+        if (socialBusy) return;
+        setSocialBusy(true);
+        try { await api(`/feed2/posts/${post.id}/repost`, { method: 'POST', token, body: { content: shareText } }); setShareOpen(false); setShareText(''); onReposted?.(); }
+        catch (e) { alert(e.message || 'Не удалось сделать репост'); } finally { setSocialBusy(false); }
+    };
     const [text, setText] = useState(post.content || '');
     const [busy, setBusy] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -230,7 +247,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     </div>
                 </div>
             ) : (
-                post.content && <p className={contentClass}>{post.content}</p>
+                post.content && <p className={contentClass}>{post.content.split(/(#[\p{L}\p{N}_]{1,50})/u).map((part, index) => /^#[\p{L}\p{N}_]{1,50}$/u.test(part) ? <button key={index} type="button" className="text-violet-300 hover:underline" onClick={() => onTagClick ? onTagClick(part.slice(1)) : window.location.assign(`/app/feed?tag=${encodeURIComponent(part.slice(1))}`)}>{part}</button> : part)}</p>
             )}
 
             {mediaEditing && mediaDraft && (
@@ -255,6 +272,12 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     </div>
                 </div>
             )}
+            {post.repostOf && <div className="mt-3 rounded-2xl border border-white/15 bg-white/[.035] p-4">
+                <div className="text-xs text-white/45 mb-2">↗ Репост публикации</div>
+                <Link to={`/app/u/${post.repostOf.author?.username}`} className="text-sm font-semibold text-violet-200 hover:underline">{post.repostOf.author?.fullName || 'Автор оригинала'}</Link>
+                <p className="text-sm text-white/80 whitespace-pre-wrap mt-2">{post.repostOf.content}</p>
+                {post.repostOf.mediaUrl && <img src={resolveUrl(post.repostOf.mediaUrl)} alt="Медиа оригинальной публикации" loading="lazy" className="w-full max-h-80 object-contain rounded-xl mt-3" />}
+            </div>}
             {/* Медиа */}
             {images.length > 0 && (
                 <div className={`${compact ? 'mt-2' : 'mt-3'} rounded-2xl overflow-hidden`}>
@@ -322,6 +345,15 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                 />
             </div>
 
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/10">
+                <button type="button" disabled={socialBusy} onClick={toggleSave} aria-pressed={saved} className={`chip text-xs ${saved ? 'bg-violet-500/20 text-violet-200' : 'bg-white/5 text-white/60'}`}>{saved ? '🔖 Сохранено' : '🔖 Сохранить'}</button>
+                <button type="button" onClick={() => setShareOpen((v) => !v)} aria-expanded={shareOpen} className="chip bg-white/5 text-white/60 text-xs">↗ Репост</button>
+            </div>
+            {shareOpen && <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                <label className="text-sm font-semibold block" htmlFor={`repost-${post.id}`}>Поделиться публикацией</label>
+                <textarea id={`repost-${post.id}`} className="input w-full" maxLength={1000} rows={2} value={shareText} onChange={(e) => setShareText(e.target.value)} placeholder="Добавьте комментарий (необязательно)" />
+                <div className="flex justify-end gap-2"><button type="button" className="btn-ghost" onClick={() => setShareOpen(false)}>Отмена</button><button type="button" disabled={socialBusy} className="btn-primary" onClick={repost}>{socialBusy ? 'Отправка…' : 'Опубликовать репост'}</button></div>
+            </div>}
             {/* Жалоба — только на чужие */}
             {!isOwner && (
                 <div className="mt-2 flex justify-end">

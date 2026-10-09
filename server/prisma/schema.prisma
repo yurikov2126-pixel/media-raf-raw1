@@ -41,6 +41,7 @@ model User {
   posts         Post[]
   comments      Comment[]
   postReactions PostReaction[]
+  savedPosts SavedPost[]
   chatMembers   ChatMember[]
   messages      Message[]
   reactions     Reaction[]
@@ -81,12 +82,17 @@ model Post {
   mediaType String?
   editedAt  DateTime?
   pinnedAt  DateTime?
+  repostOfId String?
   createdAt DateTime  @default(now())
 
   author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments  Comment[]
   reactions PostReaction[]
+  savedBy SavedPost[]
+  repostOf Post? @relation("PostReposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts Post[] @relation("PostReposts")
 
+  @@index([repostOfId])
   @@index([createdAt])
   @@index([authorId, createdAt])
   @@index([authorId, pinnedAt])
@@ -689,4 +695,15 @@ model CreativeProject {
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, createdAt])
+}
+
+model SavedPost {
+  userId String
+  postId String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([userId, createdAt])
 }

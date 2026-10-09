@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import PostCard from '../components/PostCard.jsx';
@@ -12,10 +13,16 @@ const PAGE_SIZE = 20;
 
 export default function Feed() {
     const { user, token } = useAuth();
+    const [params, setParams] = useSearchParams();
+    const mode = ['latest', 'recommended', 'saved'].includes(params.get('mode')) ? params.get('mode') : 'latest';
+    const tag = params.get('tag') || '';
+    const query = params.get('q') || '';
+    const [searchDraft, setSearchDraft] = useState(query);
+    const [trending, setTrending] = useState([]);
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [cursor, setCursor] = useState(null);
+    const [nextPage, setNextPage] = useState(null);
     const [hasMore, setHasMore] = useState(true);
     const [error, setError] = useState('');
     const [composeOpen, setComposeOpen] = useState(false);
@@ -24,22 +31,27 @@ export default function Feed() {
     const sentinelRef = useRef(null);
     const scrollRef = useRef(null);
 
+    const feedUrl = useCallback((page) => `/feed2/posts?limit=${PAGE_SIZE}&page=${page}&mode=${encodeURIComponent(mode)}${query ? `&q=${encodeURIComponent(query)}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`, [mode, query, tag]);
+    const changeFilters = (patch) => { const next = new URLSearchParams(params); Object.entries(patch).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setParams(next); };
+    useEffect(() => { setSearchDraft(query); }, [query]);
+    useEffect(() => { if (!token) return; api('/feed2/tags', { token }).then(setTrending).catch(() => {}); }, [token]);
+
     /* Первичная загрузка */
     const loadInitial = useCallback(async () => {
         if (!token) return;
         setLoading(true);
         setError('');
         try {
-            const r = await api(`/posts/feed?limit=${PAGE_SIZE}`, { token });
+            const r = await api(feedUrl(0), { token });
             setPosts(r.items);
-            setCursor(r.nextCursor);
-            setHasMore(!!r.nextCursor);
+            setNextPage(r.nextPage);
+            setHasMore(r.nextPage !== null);
         } catch (e) {
             setError(e.message || 'Не удалось загрузить ленту');
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [token, feedUrl]);
 
     useEffect(() => {
         loadInitial();
@@ -47,22 +59,19 @@ export default function Feed() {
 
     /* Подгрузка следующей страницы */
     const loadMore = useCallback(async () => {
-        if (loadingMore || !hasMore || !cursor || !token) return;
+        if (loadingMore || !hasMore || nextPage === null || !token) return;
         setLoadingMore(true);
         try {
-            const r = await api(
-                `/posts/feed?limit=${PAGE_SIZE}&cursor=${cursor}`,
-                { token }
-            );
+            const r = await api(feedUrl(nextPage), { token });
             setPosts((prev) => [...prev, ...r.items]);
-            setCursor(r.nextCursor);
-            setHasMore(!!r.nextCursor);
+            setNextPage(r.nextPage);
+            setHasMore(r.nextPage !== null);
         } catch (e) {
             setError(e.message || 'Не удалось подгрузить');
         } finally {
             setLoadingMore(false);
         }
-    }, [cursor, hasMore, loadingMore, token]);
+    }, [nextPage, hasMore, loadingMore, token, feedUrl]);
 
     /* Infinite scroll */
     useEffect(() => {
@@ -101,6 +110,18 @@ export default function Feed() {
                 </button>
             </div>
             <p className="ui-feed-subtitle">Свежие публикации MEDIA·RAF·RAW — идеи, проекты и события команды.</p>
+            <div className="rounded-2xl border border-white/10 bg-white/[.035] p-3 sm:p-4 space-y-4 mb-5">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Разделы ленты">
+                    {[['latest', '🕒 Новые'], ['recommended', '✨ Рекомендуем'], ['saved', '🔖 Сохранённые']].map(([key, label]) => <button key={key} type="button" aria-pressed={mode === key} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${mode === key ? 'bg-violet-500/25 text-violet-100 border border-violet-400/30' : 'bg-white/5 text-white/60 border border-transparent hover:bg-white/10'}`} onClick={() => changeFilters({ mode: key === 'latest' ? '' : key })}>{label}</button>)}
+                </div>
+                <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); changeFilters({ q: searchDraft.trim() }); }}>
+                    <input aria-label="Поиск по публикациям и авторам" className="input flex-1 min-w-0" value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} placeholder="Поиск по тексту, авторам, темам…" maxLength={100} />
+                    <button type="submit" className="btn-primary shrink-0">Найти</button>
+                    {query && <button type="button" className="btn-ghost" onClick={() => { setSearchDraft(''); changeFilters({ q: '' }); }} aria-label="Очистить поиск">✕</button>}
+                </form>
+                {tag && <div className="flex items-center gap-3"><span className="text-sm text-violet-200"># {tag}</span><button type="button" className="text-xs underline text-white/60" onClick={() => changeFilters({ tag: '' })}>Сбросить хештег</button></div>}
+                {trending.length > 0 && <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-white/40 mr-1">Популярные темы</span>{trending.map(({ tag: t, count }) => <button type="button" key={t} className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs text-violet-200 hover:bg-white/10" onClick={() => changeFilters({ tag: t })}>#{t} <span className="text-white/35">{count}</span></button>)}</div>}
+            </div>
             <button type="button" className="ui-feed-compose" onClick={() => setComposeOpen((v) => !v)} aria-expanded={composeOpen} aria-controls="feed-composer"><Icon name="plus" size={19} /> Новая публикация <Icon name="chevronRight" size={16} /></button>
             {composeOpen && <PostComposer onClose={() => setComposeOpen(false)} onPublished={() => { setComposeOpen(false); return loadInitial(); }} />}
 
@@ -119,7 +140,7 @@ export default function Feed() {
 
             {!loading && !error && posts.length === 0 && (
                 <div className="card p-10 text-center text-white/40">
-                    Пока нет публикаций. Создайте первую запись у себя в профиле.
+                    {mode === 'saved' ? 'Вы ещё не сохранили ни одной публикации.' : query || tag ? 'По вашему запросу публикаций не найдено.' : mode === 'recommended' ? 'Пока нет публикаций для рекомендаций за последние 30 дней.' : 'Пока нет публикаций. Создайте первую запись у себя в профиле.'}
                 </div>
             )}
 
@@ -130,13 +151,9 @@ export default function Feed() {
                         post={post}
                         author={post.author}
                         compact={compact}
-                        onChanged={(u) =>
-                            setPosts((prev) =>
-                                prev.map((x) =>
-                                    x.id === u.id ? { ...x, ...u } : x
-                                )
-                            )
-                        }
+                        onTagClick={(value) => changeFilters({ tag: value })}
+                        onReposted={loadInitial}
+                        onChanged={(u) => setPosts((prev) => mode === 'saved' && u.isSaved === false ? prev.filter((x) => x.id !== u.id) : prev.map((x) => x.id === u.id ? { ...x, ...u } : x))}
                         onDeleted={(id) => setPosts((prev) => prev.filter((x) => x.id !== id))}
                     />
                 ))}
