@@ -66,6 +66,27 @@ export function NetworkProvider({ children }) {
         };
     }, []);
 
+    /* iOS may restore a cached PWA with navigator.onLine === true even
+       though the API is unreachable. Verify connectivity on cold start and
+       whenever the app returns to foreground. */
+    useEffect(() => {
+        let lastCheck = 0;
+        const check = () => {
+            if (document.visibilityState === 'hidden') return;
+            const now = Date.now();
+            if (now - lastCheck < 3000) return;
+            lastCheck = now;
+            runPing();
+        };
+        check();
+        document.addEventListener('visibilitychange', check);
+        window.addEventListener('pageshow', check);
+        return () => {
+            document.removeEventListener('visibilitychange', check);
+            window.removeEventListener('pageshow', check);
+        };
+    }, [runPing]);
+
     /* Пока считаем, что офлайн — периодически пингуем.
        Первый пинг почти сразу, дальше — раз в PING_INTERVAL_MS.
        Так мы восстанавливаемся даже если браузер не стрельнул `online`. */
