@@ -963,7 +963,7 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <button type="button" className="fixed inset-0 z-[70] bg-black/30 md:bg-transparent cursor-default"
+                        <button type="button" className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[3px] md:bg-transparent md:backdrop-blur-none cursor-default"
                             onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
                         {/* Telegram-inspired contextual popover with a selected-message preview. */}
                         <div className="mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2"
