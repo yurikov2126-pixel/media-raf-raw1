@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import { useModules } from '../../../store/modules.jsx';
 
 export default function Modules({ token }) {
+    const { reload: reloadActiveModules } = useModules();
     const [modules, setModules] = useState([]);
     const [draft, setDraft] = useState({});
     const [loading, setLoading] = useState(true);
@@ -65,7 +67,7 @@ export default function Modules({ token }) {
         setMessage('');
         try {
             await api('/admin/modules', { method: 'PUT', token, body: { modules: draft } });
-            await loadModules();
+            await Promise.all([loadModules(), reloadActiveModules()]);
             setMessage('✓ Настройки сохранены');
             setTimeout(() => setMessage(''), 2500);
         } catch (e) {
@@ -102,8 +104,9 @@ export default function Modules({ token }) {
                     <div>
                         <div className="font-bold text-lg">🧩 Модули платформы</div>
                         <div className="text-sm text-white/50 mt-1">
-                            Отключённые модули скрываются из навигации, а прямые ссылки
-                            перенаправляют на доступный раздел.
+                            Отключённые модули скрываются из навигации, прямые ссылки
+                            перенаправляют на доступный раздел, а API раздела блокируется.
+                            Данные сохраняются и станут доступны после включения.
                         </div>
                     </div>
                     {dirty && (
