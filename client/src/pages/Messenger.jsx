@@ -82,6 +82,9 @@ export default function Messenger() {
     const [search, setSearch] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
     const [chatFilter, setChatFilter] = useState('all');
+    const [messageSearchOpen, setMessageSearchOpen] = useState(false);
+    const [messageQuery, setMessageQuery] = useState('');
+    const [messageMatchIndex, setMessageMatchIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(null);
     const [showMembers, setShowMembers] = useState(false);
@@ -131,6 +134,20 @@ export default function Messenger() {
             .map((m) => ({ id: m.id, url: resolveUrl(m.content) })),
         [messages]
     );
+
+    const messageMatches = useMemo(() => {
+        const query = messageQuery.trim().toLocaleLowerCase('ru');
+        if (!query) return [];
+        return messages.filter((m) => !m.deletedAt && m.type === 'text' &&
+            String(m.content || '').toLocaleLowerCase('ru').includes(query));
+    }, [messages, messageQuery]);
+
+    const goToMessageMatch = (index) => {
+        if (!messageMatches.length) return;
+        const normalized = (index + messageMatches.length) % messageMatches.length;
+        setMessageMatchIndex(normalized);
+        scrollToMessage(messageMatches[normalized].id);
+    };
 
     const openViewer = (id) => {
         const idx = imageMessages.findIndex((i) => i.id === id);
@@ -307,6 +324,7 @@ export default function Messenger() {
         setAttachMenu(false); setSearchOpen(false); setSearch('');
         setReportTarget(null);
         setTypingUsers([]);
+        setMessageSearchOpen(false); setMessageQuery(''); setMessageMatchIndex(0);
     }, [chatId]);
 
     /* Pull-to-refresh на списке чатов */
@@ -699,6 +717,9 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             </button>
+                            <button type="button" className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl"
+                                onClick={() => { setMessageSearchOpen((v) => !v); setMessageQuery(''); setMessageMatchIndex(0); }}
+                                aria-label="Поиск по сообщениям" title="Поиск по сообщениям" aria-expanded={messageSearchOpen}>⌕</button>
                             <button className="btn-ghost !p-2 min-w-10 min-h-10 rounded-xl" onClick={() => setShowGallery(true)} title="Медиа и файлы" aria-label="Открыть медиа и файлы">🖼️</button>
                             <button
                                 className={`btn-ghost !p-2 min-w-10 min-h-10 rounded-xl ${showMembers ? 'bg-white/10' : ''}`}
@@ -724,6 +745,25 @@ export default function Messenger() {
                             </div>
                         </header>
 
+                        {messageSearchOpen && (
+                            <div className="relative z-20 flex flex-wrap items-center gap-2 px-3 py-2 border-b shrink-0"
+                                style={{ backgroundColor: 'var(--bg-elev-1)', borderColor: 'var(--border-subtle)' }}>
+                                <input type="search" autoFocus value={messageQuery}
+                                    onChange={(e) => { setMessageQuery(e.target.value); setMessageMatchIndex(0); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); goToMessageMatch(messageMatchIndex + (e.shiftKey ? -1 : 1)); } }}
+                                    placeholder="Найти сообщение…" aria-label="Поиск в текущей переписке"
+                                    className="input min-w-0 flex-1 !py-2 text-base" />
+                                <span className="text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
+                                    {messageQuery.trim() ? (messageMatches.length ? `${messageMatchIndex + 1} из ${messageMatches.length}` : 'Не найдено') : 'По загруженным сообщениям'}
+                                </span>
+                                <button type="button" className="btn-ghost !p-2" disabled={!messageMatches.length}
+                                    onClick={() => goToMessageMatch(messageMatchIndex - 1)} aria-label="Предыдущее совпадение">↑</button>
+                                <button type="button" className="btn-ghost !p-2" disabled={!messageMatches.length}
+                                    onClick={() => goToMessageMatch(messageMatchIndex + 1)} aria-label="Следующее совпадение">↓</button>
+                                <button type="button" className="btn-ghost !p-2"
+                                    onClick={() => { setMessageSearchOpen(false); setMessageQuery(''); }} aria-label="Закрыть поиск">✕</button>
+                            </div>
+                        )}
                         <PinnedBar
                             message={pinned}
                             onUnpin={unpinMessage}
