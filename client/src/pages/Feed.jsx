@@ -259,6 +259,18 @@ export default function Feed() {
         loadInitial();
     }, [loadInitial, snapshotKey]);
 
+    // Stable handlers allow memoized cards to keep their own UI state and
+    // avoid rerendering when another post changes or pagination completes.
+    const handleTagClick = useCallback((value) => changeFilters({ tag: value }), [params, setParams]);
+    const handlePostChanged = useCallback((update) => {
+        setPosts((prev) => mode === 'saved' && update.isSaved === false
+            ? prev.filter((item) => item.id !== update.id)
+            : prev.map((item) => item.id === update.id ? { ...item, ...update } : item));
+    }, [mode]);
+    const handlePostDeleted = useCallback((id) => {
+        setPosts((prev) => prev.filter((item) => item.id !== id));
+    }, []);
+
     /* Подгрузка следующей страницы */
     const loadMore = useCallback(async () => {
         if (loadingMore || !hasMore || nextPage === null || !token) return;
@@ -416,10 +428,10 @@ export default function Feed() {
                         post={post}
                         author={post.author}
                         compact={compact}
-                        onTagClick={(value) => changeFilters({ tag: value })}
+                        onTagClick={handleTagClick}
                         onReposted={loadInitial}
-                        onChanged={(u) => setPosts((prev) => mode === 'saved' && u.isSaved === false ? prev.filter((x) => x.id !== u.id) : prev.map((x) => x.id === u.id ? { ...x, ...u } : x))}
-                        onDeleted={(id) => setPosts((prev) => prev.filter((x) => x.id !== id))}
+                        onChanged={handlePostChanged}
+                        onDeleted={handlePostDeleted}
                     />
                     </div>
                 ))}
