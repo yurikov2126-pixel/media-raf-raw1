@@ -101,6 +101,18 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommen
     const [replyText, setReplyText] = useState('');
     const [busy, setBusy] = useState(false);
     const [showReplies, setShowReplies] = useState(depth === 0 || highlightedPath.includes(comment.id));
+    const targetRef = useRef(null);
+    useEffect(() => {
+        if (highlightCommentId !== comment.id || !targetRef.current) return;
+        // The target may be mounted after parent replies expand. Scroll only after it exists.
+        let secondFrame;
+        const firstFrame = requestAnimationFrame(() => {
+            secondFrame = requestAnimationFrame(() => {
+                targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        });
+        return () => { cancelAnimationFrame(firstFrame); if (secondFrame) cancelAnimationFrame(secondFrame); };
+    }, [highlightCommentId, comment.id]);
     useEffect(() => { if (highlightedPath.includes(comment.id)) setShowReplies(true); }, [highlightedPath, comment.id]);
 
     const isMine = comment.author.id === user.id || user.role === 'ADMIN';
@@ -164,7 +176,7 @@ function CommentItem({ comment, depth = 0, onChanged, onDeleted, highlightCommen
     const repliesCount = comment.replies?.length || 0;
 
     return (
-        <div data-comment-id={comment.id} className={`${depth > 0 ? 'ml-8 md:ml-10 border-l border-white/10 pl-3' : ''} ${highlightCommentId === comment.id ? 'rounded-xl ring-2 ring-violet-400 bg-violet-500/10' : ''}`}>
+        <div ref={targetRef} data-comment-id={comment.id} className={`${depth > 0 ? 'ml-8 md:ml-10 border-l border-white/10 pl-3' : ''} ${highlightCommentId === comment.id ? 'rounded-xl ring-2 ring-violet-400 bg-violet-500/10' : ''}`}>
             <div className="flex gap-2 py-2">
                 <Link to={`/app/u/${comment.author.username}`} className="shrink-0">
                     <Avatar user={comment.author} size={32} />
@@ -274,16 +286,7 @@ export default function CommentSection({ postId, initialCount = 0, highlightComm
         return false;
     };
     if (highlightCommentId) findPath(comments);
-    useEffect(() => {
-        if (!highlightCommentId) return;
-        setOpen(true);
-        const frame = requestAnimationFrame(() => {
-            const nodes = document.querySelectorAll('[data-comment-id]');
-            const target = Array.from(nodes).find((node) => node.getAttribute('data-comment-id') === highlightCommentId);
-            target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
-        return () => cancelAnimationFrame(frame);
-    }, [highlightCommentId, comments]);
+    useEffect(() => { if (highlightCommentId) setOpen(true); }, [highlightCommentId]);
 
     const send = async () => {
         if (!text.trim()) return;
