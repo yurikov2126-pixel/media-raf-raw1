@@ -88,6 +88,8 @@ export default function Messenger() {
     const [messageQuery, setMessageQuery] = useState('');
     const [messageMatchIndex, setMessageMatchIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
+    const [pendingFiles, setPendingFiles] = useState([]);
+    const [attachmentCaption, setAttachmentCaption] = useState('');
     const [viewerIndex, setViewerIndex] = useState(null);
     const [showMembers, setShowMembers] = useState(false);
     const [showGallery, setShowGallery] = useState(false);
@@ -397,6 +399,27 @@ export default function Messenger() {
     const sendImage = (f) => sendFile(f, 'image');
     const sendVideo = (f) => sendFile(f, 'video');
     const sendDoc = (f) => sendFile(f, 'file');
+
+    const sendPendingFiles = async () => {
+        if (!pendingFiles.length || uploading || !chatId || !socket) return;
+        setUploading(true);
+        let completed = 0;
+        try {
+            for (const file of pendingFiles) {
+                const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
+                const result = await uploadFile(file, token);
+                socket.emit('message:send', { chatId, content: result.url, type, replyToId: completed === 0 ? replyTo?.id : undefined });
+                completed++;
+            }
+            if (attachmentCaption.trim()) socket.emit('message:send', { chatId, content: attachmentCaption.trim(), type: 'text' });
+            setPendingFiles([]);
+            setAttachmentCaption('');
+            setReplyTo(null);
+        } catch (error) {
+            setPendingFiles((files) => files.slice(completed));
+            alert('Не все файлы отправлены: ' + error.message);
+        } finally { setUploading(false); }
+    };
 
     const startRecording = async () => {
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -857,6 +880,32 @@ export default function Messenger() {
                                 </div>
                             )}
 
+                            {pendingFiles.length > 0 && (
+                                <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--border-strong)', backgroundColor: 'var(--bg-elev-2)' }}>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-semibold">Вложения: {pendingFiles.length} из 20</span>
+                                        <button type="button" disabled={uploading} onClick={() => { setPendingFiles([]); setAttachmentCaption(''); }} aria-label="Отменить вложения">✕</button>
+                                    </div>
+                                    <div className="flex gap-2 overflow-x-auto pb-1">
+                                        {pendingFiles.map((file, index) => (
+                                            <div key={index + '-' + file.name} className="relative shrink-0 w-28 rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border-strong)' }}>
+                                                <div className="truncate" title={file.name}>{file.type.startsWith('image/') ? '🖼️' : file.type.startsWith('video/') ? '🎥' : '📎'} {file.name}</div>
+                                                <div className="opacity-60">{(file.size / 1024 / 1024).toFixed(1)} МБ</div>
+                                                <button type="button" disabled={uploading} aria-label={`Убрать ${file.name}`}
+                                                    onClick={() => setPendingFiles((files) => files.filter((_, i) => i !== index))}
+                                                    className="absolute -top-1 -right-1 rounded-full px-1.5 bg-ink-700 text-white">✕</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <input value={attachmentCaption} onChange={(e) => setAttachmentCaption(e.target.value)}
+                                        maxLength={2000} placeholder="Подпись к материалам (отдельным сообщением)…"
+                                        aria-label="Подпись к вложениям" className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                                        style={{ borderColor: 'var(--border-strong)' }} />
+                                    <button type="button" disabled={uploading} onClick={sendPendingFiles}
+                                        className="btn-primary w-full !py-2 text-sm">{uploading ? 'Отправляем…' : `Отправить ${pendingFiles.length} файл(ов)`}</button>
+                                </div>
+                            )}
+
                             {recording ? (
                                 <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
                                     <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
@@ -890,20 +939,18 @@ export default function Messenger() {
                                         )}
                                     </div>
 
-                                    <input ref={fileRef} type="file" accept="image/*,video/*" hidden
+                                    <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden
                                            onChange={(e) => {
-                                               const f = e.target.files?.[0];
+                                               const files = Array.from(e.target.files || []);
                                                e.target.value = '';
-                                               if (!f) return;
-                                               if (f.type.startsWith('video/')) sendVideo(f);
-                                               else sendImage(f);
+                                               if (files.length) setPendingFiles((current) => [...current, ...files].slice(0, 20));
                                            }}
                                     />
-                                    <input ref={mediaFileRef} type="file" hidden
+                                    <input ref={mediaFileRef} type="file" multiple hidden
                                            onChange={(e) => {
-                                               const f = e.target.files?.[0];
+                                               const files = Array.from(e.target.files || []);
                                                e.target.value = '';
-                                               if (f) sendDoc(f);
+                                               if (files.length) setPendingFiles((current) => [...current, ...files].slice(0, 20));
                                            }}
                                     />
 
@@ -1144,7 +1191,7 @@ export default function Messenger() {
             )}
 
             {showGallery && chatId && (
-                <MediaGalleryModal chatId={chatId} onClose={() => setShowGallery(false)} />
+                <MediaGalleryModal chatId={chatId} onClose={() => setShowGallery(false)} onJumpToMessage={scrollToMessage} />
             )}
 
             {reportTarget && (
