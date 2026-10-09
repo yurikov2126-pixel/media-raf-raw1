@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -62,23 +62,49 @@ export default function Feed() {
     const currentFeedRef = useRef(null);
     currentFeedRef.current = { posts, nextPage, hasMore };
     const currentKeyRef = useRef(snapshotKey);
-    const restoreY = useRef(cachedOnMount.current?.scrollY ?? null);
+    const lastScrollYRef = useRef(cachedOnMount.current?.scrollY ?? 0);
+    const restoreYRef = useRef(cachedOnMount.current?.scrollY ?? null);
+    const restorePendingRef = useRef(restoreYRef.current !== null);
+
+    // Record scroll position while the feed is visible, not during unmount:
+    // iOS Safari can reset document scroll before effect cleanups run.
+    useEffect(() => {
+        const onScroll = () => {
+            if (!restorePendingRef.current) lastScrollYRef.current = window.scrollY;
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     useEffect(() => {
         const key = snapshotKey;
         return () => {
             if (currentKeyRef.current !== key) return;
             const state = currentFeedRef.current;
-            if (state?.posts.length) saveSnapshot(key, { ...state, scrollY: window.scrollY });
+            if (state?.posts.length) {
+                saveSnapshot(key, { ...state, scrollY: lastScrollYRef.current });
+            }
         };
     }, [snapshotKey]);
 
-    useEffect(() => {
-        if (restoreY.current === null) return;
-        const y = restoreY.current;
-        restoreY.current = null;
-        const frame = requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }));
-        return () => cancelAnimationFrame(frame);
+    // The cached posts must be mounted before restoring the document scroll.
+    // Two frames give WebKit time to calculate the page height after route change.
+    useLayoutEffect(() => {
+        if (restoreYRef.current === null) return;
+        const y = restoreYRef.current;
+        let secondFrame = null;
+        const firstFrame = requestAnimationFrame(() => {
+            secondFrame = requestAnimationFrame(() => {
+                window.scrollTo(0, y);
+                lastScrollYRef.current = y;
+                restorePendingRef.current = false;
+                restoreYRef.current = null;
+            });
+        });
+        return () => {
+            cancelAnimationFrame(firstFrame);
+            if (secondFrame !== null) cancelAnimationFrame(secondFrame);
+        };
     }, []);
 
 
@@ -163,6 +189,9 @@ export default function Feed() {
             return;
         }
         currentKeyRef.current = snapshotKey;
+        lastScrollYRef.current = 0;
+        restorePendingRef.current = false;
+        restoreYRef.current = null;
         setPosts([]);
         setNextPage(null);
         setHasMore(true);
