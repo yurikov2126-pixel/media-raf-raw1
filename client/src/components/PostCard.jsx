@@ -15,6 +15,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
     const [socialBusy, setSocialBusy] = useState(false);
     const [shareOpen, setShareOpen] = useState(false);
     const [shareText, setShareText] = useState('');
+    const [linkCopied, setLinkCopied] = useState(false);
     const [saved, setSaved] = useState(Boolean(post.isSaved));
     const [savedCount, setSavedCount] = useState(post._count?.savedBy ?? null);
     const [repostCount, setRepostCount] = useState(post._count?.reposts ?? null);
@@ -25,6 +26,23 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
         setSocialBusy(true);
         try { const result = await api(`/feed2/posts/${post.id}/save`, { method: saved ? 'DELETE' : 'PUT', token }); setSaved(result.saved); setSavedCount((n) => n === null ? n : Math.max(0, n + (result.saved ? 1 : -1))); onChanged?.({ id: post.id, isSaved: result.saved }); }
         catch (e) { alert(e.message || 'Не удалось изменить закладку'); } finally { setSocialBusy(false); }
+    };
+    const sharePost = async () => {
+        const url = new URL('/app/feed', window.location.origin);
+        url.searchParams.set('post', post.id);
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: 'Публикация MEDIA·RAF·RAW', url: url.toString() });
+            } else {
+                await navigator.clipboard.writeText(url.toString());
+                setLinkCopied(true);
+            }
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                try { await navigator.clipboard.writeText(url.toString()); setLinkCopied(true); }
+                catch { window.prompt('Скопируйте ссылку на публикацию:', url.toString()); }
+            }
+        }
     };
     const repost = async () => {
         if (socialBusy) return;
@@ -350,6 +368,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
 
             <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/10">
                 <button type="button" disabled={socialBusy} onClick={toggleSave} aria-pressed={saved} className={`chip text-xs feed-save-button ${saved ? 'feed-save-button--active' : 'bg-white/5 text-white/60'}`}>{saved ? '🔖 Сохранено' : '🔖 Сохранить'}{savedCount !== null ? ` · ${savedCount}` : ''}</button>
+                <button type="button" onClick={sharePost} className="chip bg-white/5 text-white/60 text-xs" aria-label="Поделиться ссылкой на публикацию">{linkCopied ? '✓ Ссылка скопирована' : '🔗 Ссылка'}</button>
                 <button type="button" onClick={() => setShareOpen((v) => !v)} aria-expanded={shareOpen} className="chip bg-white/5 text-white/60 text-xs">↗ Репост{repostCount !== null ? ` · ${repostCount}` : ''}</button>
             </div>
             {shareOpen && <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
