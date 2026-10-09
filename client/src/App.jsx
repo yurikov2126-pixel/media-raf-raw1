@@ -30,8 +30,8 @@ const Private = ({ children, roles }) => {
     const { isOffline } = useNetwork();
     const showSplash = useSplashGate(loading);
 
+    if (isOffline) return <OfflineScreen />;
     if (showSplash) return <SplashScreen />;
-    if (isOffline && !user) return <OfflineScreen />;
     if (!user) return <Navigate to="/login" replace />;
     if (roles && !roles.includes(user.role)) return <Navigate to="/app" replace />;
     return children;
@@ -42,8 +42,8 @@ function RootGate() {
     const { isOffline } = useNetwork();
     const showSplash = useSplashGate(loading);
 
+    if (isOffline && token) return <OfflineScreen />;
     if (showSplash) return <SplashScreen />;
-    if (isOffline && token && !user) return <OfflineScreen />;
     if (user) return <Navigate to="/app" replace />;
     return <div className="page-enter"><Landing /></div>;
 }
