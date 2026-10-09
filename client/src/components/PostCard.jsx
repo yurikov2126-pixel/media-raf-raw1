@@ -282,7 +282,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {mediaDraft.map((url, index) => (
                             <div key={url} data-media-url={url} className={`rounded-xl bg-white/5 p-2 ${draggingMedia === url ? 'ring-2 ring-violet-400 opacity-70' : ''}`}>
-                                <img src={resolveUrl(url)} alt={`Фото ${index + 1}`} loading="lazy" decoding="async" className="w-full h-28 object-cover rounded-lg" />
+                                <img src={resolveUrl(url)} alt={`Фото ${index + 1}`} loading="lazy" decoding="async" fetchPriority="low" className="w-full h-28 object-cover rounded-lg" />
                                 <div className="flex items-center justify-between mt-2">
                                     <button type="button" aria-label={`Переместить фото ${index + 1}`} className="touch-none cursor-grab rounded-lg bg-white/10 px-3 py-2" onPointerDown={(e) => { if (mediaSaving) return; mediaDrag.current = url; setDraggingMedia(url); e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={(e) => { if (!mediaDrag.current) return; const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-media-url]')?.getAttribute('data-media-url'); if (target) reorderMedia(mediaDrag.current, target); }} onPointerUp={() => { mediaDrag.current = null; setDraggingMedia(null); }} onPointerCancel={() => { mediaDrag.current = null; setDraggingMedia(null); }}>⠿</button>
                                     <button type="button" className="text-pink text-xs px-2 py-2" disabled={mediaSaving} onClick={() => setMediaDraft((prev) => prev.filter((u) => u !== url))}>Удалить</button>
@@ -301,7 +301,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                 <div className="text-xs text-white/45 mb-2">↗ Репост публикации</div>
                 <Link to={`/app/u/${post.repostOf.author?.username}`} className="text-sm font-semibold text-violet-200 hover:underline">{post.repostOf.author?.fullName || 'Автор оригинала'}</Link>
                 <p className="text-sm text-white/80 whitespace-pre-wrap mt-2">{post.repostOf.content}</p>
-                {post.repostOf.mediaUrl && <img src={resolveUrl(post.repostOf.mediaUrl)} alt="Медиа оригинальной публикации" loading="lazy" decoding="async" className="w-full max-h-80 object-contain rounded-xl mt-3" />}
+                {post.repostOf.mediaUrl && <img src={resolveUrl(post.repostOf.mediaUrl)} alt="Медиа оригинальной публикации" loading="lazy" decoding="async" fetchPriority="low" className="w-full max-h-80 object-contain rounded-xl mt-3" />}
             </div>}
             {/* Медиа */}
             {images.length > 0 && (
@@ -309,7 +309,7 @@ export default function PostCard({ post, author, onChanged, onDeleted, onPinned,
                     <div className={images.length > 1 ? 'grid grid-cols-2 gap-2' : ''}>
                         {images.map((url, index) => (
                             <button key={index} type="button" className="block w-full overflow-hidden rounded-xl" onClick={() => setActiveImage(index)} aria-label={`Открыть фото ${index + 1}`}>
-                                <img src={imageUrls[index]} alt={`Фото ${index + 1}`} decoding="async" className={`w-full object-cover ${images.length > 1 ? 'h-44 md:h-64' : mediaMaxH}`} loading="lazy" />
+                                <img src={imageUrls[index]} alt={`Фото ${index + 1}`} decoding="async" className={`w-full object-cover ${images.length > 1 ? 'h-44 md:h-64' : mediaMaxH}`} loading="lazy" fetchPriority="low" />
                             </button>
                         ))}
                     </div>
