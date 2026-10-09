@@ -63,12 +63,17 @@ export default function Layout() {
         else if (target) navigate(`/app/${target}`, { replace: true });
     }, [location.pathname, modules, isEnabled, navigate]);
 
-    const handlePanEnd = (_e, info) => {
+    const handlePanEnd = (event, info) => {
         if (modalOpen || info.pointerType !== 'touch') return;
         if (window.matchMedia('(min-width: 768px)').matches) return;
+        // Keep navigation swipes away from forms, buttons, carousels and
+        // independently scrollable regions (notably chats and media).
+        const target = event.target;
+        if (target instanceof Element && target.closest('a, button, input, textarea, select, [contenteditable], [role="button"], [role="slider"], [data-no-route-swipe], [data-swipe-dismiss], .overflow-x-auto, .overflow-x-scroll, .chat-screen')) return;
         const dx = info.offset.x;
         const dy = info.offset.y;
-        if (Math.abs(dy) > Math.abs(dx)) return;
+        // Require an intentional horizontal swipe, not a diagonal scroll.
+        if (Math.abs(dx) < 100 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
         const i = SWIPE_ORDER.findIndex((p) => location.pathname === p || location.pathname.startsWith(p + '/'));
         if (i < 0) return;
         if (dx < -80 && i < SWIPE_ORDER.length - 1) navigate(SWIPE_ORDER[i + 1]);

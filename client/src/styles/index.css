@@ -122,11 +122,12 @@ html, body {
 
 .page-enter {
     animation: pageEnter 180ms ease-out;
-    will-change: opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
     .page-enter { animation: none; }
+    html { scroll-behavior: auto !important; }
+    .mrr-netbanner, .mrr-netbanner__dot { animation: none !important; }
 }
 
 /* ─────────── Экран чата ─────────── */
