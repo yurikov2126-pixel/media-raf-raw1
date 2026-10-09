@@ -197,10 +197,12 @@ export default function Feed() {
                 </div>
             )}
 
+            {mode === 'saved' && !loading && posts.length > 0 && <p className="text-sm opacity-65 mb-3">{sort === 'newest' ? 'Сначала недавно сохранённые' : sort === 'oldest' ? 'Сначала старые публикации' : 'Сначала публикации с большим числом реакций'}</p>}
             <div className={`ui-feed-posts ${compact ? 'space-y-2' : 'space-y-4'}`}>
                 {posts.map((post) => (
+                    <div key={post.id}>
+                    {mode === 'saved' && post.savedAt && <div className="text-xs opacity-60 mb-2 px-2">🔖 Сохранено {new Date(post.savedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</div>}
                     <PostCard
-                        key={post.id}
                         post={post}
                         author={post.author}
                         compact={compact}
@@ -209,6 +211,7 @@ export default function Feed() {
                         onChanged={(u) => setPosts((prev) => mode === 'saved' && u.isSaved === false ? prev.filter((x) => x.id !== u.id) : prev.map((x) => x.id === u.id ? { ...x, ...u } : x))}
                         onDeleted={(id) => setPosts((prev) => prev.filter((x) => x.id !== id))}
                     />
+                    </div>
                 ))}
             </div>
 
