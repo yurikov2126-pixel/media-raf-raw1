@@ -331,6 +331,7 @@ export default function Notifications() {
                         )}
                         <SwipeDismissRow
                             onDismiss={() => remove(n.id)}
+                            onRead={!n.readAt ? () => markRead(n.id) : undefined}
                             onOpen={() => go(n)}
                             className={`group px-4 py-3 border-b border-white/5 hover:bg-white/5 cursor-pointer flex gap-3 ${!n.readAt ? 'ring-1 ring-inset ring-violet-400/15' : ''}`}
                         >
