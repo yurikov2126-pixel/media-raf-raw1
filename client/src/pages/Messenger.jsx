@@ -63,6 +63,7 @@ export default function Messenger() {
     const [typingByChat, setTypingByChat] = useState({});     // для списка чатов
     const [search, setSearch] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
+    const [chatFilter, setChatFilter] = useState('all');
     const [uploading, setUploading] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(null);
     const [showMembers, setShowMembers] = useState(false);
@@ -481,9 +482,13 @@ export default function Messenger() {
         return { actions, handler };
     };
 
+    const unreadChatCount = chats.filter((c) => Number(c.unread) > 0).length;
     const filteredChats = chats.filter((c) => {
+        if (chatFilter === 'unread' && !(Number(c.unread) > 0)) return false;
         const name = c.type === 'GROUP' ? c.title : c.members.find((m) => m.id !== user.id)?.fullName;
-        return !search || name?.toLowerCase().includes(search.toLowerCase());
+        const query = search.trim().toLocaleLowerCase('ru');
+        return !query || [name, c.lastMessage?.content]
+            .some((value) => String(value || '').toLocaleLowerCase('ru').includes(query));
     });
 
     const chatMembers = activeChat?.members || [];
@@ -532,12 +537,22 @@ export default function Messenger() {
                         >🔍</button>
                         <NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} />
                     </div>
+                    <div className="flex items-center gap-2 mt-3" role="group" aria-label="Фильтр чатов">
+                        <button type="button" onClick={() => setChatFilter('all')} aria-pressed={chatFilter === 'all'}
+                            className={`rounded-full px-3 py-1.5 text-sm transition ${chatFilter === 'all' ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/40' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
+                            Все <span className="opacity-60">{chats.length}</span>
+                        </button>
+                        <button type="button" onClick={() => setChatFilter('unread')} aria-pressed={chatFilter === 'unread'}
+                            className={`rounded-full px-3 py-1.5 text-sm transition ${chatFilter === 'unread' ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/40' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
+                            Непрочитанные {unreadChatCount > 0 && <span className="ml-1 font-semibold">{unreadChatCount}</span>}
+                        </button>
+                    </div>
                     {searchOpen && (
                         <div className="relative mt-3">
                             <input
                                 autoFocus
                                 className="input pr-10"
-                                placeholder="Поиск…"
+                                placeholder="Поиск по чатам и сообщениям…"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
@@ -601,7 +616,7 @@ export default function Messenger() {
                                                                 : c.lastMessage?.content || 'Нет сообщений'}
                                         </div>
                                     </div>
-                                    {c.unread > 0 && <span className="chip bg-pink text-white">new</span>}
+                                    {Number(c.unread) > 0 && <span className="shrink-0 min-w-6 h-6 px-1.5 rounded-full bg-pink text-white text-xs font-bold inline-flex items-center justify-center" aria-label={`Непрочитанных сообщений: ${c.unread}`}>{Number(c.unread) > 99 ? '99+' : c.unread}</span>}
                                 </button>
                                 <button
                                     onClick={(e) => {
@@ -614,8 +629,13 @@ export default function Messenger() {
                             </div>
                         );
                     })}
-                    {filteredChats.length === 0 && search && (
-                        <div className="p-6 text-center text-white/30 text-sm">Ничего не найдено</div>
+                    {filteredChats.length === 0 && (
+                        <div className="p-6 text-center text-white/50 text-sm">
+                            <p>{search.trim() ? 'По вашему запросу ничего не найдено' : chatFilter === 'unread' ? 'Все сообщения прочитаны ✨' : 'Пока нет переписок'}</p>
+                            {(search.trim() || chatFilter === 'unread') && (
+                                <button type="button" className="mt-3 text-violet-200 underline underline-offset-4" onClick={() => { setSearch(''); setChatFilter('all'); }}>Показать все чаты</button>
+                            )}
+                        </div>
                     )}
                 </div>
             </aside>
