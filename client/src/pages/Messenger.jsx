@@ -152,11 +152,12 @@ export default function Messenger() {
     const messageMatches = useMemo(() => {
         const query = messageQuery.trim().toLocaleLowerCase('ru');
         if (!query) return [];
-        return messages.filter((m) => !m.deletedAt && m.type === 'text' &&
-            String(m.content || '').toLocaleLowerCase('ru').includes(query));
+        return messages.filter((m) => !m.deletedAt &&
+            [m.content, m.caption].some((value) => String(value || '').toLocaleLowerCase('ru').includes(query)));
     }, [messages, messageQuery]);
 
     useEffect(() => {
+        setMessageMatchIndex(0);
         if (!messageSearchOpen || !messageQuery.trim() || !messageMatches.length) return;
         const frame = requestAnimationFrame(() => scrollToMessage(messageMatches[0].id));
         return () => cancelAnimationFrame(frame);
@@ -803,6 +804,10 @@ export default function Messenger() {
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <button type="button"
+                                            onClick={() => { setHeaderMenuOpen(false); setMessageSearchOpen(true); }}
+                                            className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5"
+                                        >🔎 Поиск по сообщениям</button>
+                                        <button type="button"
                                             onClick={() => { setHeaderMenuOpen(false); setShowGallery(true); }}
                                             className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 flex items-center gap-2"
                                         >🖼️ Медиа и файлы</button>
@@ -834,6 +839,28 @@ export default function Messenger() {
                             onJump={() => pinned && scrollToMessage(pinned.id)}
                         />
 
+                        {messageSearchOpen && (
+                            <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-white/10 bg-ink-900" role="search" aria-label="Поиск в чате">
+                                <input type="search" value={messageQuery}
+                                    onChange={(e) => setMessageQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && messageMatches.length) {
+                                            e.preventDefault();
+                                            goToMessageMatch(messageMatchIndex + (e.shiftKey ? -1 : 1));
+                                        }
+                                        if (e.key === 'Escape') { setMessageSearchOpen(false); setMessageQuery(''); }
+                                    }}
+                                    autoFocus placeholder="Текст или подпись вложения"
+                                    aria-label="Найти сообщение"
+                                    className="min-w-0 flex-1 rounded-xl bg-ink-700 px-3 py-2 text-sm text-white" />
+                                <span className="text-xs text-white/60 whitespace-nowrap" aria-live="polite">
+                                    {messageQuery.trim() ? (messageMatches.length ? `${messageMatchIndex + 1} / ${messageMatches.length}` : 'Нет совпадений') : 'Поиск'}
+                                </span>
+                                <button type="button" disabled={!messageMatches.length} onClick={() => goToMessageMatch(messageMatchIndex - 1)} aria-label="Предыдущее совпадение" className="btn-ghost !p-2 disabled:opacity-30">↑</button>
+                                <button type="button" disabled={!messageMatches.length} onClick={() => goToMessageMatch(messageMatchIndex + 1)} aria-label="Следующее совпадение" className="btn-ghost !p-2 disabled:opacity-30">↓</button>
+                                <button type="button" onClick={() => { setMessageSearchOpen(false); setMessageQuery(''); setMessageMatchIndex(0); }} aria-label="Закрыть поиск" className="btn-ghost !p-2">✕</button>
+                            </div>
+                        )}
                         <div className="relative z-0 flex-1 min-h-0">
                         <div ref={scrollRef} onScroll={(event) => {
                             const el = event.currentTarget;
