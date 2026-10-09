@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useAuth } from './store/auth.jsx';
 import { useNetwork } from './store/network.jsx';
 import Layout from './components/Layout.jsx';
@@ -12,20 +12,20 @@ import AchievementToast from './components/AchievementToast.jsx';
 import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
-import Feed from './pages/Feed.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Profile from './pages/Profile.jsx';
-import Messenger from './pages/Messenger.jsx';
-import Notifications from './pages/Notifications.jsx';
-import Courses from './pages/Courses.jsx';
-import CourseView from './pages/CourseView.jsx';
-import Leaderboard from './pages/Leaderboard.jsx';
-import Admin from './pages/Admin/index.jsx';
-import Certificate from './pages/Certificate.jsx';
-import Verify from './pages/Verify.jsx';
-import Wiki from './pages/Wiki.jsx';
-import WikiArticle from './pages/WikiArticle.jsx';
-import MentorReviews from './pages/MentorReviews.jsx';
+const Feed = lazy(() => import('./pages/Feed.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Profile = lazy(() => import('./pages/Profile.jsx'));
+const Messenger = lazy(() => import('./pages/Messenger.jsx'));
+const Notifications = lazy(() => import('./pages/Notifications.jsx'));
+const Courses = lazy(() => import('./pages/Courses.jsx'));
+const CourseView = lazy(() => import('./pages/CourseView.jsx'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard.jsx'));
+const Admin = lazy(() => import('./pages/Admin/index.jsx'));
+const Certificate = lazy(() => import('./pages/Certificate.jsx'));
+const Verify = lazy(() => import('./pages/Verify.jsx'));
+const Wiki = lazy(() => import('./pages/Wiki.jsx'));
+const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
+const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
 
 const Private = ({ children, roles }) => {
     const { user, loading } = useAuth();
@@ -62,6 +62,7 @@ export default function App() {
 
     return (
         <>
+            <Suspense fallback={<div className="min-h-[45vh] flex items-center justify-center text-sm text-white/50" role="status">Загружаем раздел…</div>}>
             <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/login" element={<div className="page-enter"><Login /></div>} />
@@ -100,6 +101,7 @@ export default function App() {
 
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </Suspense>
 
             {/* Keep the current route mounted while offline, so returning online
                 restores the same screen without losing navigation state. */}
