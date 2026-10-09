@@ -69,6 +69,20 @@ router.get('/posts', async (req, res) => {
         const items = ranked.slice(page * limit, (page + 1) * limit).map(({ p }) => serialize(p, req.user.id));
         return res.json({ items, nextPage: (page + 1) * limit < ranked.length ? page + 1 : null, total: ranked.length });
     }
+    if (mode === 'saved' && sort === 'newest') {
+        const bookmarks = await prisma.savedPost.findMany({
+            where: { userId: req.user.id, post: where },
+            orderBy: [{ createdAt: 'desc' }, { postId: 'desc' }],
+            skip: page * limit,
+            take: limit + 1,
+            include: { post: { include: postInclude(req.user.id) } },
+        });
+        const hasMore = bookmarks.length > limit;
+        return res.json({
+            items: bookmarks.slice(0, limit).map((bookmark) => ({ ...serialize(bookmark.post, req.user.id), savedAt: bookmark.createdAt })),
+            nextPage: hasMore ? page + 1 : null,
+        });
+    }
     const orderBy = sort === 'oldest'
         ? [{ createdAt: 'asc' }, { id: 'asc' }]
         : sort === 'popular'
