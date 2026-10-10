@@ -1760,3 +1760,20 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
   outline: 2px solid #c4b5fd;
   outline-offset: 2px;
 }
+
+/* Material lightbox: GPU-backed gestures and a restrained entry transition. */
+.editorial-material-lightbox .editorial-viewer-image {
+  animation: editorial-viewer-appear 220ms ease-out both;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+@keyframes editorial-viewer-appear {
+  from { opacity: .5; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .editorial-material-lightbox .editorial-viewer-image {
+    animation: none;
+    transition: none !important;
+  }
+}
