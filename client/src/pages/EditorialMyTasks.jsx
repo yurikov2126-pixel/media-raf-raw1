@@ -17,10 +17,11 @@ const dateFormat = new Intl.DateTimeFormat('ru-RU', { day:'numeric', month:'shor
 function deadlineLabel(task, now) {
     if (!task.dueAt) return 'Без срока';
     const due = new Date(task.dueAt);
-    const day = new Date(now); day.setHours(0,0,0,0);
-    const dueDay = new Date(due); dueDay.setHours(0,0,0,0);
-    const days = Math.round((dueDay - day) / 86400000);
-    if (deadlineState(task,now) === 'overdue') return `Просрочено на ${Math.max(1,-days)} дн.`;
+    if (Number.isNaN(due.getTime())) return 'Срок не указан';
+    const today = new Date(now);
+    const dayNumber = (date) => Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()) / 86400000;
+    const days = dayNumber(due) - dayNumber(today);
+    if (deadlineState(task,now) === 'overdue') return days >= 0 ? 'Сегодня · срок истёк' : `Просрочено на ${-days} дн.`;
     if (days === 0) return 'Сегодня';
     if (days === 1) return 'Завтра';
     return `Срок · ${dateFormat.format(due)}`;
