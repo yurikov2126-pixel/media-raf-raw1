@@ -13,6 +13,7 @@ export default function EditorialWorkflow({ project, onError }) {
     const [taskStage, setTaskStage] = useState('');
     const [taskAssignee, setTaskAssignee] = useState('');
     const [taskParent, setTaskParent] = useState('');
+    const [taskOpen, setTaskOpen] = useState(false);
     const [taskDue, setTaskDue] = useState('');
     const [busy, setBusy] = useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -40,8 +41,8 @@ export default function EditorialWorkflow({ project, onError }) {
                 await api(`/editorial/workflow/projects/${project.id}/stages`, { method: 'POST', token, body: { title: stageTitle } });
                 setStageTitle('');
             } else {
-                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, stageId: taskStage || null, assigneeId: taskAssignee || null, parentId: taskParent || null, dueAt: taskDue ? new Date(taskDue).toISOString() : null } });
-                setTaskTitle(''); setTaskDue(''); setTaskParent('');
+                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, stageId: taskStage || null, assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: taskDue ? new Date(taskDue).toISOString() : null } });
+                setTaskTitle(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false);
             }
             await refresh();
         } catch (e) { onError(e.message); }
@@ -68,6 +69,7 @@ export default function EditorialWorkflow({ project, onError }) {
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
                 <label className="block text-sm">Родительская задача<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskParent} onChange={(e) => setTaskParent(e.target.value)}><option value="">Нет (основная задача)</option>{tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
                 <label className="block text-sm">Срок<input type="datetime-local" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} /></label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={taskOpen} onChange={(e) => setTaskOpen(e.target.checked)} />Открыть приём заявок</label>
                 <button disabled={busy} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">Создать задачу</button>
             </form>
         </div>}
