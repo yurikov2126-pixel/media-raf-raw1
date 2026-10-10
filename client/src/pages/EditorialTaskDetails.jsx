@@ -8,7 +8,7 @@ const STATUSES = [
     ['REVISION', 'На доработке'], ['APPROVED', 'Утверждено'], ['DONE', 'Завершено'],
 ];
 
-export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, refresh, onError }) {
+export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, refresh, onError, onClose }) {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
