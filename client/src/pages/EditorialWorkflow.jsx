@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialTaskDetails from './EditorialTaskDetails.jsx';
@@ -174,17 +175,17 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                 </div>;
             })}</div>
         )}
-        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
-            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog flex h-[94dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl text-slate-900 shadow-2xl dark:text-slate-100 sm:h-auto sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-2xl">
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
+        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && createPortal(<div className="fixed inset-0 z-[9999] flex min-h-0 items-stretch justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog relative flex h-[100dvh] max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[min(88dvh,850px)] sm:max-w-3xl sm:rounded-2xl">
+                <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:gap-3 sm:px-5">
                     <div className="min-w-0"><p className="text-xs text-violet-700 dark:text-violet-200">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
-                    <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/app/editorial/projects?project=${encodeURIComponent(project.id)}&task=${encodeURIComponent(selectedTaskId)}`); } catch { onError('Не удалось скопировать ссылку на задание'); } }} className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800">Ссылка</button>
-                    <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800">Закрыть</button>
+                    <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/app/editorial/projects?project=${encodeURIComponent(project.id)}&task=${encodeURIComponent(selectedTaskId)}`); } catch { onError('Не удалось скопировать ссылку на задание'); } }} className="ml-auto shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-xs hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800 sm:px-3 sm:text-sm">Ссылка</button>
+                    <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5" data-no-route-swipe>
+                <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-[max(24px,env(safe-area-inset-bottom))] pt-4 sm:p-5" data-no-route-swipe>
                     <EditorialTaskDetails task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
                 </div>
             </div>
-        </div>}
+        </div>, document.body)}
     </section>;
 }

@@ -53,24 +53,20 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             parentId: parentId || null, dueAt: dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
-    return <section className="space-y-4" aria-label={`Карточка задачи ${task.title}`}>
-        <div className="flex gap-2 border-b border-current/10 pb-3" role="tablist" aria-label="Содержимое задания">
+    return <section className="min-w-0 space-y-4" aria-label={`Карточка задачи ${task.title}`}>
+        <div className="flex min-w-0 flex-wrap gap-2 border-b border-current/10 pb-3" role="tablist" aria-label="Содержимое задания">
             <button type="button" role="tab" aria-selected={tab === 'details'} onClick={() => setTab('details')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'details' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Детали</button>
             <button type="button" role="tab" aria-selected={tab === 'discussion'} onClick={() => setTab('discussion')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'discussion' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Обсуждение и заявки</button>
         </div>
         <div hidden={tab !== 'details'} className="space-y-4">
-        <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0"><h5 className="break-words text-lg font-semibold">{task.title}</h5><p className="text-xs opacity-60">Карточка задачи</p></div>
-
-        </div>
-        <form onSubmit={save} className="grid gap-3 md:grid-cols-2">
-            <label className="block text-sm md:col-span-2">Название
-                <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
+        <form onSubmit={save} className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <label className="block min-w-0 text-sm sm:col-span-2">Название
+                <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40 disabled:opacity-60" />
             </label>
             <label className="block text-sm md:col-span-2">Описание
-                <textarea maxLength={10000} rows={4} disabled={!canEdit || saving} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
+                <textarea maxLength={10000} rows={3} disabled={!canEdit || saving} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
             </label>
-            <label className="block text-sm">Исполнитель
+            <label className="block min-w-0 text-sm">Исполнитель
                 <select disabled={!canEdit || saving} value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
                     <option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}
                 </select>
@@ -83,11 +79,11 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
                     <option value="">Нет</option>{availableParents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
                 </select>
             </label>
-            {canEdit && <button disabled={saving} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-medium disabled:opacity-50 md:col-span-2">Сохранить изменения</button>}
+            {canEdit && <button disabled={saving} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 sm:col-span-2 dark:bg-violet-200 dark:text-slate-950">Сохранить изменения</button>}
         </form>
         <div className="space-y-2">
             <h6 className="font-medium">Статус</h6>
-            {canChangeStatus ? <select disabled={saving} value={task.status} onChange={(e) => run(() => api(base, { method: 'PATCH', token, body: { status: e.target.value } }))} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm">
+            {canChangeStatus ? <select disabled={saving} value={task.status} onChange={(e) => run(() => api(base, { method: 'PATCH', token, body: { status: e.target.value } }))} className="w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40">
                 {STATUSES.filter(([value]) => canEdit || value === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select> : <p className="text-sm opacity-70">{STATUSES.find(([value]) => value === task.status)?.[1] || task.status}</p>}
         </div>
