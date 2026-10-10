@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { io } from 'socket.io-client';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialTaskDetails from './EditorialTaskDetails.jsx';
@@ -51,29 +52,41 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     useEffect(() => {
         if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
     }, [loading, linkedTaskId, tasks]);
-    // Keep the review queue and the currently open task in sync across accounts.
-    // Poll only while the page is visible; avoid overlapping requests and stale updates.
+    // Socket.IO reuses the server's authenticated user channels. Refresh the
+    // canonical workflow only when a mutation occurs, on reconnect or on focus.
     useEffect(() => {
         if (!canView || !token) return undefined;
         let active = true;
-        let pending = false;
+        let inFlight = false;
+        let queued = false;
         const sync = async () => {
-            if (!active || pending || document.visibilityState === 'hidden') return;
-            pending = true;
+            if (!active) return;
+            if (inFlight) { queued = true; return; }
+            inFlight = true;
             try {
                 const data = await api(`/editorial/workflow/projects/${project.id}/workflow`, { token });
                 if (active) { setStages(data.stages); setTasks(data.tasks); }
             } catch {
-                // Keep the last known task list during transient connectivity issues.
-            } finally { pending = false; }
+                // Preserve the last known data if the connection drops.
+            } finally {
+                inFlight = false;
+                if (queued && active) { queued = false; void sync(); }
+            }
         };
-        const interval = window.setInterval(sync, 10000);
-        document.addEventListener('visibilitychange', sync);
+        const endpoint = (import.meta.env.VITE_API || 'http://localhost:4000/api').replace(/\\/api\\/?$/, '');
+        const socket = io(endpoint, { auth: { token }, reconnection: true });
+        const onUpdate = (event) => { if (event?.projectId === project.id) void sync(); };
+        const onVisible = () => { if (document.visibilityState === 'visible') void sync(); };
+        socket.on('editorial:workflow:updated', onUpdate);
+        socket.on('connect', sync);
+        document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('focus', sync);
         return () => {
             active = false;
-            window.clearInterval(interval);
-            document.removeEventListener('visibilitychange', sync);
+            socket.off('editorial:workflow:updated', onUpdate);
+            socket.off('connect', sync);
+            socket.disconnect();
+            document.removeEventListener('visibilitychange', onVisible);
             window.removeEventListener('focus', sync);
         };
     }, [project.id, token, canView]);
