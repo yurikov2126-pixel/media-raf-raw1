@@ -32,6 +32,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const [showFilters, setShowFilters] = useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
     const closeButtonRef = useRef(null);
+    const openedLinkRef = useRef(null);
     const dialogRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const canEdit = user?.role === 'ADMIN' || project.members.some((m) => m.userId === user?.id && ['MANAGER', 'EDITOR'].includes(m.role));
@@ -47,7 +48,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         return () => { active = false; };
     }, [project.id, token, canView]);
     useEffect(() => {
-        if (!loading && linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) setSelectedTaskId(linkedTaskId);
+        if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
     }, [loading, linkedTaskId, tasks]);
     useEffect(() => {
         if (!selectedTaskId) return undefined;
