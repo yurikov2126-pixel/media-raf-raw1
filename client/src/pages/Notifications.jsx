@@ -111,7 +111,7 @@ export default function Notifications() {
         else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}`);
         else if (n.type === 'post' && p.authorUsername) nav(`/app/u/${encodeURIComponent(p.authorUsername)}`);
-        else if (n.type === 'editorial') nav(`/app/editorial/projects${p.projectId ? `?project=${encodeURIComponent(p.projectId)}` : ''}`);
+        else if (n.type === 'editorial') { const q = new URLSearchParams(); if (p.projectId) q.set('project', p.projectId); if (p.projectId && p.taskId) q.set('task', p.taskId); nav(`/app/editorial/projects${q.toString() ? `?${q}` : ''}`); }
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');

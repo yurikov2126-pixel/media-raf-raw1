@@ -12,7 +12,7 @@ const STATUS_COLORS = {
     DONE: 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-400 dark:bg-teal-950 dark:text-teal-200',
 };
 const LABELS = { TODO: 'К выполнению', IN_PROGRESS: 'В работе', IN_REVIEW: 'На проверке', REVISION: 'Доработка', APPROVED: 'Утверждено', DONE: 'Завершено' };
-export default function EditorialWorkflow({ project, onError }) {
+export default function EditorialWorkflow({ project, onError, linkedTaskId = null }) {
     const { token, user } = useAuth();
     const [stages, setStages] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -32,6 +32,7 @@ export default function EditorialWorkflow({ project, onError }) {
     const [showFilters, setShowFilters] = useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
     const closeButtonRef = useRef(null);
+    const openedLinkRef = useRef(null);
     const dialogRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const canEdit = user?.role === 'ADMIN' || project.members.some((m) => m.userId === user?.id && ['MANAGER', 'EDITOR'].includes(m.role));
@@ -46,6 +47,9 @@ export default function EditorialWorkflow({ project, onError }) {
         else setLoading(false);
         return () => { active = false; };
     }, [project.id, token, canView]);
+    useEffect(() => {
+        if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
+    }, [loading, linkedTaskId, tasks]);
     useEffect(() => {
         if (!selectedTaskId) return undefined;
         const previousFocus = document.activeElement;
@@ -174,6 +178,7 @@ export default function EditorialWorkflow({ project, onError }) {
             <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog flex h-[94dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl text-slate-900 shadow-2xl dark:text-slate-100 sm:h-auto sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-2xl">
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
                     <div className="min-w-0"><p className="text-xs text-violet-700 dark:text-violet-200">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
+                    <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/app/editorial/projects?project=${encodeURIComponent(project.id)}&task=${encodeURIComponent(selectedTaskId)}`); } catch { onError('Не удалось скопировать ссылку на задание'); } }} className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800">Ссылка</button>
                     <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800">Закрыть</button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5" data-no-route-swipe>
