@@ -15,6 +15,7 @@ import Landing from './pages/Landing.jsx';
 import { EditorialSection } from './pages/Editorial.jsx';
 const Editorial = lazy(() => import('./pages/Editorial.jsx'));
 const EditorialProjects = lazy(() => import('./pages/EditorialProjects.jsx'));
+const EditorialMyTasks = lazy(() => import('./pages/EditorialMyTasks.jsx'));
 import Login from './pages/Login.jsx';
 const Feed = lazy(() => import('./pages/Feed.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
@@ -98,6 +99,7 @@ export default function App() {
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
                         <Route index element={<EditorialSection title="Обзор" />} />
                         <Route path="projects" element={<LazyPage><EditorialProjects /></LazyPage>} />
+                        <Route path="my-tasks" element={<LazyPage><EditorialMyTasks /></LazyPage>} />
                         {['calendar', 'files', 'shares', 'reviews', 'ideas', 'content'].map((section) => (
                             <Route key={section} path={section} element={<EditorialSection title={{
                                 projects: 'Проекты', calendar: 'Календарь', files: 'Файлы',
