@@ -214,7 +214,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                     <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
                 </div>
                 <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:p-5" data-no-route-swipe>
-                    <EditorialTaskDetails task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
+                    <EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
                 </div>
                 <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-current/20 px-4 py-3 text-sm font-semibold">Закрыть задание</button></div>
             </div>
