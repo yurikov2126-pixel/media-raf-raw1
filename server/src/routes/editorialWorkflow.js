@@ -177,6 +177,7 @@ router.post('/projects/:projectId/tasks/:taskId/review', async (req, res, next) 
         if (action === 'submit' && !['TODO', 'IN_PROGRESS', 'REVISION'].includes(task.status)) return res.status(409).json({ error: 'Материал нельзя отправить из текущего статуса' });
         if (action !== 'submit' && task.status !== 'IN_REVIEW') return res.status(409).json({ error: 'Материал не находится на проверке' });
         if (action === 'revise' && !note) return res.status(400).json({ error: 'Укажите, что необходимо исправить' });
+        if (action === 'submit' && !(await prisma.editorialMaterialFile.count({ where: { taskId: task.id } }))) return res.status(400).json({ error: 'Сначала прикрепите материалы' });
         const status = action === 'submit' ? 'IN_REVIEW' : action === 'approve' ? 'APPROVED' : 'REVISION';
         const updated = await prisma.$transaction(async (tx) => {
             const result = await tx.editorialTask.update({ where: { id: task.id }, data: { status } });

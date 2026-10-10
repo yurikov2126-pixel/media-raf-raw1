@@ -41,6 +41,7 @@ model User {
   editorialTaskComments EditorialTaskComment[]
   editorialTaskApplications EditorialTaskApplication[]
   editorialTaskEvents EditorialTaskEvent[]
+  editorialMaterialFiles EditorialMaterialFile[]
 
   // Базовые связи
   albums        PhotoAlbum[]
@@ -787,6 +788,7 @@ model EditorialTask {
   comments EditorialTaskComment[]
   applications EditorialTaskApplication[]
   events EditorialTaskEvent[]
+  materialFiles EditorialMaterialFile[]
   @@index([projectId, status])
   @@index([assigneeId, dueAt])
   @@index([parentId])
@@ -836,4 +838,20 @@ model EditorialTaskEvent {
   task EditorialTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
   actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
   @@index([taskId, createdAt])
+}
+
+model EditorialMaterialFile {
+  id String @id @default(cuid())
+  taskId String
+  uploaderId String
+  version Int
+  name String
+  mimeType String
+  size Int
+  storageName String @unique
+  caption String @default("")
+  createdAt DateTime @default(now())
+  task EditorialTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader User @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  @@index([taskId, version])
 }
