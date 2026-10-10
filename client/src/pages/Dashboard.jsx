@@ -50,6 +50,7 @@ export default function Dashboard() {
   const { dashboard, brand } = useSettings();
   const { isEnabled } = useModules();
   const coursesEnabled = isEnabled('courses');
+  const editorialEnabled = isEnabled('editorial');
   const gamif = useGamification();
   const notifications = useNotifications();
   const navigate = useNavigate();
@@ -119,6 +120,7 @@ export default function Dashboard() {
   if (!dashboard.enabled) return <Navigate to="/app/feed" replace />;
 
   const actions = [
+    ...(editorialEnabled ? [{ label: 'Перейти в редакцию', sub: 'Проекты и задания команды', icon: 'newspaper', to: '/app/editorial' }] : []),
     {
       label: 'Новая публикация',
       sub: 'Поделиться материалом',
@@ -157,6 +159,13 @@ export default function Dashboard() {
         </h1>
         <p className="ui-hero__subtitle">{dashboard.welcomeSubtitle}</p>
 
+        {editorialEnabled && !dashboard.showQuickActions && (
+          <Link to="/app/editorial" className="ui-action mt-4 max-w-sm">
+            <span className="ui-action__icon"><Icon name="newspaper" size={18} /></span>
+            <span className="ui-action__copy"><span className="ui-action__title">Перейти в редакцию</span><span className="ui-action__sub">Проекты и задания команды</span></span>
+            <span className="ui-action__arrow"><Icon name="chevronRight" size={15} /></span>
+          </Link>
+        )}
         {dashboard.showQuickActions && (
           <div className="ui-quick-actions">
             {actions.map((action) => {
