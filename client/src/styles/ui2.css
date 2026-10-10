@@ -1777,3 +1777,41 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
     transition: none !important;
   }
 }
+
+/* Viewer is rendered in document.body, outside the application's theme wrapper.
+   Force legible, stable controls in both themes and iOS PWA status-bar area. */
+.editorial-material-lightbox .editorial-viewer-toolbar {
+  background: #020617 !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+  color-scheme: dark;
+  isolation: isolate;
+}
+.editorial-material-lightbox .editorial-viewer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 42px;
+  min-height: 42px;
+  border: 1px solid #64748b !important;
+  border-radius: 12px;
+  background: #334155 !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 1 !important;
+}
+.editorial-material-lightbox .editorial-viewer-action:hover {
+  background: #475569 !important;
+}
+.editorial-material-lightbox .editorial-viewer-action:disabled {
+  opacity: .45 !important;
+  cursor: not-allowed;
+}
+.editorial-material-lightbox .editorial-viewer-action:focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 2px;
+}
