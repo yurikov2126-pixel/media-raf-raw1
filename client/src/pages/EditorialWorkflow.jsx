@@ -15,7 +15,7 @@ const STATUS_COLORS = {
     DONE: 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-400 dark:bg-teal-950 dark:text-teal-200',
 };
 const LABELS = { TODO: 'К выполнению', IN_PROGRESS: 'В работе', IN_REVIEW: 'На проверке', REVISION: 'Доработка', APPROVED: 'Утверждено', DONE: 'Завершено' };
-export default function EditorialWorkflow({ project, onError, linkedTaskId = null }) {
+export default function EditorialWorkflow({ project, onError, linkedTaskId = null, linkedTab = 'details' }) {
     const { token, user } = useAuth();
     const [stages, setStages] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -236,7 +236,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                     <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-500 bg-slate-800 px-2.5 py-2 text-xs font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-violet-300 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
                 </div>
                 <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:p-5" data-no-route-swipe>
-                    <EditorialTaskErrorBoundary key={selectedTaskId}><EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} /></EditorialTaskErrorBoundary>
+                    <EditorialTaskErrorBoundary key={selectedTaskId}><EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} initialTab={selectedTaskId === linkedTaskId ? linkedTab : undefined} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} /></EditorialTaskErrorBoundary>
                 </div>
                 <div className="editorial-task-modal-footer sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700">Закрыть задание</button></div>
             </div>
