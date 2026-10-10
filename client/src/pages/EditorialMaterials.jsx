@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialMaterialViewer from './EditorialMaterialViewer.jsx';
-import EditorialMaterialCompare from './EditorialMaterialCompare.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 
@@ -9,16 +8,24 @@ const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 function MaterialTile({ file, base, token, onOpen, canRename, onRename }) {
     const [thumb, setThumb] = useState(null);
     const [failed, setFailed] = useState(false);
+    const tileRef = useRef(null);
+    const [visible, setVisible] = useState(false);
+    useEffect(() => {
+        if (!tileRef.current) return undefined;
+        const observer = new IntersectionObserver(entries => { if (entries[0]?.isIntersecting) { setVisible(true); observer.disconnect(); } }, { rootMargin:'200px' });
+        observer.observe(tileRef.current);
+        return () => observer.disconnect();
+    }, []);
     const isImage = file.mimeType?.startsWith('image/');
     const isVideo = file.mimeType?.startsWith('video/');
     useEffect(() => {
-        if (!isImage) return undefined;
+        if (!isImage || !visible) return undefined;
         let active = true;
         let url;
         const controller = new AbortController();
         (async () => {
             try {
-                const response = await fetch(API + base + '/' + file.id + '/content', {
+                const response = await fetch(API + base + '/' + file.id + '/thumbnail', {
                     headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
                 });
                 if (!response.ok) throw new Error('Preview unavailable');
@@ -31,8 +38,8 @@ function MaterialTile({ file, base, token, onOpen, canRename, onRename }) {
             }
         })();
         return () => { active = false; controller.abort(); if (url) URL.revokeObjectURL(url); };
-    }, [base, file.id, isImage, token]);
-    return <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
+    }, [base, file.id, isImage, token, visible]);
+    return <article ref={tileRef} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
         <button type="button" onClick={() => onOpen(file)} aria-label={`Просмотреть: ${file.name}`} className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-violet-500">
             <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-300">
                 {isImage && thumb ? <img src={thumb} alt={file.caption || file.name} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.03]" /> :
@@ -53,9 +60,11 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const [files,setFiles]=useState([]);
     const [selected,setSelected]=useState([]);
     const [progress,setProgress]=useState(null);
+    const [batchProgress,setBatchProgress]=useState(null);
+    const xhrRef = useRef(null);
+    const cancelledRef = useRef(false);
     const [busy,setBusy]=useState(false);
     const [preview,setPreview]=useState(null);
-    const [compareOpen,setCompareOpen]=useState(false);
     const [search,setSearch]=useState('');
     const [typeFilter,setTypeFilter]=useState('all');
     const [versionFilter,setVersionFilter]=useState('all');
@@ -70,7 +79,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const canUpload=(canEdit||task.assigneeId===user?.id)&&['TODO','IN_PROGRESS','REVISION'].includes(currentStatus);
     const canSubmit=task.assigneeId===user?.id&&['TODO','IN_PROGRESS','REVISION'].includes(currentStatus);
     const canReview=canEdit&&currentStatus==='IN_REVIEW';
-    const imageFiles = files.filter(file => file.mimeType?.startsWith('image/'));
     const visibleFiles = files.filter(file => {
         if (versionFilter !== 'all' && String(file.version) !== versionFilter) return false;
         if (typeFilter === 'images' && !file.mimeType?.startsWith('image/')) return false;
@@ -91,24 +99,33 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     function open(file) { setPreview(file.id); }
     function uploadOne(file,caption) {
         return new Promise((resolve,reject)=>{
+            if (cancelledRef.current) { reject(new Error('Загрузка отменена')); return; }
             const xhr=new XMLHttpRequest();
+            xhrRef.current=xhr;
             xhr.open('POST',API+base);
             xhr.setRequestHeader('Authorization',`Bearer ${token}`);
             xhr.upload.onprogress=(event)=>{if(event.lengthComputable)setProgress(Math.round(event.loaded/event.total*100));};
             xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText);}catch{}if(xhr.status>=200&&xhr.status<300)resolve(data);else reject(new Error(data.error||'Ошибка загрузки'));};
             xhr.onerror=()=>reject(new Error('Сетевая ошибка при загрузке'));
+            xhr.onabort=()=>reject(new Error('Загрузка отменена'));
+            xhr.onloadend=()=>{ if (xhrRef.current === xhr) xhrRef.current=null; };
             const body=new FormData();body.append('file',file);body.append('caption',caption);xhr.send(body);
         });
     }
     async function uploadSelected() {
+        cancelledRef.current=false;
         const pending = [...selected];
-        for (const item of pending) {
+        for (const [index,item] of pending.entries()) {
+            if (cancelledRef.current) throw new Error('Загрузка отменена');
+            setBatchProgress({ completed:index, total:pending.length, name:item.file.name });
             setProgress(0);
             await uploadOne(item.file, item.caption);
             // Preserve only not-yet-uploaded files if a later upload fails.
             setSelected((items) => items.filter((entry) => entry !== item));
+            setBatchProgress({ completed:index+1, total:pending.length, name:item.file.name });
         }
         setProgress(null);
+        setBatchProgress(null);
         await load();
     }
     async function saveDraft() {
@@ -118,7 +135,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
             await uploadSelected();
             setMessage('Черновик сохранён. Материалы ещё не отправлены редактору.');
         } catch (error) { onError(error.message); }
-        finally { setBusy(false); setProgress(null); }
+        finally { setBusy(false); setProgress(null); setBatchProgress(null); }
     }
     async function submitAll() {
         if (busy || (!selected.length && !files.length)) return;
@@ -135,7 +152,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
             onError(error.message);
             setMessage('Отправка не завершена. Уже загруженные файлы сохранены; можно повторить попытку.');
             await load();
-        } finally { setBusy(false); setProgress(null); }
+        } finally { setBusy(false); setProgress(null); setBatchProgress(null); }
     }
     async function updateCaption(file,caption) {
         try {await api(base+'/'+file.id,{method:'PATCH',token,body:{caption}});await load();}
@@ -162,14 +179,13 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.doc,.docx" disabled={busy} onChange={e=>{setSelected(prev=>[...prev,...Array.from(e.target.files||[]).map(file=>({file,caption:''}))]);e.target.value='';}} className="mt-2 block w-full text-sm" />
             </label>
             {selected.map((item,i)=><div key={i} className="rounded-lg border border-current/10 p-2"><div className="flex items-center justify-between gap-2"><span className="min-w-0 truncate text-sm">{item.file.name}</span><button type="button" onClick={()=>setSelected(v=>v.filter((_,j)=>j!==i))} className="text-xs underline">Убрать</button></div><input value={item.caption} maxLength={1000} placeholder="Подпись к файлу" onChange={e=>setSelected(v=>v.map((x,j)=>j===i?{...x,caption:e.target.value}:x))} className="mt-2 w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm" /></div>)}
-            {progress!==null&&<div role="status"><div className="text-xs">Загрузка: {progress}%</div><progress value={progress} max="100" className="w-full"/></div>}
+            {batchProgress&&<div role="status" className="space-y-2 rounded-lg border border-slate-300 p-3 dark:border-slate-600"><div className="text-sm font-medium">Файл {batchProgress.completed+1} из {batchProgress.total}: {batchProgress.name}</div><progress aria-label="Общий прогресс загрузки" value={batchProgress.completed+(progress||0)/100} max={batchProgress.total} className="w-full"/><div className="text-xs">Текущий файл: {progress||0}% · Загружено: {batchProgress.completed} из {batchProgress.total}</div><progress aria-label="Прогресс текущего файла" value={progress||0} max="100" className="w-full"/><button type="button" onClick={()=>{cancelledRef.current=true;xhrRef.current?.abort();}} className="min-h-11 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
             {selected.length>0&&<p className="text-xs opacity-65">Файлы загрузятся автоматически при отправке на проверку.</p>}
         </div>}
         {(canSubmit||canReview)&&<div className="space-y-2 rounded-xl border border-violet-300/30 bg-violet-100/20 p-3 dark:bg-violet-300/10"><h4 className="font-semibold">Согласование</h4><textarea rows={3} maxLength={10000} value={note} onChange={e=>{setNote(e.target.value);setReviewError('');}} placeholder={canReview?'Обязательно напишите, что нужно исправить…':'Комментарий к результату…'} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm"/><div className="flex flex-wrap gap-2">{canSubmit&&<><button type="button" disabled={busy||(selected.length===0&&files.length===0)} onClick={submitAll} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Отправляем…' : 'Отправить на проверку'}</button>{selected.length>0&&<button type="button" disabled={busy} onClick={saveDraft} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">Сохранить черновик</button>}</>}{canReview&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Утвердить</button><button type="button" disabled={busy} onClick={()=>review('revise')} className="rounded-lg border border-amber-500 bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30">Вернуть на доработку</button></>}</div>{canReview&&<p className="text-xs text-slate-600 dark:text-slate-200">Для возврата на доработку требуется замечание редактора.</p>}{reviewError&&<p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{reviewError}</p>}</div>}
         {files.length > 0 && <section className="space-y-3 rounded-xl border border-slate-200 bg-white/70 p-3 dark:border-slate-600 dark:bg-slate-800/70" aria-label="Фильтры галереи">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="font-semibold">Галерея материалов <span className="text-sm font-normal text-slate-600 dark:text-slate-300">({visibleFiles.length} из {files.length})</span></h4>
-                {imageFiles.length >= 2 && <button type="button" onClick={() => setCompareOpen(true)} className="rounded-lg border border-violet-400 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-900 hover:bg-violet-100 dark:border-violet-500 dark:bg-violet-900/50 dark:text-violet-100">Сравнить фотографии</button>}
             </div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-200">Поиск по названию и подписи
                 <input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти материал…" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 dark:border-slate-500 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-400" />
@@ -207,7 +223,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         )}
         {currentStatus==='IN_REVIEW'&&!canReview&&<p className="text-sm opacity-65">Материалы ожидают проверки редактором.</p>}
         {message&&<p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{message}</p>}
-        {compareOpen&&<EditorialMaterialCompare files={imageFiles} base={base} token={token} onClose={()=>setCompareOpen(false)} />}
         {preview&&<EditorialMaterialViewer files={files} initialId={preview} base={base} token={token} onClose={()=>setPreview(null)} onError={onError} />}
     </section>;
 }
