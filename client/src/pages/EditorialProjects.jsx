@@ -90,8 +90,8 @@ export default function EditorialProjects() {
                 <label className="block text-sm">Видимость<select value={visibility} onChange={(e) => setVisibility(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
                 <button disabled={creating} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold disabled:opacity-50">{creating ? 'Создание…' : 'Создать'}</button>
             </form>}
-            <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(220px,270px)_minmax(0,1fr)]">
-                <aside className="min-w-0 space-y-2" aria-label="Список проектов">
+            <div className="min-w-0 space-y-3">
+                <aside className={`min-w-0 space-y-2 ${selected ? "hidden" : ""}`} aria-label="Список проектов">
                     {loading ? <p role="status" className="p-3 text-sm">Загружаем…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-70">Проектов пока нет.</p> : projects.map((project) => (
                         <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
                             aria-current={selected?.id === project.id ? 'true' : undefined}
@@ -101,16 +101,16 @@ export default function EditorialProjects() {
                         </button>
                     ))}
                 </aside>
-                <main className="min-w-0">
+                <main className={`min-w-0 ${selected ? "" : "hidden"}`}>
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
                         <section className="editorial-glass__surface min-w-0 space-y-4 rounded-2xl border border-violet-200/60 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
                                 <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>
-                                <button type="button" onClick={() => setSelected(null)} className="rounded-lg border border-current/20 px-3 py-1.5 text-xs">Закрыть</button>
+
                             </div>
                             <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
                                 <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'text-violet-700 opacity-75 dark:text-slate-100'}`}>Задания</button>
-                                <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-current/10 font-semibold' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
+                                <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
                             </div>
                             {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} /> : <div className="space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Участники</h4>{canManage && <button type="button" onClick={() => setShowMemberForm((v) => !v)} className="rounded-lg border border-current/20 px-3 py-2 text-xs">{showMemberForm ? 'Скрыть форму' : '+ Участник'}</button>}</div>
