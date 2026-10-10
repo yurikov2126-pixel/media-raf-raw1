@@ -65,14 +65,15 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
     try {
         const project = await getProject(req.params.projectId);
         if (!project || !canEdit(project, req.user)) return notFound(res);
-        const { title, description = '', stageId = null, parentId = null, assigneeId = null, dueAt = null } = req.body;
+        const { title, description = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, isOpen = false } = req.body;
         if (!validText(title, 160) || typeof description !== 'string' || description.length > 10000) return res.status(400).json({ error: 'Некорректное название или описание' });
         if (stageId && !(await prisma.editorialStage.findFirst({ where: { id: stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
         if (parentId && !(await prisma.editorialTask.findFirst({ where: { id: parentId, projectId: project.id } }))) return res.status(400).json({ error: 'Родительская задача не найдена' });
         if (assigneeId && !project.members.some((m) => m.userId === assigneeId)) return res.status(400).json({ error: 'Исполнитель должен быть участником проекта' });
         const due = dateValue(dueAt);
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
-        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, createdById: req.user.id } });
+        if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
+        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
         res.status(201).json({ task });
     } catch (error) { next(error); }
 });
@@ -92,6 +93,10 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             data.status = req.body.status;
         }
         if (editor) {
+            if (req.body.isOpen !== undefined) {
+                if (typeof req.body.isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
+                data.isOpen = req.body.isOpen;
+            }
             if (req.body.title !== undefined) {
                 if (!validText(req.body.title, 160)) return res.status(400).json({ error: 'Некорректное название' });
                 data.title = req.body.title.trim();
@@ -131,7 +136,11 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             return res.status(403).json({ error: 'Исполнитель может менять только статус' });
         }
         if (!Object.keys(data).length) return res.status(400).json({ error: 'Нет изменений' });
-        const updated = await prisma.editorialTask.update({ where: { id: task.id }, data });
+        const updated = await prisma.$transaction(async (tx) => {
+            const result = await tx.editorialTask.update({ where: { id: task.id }, data });
+            await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'UPDATED', details: JSON.stringify({ before: Object.fromEntries(Object.keys(data).map((key) => [key, task[key] instanceof Date ? task[key].toISOString() : task[key]])), after: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value])) }) } });
+            return result;
+        });
         res.json({ task: updated });
     } catch (error) { next(error); }
 });
@@ -165,6 +174,84 @@ router.delete('/projects/:projectId/tasks/:taskId/dependencies/:dependsOnId', as
         if (!project || !canEdit(project, req.user)) return notFound(res);
         const result = await prisma.editorialTaskDependency.deleteMany({ where: { taskId: req.params.taskId, dependsOnId: req.params.dependsOnId, task: { projectId: project.id }, dependsOn: { projectId: project.id } } });
         res.json({ removed: result.count });
+    } catch (error) { next(error); }
+});
+
+
+router.get('/projects/:projectId/tasks/:taskId/discussion', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id } });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        const [comments, events, applications] = await Promise.all([
+            prisma.editorialTaskComment.findMany({ where: { taskId: task.id }, include: { author: { select: { id: true, fullName: true, username: true } } }, orderBy: { createdAt: 'asc' }, take: 300 }),
+            prisma.editorialTaskEvent.findMany({ where: { taskId: task.id }, include: { actor: { select: { id: true, fullName: true, username: true } } }, orderBy: { createdAt: 'desc' }, take: 100 }),
+            canEdit(project, req.user) ? prisma.editorialTaskApplication.findMany({ where: { taskId: task.id }, include: { user: { select: { id: true, fullName: true, username: true } } }, orderBy: { createdAt: 'desc' } }) :
+                prisma.editorialTaskApplication.findMany({ where: { taskId: task.id, userId: req.user.id }, orderBy: { createdAt: 'desc' } }),
+        ]);
+        res.json({ comments, events, applications });
+    } catch (error) { next(error); }
+});
+
+router.post('/projects/:projectId/tasks/:taskId/comments', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id } });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        if (!validText(req.body.body, 4000)) return res.status(400).json({ error: 'Комментарий должен содержать от 1 до 4000 символов' });
+        const comment = await prisma.$transaction(async (tx) => {
+            const created = await tx.editorialTaskComment.create({ data: { taskId: task.id, authorId: req.user.id, body: req.body.body.trim() } });
+            await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'COMMENTED' } });
+            return created;
+        });
+        res.status(201).json({ comment });
+    } catch (error) { next(error); }
+});
+
+router.post('/projects/:projectId/tasks/:taskId/applications', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id } });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        if (!task.isOpen || task.assigneeId) return res.status(409).json({ error: 'Приём заявок закрыт' });
+        if (!project.members.some((member) => member.userId === req.user.id)) return res.status(403).json({ error: 'Заявки доступны участникам проекта' });
+        if (typeof req.body.note !== 'string' && req.body.note !== undefined) return res.status(400).json({ error: 'Некорректный комментарий' });
+        const note = (req.body.note || '').trim();
+        if (note.length > 1000) return res.status(400).json({ error: 'Комментарий слишком длинный' });
+        const application = await prisma.editorialTaskApplication.upsert({
+            where: { taskId_userId: { taskId: task.id, userId: req.user.id } },
+            create: { taskId: task.id, userId: req.user.id, note },
+            update: { status: 'PENDING', note, reviewedAt: null, reviewedById: null },
+        });
+        await prisma.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'APPLIED' } });
+        res.status(201).json({ application });
+    } catch (error) { next(error); }
+});
+
+router.patch('/projects/:projectId/tasks/:taskId/applications/:applicationId', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canEdit(project, req.user)) return notFound(res);
+        if (!['APPROVED', 'REJECTED'].includes(req.body.status)) return res.status(400).json({ error: 'Некорректное решение' });
+        const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id } });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        const result = await prisma.$transaction(async (tx) => {
+            const application = await tx.editorialTaskApplication.findFirst({ where: { id: req.params.applicationId, taskId: task.id, status: 'PENDING' } });
+            if (!application) return { error: 'Заявка уже рассмотрена или не найдена' };
+            if (req.body.status === 'APPROVED') {
+                const claimed = await tx.editorialTask.updateMany({ where: { id: task.id, projectId: project.id, isOpen: true, assigneeId: null }, data: { assigneeId: application.userId, isOpen: false } });
+                if (!claimed.count) return { error: 'Задание уже занято или набор закрыт' };
+                await tx.editorialTaskApplication.updateMany({ where: { taskId: task.id, status: 'PENDING', id: { not: application.id } }, data: { status: 'REJECTED', reviewedById: req.user.id, reviewedAt: new Date() } });
+            }
+            const updated = await tx.editorialTaskApplication.update({ where: { id: application.id }, data: { status: req.body.status, reviewedById: req.user.id, reviewedAt: new Date() } });
+            await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: req.body.status === 'APPROVED' ? 'APPLICATION_APPROVED' : 'APPLICATION_REJECTED', details: JSON.stringify({ userId: application.userId }) } });
+            return { application: updated };
+        });
+        if (result.error) return res.status(409).json({ error: result.error });
+        res.json(result);
     } catch (error) { next(error); }
 });
 
