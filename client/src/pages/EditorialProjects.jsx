@@ -93,7 +93,8 @@ export default function EditorialProjects() {
                 <button disabled={creating} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold disabled:opacity-50">{creating ? 'Создание…' : 'Создать'}</button>
             </form>}
             <div className="min-w-0 space-y-3">
-                <aside className={`min-w-0 space-y-2 ${selected ? "hidden" : ""}`} aria-label="Список проектов">\n                    {!loading && projects.length > 0 && <label className="block"><span className="sr-only">Поиск проектов</span><input type="search" value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="Найти проект…" className="w-full rounded-xl border border-current/15 bg-transparent px-3 py-3 text-sm" /></label>}
+                <aside className={`min-w-0 space-y-2 ${selected ? "hidden" : ""}`} aria-label="Список проектов">
+                    {!loading && projects.length > 0 && <label className="block"><span className="sr-only">Поиск проектов</span><input type="search" value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="Найти проект…" className="w-full rounded-xl border border-current/15 bg-transparent px-3 py-3 text-sm" /></label>}
                     {loading ? <p role="status" className="p-3 text-sm">Загружаем…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-70">Проектов пока нет.</p> : filteredProjects.length === 0 ? <p className="p-3 text-sm opacity-60">По вашему запросу проектов нет.</p> : filteredProjects.map((project) => (
                         <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
                             aria-current={selected?.id === project.id ? 'true' : undefined}
