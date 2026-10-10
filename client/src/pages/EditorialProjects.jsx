@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import EditorialWorkflow from './EditorialWorkflow.jsx';
 
 export default function EditorialProjects() {
     const { token, user } = useAuth();
@@ -13,9 +14,24 @@ export default function EditorialProjects() {
     const [creating, setCreating] = useState(false);
     const [selected, setSelected] = useState(null);
     const [memberId, setMemberId] = useState('');
+    const [personQuery, setPersonQuery] = useState('');
+    const [people, setPeople] = useState([]);
+    const [searching, setSearching] = useState(false);
     const [memberRole, setMemberRole] = useState('PARTICIPANT');
     const [savingMember, setSavingMember] = useState(false);
     const canCreate = ['ADMIN', 'MENTOR'].includes(user?.role);
+    useEffect(() => {
+        let active = true;
+        if (personQuery.trim().length < 2) { setPeople([]); return () => { active = false; }; }
+        const timeout = setTimeout(() => {
+            setSearching(true);
+            api('/editorial/workflow/people?q=' + encodeURIComponent(personQuery.trim()), { token })
+                .then((data) => { if (active) setPeople(data.people || []); })
+                .catch((e) => { if (active) setError(e.message); })
+                .finally(() => { if (active) setSearching(false); });
+        }, 300);
+        return () => { active = false; clearTimeout(timeout); };
+    }, [personQuery, token]);
 
     async function reload() {
         const result = await api('/editorial/projects', { token });
@@ -49,7 +65,7 @@ export default function EditorialProjects() {
         setSavingMember(true); setError('');
         try {
             await api(`/editorial/projects/${selected.id}/members`, { token, method: 'POST', body: { userId: memberId.trim(), role: memberRole } });
-            setMemberId('');
+            setMemberId(''); setPersonQuery(''); setPeople([]);
             await reload();
         } catch (e) { setError(e.message); }
         finally { setSavingMember(false); }
@@ -106,19 +122,25 @@ export default function EditorialProjects() {
                             <span className="opacity-70">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span>
                         </div>
                     ))}
+                    <EditorialWorkflow project={selected} onError={setError} />
                     {canManage && (
                         <form onSubmit={addMember} className="space-y-2">
                             <p className="text-sm font-medium">Добавить или изменить участника</p>
-                            <label className="block text-xs">ID пользователя
-                                <input required value={memberId} onChange={(e) => setMemberId(e.target.value)} className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3" placeholder="ID пользователя из профиля" />
+                            <label className="block text-xs">Найти участника по имени или логину
+                                <input value={personQuery} onChange={(e) => { setPersonQuery(e.target.value); setMemberId(''); }} className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3" placeholder="Начните вводить имя…" autoComplete="off" />
                             </label>
+                            {searching && <p className="text-xs opacity-60">Поиск…</p>}
+                            {people.length > 0 && <div className="max-h-44 overflow-auto rounded-xl border border-current/15 p-1">
+                                {people.map((person) => <button type="button" key={person.id} onClick={() => { setMemberId(person.id); setPersonQuery(person.fullName + ' (@' + person.username + ')'); setPeople([]); }} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-current/10">{person.fullName} <span className="opacity-60">@{person.username}</span></button>)}
+                            </div>}
+                            {memberId && <p className="text-xs opacity-70">Пользователь выбран</p>}
                             <label className="block text-xs">Роль
                                 <select value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3">
                                     <option value="PARTICIPANT">Участник</option><option value="EDITOR">Редактор</option>
                                     <option value="OBSERVER">Наблюдатель</option><option value="MANAGER">Руководитель</option>
                                 </select>
                             </label>
-                            <button disabled={savingMember} className="rounded-xl border border-current/30 px-4 py-2 disabled:opacity-50">{savingMember ? 'Сохранение…' : 'Сохранить участника'}</button>
+                            <button disabled={savingMember || !memberId} className="rounded-xl border border-current/30 px-4 py-2 disabled:opacity-50">{savingMember ? 'Сохранение…' : 'Сохранить участника'}</button>
                         </form>
                     )}
                 </section>
