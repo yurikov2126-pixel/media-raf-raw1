@@ -37,14 +37,16 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const closeButtonRef = useRef(null);
     const openedLinkRef = useRef(null);
     const dialogRef = useRef(null);
+    const latestWorkflowRequest = useRef(0);
     const [loading, setLoading] = useState(true);
     const canEdit = user?.role === 'ADMIN' || project.members.some((m) => m.userId === user?.id && ['MANAGER', 'EDITOR'].includes(m.role));
     const canView = canEdit || project.members.some((m) => m.userId === user?.id);
     useEffect(() => {
         let active = true;
         setLoading(true); setStages([]); setTasks([]); setSelectedTaskId(null);
+        const requestId = ++latestWorkflowRequest.current;
         if (canView) api(`/editorial/workflow/projects/${project.id}/workflow`, { token })
-            .then((data) => { if (active) { setStages(data.stages); setTasks(data.tasks); } })
+            .then((data) => { if (active && requestId === latestWorkflowRequest.current) { setStages(data.stages); setTasks(data.tasks); } })
             .catch((e) => { if (active) onError(e.message); })
             .finally(() => { if (active) setLoading(false); });
         else setLoading(false);
@@ -64,9 +66,10 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             if (!active) return;
             if (inFlight) { queued = true; return; }
             inFlight = true;
+            const requestId = ++latestWorkflowRequest.current;
             try {
                 const data = await api(`/editorial/workflow/projects/${project.id}/workflow`, { token });
-                if (active) { setStages(data.stages); setTasks(data.tasks); }
+                if (active && requestId === latestWorkflowRequest.current) { setStages(data.stages); setTasks(data.tasks); }
             } catch {
                 // Preserve the last known data if the connection drops.
             } finally {
@@ -82,6 +85,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         socket.on('connect', sync);
         document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('focus', sync);
+        window.addEventListener('online', sync);
         return () => {
             active = false;
             socket.off('editorial:workflow:updated', onUpdate);
@@ -89,6 +93,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             socket.disconnect();
             document.removeEventListener('visibilitychange', onVisible);
             window.removeEventListener('focus', sync);
+            window.removeEventListener('online', sync);
         };
     }, [project.id, token, canView]);
     useEffect(() => {
