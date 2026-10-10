@@ -66,6 +66,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const cancelledRef = useRef(false);
     const [busy,setBusy]=useState(false);
     const [preview,setPreview]=useState(null);
+    const [archiveBusy,setArchiveBusy]=useState(false);
     const [note,setNote]=useState('');
     const [message,setMessage]=useState('');
     const [reviewError,setReviewError]=useState('');
@@ -80,6 +81,31 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const visibleFiles = [...files].sort((a,b) => Number(b.version)-Number(a.version) || new Date(b.createdAt)-new Date(a.createdAt));
     const visibleVersions = [...new Set(visibleFiles.map(file => file.version))].sort((a,b) => b-a);
 
+    async function downloadArchive(version) {
+        if (archiveBusy) return;
+        setArchiveBusy(true);
+        try {
+            const suffix = version === null ? '' : `?version=${encodeURIComponent(version)}`;
+            const response = await fetch(API + base + '/archive' + suffix, {
+                headers: { Authorization: `Bearer ${token}` }, cache:'no-store',
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || 'Не удалось скачать архив');
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            try {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = version === null ? 'materials-all.zip' : `materials-version-${version}.zip`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            } finally { window.setTimeout(() => URL.revokeObjectURL(url), 60000); }
+        } catch(error) { onError(error.message); }
+        finally { setArchiveBusy(false); }
+    }
     async function load() {
         try {const result=await api(base,{token});setFiles(result.files||[]);}
         catch(e){onError(e.message);}
@@ -173,12 +199,12 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         {(canSubmit||canReview)&&<div className="space-y-2 rounded-xl border border-violet-300/30 bg-violet-100/20 p-3 dark:bg-violet-300/10"><h4 className="font-semibold">Согласование</h4><textarea rows={3} maxLength={10000} value={note} onChange={e=>{setNote(e.target.value);setReviewError('');}} placeholder={canReview?'Обязательно напишите, что нужно исправить…':'Комментарий к результату…'} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm"/><div className="flex flex-wrap gap-2">{canSubmit&&<><button type="button" disabled={busy||(selected.length===0&&files.length===0)} onClick={submitAll} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Отправляем…' : 'Отправить на проверку'}</button>{selected.length>0&&<button type="button" disabled={busy} onClick={saveDraft} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">Сохранить черновик</button>}</>}{canReview&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Утвердить</button><button type="button" disabled={busy} onClick={()=>review('revise')} className="rounded-lg border border-amber-500 bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30">Вернуть на доработку</button></>}</div>{canReview&&<p className="text-xs text-slate-600 dark:text-slate-200">Для возврата на доработку требуется замечание редактора.</p>}{reviewError&&<p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{reviewError}</p>}</div>}
         {files.length > 0 && <div className="editorial-gallery-heading flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
             <h4 className="text-base font-semibold">Материалы <span className="text-sm font-normal text-slate-600 dark:text-slate-300">· {files.length} файл(ов)</span></h4>
-            <span className="text-xs text-slate-600 dark:text-slate-300">Последние версии выше</span>
+            <button type="button" disabled={archiveBusy} onClick={() => downloadArchive(null)} className="min-h-11 rounded-lg border border-violet-500 bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"> {archiveBusy ? "Подготовка архива…" : "Скачать все ZIP ↓"} </button>
         </div>}
         {files.length===0 ? <p className="text-sm opacity-70">Материалы ещё не загружены.</p> :
          visibleVersions.map(version =>
             <section key={version} className="space-y-3" aria-label={`Материалы версии ${version}`}>
-                <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">Версия {version}</h4><span className="text-xs text-slate-600 dark:text-slate-300">{visibleFiles.filter(f => f.version === version).length} файл(ов)</span></div>
+                <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">Версия {version}</h4><div className="flex items-center gap-2"><span className="text-xs text-slate-600 dark:text-slate-300">{visibleFiles.filter(f => f.version === version).length} файл(ов)</span><button type="button" disabled={archiveBusy} onClick={() => downloadArchive(version)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-60 dark:border-slate-500 dark:bg-slate-800 dark:text-violet-200">ZIP версии ↓</button></div></div>
                 <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {visibleFiles.filter(f => f.version === version).map(file => <MaterialTile key={file.id} file={file} base={base} token={token} onOpen={open}
                         canRename={canUpload && (canEdit || file.uploaderId === user?.id)}
