@@ -1,0 +1,24 @@
+name: Deploy preview
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy preview (self-hosted)
+    runs-on: self-hosted
+    timeout-minutes: 20
+    steps:
+      - name: Check out trusted deployment script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run preview-only deployment
+        run: bash scripts/deploy-preview.sh
