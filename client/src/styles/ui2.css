@@ -1607,3 +1607,47 @@ select {
   .editorial-glass { --editorial-glass-bg: #f7f5fc; }
   .dark .editorial-glass, [data-theme="dark"] .editorial-glass { --editorial-glass-bg: #191b2d; }
 }
+
+/* Editorial task accessibility: portal dialogs live under body, outside the module wrapper.
+   Keep controls, options and focus rings readable in both color schemes. */
+.editorial-glass__dialog {
+  color-scheme: light;
+}
+.dark .editorial-glass__dialog,
+[data-theme="dark"] .editorial-glass__dialog {
+  color-scheme: dark;
+  background: #151827;
+  color: #f1f5f9;
+  border-color: #46506a;
+}
+.dark .editorial-glass__dialog input:not([type="checkbox"]):not([type="file"]),
+.dark .editorial-glass__dialog textarea,
+.dark .editorial-glass__dialog select,
+[data-theme="dark"] .editorial-glass__dialog input:not([type="checkbox"]):not([type="file"]),
+[data-theme="dark"] .editorial-glass__dialog textarea,
+[data-theme="dark"] .editorial-glass__dialog select {
+  background-color: #242a40;
+  border-color: #64708a;
+  color: #f8fafc;
+  -webkit-text-fill-color: #f8fafc;
+}
+.dark .editorial-glass__dialog option,
+[data-theme="dark"] .editorial-glass__dialog option {
+  background-color: #242a40;
+  color: #f8fafc;
+}
+.dark .editorial-glass__dialog input::placeholder,
+.dark .editorial-glass__dialog textarea::placeholder,
+[data-theme="dark"] .editorial-glass__dialog input::placeholder,
+[data-theme="dark"] .editorial-glass__dialog textarea::placeholder {
+  color: #b6c0d2;
+  opacity: 1;
+}
+.editorial-glass__dialog :is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.dark .editorial-glass__dialog button:disabled,
+[data-theme="dark"] .editorial-glass__dialog button:disabled {
+  opacity: .6;
+}

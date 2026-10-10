@@ -108,7 +108,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             </div>}
         </div>
         </div>
-        <div hidden={tab !== "materials"}><EditorialMaterials project={project} task={task} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} /></div>
+        <div hidden={tab !== "materials"}><EditorialMaterials project={project} task={task} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={onClose} /></div>
         <div hidden={tab !== "discussion"}><EditorialTaskDiscussion projectId={project.id} task={task} token={token} userId={user?.id} canEdit={canEdit} onError={onError} onChanged={refresh} /></div>
     </section>;
 }
