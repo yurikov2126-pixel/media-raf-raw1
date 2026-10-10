@@ -53,8 +53,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         return () => { active = false; };
     }, [project.id, token, canView]);
     useEffect(() => {
-        if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
-    }, [loading, linkedTaskId, tasks]);
+        if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId && (canEdit || task.assigneeId === user?.id))) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
+    }, [loading, linkedTaskId, tasks, canEdit, user?.id]);
     // Socket.IO reuses the server's authenticated user channels. Refresh the
     // canonical workflow only when a mutation occurs, on reconnect or on focus.
     useEffect(() => {
