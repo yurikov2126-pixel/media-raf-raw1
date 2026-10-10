@@ -83,13 +83,9 @@ router.get('/projects/:projectId/tasks/:taskId/materials/archive', async (req,re
         const entries = zipEntries(files.map(f => ({ name:`v${f.version}/${f.name}`, size:f.size, path:path.join(root,f.storageName), caption:f.caption, version:f.version, createdAt:f.createdAt })));
         // Keep version folders while sanitizing user-supplied filename components.
         for (let index=0; index<entries.length; index++) entries[index].zipName = `Версия ${files[index].version}/${entries[index].zipName}`;
-        const manifest = Buffer.from(JSON.stringify(files.map((f,index)=>({
-            file:entries[index].zipName, caption:f.caption || '', version:f.version,
-            uploadedAt:f.createdAt,
-        })), null, 2), 'utf8');
-        const archive = [...entries, { zipName:'Подписи.json', size:manifest.length, buffer:manifest }];
-        const estimatedOverhead = archive.reduce((n,f) => n + 76 + 2 * Buffer.byteLength(f.zipName,'utf8'), 22);
-        if (total + manifest.length + estimatedOverhead > 0xffffffff) return res.status(413).json({ error:'Архив слишком большой' });
+        // Export only the original attachments. Captions remain in the gallery UI.
+        const estimatedOverhead = entries.reduce((n,f) => n + 76 + 2 * Buffer.byteLength(f.zipName,'utf8'), 22);
+        if (total + estimatedOverhead > 0xffffffff) return res.status(413).json({ error:'Архив слишком большой' });
         // Detect missing files before streaming; avoid truncated ZIP from missing originals.
         for (const file of entries) {
             const stat = await fs.stat(file.path);
@@ -100,7 +96,7 @@ router.get('/projects/:projectId/tasks/:taskId/materials/archive', async (req,re
         res.setHeader('Content-Disposition',`attachment; filename="${name}"`);
         res.setHeader('Cache-Control','private, no-store');
         res.setHeader('X-Content-Type-Options','nosniff');
-        const stream = streamZip(archive);
+        const stream = streamZip(entries);
         req.on('close', () => { if (!res.writableFinished) stream.destroy(); });
         stream.on('error', err => { if (!res.headersSent) next(err); else res.destroy(err); });
         stream.pipe(res);
