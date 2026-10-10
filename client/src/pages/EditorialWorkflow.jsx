@@ -143,7 +143,9 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const overdueCount = tasks.filter(isOverdue).length;
     const dueSoonCount = tasks.filter(isDueSoon).length;
     const reviewTasks = canEdit ? tasks.filter((task) => task.status === 'IN_REVIEW') : [];
-    const nextReviewTask = reviewTasks.find((task) => task.id !== selectedTaskId);
+    const currentReviewIndex = reviewTasks.findIndex((task) => task.id === selectedTaskId);
+    const nextReviewTask = currentReviewIndex >= 0 && reviewTasks.length > 1 ? reviewTasks[(currentReviewIndex + 1) % reviewTasks.length] : null;
+    const previousReviewTask = currentReviewIndex >= 0 && reviewTasks.length > 1 ? reviewTasks[(currentReviewIndex - 1 + reviewTasks.length) % reviewTasks.length] : null;
     const visibleTasks = tasks.filter((task) => {
         if (deadlineFilter === 'OVERDUE' && !isOverdue(task)) return false;
         if (deadlineFilter === 'SOON' && !isDueSoon(task)) return false;
@@ -222,17 +224,19 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             })}</div>
         )}
         {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && createPortal(<div className="fixed inset-0 z-[9999] flex min-h-0 items-stretch justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
-            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog relative flex h-[100dvh] max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[min(88dvh,850px)] sm:max-w-3xl sm:rounded-2xl">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog editorial-task-modal relative flex h-[100dvh] max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[min(88dvh,850px)] sm:max-w-3xl sm:rounded-2xl">
                 <div className="editorial-task-modal-header sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b border-slate-700 bg-slate-950 px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] text-slate-50 sm:gap-3 sm:px-5">
-                    <div className="min-w-0"><p className="text-xs font-medium text-violet-300">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
-                    {canEdit && nextReviewTask && <button type="button" title={`Открыть на проверку: ${nextReviewTask.title}`} onClick={() => setSelectedTaskId(nextReviewTask.id)} className="shrink-0 rounded-lg border border-violet-400/60 bg-violet-600 px-2.5 py-2 text-xs font-semibold text-white hover:bg-violet-500 sm:px-3 sm:text-sm"><span className="sm:hidden">Далее →</span><span className="hidden sm:inline">Следующая на проверке →</span></button>}
+                    <div className="min-w-0 flex-1"><p className="text-xs font-medium text-violet-300">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
+                    {canEdit && currentReviewIndex >= 0 && <span className="editorial-task-review-count hidden shrink-0 text-xs font-medium sm:inline" aria-label={`Материал ${currentReviewIndex + 1} из ${reviewTasks.length}`}>{currentReviewIndex + 1}/{reviewTasks.length}</span>}
+                    {canEdit && previousReviewTask && <button type="button" title={`Предыдущий материал: ${previousReviewTask.title}`} onClick={() => setSelectedTaskId(previousReviewTask.id)} className="editorial-task-nav shrink-0 rounded-lg border px-2.5 py-2 text-xs font-semibold sm:px-3 sm:text-sm" aria-label="Предыдущий материал на проверке">←</button>}
+                    {canEdit && nextReviewTask && <button type="button" title={`Открыть на проверку: ${nextReviewTask.title}`} onClick={() => setSelectedTaskId(nextReviewTask.id)} className="editorial-task-next shrink-0 rounded-lg border border-violet-400/60 bg-violet-600 px-2.5 py-2 text-xs font-semibold text-white hover:bg-violet-500 sm:px-3 sm:text-sm"><span className="sm:hidden">Далее →</span><span className="hidden sm:inline">Следующая на проверке →</span></button>}
                     <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/app/editorial/projects?project=${encodeURIComponent(project.id)}&task=${encodeURIComponent(selectedTaskId)}`); } catch { onError('Не удалось скопировать ссылку на задание'); } }} className="ml-auto shrink-0 rounded-lg border border-slate-500 bg-slate-800 px-2.5 py-2 text-xs font-medium text-white hover:bg-slate-700 sm:px-3 sm:text-sm">Ссылка</button>
                     <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-500 bg-slate-800 px-2.5 py-2 text-xs font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-violet-300 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
                 </div>
                 <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:p-5" data-no-route-swipe>
                     <EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
                 </div>
-                <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-current/20 px-4 py-3 text-sm font-semibold">Закрыть задание</button></div>
+                <div className="editorial-task-modal-footer sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-current/20 px-4 py-3 text-sm font-semibold">Закрыть задание</button></div>
             </div>
         </div>, document.body)}
     </section>;
