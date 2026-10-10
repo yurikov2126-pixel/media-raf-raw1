@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -14,12 +14,25 @@ const STATUS_STYLE = {
     DONE:'bg-teal-50 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-700',
 };
 const dateFormat = new Intl.DateTimeFormat('ru-RU', { day:'numeric', month:'short', year:'numeric' });
+function deadlineLabel(task, now) {
+    if (!task.dueAt) return 'Без срока';
+    const due = new Date(task.dueAt);
+    const day = new Date(now); day.setHours(0,0,0,0);
+    const dueDay = new Date(due); dueDay.setHours(0,0,0,0);
+    const days = Math.round((dueDay - day) / 86400000);
+    if (deadlineState(task,now) === 'overdue') return `Просрочено на ${Math.max(1,-days)} дн.`;
+    if (days === 0) return 'Сегодня';
+    if (days === 1) return 'Завтра';
+    return `Срок · ${dateFormat.format(due)}`;
+}
 export default function EditorialMyTasks() {
     const { token } = useAuth();
+    const [params, setParams] = useSearchParams();
     const [tasks,setTasks] = useState([]);
     const [loading,setLoading] = useState(true);
     const [error,setError] = useState('');
-    const [filter,setFilter] = useState('ACTIVE');
+    const filter = params.get('status') || 'ACTIVE';
+    const setFilter = (value) => setParams(value === 'ACTIVE' ? {} : { status:value }, { replace:true });
     const [refreshing,setRefreshing] = useState(false);
     const [now,setNow] = useState(Date.now());
     const sync = useCallback(async (initial = false) => {
