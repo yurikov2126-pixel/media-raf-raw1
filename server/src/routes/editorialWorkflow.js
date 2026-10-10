@@ -73,7 +73,7 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
         const due = dateValue(dueAt);
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
         if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
-        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } } });
+        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
         res.status(201).json({ task });
     } catch (error) { next(error); }
 });
