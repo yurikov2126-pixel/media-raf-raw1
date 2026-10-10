@@ -56,6 +56,23 @@ function dateValue(value) {
     return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+// Personal cross-project task feed. Always scope to the authenticated assignee.
+router.get('/my-tasks', async (req, res, next) => {
+    try {
+        const tasks = await prisma.editorialTask.findMany({
+            where: { assigneeId: req.user.id, project: { members: { some: { userId: req.user.id } } } },
+            select: {
+                id:true, projectId:true, title:true, description:true, status:true,
+                dueAt:true, updatedAt:true, createdAt:true, parentId:true,
+                project: { select: { id:true, title:true } },
+            },
+            orderBy: [{ dueAt:'asc' }, { updatedAt:'desc' }],
+            take:500,
+        });
+        res.json({ tasks });
+    } catch(error) { next(error); }
+});
+
 router.get('/people', async (req, res, next) => {
     try {
         if (!['ADMIN', 'MENTOR'].includes(req.user.role) &&
