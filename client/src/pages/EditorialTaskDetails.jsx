@@ -61,7 +61,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         <div hidden={tab !== 'details'} className="space-y-4">
         <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><h5 className="break-words text-lg font-semibold">{task.title}</h5><p className="text-xs opacity-60">Карточка задачи</p></div>
-            <button type="button" className="rounded-lg border border-current/20 px-3 py-1 text-sm" onClick={onClose}>Закрыть</button>
+
         </div>
         <form onSubmit={save} className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm md:col-span-2">Название
