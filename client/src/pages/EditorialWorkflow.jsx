@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { io } from 'socket.io-client';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialTaskDetails from './EditorialTaskDetails.jsx';
@@ -51,6 +52,44 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     useEffect(() => {
         if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
     }, [loading, linkedTaskId, tasks]);
+    // Socket.IO reuses the server's authenticated user channels. Refresh the
+    // canonical workflow only when a mutation occurs, on reconnect or on focus.
+    useEffect(() => {
+        if (!canView || !token) return undefined;
+        let active = true;
+        let inFlight = false;
+        let queued = false;
+        const sync = async () => {
+            if (!active) return;
+            if (inFlight) { queued = true; return; }
+            inFlight = true;
+            try {
+                const data = await api(`/editorial/workflow/projects/${project.id}/workflow`, { token });
+                if (active) { setStages(data.stages); setTasks(data.tasks); }
+            } catch {
+                // Preserve the last known data if the connection drops.
+            } finally {
+                inFlight = false;
+                if (queued && active) { queued = false; void sync(); }
+            }
+        };
+        const endpoint = (import.meta.env.VITE_API || 'http://localhost:4000/api').replace(/\/api\/?$/, '');
+        const socket = io(endpoint, { auth: { token }, reconnection: true });
+        const onUpdate = (event) => { if (event?.projectId === project.id) void sync(); };
+        const onVisible = () => { if (document.visibilityState === 'visible') void sync(); };
+        socket.on('editorial:workflow:updated', onUpdate);
+        socket.on('connect', sync);
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', sync);
+        return () => {
+            active = false;
+            socket.off('editorial:workflow:updated', onUpdate);
+            socket.off('connect', sync);
+            socket.disconnect();
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener('focus', sync);
+        };
+    }, [project.id, token, canView]);
     useEffect(() => {
         if (!selectedTaskId) return undefined;
         const previousFocus = document.activeElement;
@@ -188,7 +227,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                     <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-xs hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
                 </div>
                 <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:p-5" data-no-route-swipe>
-                    <EditorialTaskDetails task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
+                    <EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
                 </div>
                 <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-current/20 px-4 py-3 text-sm font-semibold">Закрыть задание</button></div>
             </div>

@@ -1651,3 +1651,70 @@ select {
 [data-theme="dark"] .editorial-glass__dialog button:disabled {
   opacity: .6;
 }
+
+/* The task dialog is portaled to body, so an app-level .dark ancestor cannot
+   reach it. Match the active dark app anywhere under body as well. */
+body:has(.dark) .editorial-glass__dialog,
+body:has([data-theme="dark"]) .editorial-glass__dialog,
+body.dark .editorial-glass__dialog,
+html.dark .editorial-glass__dialog {
+  --editorial-glass-bg: #171a2a;
+  --editorial-glass-border: #46506a;
+  color-scheme: dark;
+  background: #171a2a;
+  color: #f1f5f9;
+  border-color: #46506a;
+}
+body:has(.dark) .editorial-glass__dialog > div:first-child,
+body:has(.dark) .editorial-glass__dialog > div:last-child,
+body:has([data-theme="dark"]) .editorial-glass__dialog > div:first-child,
+body:has([data-theme="dark"]) .editorial-glass__dialog > div:last-child,
+body.dark .editorial-glass__dialog > div:first-child,
+body.dark .editorial-glass__dialog > div:last-child,
+html.dark .editorial-glass__dialog > div:first-child,
+html.dark .editorial-glass__dialog > div:last-child {
+  background: #171a2a;
+  color: #f1f5f9;
+  border-color: #46506a;
+}
+body:has(.dark) .editorial-glass__dialog :is(input:not([type="checkbox"]):not([type="file"]),textarea,select),
+body:has([data-theme="dark"]) .editorial-glass__dialog :is(input:not([type="checkbox"]):not([type="file"]),textarea,select),
+body.dark .editorial-glass__dialog :is(input:not([type="checkbox"]):not([type="file"]),textarea,select),
+html.dark .editorial-glass__dialog :is(input:not([type="checkbox"]):not([type="file"]),textarea,select) {
+  background-color: #242a40;
+  color: #f8fafc;
+  border-color: #64708a;
+  -webkit-text-fill-color: #f8fafc;
+}
+body:has(.dark) .editorial-glass__dialog option,
+body:has([data-theme="dark"]) .editorial-glass__dialog option,
+body.dark .editorial-glass__dialog option,
+html.dark .editorial-glass__dialog option {
+  background: #242a40;
+  color: #f8fafc;
+}
+body:has(.dark) .editorial-glass__dialog input::placeholder,
+body:has(.dark) .editorial-glass__dialog textarea::placeholder,
+body:has([data-theme="dark"]) .editorial-glass__dialog input::placeholder,
+body:has([data-theme="dark"]) .editorial-glass__dialog textarea::placeholder {
+  color: #b6c0d2;
+  opacity: 1;
+}
+body:has(.dark) .editorial-glass__dialog button:not([class*="bg-violet"]):not([class*="bg-emerald"]):not([class*="bg-amber"]),
+body:has([data-theme="dark"]) .editorial-glass__dialog button:not([class*="bg-violet"]):not([class*="bg-emerald"]):not([class*="bg-amber"]) {
+  color: #e9e7ff;
+}
+body:has(.dark) .editorial-glass__dialog [class*="bg-white/"],
+body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-white/"] {
+  background-color: #262b40;
+  border-color: #59627a;
+}
+body:has(.dark) .editorial-glass__dialog [class*="text-violet-700"],
+body:has([data-theme="dark"]) .editorial-glass__dialog [class*="text-violet-700"] {
+  color: #c4b5fd;
+}
+body:has(.dark) .editorial-glass__dialog [class*="bg-amber-100"],
+body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
+  background: #443620;
+  color: #fde68a;
+}
