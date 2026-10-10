@@ -8,6 +8,7 @@ import usePageMeta from '../hooks/usePageMeta.js';
 
 const ICONS = {
     message: '💬',
+    editorial: '📋',
     mention: '📣',
     post: '📝',
     certificate: '🏆',
@@ -24,6 +25,7 @@ const ICONS = {
 
 const TITLES = {
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
+    editorial: (p) => ({ assigned: 'Вам назначено задание', status: 'Изменён статус задания', comment: 'Новый комментарий к заданию', application: 'Новая заявка на задание', application_approved: 'Ваша заявка одобрена', application_rejected: 'Решение по вашей заявке' }[p.event] || 'Событие редакции') + (p.taskTitle ? `: ${p.taskTitle}` : ''),
     mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
     certificate: (p) => p.title || 'Получен сертификат',
@@ -49,6 +51,7 @@ const FILTERS = [
     { v: 'homework_due', l: '📋 ДЗ' },
     { v: 'report', l: '🚩 Жалобы' },
     { v: 'message', l: '💬 Сообщения' },
+    { v: 'editorial', l: '📋 Редакция' },
     { v: 'post', l: '📝 Посты' },
     { v: 'mention', l: '📣 Упоминания' },
     { v: 'mention_post', l: '📝 В публикациях' },
@@ -108,6 +111,7 @@ export default function Notifications() {
         else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}`);
         else if (n.type === 'post' && p.authorUsername) nav(`/app/u/${encodeURIComponent(p.authorUsername)}`);
+        else if (n.type === 'editorial') nav(`/app/editorial/projects${p.projectId ? `?project=${encodeURIComponent(p.projectId)}` : ''}`);
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
@@ -267,6 +271,7 @@ export default function Notifications() {
                             );
                         }
                         if (n.type === 'post') return p.preview;
+                        if (n.type === 'editorial') return p.projectTitle ? `Проект: ${p.projectTitle}` : 'Редакция';
                         if (n.type === 'certificate') return p.courseTitle;
                         if (n.type === 'system') return p.message;
                         if (n.type === 'report') {
