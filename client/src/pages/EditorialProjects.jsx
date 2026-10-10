@@ -80,7 +80,7 @@ export default function EditorialProjects() {
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><h2 className="text-xl font-semibold">Проекты</h2><p className="text-xs opacity-60">{projects.length} доступно · управление редакционными задачами</p></div>
-                {canCreate && <button type="button" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate} className="rounded-xl border border-current/20 px-4 py-2 text-sm font-semibold hover:border-current/50">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
+                {canCreate && <button type="button" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
             </div>
             {error && <p role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm">{error}</p>}
             {showCreate && canCreate && <form onSubmit={create} className="space-y-3 rounded-2xl border border-current/15 p-4">
@@ -95,7 +95,7 @@ export default function EditorialProjects() {
                     {loading ? <p role="status" className="p-3 text-sm">Загружаем…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-70">Проектов пока нет.</p> : projects.map((project) => (
                         <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
                             aria-current={selected?.id === project.id ? 'true' : undefined}
-                            className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${selected?.id === project.id ? 'border-current/50 bg-current/5' : 'border-current/10 hover:border-current/30'}`}>
+                            className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${selected?.id === project.id ? 'border-violet-400 bg-violet-50 text-violet-900 dark:bg-violet-400/10 dark:text-violet-200' : 'border-violet-200/60 hover:border-violet-400 dark:border-violet-400/20'}`}>
                             <strong className="block truncate text-sm">{project.title}</strong>
                             <span className="mt-1 block text-xs opacity-60">{project.visibility === 'CLOSED' ? 'Закрытый' : 'Командный'} · {project.members.length} участн.</span>
                         </button>
@@ -103,13 +103,13 @@ export default function EditorialProjects() {
                 </aside>
                 <main className="min-w-0">
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
-                        <section className="min-w-0 space-y-4 rounded-2xl border border-current/15 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
+                        <section className="min-w-0 space-y-4 rounded-2xl border border-violet-200/60 bg-violet-50/20 p-3 dark:border-violet-400/20 dark:bg-violet-400/5 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
                                 <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>
                                 <button type="button" onClick={() => setSelected(null)} className="rounded-lg border border-current/20 px-3 py-1.5 text-xs">Закрыть</button>
                             </div>
                             <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
-                                <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-current/10 font-semibold' : 'opacity-65'}`}>Задания</button>
+                                <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold' : 'text-violet-700 opacity-75 dark:text-violet-300'}`}>Задания</button>
                                 <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-current/10 font-semibold' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
                             </div>
                             {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} /> : <div className="space-y-3">
