@@ -73,7 +73,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                 if (queued && active) { queued = false; void sync(); }
             }
         };
-        const endpoint = (import.meta.env.VITE_API || 'http://localhost:4000/api').replace(/\\/api\\/?$/, '');
+        const endpoint = (import.meta.env.VITE_API || 'http://localhost:4000/api').replace(/\/api\/?$/, '');
         const socket = io(endpoint, { auth: { token }, reconnection: true });
         const onUpdate = (event) => { if (event?.projectId === project.id) void sync(); };
         const onVisible = () => { if (document.visibilityState === 'visible') void sync(); };
