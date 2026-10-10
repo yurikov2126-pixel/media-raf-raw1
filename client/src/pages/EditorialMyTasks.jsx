@@ -94,7 +94,7 @@ export default function EditorialMyTasks() {
             <div className="grid gap-3 md:grid-cols-2">
                 {shown.map(task => {
                     const deadline = deadlineState(task,now);
-                    return <Link key={task.id} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}`}
+                    return <Link key={task.id} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&from=my-tasks&status=${encodeURIComponent(filter)}`}
                         className="block min-w-0 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition hover:border-violet-500 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-400">
                         <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="min-w-0 flex-1 break-words text-base font-semibold">{task.title}</h3>
                             <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status] || STATUS_STYLE.TODO}`}>{STATUS_LABELS[task.status] || task.status}</span></div>
@@ -102,7 +102,7 @@ export default function EditorialMyTasks() {
                         {task.description && <p className="mt-2 line-clamp-2 break-words text-sm text-slate-700 dark:text-slate-200">{task.description}</p>}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-600">
                             <span className={deadline === 'overdue' ? 'font-semibold text-rose-700 dark:text-rose-300' : deadline === 'soon' ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}>
-                                {task.dueAt ? `${deadline === 'overdue' ? 'Просрочено · ' : deadline === 'soon' ? 'Скоро срок · ' : 'Срок · '}${dateFormat.format(new Date(task.dueAt))}` : 'Без срока'}
+                                {deadlineLabel(task,now)}
                             </span><span className="font-semibold text-violet-700 dark:text-violet-300">Открыть задание →</span>
                         </div>
                     </Link>;
