@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialWorkflow from './EditorialWorkflow.jsx';
@@ -7,6 +7,7 @@ import EditorialWorkflow from './EditorialWorkflow.jsx';
 export default function EditorialProjects() {
     const { token, user } = useAuth();
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const linkedProjectId = searchParams.get('project');
     const linkedTaskId = searchParams.get('task');
     const fromMyTasks = searchParams.get('from') === 'my-tasks';
@@ -101,7 +102,7 @@ export default function EditorialProjects() {
                 <button disabled={creating} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold disabled:opacity-50">{creating ? 'Создание…' : 'Создать'}</button>
             </form>}
             <div className="min-w-0 space-y-3">
-                <aside className={`min-w-0 space-y-2 ${selected ? "hidden" : ""}`} aria-label="Список проектов">
+                <aside className={`min-w-0 space-y-2 ${selected || fromMyTasks ? "hidden" : ""}`} aria-label="Список проектов">
                     {!loading && projects.length > 0 && <label className="block"><span className="sr-only">Поиск проектов</span><input type="search" value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="Найти проект…" className="w-full rounded-xl border border-current/15 bg-transparent px-3 py-3 text-sm" /></label>}
                     {loading ? <p role="status" className="p-3 text-sm">Загружаем…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-70">Проектов пока нет.</p> : filteredProjects.length === 0 ? <p className="p-3 text-sm opacity-60">По вашему запросу проектов нет.</p> : filteredProjects.map((project) => (
                         <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
@@ -123,7 +124,7 @@ export default function EditorialProjects() {
                                 <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'text-violet-700 opacity-75 dark:text-slate-100'}`}>Задания</button>
                                 <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
                             </div>
-                            {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} linkedTaskId={selected.id === linkedProjectId ? linkedTaskId : null} linkedTab={linkedTab} /> : <div className="space-y-3">
+                            {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} linkedTaskId={selected.id === linkedProjectId ? linkedTaskId : null} linkedTab={linkedTab} onTaskClose={fromMyTasks ? () => navigate("/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")) : undefined} /> : <div className="space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Участники</h4>{canManage && <button type="button" onClick={() => setShowMemberForm((v) => !v)} className="rounded-lg border border-current/20 px-3 py-2 text-xs">{showMemberForm ? 'Скрыть форму' : '+ Участник'}</button>}</div>
                                 {selected.members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 py-2 text-sm"><span className="min-w-0 break-words">{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span><span className="text-xs opacity-60">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span></div>)}
                                 {canManage && showMemberForm && <form onSubmit={addMember} className="space-y-3 rounded-xl border border-current/10 p-3">
