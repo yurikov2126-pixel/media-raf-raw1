@@ -1815,3 +1815,38 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
   outline: 2px solid #c4b5fd;
   outline-offset: 2px;
 }
+
+/* Editorial mobile/PWA: keep interactive controls accessible above safe areas. */
+.editorial-glass__dialog {
+  max-width: 100vw;
+  min-width: 0;
+  overscroll-behavior: contain;
+}
+.editorial-glass__dialog :is(input, textarea, select) {
+  font-size: max(16px, 1rem);
+}
+.editorial-glass__dialog :is(button, [role="button"]),
+.editorial-material-lightbox :is(button, [role="button"]) {
+  min-height: 44px;
+}
+.editorial-glass__dialog :is(h1, h2, h3, h4, p),
+.editorial-material-lightbox :is(h1, h2, h3, h4, p) {
+  overflow-wrap: anywhere;
+}
+.editorial-material-lightbox {
+  height: 100dvh;
+  min-height: 100%;
+  overscroll-behavior: none;
+}
+.editorial-material-lightbox .editorial-viewer-toolbar {
+  padding-top: max(14px, env(safe-area-inset-top));
+}
+@media (max-width: 480px) {
+  .editorial-glass__dialog .editorial-task-modal-header {
+    gap: 6px;
+  }
+  .editorial-glass__dialog .editorial-task-modal-header button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

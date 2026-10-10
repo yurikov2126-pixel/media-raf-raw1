@@ -58,11 +58,24 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
         setScale(1); setOffset({ x: 0, y: 0 }); setDragging(false);
         pointers.current.clear(); gesture.current = null;
         setLoading(!urlsRef.current.has(active?.id));
+        // Keep only the current and adjacent full-size originals in memory.
+        // A small delay avoids revoking an image still animating out of view.
+        const retained = new Set([files[index - 1]?.id, active?.id, files[index + 1]?.id]);
+        for (const [id, request] of requests.current) if (!retained.has(id)) request.abort();
+        const cleanup = window.setTimeout(() => {
+            for (const [id, objectUrl] of urlsRef.current) {
+                if (retained.has(id)) continue;
+                URL.revokeObjectURL(objectUrl);
+                urlsRef.current.delete(id);
+                setUrls(previous => { const next = { ...previous }; delete next[id]; return next; });
+            }
+        }, 500);
         void fetchFile(active);
         // Preload adjacent images to reduce the delay during swiping.
         for (const neighbor of [files[index - 1], files[index + 1]]) {
             if (neighbor?.mimeType?.startsWith('image/')) void fetchFile(neighbor);
         }
+        return () => window.clearTimeout(cleanup);
     }, [index, active?.id, files, fetchFile]);
 
     useEffect(() => { if (url) setLoading(false); }, [url]);
