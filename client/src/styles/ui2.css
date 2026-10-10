@@ -1539,3 +1539,71 @@ select {
     contain-intrinsic-size: auto 420px;
   }
 }
+
+
+/* Editorial: reuse the main site's translucent surfaces without affecting other modules. */
+.editorial-glass {
+  --editorial-glass-bg: rgba(255, 255, 255, .66);
+  --editorial-glass-border: rgba(112, 85, 170, .19);
+  --editorial-glass-shadow: 0 18px 48px -35px rgba(66, 36, 112, .28);
+}
+.dark .editorial-glass,
+[data-theme="dark"] .editorial-glass {
+  --editorial-glass-bg: rgba(20, 22, 39, .76);
+  --editorial-glass-border: rgba(190, 184, 231, .21);
+  --editorial-glass-shadow: 0 20px 48px -30px rgba(0, 0, 0, .72);
+}
+.editorial-glass__surface,
+.editorial-glass__status,
+.editorial-glass__dialog {
+  background: var(--editorial-glass-bg);
+  border-color: var(--editorial-glass-border);
+  box-shadow: var(--editorial-glass-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+.editorial-glass__dialog {
+  --editorial-glass-bg: rgba(255, 255, 255, .94);
+  border: 1px solid var(--editorial-glass-border);
+}
+.dark .editorial-glass__dialog,
+[data-theme="dark"] .editorial-glass__dialog {
+  --editorial-glass-bg: rgba(21, 23, 39, .96);
+}
+.editorial-glass__nav a {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.editorial-glass__projects aside > button {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.editorial-glass__projects aside > button[aria-current="true"] {
+  box-shadow: inset 3px 0 0 #8b5cf6, var(--editorial-glass-shadow);
+}
+.editorial-glass__projects aside > button:not([aria-current="true"]) {
+  background: var(--editorial-glass-bg);
+  border-color: var(--editorial-glass-border);
+}
+.editorial-glass__status {
+  /* Keep status text and border hues, while softening the filled background. */
+  background-color: var(--editorial-glass-bg);
+}
+@media (max-width: 639px) {
+  .editorial-glass__dialog {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .editorial-glass__surface,
+  .editorial-glass__status,
+  .editorial-glass__dialog,
+  .editorial-glass__nav a,
+  .editorial-glass__projects aside > button {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .editorial-glass { --editorial-glass-bg: #f7f5fc; }
+  .dark .editorial-glass, [data-theme="dark"] .editorial-glass { --editorial-glass-bg: #191b2d; }
+}
