@@ -102,7 +102,7 @@ export default function EditorialWorkflow({ project, onError }) {
             <div className={view === 'board' ? "grid min-w-0 gap-3 xl:grid-cols-2" : "space-y-2"}>{(view === 'board' ? Object.entries(LABELS).map(([id, title]) => ({ id, title })) : [{ id: 'all', title: 'Все задания' }]).map((stage) => {
                 const list = stage.id === 'all' ? tasks : tasks.filter((task) => task.status === stage.id);
                 if (!list.length) return null;
-                return <div key={stage.id || 'none'} className={`rounded-xl border p-3 space-y-2 ${STATUS_COLORS[stage.id] || "border-slate-300 dark:border-slate-600"}`}>
+                return <div key={stage.id || 'none'} className={`editorial-glass__status min-w-0 rounded-xl border p-3 space-y-2 ${STATUS_COLORS[stage.id] || "border-slate-300 dark:border-slate-600"}`}>
                     <h5 className="text-sm font-semibold">{stage.title} <span className="font-normal opacity-50">· {list.length}</span></h5>
                     {list.map((task) => {
                         const canChange = canEdit || task.assigneeId === user?.id;
@@ -117,7 +117,7 @@ export default function EditorialWorkflow({ project, onError }) {
             })}</div>
         )}
         {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
-            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="flex h-[94dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-2xl">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog flex h-[94dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl text-slate-900 shadow-2xl dark:text-slate-100 sm:h-auto sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-2xl">
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
                     <div className="min-w-0"><p className="text-xs text-violet-700 dark:text-violet-200">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
                     <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800">Закрыть</button>
