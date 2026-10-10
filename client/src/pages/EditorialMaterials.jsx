@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialMaterialViewer from './EditorialMaterialViewer.jsx';
-import EditorialMaterialCompare from './EditorialMaterialCompare.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 
@@ -55,7 +54,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const [progress,setProgress]=useState(null);
     const [busy,setBusy]=useState(false);
     const [preview,setPreview]=useState(null);
-    const [compareOpen,setCompareOpen]=useState(false);
     const [search,setSearch]=useState('');
     const [typeFilter,setTypeFilter]=useState('all');
     const [versionFilter,setVersionFilter]=useState('all');
@@ -70,7 +68,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const canUpload=(canEdit||task.assigneeId===user?.id)&&['TODO','IN_PROGRESS','REVISION'].includes(currentStatus);
     const canSubmit=task.assigneeId===user?.id&&['TODO','IN_PROGRESS','REVISION'].includes(currentStatus);
     const canReview=canEdit&&currentStatus==='IN_REVIEW';
-    const imageFiles = files.filter(file => file.mimeType?.startsWith('image/'));
     const visibleFiles = files.filter(file => {
         if (versionFilter !== 'all' && String(file.version) !== versionFilter) return false;
         if (typeFilter === 'images' && !file.mimeType?.startsWith('image/')) return false;
@@ -169,7 +166,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         {files.length > 0 && <section className="space-y-3 rounded-xl border border-slate-200 bg-white/70 p-3 dark:border-slate-600 dark:bg-slate-800/70" aria-label="Фильтры галереи">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="font-semibold">Галерея материалов <span className="text-sm font-normal text-slate-600 dark:text-slate-300">({visibleFiles.length} из {files.length})</span></h4>
-                {imageFiles.length >= 2 && <button type="button" onClick={() => setCompareOpen(true)} className="rounded-lg border border-violet-400 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-900 hover:bg-violet-100 dark:border-violet-500 dark:bg-violet-900/50 dark:text-violet-100">Сравнить фотографии</button>}
             </div>
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-200">Поиск по названию и подписи
                 <input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти материал…" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 dark:border-slate-500 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-400" />
@@ -207,7 +203,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         )}
         {currentStatus==='IN_REVIEW'&&!canReview&&<p className="text-sm opacity-65">Материалы ожидают проверки редактором.</p>}
         {message&&<p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{message}</p>}
-        {compareOpen&&<EditorialMaterialCompare files={imageFiles} base={base} token={token} onClose={()=>setCompareOpen(false)} />}
         {preview&&<EditorialMaterialViewer files={files} initialId={preview} base={base} token={token} onClose={()=>setPreview(null)} onError={onError} />}
     </section>;
 }
