@@ -1742,3 +1742,21 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
   background-color: #6d28d9 !important;
   border-color: #a78bfa !important;
 }
+
+/* iOS modal footer is portaled outside the module's theme container.
+   Use the explicit surface and text colors rather than inherited dark selectors. */
+.editorial-glass__dialog .editorial-task-modal-footer {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+.editorial-glass__dialog .editorial-task-modal-footer button {
+  background: #334155 !important;
+  border: 1px solid #64748b !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc;
+}
+.editorial-glass__dialog .editorial-task-modal-footer button:focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 2px;
+}
