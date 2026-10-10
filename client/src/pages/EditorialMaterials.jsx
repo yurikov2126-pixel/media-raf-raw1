@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialMaterialViewer from './EditorialMaterialViewer.jsx';
+import { batchUploadProgress, removeUploadedItem, canSubmitReview } from './editorialUploadUtils.js';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 
@@ -121,7 +122,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
             setProgress(0);
             await uploadOne(item.file, item.caption);
             // Preserve only not-yet-uploaded files if a later upload fails.
-            setSelected((items) => items.filter((entry) => entry !== item));
+            setSelected((items) => removeUploadedItem(items, item));
             setBatchProgress({ completed:index+1, total:pending.length, name:item.file.name });
         }
         setProgress(null);
@@ -138,7 +139,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         finally { setBusy(false); setProgress(null); setBatchProgress(null); }
     }
     async function submitAll() {
-        if (busy || (!selected.length && !files.length)) return;
+        if (!canSubmitReview({ busy, pendingCount:selected.length, uploadedCount:files.length })) return;
         setBusy(true); setMessage('');
         try {
             if (selected.length) await uploadSelected();
@@ -179,7 +180,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.doc,.docx" disabled={busy} onChange={e=>{setSelected(prev=>[...prev,...Array.from(e.target.files||[]).map(file=>({file,caption:''}))]);e.target.value='';}} className="mt-2 block w-full text-sm" />
             </label>
             {selected.map((item,i)=><div key={i} className="rounded-lg border border-current/10 p-2"><div className="flex items-center justify-between gap-2"><span className="min-w-0 truncate text-sm">{item.file.name}</span><button type="button" onClick={()=>setSelected(v=>v.filter((_,j)=>j!==i))} className="text-xs underline">Убрать</button></div><input value={item.caption} maxLength={1000} placeholder="Подпись к файлу" onChange={e=>setSelected(v=>v.map((x,j)=>j===i?{...x,caption:e.target.value}:x))} className="mt-2 w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm" /></div>)}
-            {batchProgress&&<div role="status" className="space-y-2 rounded-lg border border-slate-300 p-3 dark:border-slate-600"><div className="text-sm font-medium">Файл {batchProgress.completed+1} из {batchProgress.total}: {batchProgress.name}</div><progress aria-label="Общий прогресс загрузки" value={batchProgress.completed+(progress||0)/100} max={batchProgress.total} className="w-full"/><div className="text-xs">Текущий файл: {progress||0}% · Загружено: {batchProgress.completed} из {batchProgress.total}</div><progress aria-label="Прогресс текущего файла" value={progress||0} max="100" className="w-full"/><button type="button" onClick={()=>{cancelledRef.current=true;xhrRef.current?.abort();}} className="min-h-11 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
+            {batchProgress&&<div role="status" className="space-y-2 rounded-lg border border-slate-300 p-3 dark:border-slate-600"><div className="text-sm font-medium">Файл {batchProgress.completed+1} из {batchProgress.total}: {batchProgress.name}</div><progress aria-label="Общий прогресс загрузки" value={batchUploadProgress(batchProgress.completed,batchProgress.total,progress)} max={100} className="w-full"/><div className="text-xs">Текущий файл: {progress||0}% · Загружено: {batchProgress.completed} из {batchProgress.total}</div><progress aria-label="Прогресс текущего файла" value={progress||0} max="100" className="w-full"/><button type="button" onClick={()=>{cancelledRef.current=true;xhrRef.current?.abort();}} className="min-h-11 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
             {selected.length>0&&<p className="text-xs opacity-65">Файлы загрузятся автоматически при отправке на проверку.</p>}
         </div>}
         {(canSubmit||canReview)&&<div className="space-y-2 rounded-xl border border-violet-300/30 bg-violet-100/20 p-3 dark:bg-violet-300/10"><h4 className="font-semibold">Согласование</h4><textarea rows={3} maxLength={10000} value={note} onChange={e=>{setNote(e.target.value);setReviewError('');}} placeholder={canReview?'Обязательно напишите, что нужно исправить…':'Комментарий к результату…'} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm"/><div className="flex flex-wrap gap-2">{canSubmit&&<><button type="button" disabled={busy||(selected.length===0&&files.length===0)} onClick={submitAll} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Отправляем…' : 'Отправить на проверку'}</button>{selected.length>0&&<button type="button" disabled={busy} onClick={saveDraft} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">Сохранить черновик</button>}</>}{canReview&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Утвердить</button><button type="button" disabled={busy} onClick={()=>review('revise')} className="rounded-lg border border-amber-500 bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30">Вернуть на доработку</button></>}</div>{canReview&&<p className="text-xs text-slate-600 dark:text-slate-200">Для возврата на доработку требуется замечание редактора.</p>}{reviewError&&<p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{reviewError}</p>}</div>}
