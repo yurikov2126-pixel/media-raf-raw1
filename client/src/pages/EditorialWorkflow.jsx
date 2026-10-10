@@ -29,6 +29,7 @@ export default function EditorialWorkflow({ project, onError }) {
     const [assigneeFilter, setAssigneeFilter] = useState('ALL');
     const [sortBy, setSortBy] = useState('recent');
     const [deadlineFilter, setDeadlineFilter] = useState('ALL');
+    const [showFilters, setShowFilters] = useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
     const closeButtonRef = useRef(null);
     const dialogRef = useRef(null);
@@ -134,6 +135,13 @@ export default function EditorialWorkflow({ project, onError }) {
                 <button disabled={busy} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100 disabled:opacity-50">Создать задачу</button>
             </form>}
         </div>}
+        <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setShowFilters((open) => !open)} aria-expanded={showFilters} aria-controls="editorial-task-filters" className="inline-flex items-center gap-2 rounded-xl border border-violet-300/50 bg-white/40 px-3 py-2 text-sm font-medium text-violet-800 hover:bg-violet-100/60 dark:border-slate-500 dark:bg-slate-800/60 dark:text-slate-100 dark:hover:bg-slate-700">
+                <span aria-hidden="true">☷</span> Фильтры и вид {(query || statusFilter !== 'ALL' || assigneeFilter !== 'ALL' || deadlineFilter !== 'ALL' || sortBy !== 'recent' || view !== 'list') ? '•' : ''} <span aria-hidden="true">{showFilters ? '⌃' : '⌄'}</span>
+            </button>
+            {(query || statusFilter !== 'ALL' || assigneeFilter !== 'ALL' || deadlineFilter !== 'ALL' || sortBy !== 'recent' || view !== 'list') && <button type="button" onClick={() => { setQuery(''); setStatusFilter('ALL'); setAssigneeFilter('ALL'); setDeadlineFilter('ALL'); setSortBy('recent'); setView('list'); }} className="text-xs text-violet-700 underline dark:text-violet-200">Сбросить</button>}
+        </div>
+        {showFilters && <div id="editorial-task-filters" className="space-y-3 rounded-xl border border-current/10 bg-white/30 p-3 dark:bg-slate-800/30">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5" aria-label="Поиск и фильтры заданий">
             <label className="block"><span className="sr-only">Поиск заданий</span><input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск заданий…" className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm" /></label>
             <label className="block"><span className="sr-only">Фильтр по статусу</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"><option value="ALL">Все статусы</option>{Object.entries(LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
@@ -141,8 +149,9 @@ export default function EditorialWorkflow({ project, onError }) {
             <label className="block"><span className="sr-only">Фильтр по сроку</span><select value={deadlineFilter} onChange={(e) => setDeadlineFilter(e.target.value)} className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"><option value="ALL">Все сроки</option><option value="OVERDUE">Просрочено</option><option value="SOON">Ближайшие 7 дней</option><option value="NO_DUE">Без срока</option></select></label>
             <label className="block"><span className="sr-only">Сортировка заданий</span><select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"><option value="recent">Сначала новые</option><option value="due">По сроку</option><option value="title">По названию</option></select></label>
         </div>
-        <div className="flex items-center justify-between gap-2"><p className="text-xs opacity-60">Показано {visibleTasks.length} из {tasks.length}</p>{(query || statusFilter !== 'ALL' || assigneeFilter !== 'ALL' || deadlineFilter !== 'ALL') && <button type="button" onClick={() => { setQuery(''); setStatusFilter('ALL'); setAssigneeFilter('ALL'); setDeadlineFilter('ALL'); }} className="text-xs text-violet-700 underline dark:text-violet-200">Сбросить фильтры</button>}</div>
+        <div className="flex items-center justify-between gap-2"><p className="text-xs opacity-60">Показано {visibleTasks.length} из {tasks.length}</p><button type="button" onClick={() => { setQuery(''); setStatusFilter('ALL'); setAssigneeFilter('ALL'); setDeadlineFilter('ALL'); setSortBy('recent'); }} className="text-xs font-medium text-violet-700 underline dark:text-violet-200">Сбросить всё</button></div>
         <div className="flex gap-2 text-xs"><button type="button" onClick={() => setView('board')} aria-pressed={view === 'board'} className={`rounded-lg px-3 py-1.5 ${view === "board" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>По статусам</button><button type="button" onClick={() => setView('list')} aria-pressed={view === 'list'} className={`rounded-lg px-3 py-1.5 ${view === "list" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>Список</button></div>
+        </div>}
         {loading ? <p role="status">Загружаем задачи…</p> : visibleTasks.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-60">{tasks.length === 0 ? 'Пока нет заданий.' : 'Нет заданий по выбранным фильтрам.'}</p> : (
             <div className={view === 'board' ? "grid min-w-0 gap-3 xl:grid-cols-2" : "space-y-2"}>{(view === 'board' ? Object.entries(LABELS).map(([id, title]) => ({ id, title })) : [{ id: 'all', title: 'Все задания' }]).map((stage) => {
                 const list = stage.id === 'all' ? visibleTasks : visibleTasks.filter((task) => task.status === stage.id);
