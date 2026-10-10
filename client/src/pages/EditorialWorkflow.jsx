@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
+import EditorialTaskDetails from './EditorialTaskDetails.jsx';
 
 const LABELS = { TODO: 'К выполнению', IN_PROGRESS: 'В работе', IN_REVIEW: 'На проверке', REVISION: 'Доработка', APPROVED: 'Утверждено', DONE: 'Завершено' };
 export default function EditorialWorkflow({ project, onError }) {
@@ -11,14 +12,16 @@ export default function EditorialWorkflow({ project, onError }) {
     const [taskTitle, setTaskTitle] = useState('');
     const [taskStage, setTaskStage] = useState('');
     const [taskAssignee, setTaskAssignee] = useState('');
+    const [taskParent, setTaskParent] = useState('');
     const [taskDue, setTaskDue] = useState('');
     const [busy, setBusy] = useState(false);
+    const [selectedTaskId, setSelectedTaskId] = useState(null);
     const [loading, setLoading] = useState(true);
     const canEdit = user?.role === 'ADMIN' || project.members.some((m) => m.userId === user?.id && ['MANAGER', 'EDITOR'].includes(m.role));
     const canView = canEdit || project.members.some((m) => m.userId === user?.id);
     useEffect(() => {
         let active = true;
-        setLoading(true); setStages([]); setTasks([]);
+        setLoading(true); setStages([]); setTasks([]); setSelectedTaskId(null);
         if (canView) api(`/editorial/workflow/projects/${project.id}/workflow`, { token })
             .then((data) => { if (active) { setStages(data.stages); setTasks(data.tasks); } })
             .catch((e) => { if (active) onError(e.message); })
@@ -37,8 +40,8 @@ export default function EditorialWorkflow({ project, onError }) {
                 await api(`/editorial/workflow/projects/${project.id}/stages`, { method: 'POST', token, body: { title: stageTitle } });
                 setStageTitle('');
             } else {
-                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, stageId: taskStage || null, assigneeId: taskAssignee || null, dueAt: taskDue ? new Date(taskDue).toISOString() : null } });
-                setTaskTitle(''); setTaskDue('');
+                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, stageId: taskStage || null, assigneeId: taskAssignee || null, parentId: taskParent || null, dueAt: taskDue ? new Date(taskDue).toISOString() : null } });
+                setTaskTitle(''); setTaskDue(''); setTaskParent('');
             }
             await refresh();
         } catch (e) { onError(e.message); }
@@ -63,6 +66,7 @@ export default function EditorialWorkflow({ project, onError }) {
                 <label className="block text-sm">Новая задача<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={160} required value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} /></label>
                 <label className="block text-sm">Этап<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskStage} onChange={(e) => setTaskStage(e.target.value)}><option value="">Без этапа</option>{stages.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
+                <label className="block text-sm">Родительская задача<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskParent} onChange={(e) => setTaskParent(e.target.value)}><option value="">Нет (основная задача)</option>{tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
                 <label className="block text-sm">Срок<input type="datetime-local" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} /></label>
                 <button disabled={busy} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">Создать задачу</button>
             </form>
@@ -76,7 +80,7 @@ export default function EditorialWorkflow({ project, onError }) {
                     {list.map((task) => {
                         const canChange = canEdit || task.assigneeId === user?.id;
                         return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-current/10 py-2">
-                            <div className="min-w-0"><div className="text-sm font-medium break-words">{task.title}</div><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}</div></div>
+                            <div className="min-w-0"><button type="button" onClick={() => setSelectedTaskId(task.id)} className="text-left text-sm font-medium underline-offset-2 hover:underline break-words">{task.title}</button><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}</div></div>
                             {canChange ? <select aria-label={`Статус задачи: ${task.title}`} value={task.status} onChange={(e) => setStatus(task, e.target.value)} className="rounded-lg border border-current/20 bg-transparent p-2 text-xs">
                                 {Object.entries(LABELS).filter(([key]) => canEdit || key === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                             </select> : <span className="text-xs opacity-60">{LABELS[task.status] || task.status}</span>}
@@ -85,5 +89,6 @@ export default function EditorialWorkflow({ project, onError }) {
                 </div>;
             })}</div>
         )}
+        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && <EditorialTaskDetails task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />}
     </section>;
 }
