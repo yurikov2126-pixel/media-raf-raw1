@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 const SECTIONS = [
-    ['','Обзор'], ['projects','Проекты'], ['calendar','Календарь'],
+    ['','Обзор'], ['my-tasks','Мои задания'], ['projects','Проекты'], ['calendar','Календарь'],
     ['files','Файлы'], ['shares','Общий доступ'], ['reviews','На проверке'],
     ['ideas','Идеи'], ['content','Контент-план'],
 ];
