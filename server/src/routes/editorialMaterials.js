@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -64,6 +65,48 @@ router.patch('/projects/:projectId/tasks/:taskId/materials/:fileId', async (req,
 
 // Authenticated on-demand thumbnails: never expose original file paths.
 // Generate once on disk to avoid repeatedly decoding large camera photos.
+// Download a single review version or all versions as a private ZIP archive.
+router.get('/projects/:projectId/tasks/:taskId/materials/archive', async (req,res,next) => {
+    try {
+        const ctx = await context(req,res); if (!ctx) return;
+        const requested = req.query.version;
+        if (requested !== undefined && (!/^\\d+$/.test(String(requested)) || Number(requested) < 1)) {
+            return res.status(400).json({ error:'Некорректная версия' });
+        }
+        const where = { taskId:ctx.task.id, ...(requested === undefined ? {} : { version:Number(requested) }) };
+        const files = await prisma.editorialMaterialFile.findMany({ where, orderBy:[{version:'desc'},{createdAt:'asc'}] });
+        if (!files.length) return res.status(404).json({ error:'Материалы не найдены' });
+        if (files.length > 500) return res.status(413).json({ error:'Слишком много файлов для одного архива' });
+        // ZIP32 only: reject oversized downloads before sending response headers.
+        const total = files.reduce((n,f) => n + f.size, 0);
+        if (total > 3_500_000_000) return res.status(413).json({ error:'Архив слишком большой. Скачайте версии по отдельности.' });
+        const entries = zipEntries(files.map(f => ({ name:`v${f.version}/${f.name}`, size:f.size, path:path.join(root,f.storageName), caption:f.caption, version:f.version, createdAt:f.createdAt })));
+        // Keep version folders while sanitizing user-supplied filename components.
+        for (let index=0; index<entries.length; index++) entries[index].zipName = `Версия ${files[index].version}/${entries[index].zipName}`;
+        const manifest = Buffer.from(JSON.stringify(files.map((f,index)=>({
+            file:entries[index].zipName, caption:f.caption || '', version:f.version,
+            uploadedAt:f.createdAt,
+        })), null, 2), 'utf8');
+        const archive = [...entries, { zipName:'Подписи.json', size:manifest.length, buffer:manifest }];
+        const estimatedOverhead = archive.reduce((n,f) => n + 76 + 2 * Buffer.byteLength(f.zipName,'utf8'), 22);
+        if (total + manifest.length + estimatedOverhead > 0xffffffff) return res.status(413).json({ error:'Архив слишком большой' });
+        // Detect missing files before streaming; avoid truncated ZIP from missing originals.
+        for (const file of entries) {
+            const stat = await fs.stat(file.path);
+            if (stat.size !== file.size) return res.status(409).json({ error:'Размер файла на диске изменился' });
+        }
+        const name = requested === undefined ? 'materials-all.zip' : `materials-version-${requested}.zip`;
+        res.setHeader('Content-Type','application/zip');
+        res.setHeader('Content-Disposition',`attachment; filename="${name}"`);
+        res.setHeader('Cache-Control','private, no-store');
+        res.setHeader('X-Content-Type-Options','nosniff');
+        const stream = streamZip(archive);
+        req.on('close', () => { if (!res.writableFinished) stream.destroy(); });
+        stream.on('error', err => { if (!res.headersSent) next(err); else res.destroy(err); });
+        stream.pipe(res);
+    } catch(e) { next(e); }
+});
+
 router.get('/projects/:projectId/tasks/:taskId/materials/:fileId/thumbnail', async (req,res,next) => {
     try {
         const ctx = await context(req,res); if (!ctx) return;
