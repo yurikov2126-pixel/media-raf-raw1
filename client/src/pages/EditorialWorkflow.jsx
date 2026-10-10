@@ -78,7 +78,7 @@ export default function EditorialWorkflow({ project, onError }) {
                         return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-current/10 py-2">
                             <div className="min-w-0"><div className="text-sm font-medium break-words">{task.title}</div><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}</div></div>
                             {canChange ? <select aria-label={`Статус задачи: ${task.title}`} value={task.status} onChange={(e) => setStatus(task, e.target.value)} className="rounded-lg border border-current/20 bg-transparent p-2 text-xs">
-                                {Object.entries(LABELS).filter(([key]) => canEdit || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                                {Object.entries(LABELS).filter(([key]) => canEdit || key === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                             </select> : <span className="text-xs opacity-60">{LABELS[task.status] || task.status}</span>}
                         </div>;
                     })}
