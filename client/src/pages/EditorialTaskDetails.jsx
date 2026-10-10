@@ -16,6 +16,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
     const [tab, setTab] = useState('details');
+    const [reviewNote, setReviewNote] = useState('');
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
@@ -44,6 +45,16 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         setSaving(true); onError('');
         try { await action(); await refresh(); }
         catch (e) { onError(e.message); }
+        finally { setSaving(false); }
+    }
+    async function review(action) {
+        if (saving) return;
+        setSaving(true); onError('');
+        try {
+            await api(base + '/review', { method: 'POST', token, body: { action, note: reviewNote } });
+            setReviewNote('');
+            await refresh();
+        } catch (error) { onError(error.message); }
         finally { setSaving(false); }
     }
     function save(event) {
