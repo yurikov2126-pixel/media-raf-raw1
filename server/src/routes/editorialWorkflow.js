@@ -160,6 +160,38 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+
+router.post('/projects/:projectId/tasks/:taskId/review', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id } });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        const editor = canEdit(project, req.user);
+        const action = req.body?.action;
+        const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+        if (!['submit', 'approve', 'revise'].includes(action)) return res.status(400).json({ error: 'Неизвестное действие' });
+        if (typeof req.body?.note !== 'string' || note.length > 10000) return res.status(400).json({ error: 'Некорректное замечание' });
+        if (action === 'submit' && task.assigneeId !== req.user.id) return res.status(403).json({ error: 'Отправить материал может исполнитель' });
+        if (action !== 'submit' && !editor) return res.status(403).json({ error: 'Проверять материалы может только редактор' });
+        if (action === 'submit' && !['TODO', 'IN_PROGRESS', 'REVISION'].includes(task.status)) return res.status(409).json({ error: 'Материал нельзя отправить из текущего статуса' });
+        if (action !== 'submit' && task.status !== 'IN_REVIEW') return res.status(409).json({ error: 'Материал не находится на проверке' });
+        if (action === 'revise' && !note) return res.status(400).json({ error: 'Укажите, что необходимо исправить' });
+        const status = action === 'submit' ? 'IN_REVIEW' : action === 'approve' ? 'APPROVED' : 'REVISION';
+        const updated = await prisma.$transaction(async (tx) => {
+            const result = await tx.editorialTask.update({ where: { id: task.id }, data: { status } });
+            if (note) await tx.editorialTaskComment.create({ data: { taskId: task.id, authorId: req.user.id, body: note } });
+            await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: action === 'submit' ? 'REVIEW_SUBMITTED' : action === 'approve' ? 'REVIEW_APPROVED' : 'REVIEW_REVISION', details: JSON.stringify({ note }) } });
+            const recipients = action === 'submit'
+                ? project.members.filter((m) => ['MANAGER', 'EDITOR'].includes(m.role)).map((m) => m.userId)
+                : [task.assigneeId, task.createdById];
+            await notifyEditorial(tx, project, result, recipients, action === 'submit' ? 'review_submitted' : action === 'approve' ? 'review_approved' : 'review_revision', req.user.id);
+            return result;
+        });
+        res.json({ task: updated });
+    } catch (error) { next(error); }
+});
+
 router.post('/projects/:projectId/tasks/:taskId/dependencies', async (req, res, next) => {
     try {
         const project = await getProject(req.params.projectId);
