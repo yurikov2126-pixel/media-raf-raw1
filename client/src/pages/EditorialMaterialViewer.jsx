@@ -19,6 +19,7 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
     const requests = useRef(new Map());
     const stage = useRef(null);
     const lastTap = useRef(0);
+    const thumbnailRefs = useRef(new Map());
     const active = files[index];
     const image = active?.mimeType?.startsWith('image/');
     const url = active ? urls[active.id] : null;
@@ -64,6 +65,11 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
 
     useEffect(() => { if (url) setLoading(false); }, [url]);
 
+    // Keep the selected material visible in long horizontal filmstrips.
+    useEffect(() => {
+        thumbnailRefs.current.get(active?.id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }, [active?.id]);
+
     const navigate = useCallback((step) => {
         setIndex(previous => clamp(previous + step, 0, files.length - 1));
     }, [files.length]);
@@ -73,8 +79,6 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
             if (event.key === 'Escape') onClose();
             if (event.key === 'ArrowRight') navigate(1);
             if (event.key === 'ArrowLeft') navigate(-1);
-            if (event.key === '+' || event.key === '=') setScale(v => clamp(v * 1.5, 1, 5));
-            if (event.key === '-') setScale(v => clamp(v / 1.5, 1, 5));
         };
         window.addEventListener('keydown', keydown);
         return () => window.removeEventListener('keydown', keydown);
@@ -147,20 +151,25 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
         }
         lastTap.current = now;
     }
-    function zoom(value) {
-        setScale(current => {
-            const next = clamp(current * value, 1, 5);
-            if (next === 1) setOffset({ x: 0, y: 0 });
-            return next;
-        });
+    function downloadCurrent() {
+        if (!url || !active) return;
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = active.name || 'material';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
     }
     if (!active) return null;
     return createPortal(<div role="dialog" aria-modal="true" aria-label="Просмотр материалов" className="editorial-material-lightbox fixed inset-0 z-[10050] flex flex-col bg-slate-950 text-white">
-        <header className="flex shrink-0 items-center gap-2 border-b border-white/15 px-3 py-3 pt-[max(12px,env(safe-area-inset-top))]">
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{active.name}</p><p className="text-xs text-slate-300">{index + 1} из {files.length} · Версия {active.version}</p></div>
-            {image && <><button type="button" onClick={() => zoom(1 / 1.5)} aria-label="Уменьшить" className="rounded-lg border border-white/30 px-3 py-2">−</button><button type="button" onClick={() => zoom(1.5)} aria-label="Увеличить" className="rounded-lg border border-white/30 px-3 py-2">+</button></>}
-            <button type="button" onClick={() => setShowDetails(v => !v)} aria-label="Показать или скрыть подпись" className="rounded-lg border border-white/30 px-3 py-2">ⓘ</button>
-            <button type="button" onClick={onClose} aria-label="Закрыть просмотр" className="rounded-lg border border-white/30 px-3 py-2">✕</button>
+        <header className="editorial-viewer-toolbar relative z-20 flex shrink-0 items-center gap-2 border-b border-slate-700 bg-slate-950 px-3 py-3 pt-[max(14px,env(safe-area-inset-top))] text-white">
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">{active.name}</p>
+                <p className="text-xs text-slate-300">{index + 1} из {files.length} · Версия {active.version}</p>
+            </div>
+            <button type="button" onClick={downloadCurrent} disabled={!url} aria-label="Скачать текущий материал" title="Скачать материал" className="editorial-viewer-action" >↓</button>
+            <button type="button" onClick={() => setShowDetails(v => !v)} aria-label={showDetails ? 'Скрыть подпись' : 'Показать подпись'} aria-pressed={showDetails} className="editorial-viewer-action">ⓘ</button>
+            <button type="button" onClick={onClose} aria-label="Закрыть просмотр" className="editorial-viewer-action">✕</button>
         </header>
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
             {index > 0 && <button type="button" onClick={() => navigate(-1)} aria-label="Предыдущий материал" className="absolute left-2 z-10 hidden rounded-full bg-black/60 px-3 py-3 text-xl sm:block">‹</button>}
@@ -181,7 +190,7 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
             <p className="mt-1 text-xs text-slate-400">{(active.size / 1024 / 1024).toFixed(1)} МБ · {new Date(active.createdAt).toLocaleString('ru-RU')}</p>
         </div>}
         <nav aria-label="Миниатюры материалов" className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-white/15 px-3 py-2 pb-[max(10px,env(safe-area-inset-bottom))]">
-            {files.map((file, position) => <button key={file.id} type="button" onClick={() => setIndex(position)} aria-label={`Открыть ${file.name}`} aria-current={index === position ? 'true' : undefined}
+            {files.map((file, position) => <button key={file.id} ref={element => { if (element) thumbnailRefs.current.set(file.id, element); else thumbnailRefs.current.delete(file.id); }} type="button" onClick={() => setIndex(position)} aria-label={`Открыть ${file.name}`} aria-current={index === position ? 'true' : undefined}
                 className={`h-12 w-14 shrink-0 overflow-hidden rounded-lg border-2 text-xs transition-all duration-200 ${index === position ? 'border-violet-400 bg-violet-800' : 'border-slate-600 bg-slate-800 opacity-70'}`}>
                 {urls[file.id] && file.mimeType?.startsWith('image/') ? <img src={urls[file.id]} alt="" className="h-full w-full object-cover" /> : file.mimeType?.startsWith('video/') ? '🎬' : file.mimeType === 'application/pdf' ? '📄' : '📎'}
             </button>)}
