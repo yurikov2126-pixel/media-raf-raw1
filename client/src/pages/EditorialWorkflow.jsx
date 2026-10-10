@@ -16,6 +16,8 @@ export default function EditorialWorkflow({ project, onError }) {
     const [taskOpen, setTaskOpen] = useState(false);
     const [taskDue, setTaskDue] = useState('');
     const [busy, setBusy] = useState(false);
+    const [composer, setComposer] = useState(null);
+    const [view, setView] = useState('board');
     const [selectedTaskId, setSelectedTaskId] = useState(null);
     const [loading, setLoading] = useState(true);
     const canEdit = user?.role === 'ADMIN' || project.members.some((m) => m.userId === user?.id && ['MANAGER', 'EDITOR'].includes(m.role));
@@ -39,10 +41,10 @@ export default function EditorialWorkflow({ project, onError }) {
         try {
             if (kind === 'stage') {
                 await api(`/editorial/workflow/projects/${project.id}/stages`, { method: 'POST', token, body: { title: stageTitle } });
-                setStageTitle('');
+                setStageTitle(''); setComposer(null);
             } else {
                 await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, stageId: taskStage || null, assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: taskDue ? new Date(taskDue).toISOString() : null } });
-                setTaskTitle(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false);
+                setTaskTitle(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false); setComposer(null);
             }
             await refresh();
         } catch (e) { onError(e.message); }
@@ -57,13 +59,13 @@ export default function EditorialWorkflow({ project, onError }) {
     }
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
     return <section className="space-y-4 border-t border-current/10 pt-4">
-        <h4 className="font-semibold">Этапы и задания</h4>
-        {canEdit && <div className="grid gap-3 md:grid-cols-2">
-            <form onSubmit={(e) => submit(e, 'stage')} className="rounded-xl border border-current/15 p-3 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Задания <span className="text-xs font-normal opacity-50">· {tasks.length}</span></h4>{canEdit && <div className="flex gap-2"><button type="button" onClick={() => setComposer((v) => v === 'task' ? null : 'task')} className="rounded-lg border border-current/20 px-3 py-2 text-xs">+ Задача</button><button type="button" onClick={() => setComposer((v) => v === 'stage' ? null : 'stage')} className="rounded-lg border border-current/20 px-3 py-2 text-xs">+ Этап</button></div>}</div>
+        {canEdit && composer && <div className="rounded-xl border border-current/10 p-3">
+            {composer === 'stage' && <form onSubmit={(e) => submit(e, 'stage')} className="min-w-0 rounded-xl border border-current/10 p-3 space-y-2">
                 <label className="block text-sm">Новый этап<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={100} required value={stageTitle} onChange={(e) => setStageTitle(e.target.value)} /></label>
                 <button disabled={busy} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">Добавить этап</button>
-            </form>
-            <form onSubmit={(e) => submit(e, 'task')} className="rounded-xl border border-current/15 p-3 space-y-2">
+            </form>}
+            {composer === 'task' && <form onSubmit={(e) => submit(e, 'task')} className="rounded-xl border border-current/15 p-3 space-y-2">
                 <label className="block text-sm">Новая задача<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={160} required value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} /></label>
                 <label className="block text-sm">Этап<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskStage} onChange={(e) => setTaskStage(e.target.value)}><option value="">Без этапа</option>{stages.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
@@ -71,14 +73,15 @@ export default function EditorialWorkflow({ project, onError }) {
                 <label className="block text-sm">Срок<input type="datetime-local" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} /></label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={taskOpen} onChange={(e) => setTaskOpen(e.target.checked)} />Открыть приём заявок</label>
                 <button disabled={busy} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">Создать задачу</button>
-            </form>
+            </form>}
         </div>}
+        <div className="flex gap-2 text-xs"><button type="button" onClick={() => setView('board')} aria-pressed={view === 'board'} className="rounded-lg border border-current/20 px-3 py-1.5">По этапам</button><button type="button" onClick={() => setView('list')} aria-pressed={view === 'list'} className="rounded-lg border border-current/20 px-3 py-1.5">Список</button></div>
         {loading ? <p role="status">Загружаем задачи…</p> : tasks.length === 0 ? <p className="text-sm opacity-60">Пока нет заданий.</p> : (
-            <div className="space-y-3">{[...stages, { id: null, title: 'Без этапа' }].map((stage) => {
-                const list = tasks.filter((task) => task.stageId === stage.id);
+            <div className={view === 'board' ? "grid min-w-0 gap-3 xl:grid-cols-2" : "space-y-2"}>{(view === 'board' ? [...stages, { id: null, title: 'Без этапа' }] : [{ id: 'all', title: 'Все задания' }]).map((stage) => {
+                const list = stage.id === 'all' ? tasks : tasks.filter((task) => task.stageId === stage.id);
                 if (!list.length) return null;
                 return <div key={stage.id || 'none'} className="rounded-xl border border-current/15 p-3 space-y-2">
-                    <h5 className="font-medium">{stage.title}</h5>
+                    <h5 className="text-sm font-semibold">{stage.title} <span className="font-normal opacity-50">· {list.length}</span></h5>
                     {list.map((task) => {
                         const canChange = canEdit || task.assigneeId === user?.id;
                         return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-current/10 py-2">
