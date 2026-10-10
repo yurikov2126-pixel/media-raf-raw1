@@ -1,0 +1,21 @@
+name: Deploy preview
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+concurrency:
+  group: deploy-preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    steps:
+      - name: Deploy isolated preview
+        run: bash /www/wwwroot/mediaraf-preview/scripts/deploy-preview.sh
