@@ -94,8 +94,7 @@ export default function EditorialMyTasks() {
             <div className="grid gap-3 md:grid-cols-2">
                 {shown.map(task => {
                     const deadline = deadlineState(task,now);
-                    return <Link key={task.id} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&from=my-tasks&status=${encodeURIComponent(filter)}`}
-                        className="block min-w-0 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition hover:border-violet-500 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-400">
+                    return <div key={task.id} className="block min-w-0 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-400">
                         <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="min-w-0 flex-1 break-words text-base font-semibold">{task.title}</h3>
                             <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status] || STATUS_STYLE.TODO}`}>{STATUS_LABELS[task.status] || task.status}</span></div>
                         <p className="mt-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{task.project?.title || 'Проект'}</p>
@@ -103,9 +102,10 @@ export default function EditorialMyTasks() {
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-600">
                             <span className={deadline === 'overdue' ? 'font-semibold text-rose-700 dark:text-rose-300' : deadline === 'soon' ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}>
                                 {deadlineLabel(task,now)}
-                            </span><span className="font-semibold text-violet-700 dark:text-violet-300">Открыть задание →</span>
+                            </span>
                         </div>
-                    </Link>;
+                        <div className="mt-3 flex flex-wrap gap-2">{[['details','Открыть задание'],['materials','Материалы'],['discussion','Обсуждение']].map(([tab,label]) => <Link key={tab} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&from=my-tasks&status=${encodeURIComponent(filter)}&tab=${tab}`} className="inline-flex min-h-11 items-center rounded-lg border border-violet-300 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-50 dark:border-violet-500 dark:text-violet-200 dark:hover:bg-slate-700">{label}</Link>)}</div>
+                    </div>;
                 })}
             </div>}
     </section>;
