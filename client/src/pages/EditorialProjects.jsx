@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialWorkflow from './EditorialWorkflow.jsx';
@@ -9,6 +9,8 @@ export default function EditorialProjects() {
     const [searchParams] = useSearchParams();
     const linkedProjectId = searchParams.get('project');
     const linkedTaskId = searchParams.get('task');
+    const fromMyTasks = searchParams.get('from') === 'my-tasks';
+    const returnStatus = searchParams.get('status');
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -84,6 +86,7 @@ export default function EditorialProjects() {
 
     return (
         <div className="editorial-glass__projects space-y-4">
+            {fromMyTasks && <Link to={"/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")} className="inline-flex min-h-11 items-center rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold text-violet-800 dark:text-violet-200">← Вернуться к моим заданиям</Link>}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><h2 className="text-xl font-semibold">Проекты</h2><p className="text-xs opacity-60">{projects.length} доступно · управление редакционными задачами</p></div>
                 {canCreate && <button type="button" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
