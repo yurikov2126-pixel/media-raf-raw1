@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import EditorialMaterialViewer from './EditorialMaterialViewer.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 
@@ -68,15 +69,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         catch(e){onError(e.message);}
     }
     useEffect(()=>{load();},[base,token]);
-    useEffect(()=>()=>{if(preview?.url)URL.revokeObjectURL(preview.url);},[preview]);
-    async function open(file) {
-        try {
-            const res=await fetch(API+base+'/'+file.id+'/content',{headers:{Authorization:`Bearer ${token}`}});
-            if(!res.ok)throw new Error('Не удалось открыть файл');
-            const blob=await res.blob();
-            setPreview({file,url:URL.createObjectURL(blob)});
-        }catch(e){onError(e.message);}
-    }
+    function open(file) { setPreview(file.id); }
     function uploadOne(file,caption) {
         return new Promise((resolve,reject)=>{
             const xhr=new XMLHttpRequest();
@@ -166,6 +159,6 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         )}
         {currentStatus==='IN_REVIEW'&&!canReview&&<p className="text-sm opacity-65">Материалы ожидают проверки редактором.</p>}
         {message&&<p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{message}</p>}
-        {preview&&<div className="fixed inset-0 z-[10050] flex flex-col bg-slate-950 p-3 text-white" role="dialog" aria-modal="true" aria-label="Просмотр материала"><div className="flex items-center justify-between gap-3 py-3"><span className="min-w-0 truncate text-sm">{preview.file.name}</span><button type="button" onClick={()=>setPreview(null)} className="rounded-lg border border-white/30 px-3 py-2">Закрыть</button></div><div className="flex min-h-0 flex-1 items-center justify-center overflow-auto">{preview.file.mimeType.startsWith('image/')?<img src={preview.url} alt={preview.file.caption||preview.file.name} className="max-h-full max-w-full object-contain"/>:preview.file.mimeType.startsWith('video/')?<video controls src={preview.url} className="max-h-full max-w-full"/>:preview.file.mimeType==='application/pdf'?<iframe title={preview.file.name} src={preview.url} className="h-full w-full bg-white"/>:<a href={preview.url} download={preview.file.name} className="underline">Скачать файл</a>}</div></div>}
+        {preview&&<EditorialMaterialViewer files={files} initialId={preview} base={base} token={token} onClose={()=>setPreview(null)} onError={onError} />}
     </section>;
 }
