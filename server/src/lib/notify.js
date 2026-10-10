@@ -1,3 +1,4 @@
+import { URLSearchParams } from 'node:url';
 import { prisma } from './prisma.js';
 import { sendPushToUser } from './push.js';
 
@@ -53,6 +54,23 @@ function payloadToPush(type, payload) {
             body: payload.preview || '',
             url: payload.postId ? `/app/feed?post=${encodeURIComponent(payload.postId)}${payload.commentId ? `&comment=${encodeURIComponent(payload.commentId)}` : ''}` : payload.chatId ? `/app/chats/${payload.chatId}` : '/app',
             tag: `mention-${payload.postId || payload.chatId || 'x'}`,
+        };
+    }
+    if (type === 'editorial') {
+        const titles = {
+            assigned: 'Назначено задание', status: 'Изменён статус задания',
+            comment: 'Новый комментарий', application: 'Заявка на задание',
+            application_approved: 'Заявка одобрена', application_rejected: 'Заявка отклонена',
+            deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено',
+        };
+        const query = new URLSearchParams();
+        if (payload.projectId) query.set('project', payload.projectId);
+        if (payload.projectId && payload.taskId) query.set('task', payload.taskId);
+        return {
+            title: titles[payload.event] || 'Редакция',
+            body: payload.taskTitle || payload.projectTitle || '',
+            url: '/app/editorial/projects' + (query.toString() ? '?' + query.toString() : ''),
+            tag: 'editorial-' + (payload.taskId || 'project') + '-' + (payload.event || 'event'),
         };
     }
     if (type === 'certificate') {
