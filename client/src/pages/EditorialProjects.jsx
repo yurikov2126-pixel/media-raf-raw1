@@ -13,6 +13,7 @@ export default function EditorialProjects() {
     const [visibility, setVisibility] = useState('CLOSED');
     const [creating, setCreating] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
+    const [showProjectList, setShowProjectList] = useState(false);
     const [projectTab, setProjectTab] = useState('tasks');
     const [showMemberForm, setShowMemberForm] = useState(false);
     const [selected, setSelected] = useState(null);
@@ -56,7 +57,7 @@ export default function EditorialProjects() {
         setCreating(true); setError('');
         try {
             const result = await api('/editorial/projects', { token, method: 'POST', body: { title, description, visibility } });
-            setTitle(''); setDescription(''); setSelected(result.project); setShowCreate(false); setProjectTab('tasks');
+            setTitle(''); setDescription(''); setSelected(result.project); setShowCreate(false); setProjectTab('tasks'); setShowProjectList(false);
             await reload();
         } catch (e) { setError(e.message); }
         finally { setCreating(false); }
@@ -90,10 +91,10 @@ export default function EditorialProjects() {
                 <label className="block text-sm">Видимость<select value={visibility} onChange={(e) => setVisibility(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
                 <button disabled={creating} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold disabled:opacity-50">{creating ? 'Создание…' : 'Создать'}</button>
             </form>}
-            <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(220px,270px)_minmax(0,1fr)]">
-                <aside className="min-w-0 space-y-2" aria-label="Список проектов">
+            <div className="min-w-0 space-y-3">
+                <aside className={`min-w-0 space-y-2 ${selected && !showProjectList ? "hidden" : ""}`} aria-label="Список проектов">
                     {loading ? <p role="status" className="p-3 text-sm">Загружаем…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-70">Проектов пока нет.</p> : projects.map((project) => (
-                        <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
+                        <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); setShowProjectList(false); }}
                             aria-current={selected?.id === project.id ? 'true' : undefined}
                             className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${selected?.id === project.id ? 'border-violet-400 bg-violet-50 text-violet-900 dark:border-violet-300 dark:bg-slate-700 dark:text-white' : 'border-violet-200/60 hover:border-violet-400 dark:border-slate-600'}`}>
                             <strong className="block truncate text-sm">{project.title}</strong>
@@ -110,7 +111,7 @@ export default function EditorialProjects() {
                             </div>
                             <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
                                 <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'text-violet-700 opacity-75 dark:text-slate-100'}`}>Задания</button>
-                                <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-current/10 font-semibold' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
+                                <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
                             </div>
                             {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} /> : <div className="space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Участники</h4>{canManage && <button type="button" onClick={() => setShowMemberForm((v) => !v)} className="rounded-lg border border-current/20 px-3 py-2 text-xs">{showMemberForm ? 'Скрыть форму' : '+ Участник'}</button>}</div>
