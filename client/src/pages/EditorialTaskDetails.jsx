@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialTaskDiscussion from './EditorialTaskDiscussion.jsx';
+import EditorialMaterials from './EditorialMaterials.jsx';
 
 const STATUSES = [
     ['TODO', 'К выполнению'], ['IN_PROGRESS', 'В работе'], ['IN_REVIEW', 'На проверке'],
@@ -16,7 +17,6 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
     const [tab, setTab] = useState('details');
-    const [reviewNote, setReviewNote] = useState('');
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
@@ -47,16 +47,6 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         catch (e) { onError(e.message); }
         finally { setSaving(false); }
     }
-    async function review(action) {
-        if (saving) return;
-        setSaving(true); onError('');
-        try {
-            await api(base + '/review', { method: 'POST', token, body: { action, note: reviewNote } });
-            setReviewNote('');
-            await refresh();
-        } catch (error) { onError(error.message); }
-        finally { setSaving(false); }
-    }
     function save(event) {
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
@@ -67,6 +57,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     return <section className="min-w-0 space-y-4" aria-label={`Карточка задачи ${task.title}`}>
         <div className="flex min-w-0 flex-wrap gap-2 border-b border-current/10 pb-3" role="tablist" aria-label="Содержимое задания">
             <button type="button" role="tab" aria-selected={tab === 'details'} onClick={() => setTab('details')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'details' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Детали</button>
+            <button type="button" role="tab" aria-selected={tab === 'materials'} onClick={() => setTab('materials')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'materials' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Материалы</button>
             <button type="button" role="tab" aria-selected={tab === 'discussion'} onClick={() => setTab('discussion')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'discussion' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Обсуждение и заявки</button>
         </div>
         <div hidden={tab !== 'details'} className="space-y-4">
