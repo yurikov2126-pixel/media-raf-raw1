@@ -57,6 +57,17 @@ function dateValue(value) {
 }
 
 // Personal cross-project task feed. Always scope to the authenticated assignee.
+// Navigation capability is derived from project membership, never from a client role guess.
+router.get('/navigation', async (req, res, next) => {
+    try {
+        const canManageProjects = ['ADMIN', 'MENTOR'].includes(req.user.role)
+            || await prisma.editorialProjectMember.count({
+                where: { userId:req.user.id, role:{ in:['MANAGER','EDITOR'] } },
+            }) > 0;
+        res.json({ canManageProjects });
+    } catch (error) { next(error); }
+});
+
 router.get('/my-tasks', async (req, res, next) => {
     try {
         const tasks = await prisma.editorialTask.findMany({

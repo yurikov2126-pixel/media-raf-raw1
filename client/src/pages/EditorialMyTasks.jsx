@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -14,12 +14,26 @@ const STATUS_STYLE = {
     DONE:'bg-teal-50 text-teal-950 border-teal-300 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-700',
 };
 const dateFormat = new Intl.DateTimeFormat('ru-RU', { day:'numeric', month:'short', year:'numeric' });
+function deadlineLabel(task, now) {
+    if (!task.dueAt) return 'Без срока';
+    const due = new Date(task.dueAt);
+    if (Number.isNaN(due.getTime())) return 'Срок не указан';
+    const today = new Date(now);
+    const dayNumber = (date) => Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()) / 86400000;
+    const days = dayNumber(due) - dayNumber(today);
+    if (deadlineState(task,now) === 'overdue') return days >= 0 ? 'Сегодня · срок истёк' : `Просрочено на ${-days} дн.`;
+    if (days === 0) return 'Сегодня';
+    if (days === 1) return 'Завтра';
+    return `Срок · ${dateFormat.format(due)}`;
+}
 export default function EditorialMyTasks() {
     const { token } = useAuth();
+    const [params, setParams] = useSearchParams();
     const [tasks,setTasks] = useState([]);
     const [loading,setLoading] = useState(true);
     const [error,setError] = useState('');
-    const [filter,setFilter] = useState('ACTIVE');
+    const filter = params.get('status') || 'ACTIVE';
+    const setFilter = (value) => setParams(value === 'ACTIVE' ? {} : { status:value }, { replace:true });
     const [refreshing,setRefreshing] = useState(false);
     const [now,setNow] = useState(Date.now());
     const sync = useCallback(async (initial = false) => {
@@ -81,18 +95,18 @@ export default function EditorialMyTasks() {
             <div className="grid gap-3 md:grid-cols-2">
                 {shown.map(task => {
                     const deadline = deadlineState(task,now);
-                    return <Link key={task.id} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}`}
-                        className="block min-w-0 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition hover:border-violet-500 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-400">
+                    return <div key={task.id} className="block min-w-0 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-400">
                         <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="min-w-0 flex-1 break-words text-base font-semibold">{task.title}</h3>
                             <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status] || STATUS_STYLE.TODO}`}>{STATUS_LABELS[task.status] || task.status}</span></div>
                         <p className="mt-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{task.project?.title || 'Проект'}</p>
                         {task.description && <p className="mt-2 line-clamp-2 break-words text-sm text-slate-700 dark:text-slate-200">{task.description}</p>}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-600">
                             <span className={deadline === 'overdue' ? 'font-semibold text-rose-700 dark:text-rose-300' : deadline === 'soon' ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}>
-                                {task.dueAt ? `${deadline === 'overdue' ? 'Просрочено · ' : deadline === 'soon' ? 'Скоро срок · ' : 'Срок · '}${dateFormat.format(new Date(task.dueAt))}` : 'Без срока'}
-                            </span><span className="font-semibold text-violet-700 dark:text-violet-300">Открыть задание →</span>
+                                {deadlineLabel(task,now)}
+                            </span>
                         </div>
-                    </Link>;
+                        <div className="mt-3 flex flex-wrap gap-2">{[['details','Открыть задание'],['materials','Материалы'],['discussion','Обсуждение']].map(([tab,label]) => <Link key={tab} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&from=my-tasks&status=${encodeURIComponent(filter)}&tab=${tab}`} className="inline-flex min-h-11 items-center rounded-lg border border-violet-300 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-50 dark:border-violet-500 dark:text-violet-200 dark:hover:bg-slate-700">{label}</Link>)}</div>
+                    </div>;
                 })}
             </div>}
     </section>;

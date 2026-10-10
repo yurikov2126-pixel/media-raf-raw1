@@ -8,7 +8,7 @@ const STATUSES = [
     ['REVISION', 'На доработке'], ['APPROVED', 'Утверждено'], ['DONE', 'Завершено'],
 ];
 
-export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, refresh, onError, onClose }) {
+export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, initialTab, refresh, onError, onClose }) {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
@@ -16,7 +16,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
-    const [tab, setTab] = useState(task.status === 'IN_REVIEW' ? 'materials' : 'details');
+    const [tab, setTab] = useState(initialTab || (task.status === 'IN_REVIEW' ? 'materials' : 'details'));
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
