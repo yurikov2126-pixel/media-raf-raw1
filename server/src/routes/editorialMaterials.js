@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -37,9 +38,7 @@ router.post('/projects/:projectId/tasks/:taskId/materials', upload.single('file'
         if (!req.file || !allowed.has(req.file.mimetype)) return res.status(400).json({ error: 'Недопустимый тип файла' });
         const caption = String(req.body.caption || '').trim();
         if (caption.length > 1000) return res.status(400).json({ error: 'Подпись слишком длинная' });
-        const latest = await prisma.editorialTaskEvent.findFirst({ where: { taskId: ctx.task.id, action: 'REVIEW_SUBMITTED' }, orderBy: { createdAt: 'desc' } });
         const version = (await prisma.editorialTaskEvent.count({ where: { taskId: ctx.task.id, action: 'REVIEW_SUBMITTED' } })) + 1;
-        void latest;
         await fs.mkdir(root, { recursive: true });
         const storageName = randomUUID();
         await fs.writeFile(path.join(root,storageName),req.file.buffer,{ flag:'wx' });
@@ -61,6 +60,37 @@ router.patch('/projects/:projectId/tasks/:taskId/materials/:fileId', async (req,
         if (typeof caption!=='string'||caption.length>1000) return res.status(400).json({error:'Некорректная подпись'});
         res.json({file:await prisma.editorialMaterialFile.update({where:{id:file.id},data:{caption:caption.trim()}})});
     } catch(e){next(e);}
+});
+
+// Authenticated on-demand thumbnails: never expose original file paths.
+// Generate once on disk to avoid repeatedly decoding large camera photos.
+router.get('/projects/:projectId/tasks/:taskId/materials/:fileId/thumbnail', async (req,res,next) => {
+    try {
+        const ctx = await context(req,res); if (!ctx) return;
+        const file = await prisma.editorialMaterialFile.findFirst({ where: { id:req.params.fileId, taskId:ctx.task.id } });
+        if (!file) return res.status(404).json({ error:'Файл не найден' });
+        if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.mimeType)) {
+            return res.status(415).json({ error:'Миниатюра недоступна для этого формата' });
+        }
+        const thumbnailRoot = path.join(root, 'thumbnails');
+        const thumbnailPath = path.join(thumbnailRoot, file.storageName + '.webp');
+        await fs.mkdir(thumbnailRoot, { recursive:true });
+        try {
+            await fs.access(thumbnailPath);
+        } catch {
+            const temporary = thumbnailPath + '.' + randomUUID() + '.tmp';
+            try {
+                await sharp(path.join(root,file.storageName), { limitInputPixels: 80_000_000 })
+                    .rotate().resize({ width:480, height:480, fit:'inside', withoutEnlargement:true })
+                    .webp({ quality:72, effort:3 }).toFile(temporary);
+                await fs.rename(temporary, thumbnailPath);
+            } finally { await fs.unlink(temporary).catch(() => {}); }
+        }
+        res.setHeader('Content-Type','image/webp');
+        res.setHeader('X-Content-Type-Options','nosniff');
+        res.setHeader('Cache-Control','private, max-age=300');
+        res.sendFile(thumbnailPath, err => { if (err && !res.headersSent) next(err); });
+    } catch(e) { next(e); }
 });
 
 router.get('/projects/:projectId/tasks/:taskId/materials/:fileId/content',async(req,res,next)=>{
