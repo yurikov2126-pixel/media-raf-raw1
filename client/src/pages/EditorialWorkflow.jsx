@@ -23,7 +23,7 @@ export default function EditorialWorkflow({ project, onError }) {
     const [taskDue, setTaskDue] = useState('');
     const [busy, setBusy] = useState(false);
     const [composer, setComposer] = useState(null);
-    const [view, setView] = useState('board');
+    const [view, setView] = useState('list');
     const [selectedTaskId, setSelectedTaskId] = useState(null);
     const closeButtonRef = useRef(null);
     const dialogRef = useRef(null);
@@ -85,10 +85,15 @@ export default function EditorialWorkflow({ project, onError }) {
         } catch (e) { onError(e.message); }
     }
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
-    return <section className="space-y-4 border-t border-current/10 pt-4">
+    return <section className="space-y-4">
+        <div className="grid grid-cols-3 gap-2" aria-label="Сводка задач">
+            <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 p-3"><p className="text-[11px] opacity-65">Всего задач</p><p className="text-2xl font-bold tabular-nums">{tasks.length}</p></div>
+            <div className="rounded-xl border border-blue-300/25 bg-blue-400/10 p-3"><p className="text-[11px] opacity-65">В работе</p><p className="text-2xl font-bold tabular-nums">{tasks.filter((task) => task.status === 'IN_PROGRESS').length}</p></div>
+            <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-3"><p className="text-[11px] opacity-65">Готово</p><p className="text-2xl font-bold tabular-nums">{tasks.filter((task) => task.status === 'DONE').length}</p></div>
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Задания <span className="text-xs font-normal opacity-50">· {tasks.length}</span></h4>{canEdit && <div className="flex gap-2"><button type="button" onClick={() => setComposer((v) => v === 'task' ? null : 'task')} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100">+ Задача</button></div>}</div>
         {canEdit && composer && <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-3 dark:border-slate-600 dark:bg-slate-800/70">
-            {composer === 'task' && <form onSubmit={(e) => submit(e, 'task')} className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-3 space-y-2 dark:border-slate-600 dark:bg-slate-800/70">
+            {composer === 'task' && <form onSubmit={(e) => submit(e, 'task')} className="space-y-3">
                 <label className="block text-sm">Новая задача<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={160} required value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} /></label>
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
                 <label className="block text-sm">Родительская задача<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskParent} onChange={(e) => setTaskParent(e.target.value)}><option value="">Нет (основная задача)</option>{tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
@@ -103,10 +108,10 @@ export default function EditorialWorkflow({ project, onError }) {
                 const list = stage.id === 'all' ? tasks : tasks.filter((task) => task.status === stage.id);
                 if (!list.length) return null;
                 return <div key={stage.id || 'none'} className={`editorial-glass__status min-w-0 rounded-xl border p-3 space-y-2 ${STATUS_COLORS[stage.id] || "border-slate-300 dark:border-slate-600"}`}>
-                    <h5 className="text-sm font-semibold">{stage.title} <span className="font-normal opacity-50">· {list.length}</span></h5>
+                    {view === "board" && <h5 className="text-sm font-semibold">{stage.title} <span className="font-normal opacity-50">· {list.length}</span></h5>}
                     {list.map((task) => {
                         const canChange = canEdit || task.assigneeId === user?.id;
-                        return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-current/10 py-2">
+                        return <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-current/10 py-3">
                             <div className="min-w-0"><button type="button" onClick={() => setSelectedTaskId(task.id)} className="text-left text-sm font-medium underline-offset-2 hover:underline break-words">{task.title}</button><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}</div></div>
                             {canChange ? <select aria-label={`Статус задачи: ${task.title}`} value={task.status} onChange={(e) => setStatus(task, e.target.value)} className={`rounded-lg border p-2 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>
                                 {Object.entries(LABELS).filter(([key]) => canEdit || key === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
