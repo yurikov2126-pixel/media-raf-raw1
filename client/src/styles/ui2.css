@@ -1850,3 +1850,87 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
     min-height: 44px;
   }
 }
+
+/* Editorial accessibility pass (desktop and mobile).
+   Portal dialogs need explicit readable surfaces, including when the app theme
+   is nested outside the portal. Keep accent actions intact. */
+.editorial-glass {
+  color: #172033;
+}
+.dark .editorial-glass,
+[data-theme="dark"] .editorial-glass {
+  color: #f1f5f9;
+}
+.editorial-glass__nav a {
+  opacity: 1 !important;
+  -webkit-text-fill-color: currentColor;
+}
+.editorial-glass__nav a:not([aria-current="page"]) {
+  background: #fff;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+.dark .editorial-glass__nav a:not([aria-current="page"]),
+[data-theme="dark"] .editorial-glass__nav a:not([aria-current="page"]) {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-color: #64748b;
+}
+.editorial-glass__nav a[aria-current="page"] {
+  background: #6d28d9;
+  color: #fff;
+  border-color: #6d28d9;
+}
+.editorial-glass__projects :is(button, input, select, textarea) {
+  opacity: 1;
+}
+.editorial-glass__projects aside > button:not([aria-current="true"]) {
+  color: #1e293b;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+}
+.dark .editorial-glass__projects aside > button:not([aria-current="true"]) {
+  color: #f1f5f9;
+  background: #20283b;
+  border-color: #64748b;
+}
+.editorial-task-dialog {
+  width: min(100%, 1120px) !important;
+  max-width: min(100%, 1120px) !important;
+}
+.editorial-task-dialog :is(input:not([type="file"]), select, textarea) {
+  background-color: #fff;
+  color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
+  border-color: #94a3b8;
+}
+.editorial-task-dialog :is(input, textarea)::placeholder {
+  color: #475569;
+  opacity: 1;
+}
+body:has(.dark) .editorial-task-dialog :is(input:not([type="file"]), select, textarea),
+body:has([data-theme="dark"]) .editorial-task-dialog :is(input:not([type="file"]), select, textarea),
+html.dark .editorial-task-dialog :is(input:not([type="file"]), select, textarea) {
+  background: #20283b;
+  color: #f8fafc;
+  -webkit-text-fill-color: #f8fafc;
+  border-color: #64748b;
+}
+body:has(.dark) .editorial-task-dialog :is(input,textarea)::placeholder,
+body:has([data-theme="dark"]) .editorial-task-dialog :is(input,textarea)::placeholder,
+html.dark .editorial-task-dialog :is(input,textarea)::placeholder {
+  color: #cbd5e1;
+}
+.editorial-task-dialog [class*="opacity-65"],
+.editorial-task-dialog [class*="opacity-60"] {
+  opacity: .85;
+}
+.editorial-task-dialog :is(button, a):focus-visible {
+  outline: 3px solid #a78bfa;
+  outline-offset: 2px;
+}
+@media (min-width: 640px) {
+  .editorial-task-dialog {
+    max-height: min(92dvh, 940px) !important;
+  }
+}
