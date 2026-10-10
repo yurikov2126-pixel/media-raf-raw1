@@ -16,7 +16,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
-    const [tab, setTab] = useState('details');
+    const [tab, setTab] = useState(task.status === 'IN_REVIEW' ? 'materials' : 'details');
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
@@ -60,6 +60,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             <button type="button" role="tab" aria-selected={tab === 'materials'} onClick={() => setTab('materials')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'materials' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Материалы</button>
             <button type="button" role="tab" aria-selected={tab === 'discussion'} onClick={() => setTab('discussion')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'discussion' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Обсуждение и заявки</button>
         </div>
+        {task.status === 'IN_REVIEW' && <div role="status" className="rounded-xl border border-amber-300/40 bg-amber-100/50 px-3 py-2 text-sm font-semibold text-amber-900 dark:bg-amber-300/10 dark:text-amber-100">⏳ На проверке — {canEdit ? 'откройте вкладку «Материалы», чтобы утвердить или вернуть работу' : 'ожидает решения редактора'}</div>}
         <div hidden={tab !== 'details'} className="space-y-4">
         <form onSubmit={save} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <label className="block min-w-0 text-sm sm:col-span-2">Название
