@@ -1,9 +1,33 @@
 import { Router } from 'express';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { getIo } from '../lib/notify.js';
 
 const router = Router();
 router.use(auth);
+ 
+// Notify only project members after a successful workflow mutation.
+// User-specific Socket.IO rooms already require JWT authentication.
+router.use('/projects/:projectId', (req, res, next) => {
+    if (!['POST', 'PATCH', 'DELETE'].includes(req.method)) return next();
+    res.once('finish', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) return;
+        const io = getIo();
+        if (!io) return;
+        prisma.editorialProjectMember.findMany({
+            where: { projectId: req.params.projectId },
+            select: { userId: true },
+        }).then((members) => {
+            for (const member of members) {
+                io.to(`user:${member.userId}`).emit('editorial:workflow:updated', {
+                    projectId: req.params.projectId,
+                });
+            }
+        }).catch((error) => console.error('[editorial] socket notification failed:', error));
+    });
+    next();
+});
+
 const STATUSES = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'REVISION', 'APPROVED', 'DONE'];
 const isAdmin = (user) => user.role === 'ADMIN';
 const memberRole = (project, user) => project.members.find((member) => member.userId === user.id)?.role;
