@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import EditorialTaskDiscussion from './EditorialTaskDiscussion.jsx';
 
 const STATUSES = [
     ['TODO', 'К выполнению'], ['IN_PROGRESS', 'В работе'], ['IN_REVIEW', 'На проверке'],
@@ -107,5 +108,6 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
                 <button type="button" disabled={!dependencyId || saving} onClick={() => run(async () => { await api(base + '/dependencies', { method: 'POST', token, body: { dependsOnId: dependencyId } }); setDependencyId(''); })} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">Добавить</button>
             </div>}
         </div>
+        <EditorialTaskDiscussion projectId={project.id} task={task} token={token} userId={user?.id} canEdit={canEdit} onError={onError} onChanged={refresh} />
     </section>;
 }
