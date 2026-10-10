@@ -11,14 +11,13 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
-    const [stageId, setStageId] = useState(task.stageId || '');
     const [parentId, setParentId] = useState(task.parentId || '');
     const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
-        setAssigneeId(task.assigneeId || ''); setStageId(task.stageId || '');
+        setAssigneeId(task.assigneeId || '');
         setParentId(task.parentId || '');
         setDueAt(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     }, [task]);
@@ -49,7 +48,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     function save(event) {
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
-            title: title.trim(), description, assigneeId: assigneeId || null, stageId: stageId || null,
+            title: title.trim(), description, assigneeId: assigneeId || null,
             parentId: parentId || null, dueAt: dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
@@ -64,11 +63,6 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             </label>
             <label className="block text-sm md:col-span-2">Описание
                 <textarea maxLength={10000} rows={4} disabled={!canEdit || saving} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
-            </label>
-            <label className="block text-sm">Этап
-                <select disabled={!canEdit || saving} value={stageId} onChange={(e) => setStageId(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
-                    <option value="">Без этапа</option>{stages.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-                </select>
             </label>
             <label className="block text-sm">Исполнитель
                 <select disabled={!canEdit || saving} value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
