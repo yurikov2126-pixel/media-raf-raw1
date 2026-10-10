@@ -8,16 +8,16 @@ const SECTIONS = [
 
 export default function Editorial() {
     return (
-        <section className="mx-auto max-w-7xl px-4 py-6 md:px-8" aria-label="Редакция">
-            <header className="mb-6">
-                <p className="text-sm opacity-60">MEDIA·RAF·RAW / Рабочее пространство</p>
-                <h1 className="mt-1 text-3xl font-semibold">Редакция</h1>
-                <p className="mt-2 text-sm opacity-70">Проекты, материалы и редакционные процессы в одном месте.</p>
+        <section className="mx-auto max-w-7xl px-3 py-3 sm:px-5 md:py-5" aria-label="Редакция">
+            <header className="mb-3">
+                <p className="text-xs opacity-60">MEDIA·RAF·RAW / Рабочее пространство</p>
+                <h1 className="mt-1 text-2xl font-semibold">Редакция</h1>
+                <p className="mt-1 text-xs opacity-70">Проекты, материалы и редакционные процессы в одном месте.</p>
             </header>
-            <nav aria-label="Разделы редакции" className="mb-6 flex gap-2 overflow-x-auto pb-2" data-no-route-swipe>
+            <nav aria-label="Разделы редакции" className="mb-4 flex gap-1.5 overflow-x-auto pb-2" data-no-route-swipe>
                 {SECTIONS.map(([path, label]) => (
                     <NavLink key={path} end={!path} to={path || '/app/editorial'}
-                        className={({isActive}) => `shrink-0 rounded-xl border px-3 py-2 text-sm transition-colors ${isActive ? 'border-current font-semibold' : 'border-current/20 opacity-70 hover:opacity-100'}`}>
+                        className={({isActive}) => `shrink-0 rounded-lg border px-2.5 py-1.5 text-xs sm:text-sm transition-colors ${isActive ? 'border-current font-semibold' : 'border-current/20 opacity-70 hover:opacity-100'}`}>
                         {label}
                     </NavLink>
                 ))}
