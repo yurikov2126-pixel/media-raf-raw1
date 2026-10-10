@@ -18,4 +18,4 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Deploy isolated preview
-        run: bash /www/wwwroot/mediaraf-preview/scripts/deploy-preview.sh
+        run: bash /www/wwwroot/mediarafraw.ru/scripts/deploy-preview.sh
