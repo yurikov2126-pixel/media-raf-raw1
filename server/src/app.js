@@ -27,6 +27,7 @@ import gamificationRouter from './routes/gamification.js';
 import practicalsRouter from './routes/practicals.js';
 import homeworkRouter from './routes/homework.js';
 import editorialRouter from './routes/editorial.js';
+import editorialWorkflowRouter from './routes/editorialWorkflow.js';
 import { prisma } from './lib/prisma.js';
 import { isModuleEnabled } from './lib/modules.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -160,6 +161,7 @@ app.use('/api/onboarding', onboardingRouter);
 app.use('/api/gamification', gamificationRouter);
 app.use('/api/practicals', requireModule('courses'), practicalsRouter);
 app.use('/api/homework', requireModule('courses'), homeworkRouter);
+app.use('/api/editorial/workflow', requireModule('editorial'), editorialWorkflowRouter);
 app.use('/api/editorial', requireModule('editorial'), editorialRouter);
 
 /* ─────────── Swagger / OpenAPI ─────────── */
