@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Preview-only deploy. Never writes to production.
 set -euo pipefail
-export PATH="/www/server/nodejs/v24.21.0/bin:$PATH"
+export PATH="/www/server/nodejs/v24.21.0/bin:/www/server/pgsql/bin:$PATH"
+umask 077
 
 # Prevent overlapping timer/manual deployments.
 exec 9>/home/mediaraf-deploy/preview-deploy.lock
@@ -42,15 +43,33 @@ if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$BRANCH")" ]] &&
   echo "Preview is up to date"
   exit 0
 fi
-git merge --ff-only "origin/$BRANCH"
+# Verify safety guards in the incoming commit before checking it out.
+TARGET="origin/$BRANCH"
+git show "$TARGET:server/src/index.js" | grep -F "process.env.PREVIEW_MODE !== 'true'" >/dev/null || {
+  echo "Incoming commit lacks background-job guard" >&2; exit 1;
+}
+git show "$TARGET:server/src/lib/push.js" | grep -F "process.env.PREVIEW_MODE === 'true'" >/dev/null || {
+  echo "Incoming commit lacks push guard" >&2; exit 1;
+}
 
-# Require the committed preview guard before any service restart.
-grep -q "process.env.PREVIEW_MODE !== 'true'" server/src/index.js || {
-  echo "Missing committed preview background-job guard" >&2; exit 1;
+# Back up only the preview database before changing code or applying migrations.
+BACKUP_DIR=/home/mediaraf-deploy/backups
+[[ -d "$BACKUP_DIR" && -w "$BACKUP_DIR" ]] || {
+  echo "Preview backup directory unavailable" >&2; exit 1;
 }
-grep -q "process.env.PREVIEW_MODE === 'true'" server/src/lib/push.js || {
-  echo "Missing committed preview push guard" >&2; exit 1;
-}
+BACKUP_FILE="$BACKUP_DIR/preview-$(date -u +%Y%m%dT%H%M%SZ)-$$.dump"
+# Fixed database/user/host; never pass credentials on the command line.
+if ! PGCONNECT_TIMEOUT=10 pg_dump -h 127.0.0.1 -p 5432 -U mediaraf_preview \
+  -d mediaraf_preview -Fc -f "$BACKUP_FILE"; then
+  rm -f "$BACKUP_FILE"
+  echo "Preview backup failed; deployment aborted" >&2
+  exit 1
+fi
+chmod 600 "$BACKUP_FILE"
+pg_restore --list "$BACKUP_FILE" >/dev/null
+echo "Preview backup verified"
+
+git merge --ff-only "$TARGET"
 
 (
   cd server
