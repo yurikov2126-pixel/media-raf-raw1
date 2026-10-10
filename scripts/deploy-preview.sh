@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Preview-only deploy. Never writes to production.
 set -euo pipefail
+export PATH="/www/server/nodejs/v24.21.0/bin:$PATH"
+
+# Prevent overlapping timer/manual deployments.
+exec 9>/home/mediaraf-deploy/preview-deploy.lock
+flock -n 9 || { echo "Preview deployment already running"; exit 0; }
 
 ROOT=/www/wwwroot/mediaraf-preview
 BRANCH=feature/editorial-student-navigation
@@ -58,7 +63,7 @@ grep -q "process.env.PREVIEW_MODE === 'true'" server/src/lib/push.js || {
   npm ci
   VITE_API=/api VITE_SOCKET=https://preview.mediarafraw.ru npm run build
 )
-systemctl restart "$SERVICE"
+sudo -n /usr/bin/systemctl restart mediaraf-preview.service
 sleep 3
 systemctl is-active --quiet "$SERVICE"
 curl --fail --silent --show-error http://127.0.0.1:4001/api/health
