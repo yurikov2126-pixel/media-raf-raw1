@@ -1718,3 +1718,27 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
   background: #443620;
   color: #fde68a;
 }
+
+/* The task modal is rendered in a portal. Its header deliberately uses a
+   consistently dark surface in both themes, independent of app theme ancestry. */
+.editorial-glass__dialog .editorial-task-modal-header {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+  color-scheme: dark;
+}
+.editorial-glass__dialog .editorial-task-modal-header h4,
+.editorial-glass__dialog .editorial-task-modal-header button {
+  color: #f8fafc !important;
+}
+.editorial-glass__dialog .editorial-task-modal-header button {
+  background-color: #334155 !important;
+  border-color: #64748b !important;
+}
+.editorial-glass__dialog .editorial-task-modal-header button:hover {
+  background-color: #475569 !important;
+}
+.editorial-glass__dialog .editorial-task-modal-header button[title^="Открыть на проверку"] {
+  background-color: #6d28d9 !important;
+  border-color: #a78bfa !important;
+}
