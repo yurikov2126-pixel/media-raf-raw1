@@ -1934,3 +1934,38 @@ html.dark .editorial-task-dialog :is(input,textarea)::placeholder {
     max-height: min(92dvh, 940px) !important;
   }
 }
+
+/* Gallery contrast: light mode should never inherit the dark file card palette. */
+.editorial-material-tile {
+  color: #172033;
+  background: #fff;
+  border-color: #cbd5e1;
+}
+.editorial-material-tile:hover {
+  border-color: #7c3aed;
+  box-shadow: 0 6px 20px rgb(30 41 59 / 10%);
+}
+.editorial-material-tile :is(button, a):focus-visible {
+  outline: 3px solid #7c3aed;
+  outline-offset: 2px;
+}
+.editorial-material-tile p {
+  overflow-wrap: anywhere;
+}
+.editorial-gallery-heading {
+  background: #fff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+.dark .editorial-material-tile,
+[data-theme="dark"] .editorial-material-tile {
+  color: #f1f5f9;
+  background: #1e293b;
+  border-color: #475569;
+}
+.dark .editorial-gallery-heading,
+[data-theme="dark"] .editorial-gallery-heading {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-color: #475569;
+}
