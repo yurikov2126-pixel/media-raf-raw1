@@ -37,10 +37,8 @@ export default function EditorialWorkflow({ project, onError }) {
     async function submit(event, kind) {
         event.preventDefault(); setBusy(true); onError('');
         try {
-            {
                 await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: taskDue ? new Date(taskDue).toISOString() : null } });
                 setTaskTitle(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false); setComposer(null);
-            }
             await refresh();
         } catch (e) { onError(e.message); }
         finally { setBusy(false); }
@@ -54,7 +52,7 @@ export default function EditorialWorkflow({ project, onError }) {
     }
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
     return <section className="space-y-4 border-t border-current/10 pt-4">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Задания <span className="text-xs font-normal opacity-50">· {tasks.length}</span></h4>{canEdit && <div className="flex gap-2"><button type="button" onClick={() => setComposer((v) => v === 'task' ? null : 'task')} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700">+ Задача</button><button type="button" </div>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Задания <span className="text-xs font-normal opacity-50">· {tasks.length}</span></h4>{canEdit && <div className="flex gap-2"><button type="button" onClick={() => setComposer((v) => v === 'task' ? null : 'task')} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700">+ Задача</button></div>}</div>
         {canEdit && composer && <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-3 dark:border-violet-400/20 dark:bg-violet-400/5">
             {composer === 'task' && <form onSubmit={(e) => submit(e, 'task')} className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-3 space-y-2 dark:border-violet-400/20 dark:bg-violet-400/5">
                 <label className="block text-sm">Новая задача<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={160} required value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} /></label>
