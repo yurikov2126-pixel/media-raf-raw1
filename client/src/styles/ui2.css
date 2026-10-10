@@ -1742,3 +1742,89 @@ body:has([data-theme="dark"]) .editorial-glass__dialog [class*="bg-amber-100"] {
   background-color: #6d28d9 !important;
   border-color: #a78bfa !important;
 }
+
+/* Task modal polish: keep portal theme surfaces and text readable on iOS. */
+.editorial-task-modal .editorial-task-modal-header {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.editorial-task-modal .editorial-task-modal-header > div:first-child p,
+.editorial-task-modal .editorial-task-modal-header > div:first-child h4 {
+  filter: none !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+  -webkit-filter: none !important;
+}
+.editorial-task-modal .editorial-task-modal-header > div:first-child p {
+  color: #c4b5fd !important;
+}
+.editorial-task-modal .editorial-task-modal-header > div:first-child h4 {
+  color: #fff !important;
+}
+.editorial-task-modal .editorial-task-modal-header .editorial-task-nav {
+  background: #334155 !important;
+  border-color: #64748b !important;
+  color: #fff !important;
+}
+.editorial-task-modal .editorial-task-modal-header .editorial-task-review-count {
+  color: #cbd5e1 !important;
+}
+.editorial-task-modal .editorial-task-tab[aria-selected="true"] {
+  background: #7c3aed !important;
+  border-color: #7c3aed !important;
+  color: #fff !important;
+}
+.editorial-task-modal .editorial-task-tab[aria-selected="false"] {
+  color: inherit !important;
+}
+.editorial-task-modal .editorial-task-modal-footer {
+  background: #fff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+.editorial-task-modal .editorial-task-modal-footer button {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+html.dark .editorial-task-modal .editorial-task-modal-footer,
+body.dark .editorial-task-modal .editorial-task-modal-footer,
+body:has(.dark) .editorial-task-modal .editorial-task-modal-footer,
+body:has([data-theme="dark"]) .editorial-task-modal .editorial-task-modal-footer {
+  background: #171a2a !important;
+  color: #f8fafc !important;
+  border-color: #46506a !important;
+}
+html.dark .editorial-task-modal .editorial-task-modal-footer button,
+body.dark .editorial-task-modal .editorial-task-modal-footer button,
+body:has(.dark) .editorial-task-modal .editorial-task-modal-footer button,
+body:has([data-theme="dark"]) .editorial-task-modal .editorial-task-modal-footer button {
+  background: #293149 !important;
+  color: #f8fafc !important;
+  border-color: #64748b !important;
+}
+html.dark .editorial-task-modal .editorial-task-review-banner,
+body.dark .editorial-task-modal .editorial-task-review-banner,
+body:has(.dark) .editorial-task-modal .editorial-task-review-banner,
+body:has([data-theme="dark"]) .editorial-task-modal .editorial-task-review-banner {
+  background: #352b1b !important;
+  color: #fde68a !important;
+  border-color: #a16207 !important;
+}
+html.dark .editorial-task-modal .editorial-task-tab[aria-selected="false"],
+body.dark .editorial-task-modal .editorial-task-tab[aria-selected="false"],
+body:has(.dark) .editorial-task-modal .editorial-task-tab[aria-selected="false"],
+body:has([data-theme="dark"]) .editorial-task-modal .editorial-task-tab[aria-selected="false"] {
+  color: #e2e8f0 !important;
+  border-color: #64748b !important;
+}
+@media (max-width: 639px) {
+  .editorial-task-modal .editorial-task-modal-header {
+    gap: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .editorial-task-modal .editorial-task-modal-header button {
+    min-width: 38px;
+  }
+}
