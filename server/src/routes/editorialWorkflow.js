@@ -14,14 +14,13 @@ router.use('/projects/:projectId', (req, res, next) => {
         if (res.statusCode < 200 || res.statusCode >= 300) return;
         const io = getIo();
         if (!io) return;
-        prisma.editorialProjectMember.findMany({
-            where: { projectId: req.params.projectId },
-            select: { userId: true },
-        }).then((members) => {
-            for (const member of members) {
-                io.to(`user:${member.userId}`).emit('editorial:workflow:updated', {
-                    projectId: req.params.projectId,
-                });
+        Promise.all([
+            prisma.editorialProjectMember.findMany({ where: { projectId: req.params.projectId }, select: { userId: true } }),
+            prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } }),
+        ]).then(([members, admins]) => {
+            const recipients = new Set([...members.map((m) => m.userId), ...admins.map((a) => a.id)]);
+            for (const userId of recipients) {
+                io.to(`user:${userId}`).emit('editorial:workflow:updated', { projectId: req.params.projectId });
             }
         }).catch((error) => console.error('[editorial] socket notification failed:', error));
     });
