@@ -12,6 +12,18 @@ const canSee = (project, user) => isAdmin(user) || !!memberRole(project, user);
 async function getProject(id) {
     return prisma.editorialProject.findUnique({ where: { id }, include: { members: true } });
 }
+
+// Notifications share the existing site inbox; never send to non-members.
+async function notifyEditorial(tx, project, task, recipients, event, actorId) {
+    const allowed = new Set(project.members.map((member) => member.userId));
+    const ids = [...new Set(recipients)].filter((id) => id && id !== actorId && allowed.has(id));
+    if (!ids.length) return;
+    await tx.notification.createMany({ data: ids.map((userId) => ({
+        userId, type: 'editorial',
+        payload: JSON.stringify({ projectId: project.id, projectTitle: project.title, taskId: task.id, taskTitle: task.title, event }),
+    })) });
+}
+
 function notFound(res) { return res.status(404).json({ error: 'Проект не найден' }); }
 function validText(value, max) { return typeof value === 'string' && !!value.trim() && value.trim().length <= max; }
 function dateValue(value) {
@@ -74,6 +86,7 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
         if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
         const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
+        if (task.assigneeId) await notifyEditorial(prisma, project, task, [task.assigneeId], 'assigned', req.user.id);
         res.status(201).json({ task });
     } catch (error) { next(error); }
 });
@@ -139,6 +152,8 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
         const updated = await prisma.$transaction(async (tx) => {
             const result = await tx.editorialTask.update({ where: { id: task.id }, data });
             await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'UPDATED', details: JSON.stringify({ before: Object.fromEntries(Object.keys(data).map((key) => [key, task[key] instanceof Date ? task[key].toISOString() : task[key]])), after: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value])) }) } });
+            if (data.assigneeId && data.assigneeId !== task.assigneeId) await notifyEditorial(tx, project, result, [data.assigneeId], 'assigned', req.user.id);
+            if (data.status && data.status !== task.status) await notifyEditorial(tx, project, result, [task.assigneeId, task.createdById], 'status', req.user.id);
             return result;
         });
         res.json({ task: updated });
@@ -204,6 +219,7 @@ router.post('/projects/:projectId/tasks/:taskId/comments', async (req, res, next
         const comment = await prisma.$transaction(async (tx) => {
             const created = await tx.editorialTaskComment.create({ data: { taskId: task.id, authorId: req.user.id, body: req.body.body.trim() } });
             await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'COMMENTED' } });
+            await notifyEditorial(tx, project, task, [task.assigneeId, task.createdById], 'comment', req.user.id);
             return created;
         });
         res.status(201).json({ comment });
@@ -227,6 +243,7 @@ router.post('/projects/:projectId/tasks/:taskId/applications', async (req, res, 
             update: { status: 'PENDING', note, reviewedAt: null, reviewedById: null },
         });
         await prisma.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'APPLIED' } });
+        await notifyEditorial(prisma, project, task, project.members.filter((m) => m.role === 'MANAGER' || m.role === 'EDITOR').map((m) => m.userId), 'application', req.user.id);
         res.status(201).json({ application });
     } catch (error) { next(error); }
 });
@@ -248,6 +265,7 @@ router.patch('/projects/:projectId/tasks/:taskId/applications/:applicationId', a
             }
             const updated = await tx.editorialTaskApplication.update({ where: { id: application.id }, data: { status: req.body.status, reviewedById: req.user.id, reviewedAt: new Date() } });
             await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: req.body.status === 'APPROVED' ? 'APPLICATION_APPROVED' : 'APPLICATION_REJECTED', details: JSON.stringify({ userId: application.userId }) } });
+            await notifyEditorial(tx, project, task, [application.userId], req.body.status === 'APPROVED' ? 'application_approved' : 'application_rejected', req.user.id);
             return { application: updated };
         });
         if (result.error) return res.status(409).json({ error: result.error });
