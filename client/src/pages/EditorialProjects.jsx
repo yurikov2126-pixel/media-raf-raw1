@@ -12,6 +12,9 @@ export default function EditorialProjects() {
     const [description, setDescription] = useState('');
     const [visibility, setVisibility] = useState('CLOSED');
     const [creating, setCreating] = useState(false);
+    const [showCreate, setShowCreate] = useState(false);
+    const [projectTab, setProjectTab] = useState('tasks');
+    const [showMemberForm, setShowMemberForm] = useState(false);
     const [selected, setSelected] = useState(null);
     const [memberId, setMemberId] = useState('');
     const [personQuery, setPersonQuery] = useState('');
@@ -53,7 +56,7 @@ export default function EditorialProjects() {
         setCreating(true); setError('');
         try {
             const result = await api('/editorial/projects', { token, method: 'POST', body: { title, description, visibility } });
-            setTitle(''); setDescription(''); setSelected(result.project);
+            setTitle(''); setDescription(''); setSelected(result.project); setShowCreate(false); setProjectTab('tasks');
             await reload();
         } catch (e) { setError(e.message); }
         finally { setCreating(false); }
@@ -74,77 +77,56 @@ export default function EditorialProjects() {
     const canManage = selected && (user?.role === 'ADMIN' || selected.members.some((m) => m.userId === user?.id && m.role === 'MANAGER'));
 
     return (
-        <div className="space-y-5">
-            <div>
-                <h2 className="text-xl font-semibold">Проекты</h2>
-                <p className="mt-1 text-sm opacity-70">Командные проекты доступны участникам редакции; закрытые — только приглашённым.</p>
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><h2 className="text-xl font-semibold">Проекты</h2><p className="text-xs opacity-60">{projects.length} доступно · управление редакционными задачами</p></div>
+                {canCreate && <button type="button" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate} className="rounded-xl border border-current/20 px-4 py-2 text-sm font-semibold hover:border-current/50">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
             </div>
             {error && <p role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm">{error}</p>}
-            {canCreate && (
-                <form onSubmit={create} className="rounded-2xl border border-current/15 p-4 space-y-3">
-                    <h3 className="font-semibold">Новый проект</h3>
-                    <label className="block text-sm">Название
-                        <input className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} />
-                    </label>
-                    <label className="block text-sm">Описание
-                        <textarea className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} rows={2} />
-                    </label>
-                    <label className="block text-sm">Видимость
-                        <select className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3" value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-                            <option value="CLOSED">Закрытый — по приглашению</option>
-                            <option value="TEAM">Командный — виден участникам сайта</option>
-                        </select>
-                    </label>
-                    <button disabled={creating} className="rounded-xl border border-current/30 px-4 py-2 font-medium disabled:opacity-50">{creating ? 'Создание…' : 'Создать проект'}</button>
-                </form>
-            )}
-            {loading ? <p role="status">Загружаем проекты…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-5 opacity-70">Пока нет доступных проектов.</p> : (
-                <div className="grid gap-3 md:grid-cols-2">
-                    {projects.map((project) => (
-                        <button key={project.id} type="button" onClick={() => setSelected(project)}
-                            className="rounded-2xl border border-current/15 p-4 text-left hover:border-current/40">
-                            <span className="text-xs opacity-60">{project.visibility === 'CLOSED' ? 'Закрытый' : 'Командный'} · {project.members.length} участн.</span>
-                            <strong className="mt-2 block break-words">{project.title}</strong>
-                            <span className="mt-1 block text-sm opacity-70 break-words">{project.description || 'Без описания'}</span>
+            {showCreate && canCreate && <form onSubmit={create} className="space-y-3 rounded-2xl border border-current/15 p-4">
+                <h3 className="font-semibold">Создать проект</h3>
+                <label className="block text-sm">Название<input autoFocus required maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
+                <label className="block text-sm">Описание<textarea rows={2} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
+                <label className="block text-sm">Видимость<select value={visibility} onChange={(e) => setVisibility(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
+                <button disabled={creating} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold disabled:opacity-50">{creating ? 'Создание…' : 'Создать'}</button>
+            </form>}
+            <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(220px,270px)_minmax(0,1fr)]">
+                <aside className="min-w-0 space-y-2" aria-label="Список проектов">
+                    {loading ? <p role="status" className="p-3 text-sm">Загружаем…</p> : projects.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-70">Проектов пока нет.</p> : projects.map((project) => (
+                        <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
+                            aria-current={selected?.id === project.id ? 'true' : undefined}
+                            className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${selected?.id === project.id ? 'border-current/50 bg-current/5' : 'border-current/10 hover:border-current/30'}`}>
+                            <strong className="block truncate text-sm">{project.title}</strong>
+                            <span className="mt-1 block text-xs opacity-60">{project.visibility === 'CLOSED' ? 'Закрытый' : 'Командный'} · {project.members.length} участн.</span>
                         </button>
                     ))}
-                </div>
-            )}
-            {selected && (
-                <section className="rounded-2xl border border-current/20 p-4 space-y-3" aria-label="Участники проекта">
-                    <div className="flex items-start justify-between gap-2">
-                        <div><h3 className="text-lg font-semibold">{selected.title}</h3><p className="text-sm opacity-60">Участники проекта</p></div>
-                        <button className="rounded-lg border border-current/20 px-3 py-1" onClick={() => setSelected(null)}>Закрыть</button>
-                    </div>
-                    {selected.members.map((member) => (
-                        <div key={member.id} className="flex flex-wrap justify-between gap-2 border-b border-current/10 py-2 text-sm">
-                            <span>{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span>
-                            <span className="opacity-70">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span>
-                        </div>
-                    ))}
-                    <EditorialWorkflow project={selected} onError={setError} />
-                    {canManage && (
-                        <form onSubmit={addMember} className="space-y-2">
-                            <p className="text-sm font-medium">Добавить или изменить участника</p>
-                            <label className="block text-xs">Найти участника по имени или логину
-                                <input value={personQuery} onChange={(e) => { setPersonQuery(e.target.value); setMemberId(''); }} className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3" placeholder="Начните вводить имя…" autoComplete="off" />
-                            </label>
-                            {searching && <p className="text-xs opacity-60">Поиск…</p>}
-                            {people.length > 0 && <div className="max-h-44 overflow-auto rounded-xl border border-current/15 p-1">
-                                {people.map((person) => <button type="button" key={person.id} onClick={() => { setMemberId(person.id); setPersonQuery(person.fullName + ' (@' + person.username + ')'); setPeople([]); }} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-current/10">{person.fullName} <span className="opacity-60">@{person.username}</span></button>)}
+                </aside>
+                <main className="min-w-0">
+                    {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
+                        <section className="min-w-0 space-y-4 rounded-2xl border border-current/15 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>
+                                <button type="button" onClick={() => setSelected(null)} className="rounded-lg border border-current/20 px-3 py-1.5 text-xs">Закрыть</button>
+                            </div>
+                            <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
+                                <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-current/10 font-semibold' : 'opacity-65'}`}>Задания</button>
+                                <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-current/10 font-semibold' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
+                            </div>
+                            {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} /> : <div className="space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Участники</h4>{canManage && <button type="button" onClick={() => setShowMemberForm((v) => !v)} className="rounded-lg border border-current/20 px-3 py-2 text-xs">{showMemberForm ? 'Скрыть форму' : '+ Участник'}</button>}</div>
+                                {selected.members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 py-2 text-sm"><span className="min-w-0 break-words">{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span><span className="text-xs opacity-60">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span></div>)}
+                                {canManage && showMemberForm && <form onSubmit={addMember} className="space-y-3 rounded-xl border border-current/10 p-3">
+                                    <label className="block text-sm">Найти участника<input value={personQuery} onChange={(e) => { setPersonQuery(e.target.value); setMemberId(''); }} placeholder="Имя или логин" autoComplete="off" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
+                                    {searching && <p className="text-xs opacity-60">Поиск…</p>}
+                                    {people.length > 0 && <div className="max-h-44 overflow-auto rounded-lg border border-current/15 p-1">{people.map((person) => <button type="button" key={person.id} onClick={() => { setMemberId(person.id); setPersonQuery(person.fullName + ' (@' + person.username + ')'); setPeople([]); }} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-current/10">{person.fullName} <span className="opacity-60">@{person.username}</span></button>)}</div>}
+                                    <label className="block text-sm">Роль<select value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2"><option value="PARTICIPANT">Участник</option><option value="EDITOR">Редактор</option><option value="OBSERVER">Наблюдатель</option><option value="MANAGER">Руководитель</option></select></label>
+                                    <button disabled={!memberId || savingMember} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">{savingMember ? 'Сохранение…' : 'Добавить участника'}</button>
+                                </form>}
                             </div>}
-                            {memberId && <p className="text-xs opacity-70">Пользователь выбран</p>}
-                            <label className="block text-xs">Роль
-                                <select value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-3">
-                                    <option value="PARTICIPANT">Участник</option><option value="EDITOR">Редактор</option>
-                                    <option value="OBSERVER">Наблюдатель</option><option value="MANAGER">Руководитель</option>
-                                </select>
-                            </label>
-                            <button disabled={savingMember || !memberId} className="rounded-xl border border-current/30 px-4 py-2 disabled:opacity-50">{savingMember ? 'Сохранение…' : 'Сохранить участника'}</button>
-                        </form>
+                        </section>
                     )}
-                </section>
-            )}
+                </main>
+            </div>
         </div>
     );
 }
