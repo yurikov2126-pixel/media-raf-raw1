@@ -232,7 +232,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                 <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:p-5" data-no-route-swipe>
                     <EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
                 </div>
-                <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-current/20 px-4 py-3 text-sm font-semibold">Закрыть задание</button></div>
+                <div className="editorial-task-modal-footer sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700">Закрыть задание</button></div>
             </div>
         </div>, document.body)}
     </section>;
