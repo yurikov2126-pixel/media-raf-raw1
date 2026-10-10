@@ -51,6 +51,32 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     useEffect(() => {
         if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
     }, [loading, linkedTaskId, tasks]);
+    // Keep the review queue and the currently open task in sync across accounts.
+    // Poll only while the page is visible; avoid overlapping requests and stale updates.
+    useEffect(() => {
+        if (!canView || !token) return undefined;
+        let active = true;
+        let pending = false;
+        const sync = async () => {
+            if (!active || pending || document.visibilityState === 'hidden') return;
+            pending = true;
+            try {
+                const data = await api(`/editorial/workflow/projects/${project.id}/workflow`, { token });
+                if (active) { setStages(data.stages); setTasks(data.tasks); }
+            } catch {
+                // Keep the last known task list during transient connectivity issues.
+            } finally { pending = false; }
+        };
+        const interval = window.setInterval(sync, 10000);
+        document.addEventListener('visibilitychange', sync);
+        window.addEventListener('focus', sync);
+        return () => {
+            active = false;
+            window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', sync);
+            window.removeEventListener('focus', sync);
+        };
+    }, [project.id, token, canView]);
     useEffect(() => {
         if (!selectedTaskId) return undefined;
         const previousFocus = document.activeElement;
