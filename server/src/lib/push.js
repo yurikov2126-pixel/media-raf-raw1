@@ -63,6 +63,9 @@ export async function removeSubscription(endpoint) {
  * Возвращает { ok, status } или { ok: false, gone: true } — если подписка мертва.
  */
 async function sendToSub(sub, payload) {
+    if (process.env.PREVIEW_MODE === 'true') {
+        return { ok: false, preview: true };
+    }
     try {
         await webpush.sendNotification(
             {
