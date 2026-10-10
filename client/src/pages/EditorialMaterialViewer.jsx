@@ -13,6 +13,8 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const [showDetails, setShowDetails] = useState(true);
+    const [showFilmstrip, setShowFilmstrip] = useState(true);
+    const [showHelp, setShowHelp] = useState(false);
     const pointers = useRef(new Map());
     const gesture = useRef(null);
     const urlsRef = useRef(new Map());
@@ -76,13 +78,16 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
 
     useEffect(() => {
         const keydown = (event) => {
-            if (event.key === 'Escape') onClose();
+            if (event.key === 'Escape') { if (showHelp) setShowHelp(false); else onClose(); }
+            if (event.key.toLowerCase() === 'i') setShowDetails(value => !value);
+            if (event.key.toLowerCase() === 't') setShowFilmstrip(value => !value);
+            if (event.key === '?') setShowHelp(value => !value);
             if (event.key === 'ArrowRight') navigate(1);
             if (event.key === 'ArrowLeft') navigate(-1);
         };
         window.addEventListener('keydown', keydown);
         return () => window.removeEventListener('keydown', keydown);
-    }, [navigate, onClose]);
+    }, [navigate, onClose, showHelp]);
 
     useEffect(() => {
         const previous = document.body.style.overflow;
@@ -169,6 +174,8 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
             </div>
             <button type="button" onClick={downloadCurrent} disabled={!url} aria-label="Скачать текущий материал" title="Скачать материал" className="editorial-viewer-action" >↓</button>
             <button type="button" onClick={() => setShowDetails(v => !v)} aria-label={showDetails ? 'Скрыть подпись' : 'Показать подпись'} aria-pressed={showDetails} className="editorial-viewer-action">ⓘ</button>
+            <button type="button" onClick={() => setShowFilmstrip(value => !value)} aria-label={showFilmstrip ? "Скрыть ленту миниатюр" : "Показать ленту миниатюр"} aria-pressed={showFilmstrip} className="editorial-viewer-action">▦</button>
+            <button type="button" onClick={() => setShowHelp(true)} aria-label="Помощь по жестам и клавишам" className="editorial-viewer-action">?</button>
             <button type="button" onClick={onClose} aria-label="Закрыть просмотр" className="editorial-viewer-action">✕</button>
         </header>
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
@@ -189,11 +196,12 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
             <p className="max-h-20 overflow-auto whitespace-pre-wrap break-words text-slate-100">{active.caption || 'Без подписи'}</p>
             <p className="mt-1 text-xs text-slate-400">{(active.size / 1024 / 1024).toFixed(1)} МБ · {new Date(active.createdAt).toLocaleString('ru-RU')}</p>
         </div>}
-        <nav aria-label="Миниатюры материалов" className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-white/15 px-3 py-2 pb-[max(10px,env(safe-area-inset-bottom))]">
+        {showFilmstrip && <nav aria-label="Миниатюры материалов" className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-white/15 px-3 py-2 pb-[max(10px,env(safe-area-inset-bottom))]">
             {files.map((file, position) => <button key={file.id} ref={element => { if (element) thumbnailRefs.current.set(file.id, element); else thumbnailRefs.current.delete(file.id); }} type="button" onClick={() => setIndex(position)} aria-label={`Открыть ${file.name}`} aria-current={index === position ? 'true' : undefined}
                 className={`h-12 w-14 shrink-0 overflow-hidden rounded-lg border-2 text-xs transition-all duration-200 ${index === position ? 'border-violet-400 bg-violet-800' : 'border-slate-600 bg-slate-800 opacity-70'}`}>
                 {urls[file.id] && file.mimeType?.startsWith('image/') ? <img src={urls[file.id]} alt="" className="h-full w-full object-cover" /> : file.mimeType?.startsWith('video/') ? '🎬' : file.mimeType === 'application/pdf' ? '📄' : '📎'}
             </button>)}
-        </nav>
+        </nav>}
+        {showHelp && <div role="dialog" aria-label="Управление просмотрщиком" className="absolute inset-0 z-30 flex items-center justify-center bg-black/75 p-4" onClick={() => setShowHelp(false)}><div className="w-full max-w-md space-y-3 rounded-xl border border-slate-600 bg-slate-900 p-5 text-sm text-white shadow-2xl" onClick={event => event.stopPropagation()}><h3 className="text-lg font-semibold">Управление материалами</h3><p>Свайп влево/вправо — следующий или предыдущий файл.</p><p>Два пальца — увеличить фото. Двойное касание — быстрый масштаб. При увеличении фото можно перемещать.</p><p>На клавиатуре: ←/→ — перелистывание, I — подпись, T — лента, ? — помощь, Esc — закрыть.</p><button type="button" onClick={() => setShowHelp(false)} className="w-full rounded-lg bg-violet-600 px-4 py-3 font-semibold text-white">Понятно</button></div></div>}
     </div>, document.body);
 }
