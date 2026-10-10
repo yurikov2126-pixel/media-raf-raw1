@@ -25,7 +25,7 @@ const ICONS = {
 
 const TITLES = {
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
-    editorial: (p) => ({ assigned: 'Вам назначено задание', status: 'Изменён статус задания', comment: 'Новый комментарий к заданию', application: 'Новая заявка на задание', application_approved: 'Ваша заявка одобрена', application_rejected: 'Решение по вашей заявке', deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено' }[p.event] || 'Событие редакции') + (p.taskTitle ? `: ${p.taskTitle}` : ''),
+    editorial: (p) => ({ assigned: 'Вам назначено задание', status: 'Изменён статус задания', comment: 'Новый комментарий к заданию', application: 'Новая заявка на задание', application_approved: 'Ваша заявка одобрена', application_rejected: 'Решение по вашей заявке', deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено', review_submitted: 'Материал отправлен на проверку', review_approved: 'Материал утверждён', review_revision: 'Материал возвращён на доработку' }[p.event] || 'Событие редакции') + (p.taskTitle ? `: ${p.taskTitle}` : ''),
     mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
     certificate: (p) => p.title || 'Получен сертификат',
