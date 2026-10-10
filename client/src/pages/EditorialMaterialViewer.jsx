@@ -108,6 +108,8 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
             }
             const nextScale = clamp(gesture.current.scale * distance(points[0], points[1]) / Math.max(1, gesture.current.distance), 1, 5);
             setScale(nextScale);
+        } else if (points.length === 1 && gesture.current?.type === 'move' && scale <= 1) {
+            setOffset({ x: clamp(event.clientX - gesture.current.x, -120, 120), y: 0 });
         } else if (points.length === 1 && gesture.current?.type === 'move' && scale > 1) {
             const width = stage.current?.clientWidth || 0;
             const height = stage.current?.clientHeight || 0;
@@ -129,6 +131,7 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
                 const deltaY = event.clientY - started.y;
                 if (Math.abs(deltaX) > 55 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) navigate(deltaX < 0 ? 1 : -1);
             }
+            if (started?.scale <= 1) setOffset({ x: 0, y: 0 });
             gesture.current = null;
         } else {
             const remaining = [...pointers.current.values()][0];
@@ -165,7 +168,7 @@ export default function EditorialMaterialViewer({ files, initialId, base, token,
                 onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClick={doubleTap}>
                 {loading && <span className="text-sm text-slate-300">Загружаем материал…</span>}
                 {url && image && <img draggable={false} src={url} alt={active.caption || active.name}
-                    className="max-h-full max-w-full select-none object-contain"
+                    className="editorial-viewer-image max-h-full max-w-full select-none object-contain"
                     style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`, transition: dragging ? 'none' : 'transform 260ms cubic-bezier(.2,.8,.2,1)', willChange: 'transform' }} />}
                 {url && active.mimeType?.startsWith('video/') && <video key={active.id} controls playsInline src={url} className="max-h-full max-w-full" />}
                 {url && active.mimeType === 'application/pdf' && <iframe title={active.name} src={url} className="h-full w-full bg-white" />}
