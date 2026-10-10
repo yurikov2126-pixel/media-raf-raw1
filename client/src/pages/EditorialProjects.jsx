@@ -91,7 +91,7 @@ export default function EditorialProjects() {
             {!fromMyTasks && <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><h2 className="text-xl font-semibold">Проекты</h2><p className="text-xs opacity-60">{projects.length} доступно · управление редакционными задачами</p></div>
                 {canCreate && <button type="button" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
-            </div>
+            </div>}
             {error && <p role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm">{error}</p>}
             {showCreate && canCreate && <form onSubmit={create} className="editorial-glass__surface space-y-3 rounded-2xl border border-current/15 p-4">
                 <h3 className="font-semibold">Создать проект</h3>
