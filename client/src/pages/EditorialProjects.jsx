@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialWorkflow from './EditorialWorkflow.jsx';
 
 export default function EditorialProjects() {
     const { token, user } = useAuth();
+    const [searchParams] = useSearchParams();
+    const linkedProjectId = searchParams.get('project');
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -45,11 +48,11 @@ export default function EditorialProjects() {
     useEffect(() => {
         let active = true;
         api('/editorial/projects', { token })
-            .then((result) => { if (active) setProjects(result.projects); })
+            .then((result) => { if (active) { setProjects(result.projects); if (linkedProjectId) setSelected(result.projects.find((p) => p.id === linkedProjectId) || null); } })
             .catch((e) => { if (active) setError(e.message); })
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
-    }, [token]);
+    }, [token, linkedProjectId]);
 
     async function create(event) {
         event.preventDefault();
