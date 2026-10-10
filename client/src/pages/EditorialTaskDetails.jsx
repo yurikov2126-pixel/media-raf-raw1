@@ -7,7 +7,7 @@ const STATUSES = [
     ['REVISION', 'На доработке'], ['APPROVED', 'Утверждено'], ['DONE', 'Завершено'],
 ];
 
-export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, refresh, onError, onClose }) {
+export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, refresh, onError }) {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
@@ -15,6 +15,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
+    const [tab, setTab] = useState('details');
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
@@ -52,10 +53,15 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             parentId: parentId || null, dueAt: dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
-    return <section className="mt-4 space-y-4 rounded-2xl border border-current/20 p-4" aria-label={`Карточка задачи ${task.title}`}>
+    return <section className="space-y-4" aria-label={`Карточка задачи ${task.title}`}>
+        <div className="flex gap-2 border-b border-current/10 pb-3" role="tablist" aria-label="Содержимое задания">
+            <button type="button" role="tab" aria-selected={tab === 'details'} onClick={() => setTab('details')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'details' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Детали</button>
+            <button type="button" role="tab" aria-selected={tab === 'discussion'} onClick={() => setTab('discussion')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'discussion' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Обсуждение и заявки</button>
+        </div>
+        <div hidden={tab !== 'details'} className="space-y-4">
         <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><h5 className="break-words text-lg font-semibold">{task.title}</h5><p className="text-xs opacity-60">Карточка задачи</p></div>
-            <button type="button" className="rounded-lg border border-current/20 px-3 py-1 text-sm" onClick={onClose}>Закрыть</button>
+
         </div>
         <form onSubmit={save} className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm md:col-span-2">Название
@@ -102,6 +108,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
                 <button type="button" disabled={!dependencyId || saving} onClick={() => run(async () => { await api(base + '/dependencies', { method: 'POST', token, body: { dependsOnId: dependencyId } }); setDependencyId(''); })} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">Добавить</button>
             </div>}
         </div>
-        <EditorialTaskDiscussion projectId={project.id} task={task} token={token} userId={user?.id} canEdit={canEdit} onError={onError} onChanged={refresh} />
+        </div>
+        <div hidden={tab !== "discussion"}><EditorialTaskDiscussion projectId={project.id} task={task} token={token} userId={user?.id} canEdit={canEdit} onError={onError} onChanged={refresh} /></div>
     </section>;
 }

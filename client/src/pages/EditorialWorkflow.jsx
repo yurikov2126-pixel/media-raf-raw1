@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import EditorialTaskDetails from './EditorialTaskDetails.jsx';
@@ -25,6 +25,8 @@ export default function EditorialWorkflow({ project, onError }) {
     const [composer, setComposer] = useState(null);
     const [view, setView] = useState('board');
     const [selectedTaskId, setSelectedTaskId] = useState(null);
+    const closeButtonRef = useRef(null);
+    const dialogRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const canEdit = user?.role === 'ADMIN' || project.members.some((m) => m.userId === user?.id && ['MANAGER', 'EDITOR'].includes(m.role));
     const canView = canEdit || project.members.some((m) => m.userId === user?.id);
@@ -38,6 +40,30 @@ export default function EditorialWorkflow({ project, onError }) {
         else setLoading(false);
         return () => { active = false; };
     }, [project.id, token, canView]);
+    useEffect(() => {
+        if (!selectedTaskId) return undefined;
+        const previousFocus = document.activeElement;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        closeButtonRef.current?.focus();
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') setSelectedTaskId(null);
+            if (event.key === 'Tab' && dialogRef.current) {
+                const controls = Array.from(dialogRef.current.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter((element) => element.getClientRects().length > 0);
+                if (!controls.length) return;
+                const first = controls[0];
+                const last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            document.body.style.overflow = previousOverflow;
+            if (previousFocus?.isConnected) previousFocus.focus();
+        };
+    }, [selectedTaskId]);
     async function refresh() {
         const data = await api(`/editorial/workflow/projects/${project.id}/workflow`, { token });
         setStages(data.stages); setTasks(data.tasks);
@@ -90,6 +116,16 @@ export default function EditorialWorkflow({ project, onError }) {
                 </div>;
             })}</div>
         )}
-        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && <EditorialTaskDetails task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />}
+        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="flex h-[94dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-2xl">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
+                    <div className="min-w-0"><p className="text-xs text-violet-700 dark:text-violet-200">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
+                    <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:border-slate-600 dark:hover:bg-slate-800">Закрыть</button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5" data-no-route-swipe>
+                    <EditorialTaskDetails task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} />
+                </div>
+            </div>
+        </div>}
     </section>;
 }
