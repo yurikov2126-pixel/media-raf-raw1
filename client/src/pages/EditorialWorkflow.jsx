@@ -119,6 +119,11 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     });
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
     return <section className="space-y-4">
+        {canEdit && tasks.some((task) => task.status === 'IN_REVIEW') && <section className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-100/30 p-3 dark:bg-amber-300/10" aria-label="Материалы на проверке">
+            <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">⏳ Ожидают проверки</h4><span className="text-sm opacity-70">{tasks.filter((task) => task.status === 'IN_REVIEW').length}</span></div>
+            <p className="text-xs opacity-70">Откройте задание, просмотрите файлы и утвердите результат или верните на доработку.</p>
+            {tasks.filter((task) => task.status === 'IN_REVIEW').map((task) => <button type="button" key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-center justify-between gap-3 rounded-lg border border-current/10 bg-white/50 px-3 py-3 text-left text-sm transition hover:bg-white/80 dark:bg-slate-900/40 dark:hover:bg-slate-900/70"><span className="min-w-0 truncate font-medium">{task.title}</span><span className="shrink-0 text-xs font-semibold text-violet-700 dark:text-violet-200">Проверить →</span></button>)}
+        </section>}
         <div className="grid grid-cols-3 gap-2" aria-label="Сводка задач">
             <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 p-3"><p className="text-[11px] opacity-65">Всего задач</p><p className="text-2xl font-bold tabular-nums">{tasks.length}</p></div>
             <div className="rounded-xl border border-blue-300/25 bg-blue-400/10 p-3"><p className="text-[11px] opacity-65">В работе</p><p className="text-2xl font-bold tabular-nums">{tasks.filter((task) => task.status === 'IN_PROGRESS').length}</p></div>
