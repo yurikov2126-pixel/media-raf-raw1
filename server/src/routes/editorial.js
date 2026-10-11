@@ -59,6 +59,10 @@ router.patch('/projects/:id', async (req, res, next) => {
             if (typeof req.body.description !== 'string' || req.body.description.length > 5000) return res.status(400).json({ error: 'Некорректное описание' });
             data.description = req.body.description.trim();
         }
+        if (req.body.completed !== undefined) {
+            if (typeof req.body.completed !== 'boolean') return res.status(400).json({ error: 'Некорректный статус проекта' });
+            data.completedAt = req.body.completed ? (project.completedAt || new Date()) : null;
+        }
         if (req.body.visibility !== undefined) {
             if (!['TEAM', 'CLOSED'].includes(req.body.visibility)) return res.status(400).json({ error: 'Некорректная видимость' });
             data.visibility = req.body.visibility;
