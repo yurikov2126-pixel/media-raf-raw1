@@ -866,6 +866,7 @@ model PersonalCalendarEvent {
   startsAt    DateTime
   endsAt      DateTime
   allDay      Boolean  @default(false)
+  reminderMinutes Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

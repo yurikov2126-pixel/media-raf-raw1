@@ -21,7 +21,9 @@ function validate(body) {
     if (!startsAt || !endsAt || endsAt <= startsAt) return { error: 'Укажите корректное начало и окончание события' };
     if (endsAt.getTime() - startsAt.getTime() > 31 * 86400000) return { error: 'Событие не может длиться более 31 дня' };
     if (typeof body.allDay !== 'boolean') return { error: 'Некорректное значение «Весь день»' };
-    return { data: { title, description, startsAt, endsAt, allDay: body.allDay } };
+    const reminderMinutes = body.reminderMinutes ?? null;
+    if (reminderMinutes !== null && ![10, 30, 60, 1440].includes(reminderMinutes)) return { error: 'Некорректное время напоминания' };
+    return { data: { title, description, startsAt, endsAt, allDay: body.allDay, reminderMinutes } };
 }
 
 const REPEAT = new Set(['NONE', 'DAILY', 'WEEKLY', 'WEEKDAYS', 'MONTHLY']);

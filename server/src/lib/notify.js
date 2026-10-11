@@ -56,6 +56,14 @@ function payloadToPush(type, payload) {
             tag: `mention-${payload.postId || payload.chatId || 'x'}`,
         };
     }
+    if (type === 'personal_calendar') {
+        return {
+            title: 'Напоминание о личном событии',
+            body: payload.eventTitle || 'Скоро начало события',
+            url: '/app/editorial/calendar',
+            tag: 'personal-calendar-' + (payload.eventId || 'event'),
+        };
+    }
     if (type === 'editorial') {
         const titles = {
             assigned: 'Назначено задание', status: 'Изменён статус задания',

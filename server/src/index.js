@@ -12,6 +12,7 @@ import { schedulePasswordResetCleanup } from './lib/passwordResetCron.js';
 import { scheduleInactivityCharge } from './lib/gamificationCron.js';
 import { scheduleDeadlineReminders } from './lib/deadlineCron.js';
 import { scheduleEditorialDeadlineReminders } from './lib/editorialDeadlineCron.js';
+import { schedulePersonalEventReminders } from './lib/personalEventReminderCron.js';
 import { scheduleDripUnlockNotifications } from './lib/dripCron.js';
 import { startPendingDeletionWorker } from './lib/pendingDeletion.js';
 import { scheduleActionCleanup } from './lib/adminActionCleanupCron.js';
@@ -41,6 +42,7 @@ if (process.env.PREVIEW_MODE !== 'true') {
     scheduleInactivityCharge();
     scheduleDeadlineReminders();
     scheduleEditorialDeadlineReminders();
+    schedulePersonalEventReminders();
     scheduleDripUnlockNotifications();
     startPendingDeletionWorker();
     scheduleActionCleanup();

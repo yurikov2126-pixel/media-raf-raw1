@@ -8,6 +8,7 @@ import { isIOS, isStandalone } from '../lib/push.js';
 
 const ICONS = {
     message: '💬',
+    personal_calendar: '🗓️',
     mention: '📣',
     post: '📝',
     certificate: '🏆',
@@ -23,6 +24,7 @@ const ICONS = {
 };
 
 const TITLES = {
+    personal_calendar: (p) => `Напоминание: ${p.eventTitle || 'Личное событие'}`,
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
     mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
@@ -158,6 +160,7 @@ export default function NotificationBell({ align = 'right' }) {
         else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);
         else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
+        else if (n.type === 'personal_calendar') nav('/app/editorial/calendar');
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');

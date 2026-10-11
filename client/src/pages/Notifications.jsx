@@ -9,6 +9,7 @@ import usePageMeta from '../hooks/usePageMeta.js';
 const ICONS = {
     message: '💬',
     editorial: '📋',
+    personal_calendar: '🗓️',
     mention: '📣',
     post: '📝',
     certificate: '🏆',
@@ -25,6 +26,7 @@ const ICONS = {
 
 const TITLES = {
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
+    personal_calendar: (p) => `Напоминание: ${p.eventTitle || 'Личное событие'}`,
     editorial: (p) => ({ assigned: 'Вам назначено задание', status: 'Изменён статус задания', comment: 'Новый комментарий к заданию', application: 'Новая заявка на задание', application_approved: 'Ваша заявка одобрена', application_rejected: 'Решение по вашей заявке', deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено', review_submitted: 'Материал отправлен на проверку', review_approved: 'Материал утверждён', review_revision: 'Материал возвращён на доработку' }[p.event] || 'Событие редакции') + (p.taskTitle ? `: ${p.taskTitle}` : ''),
     mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
@@ -52,6 +54,7 @@ const FILTERS = [
     { v: 'report', l: '🚩 Жалобы' },
     { v: 'message', l: '💬 Сообщения' },
     { v: 'editorial', l: '📋 Редакция' },
+    { v: 'personal_calendar', l: '🗓️ Личный календарь' },
     { v: 'post', l: '📝 Посты' },
     { v: 'mention', l: '📣 Упоминания' },
     { v: 'mention_post', l: '📝 В публикациях' },
@@ -112,6 +115,7 @@ export default function Notifications() {
         else if (n.type === 'post' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}`);
         else if (n.type === 'post' && p.authorUsername) nav(`/app/u/${encodeURIComponent(p.authorUsername)}`);
         else if (n.type === 'editorial') { const q = new URLSearchParams(); if (p.projectId) q.set('project', p.projectId); if (p.projectId && p.taskId) q.set('task', p.taskId); nav(`/app/editorial/projects${q.toString() ? `?${q}` : ''}`); }
+        else if (n.type === 'personal_calendar') nav('/app/editorial/calendar');
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
