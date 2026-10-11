@@ -1992,3 +1992,14 @@ html:not(.dark) .ui-more-sheet .ui-mobile-logout,
   background: #fff1f2;
   border-color: #fecdd3;
 }
+
+/* Admin-controlled design tokens: restrained overrides for shared UI primitives. */
+.card {
+  box-shadow: var(--ui-card-shadow, 0 8px 28px rgba(0,0,0,.12));
+  border-color: rgb(148 163 184 / var(--ui-card-border-opacity, .13));
+}
+.btn-primary, .btn-ghost {
+  border-radius: var(--ui-button-radius, 12px);
+}
+.card.p-4 { padding: calc(1rem * var(--ui-density, 1)); }
+.card.p-5 { padding: calc(1.25rem * var(--ui-density, 1)); }
