@@ -22,6 +22,14 @@ export default function EditorialProjects() {
     const [visibility, setVisibility] = useState('CLOSED');
     const [creating, setCreating] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
+    const [wizardStep, setWizardStep] = useState(1);
+    const [wizardProject, setWizardProject] = useState(null);
+    const [wizardMembers, setWizardMembers] = useState([]);
+    const [wizardTasks, setWizardTasks] = useState([]);
+    const [wizardTaskTitle, setWizardTaskTitle] = useState('');
+    const [wizardTaskAssignee, setWizardTaskAssignee] = useState('');
+    const [wizardTaskDue, setWizardTaskDue] = useState('');
+    const [wizardBusy, setWizardBusy] = useState(false);
     const [projectTab, setProjectTab] = useState('tasks');
     const [projectQuery, setProjectQuery] = useState('');
     const [showMemberForm, setShowMemberForm] = useState(false);
@@ -32,6 +40,7 @@ export default function EditorialProjects() {
     const [searching, setSearching] = useState(false);
     const [memberRole, setMemberRole] = useState('PARTICIPANT');
     const [savingMember, setSavingMember] = useState(false);
+    const [updatingCompletion, setUpdatingCompletion] = useState(false);
     const canCreate = ['ADMIN', 'MENTOR'].includes(user?.role);
     useEffect(() => {
         let active = true;
@@ -60,13 +69,55 @@ export default function EditorialProjects() {
         return () => { active = false; };
     }, [token, linkedProjectId]);
 
+    function startWizard() {
+        setTitle(''); setDescription(''); setVisibility('CLOSED');
+        setWizardStep(1); setWizardProject(null); setWizardMembers([]); setWizardTasks([]);
+        setWizardTaskTitle(''); setWizardTaskAssignee(''); setWizardTaskDue('');
+        setMemberId(''); setPersonQuery(''); setPeople([]); setError(''); setShowCreate(true);
+    }
+    function finishWizard() {
+        setShowCreate(false);
+        setSelected(wizardProject);
+        setProjectTab('tasks');
+        void reload();
+    }
+    async function addWizardMember(event) {
+        event.preventDefault();
+        if (!wizardProject || !memberId || wizardBusy) return;
+        setWizardBusy(true); setError('');
+        try {
+            await api(`/editorial/projects/${wizardProject.id}/members`, { token, method: 'POST', body: { userId: memberId, role: memberRole } });
+            const result = await api('/editorial/projects', { token });
+            const project = result.projects.find(p => p.id === wizardProject.id);
+            if (project) { setWizardProject(project); setWizardMembers(project.members); setProjects(result.projects); }
+            setMemberId(''); setPersonQuery(''); setPeople([]);
+        } catch (e) { setError(e.message); }
+        finally { setWizardBusy(false); }
+    }
+    async function addWizardTask(event) {
+        event.preventDefault();
+        if (!wizardProject || !wizardTaskTitle.trim() || wizardBusy) return;
+        setWizardBusy(true); setError('');
+        try {
+            const result = await api(`/editorial/workflow/projects/${wizardProject.id}/tasks`, {
+                token, method: 'POST', body: {
+                    title: wizardTaskTitle.trim(), assigneeId: wizardTaskAssignee || null,
+                    parentId: null, isOpen: false,
+                    dueAt: wizardTaskDue ? new Date(wizardTaskDue).toISOString() : null,
+                },
+            });
+            setWizardTasks(current => [...current, result.task || { id: String(Date.now()), title: wizardTaskTitle.trim() }]);
+            setWizardTaskTitle(''); setWizardTaskDue(''); setWizardTaskAssignee('');
+        } catch (e) { setError(e.message); }
+        finally { setWizardBusy(false); }
+    }
     async function create(event) {
         event.preventDefault();
         if (creating) return;
         setCreating(true); setError('');
         try {
             const result = await api('/editorial/projects', { token, method: 'POST', body: { title, description, visibility } });
-            setTitle(''); setDescription(''); setSelected(result.project); setShowCreate(false); setProjectTab('tasks');
+            setWizardProject(result.project); setWizardStep(2); setWizardMembers(result.project.members || []);
             await reload();
         } catch (e) { setError(e.message); }
         finally { setCreating(false); }
@@ -84,6 +135,23 @@ export default function EditorialProjects() {
         finally { setSavingMember(false); }
     }
 
+    async function toggleProjectCompletion() {
+        if (!selected || updatingCompletion) return;
+        const completed = !selected.completedAt;
+        if (!window.confirm(completed
+            ? 'Завершить проект? Он останется в списке, все задания и материалы сохранятся.'
+            : 'Вернуть проект в работу?')) return;
+        setUpdatingCompletion(true); setError('');
+        try {
+            const result = await api(`/editorial/projects/${selected.id}`, {
+                token, method: 'PATCH', body: { completed },
+            });
+            setSelected(result.project);
+            setProjects(current => current.map(p => p.id === result.project.id ? result.project : p));
+        } catch (e) { setError(e.message); }
+        finally { setUpdatingCompletion(false); }
+    }
+
     const filteredProjects = projects.filter((project) => `${project.title} ${project.description || ''}`.toLocaleLowerCase('ru').includes(projectQuery.trim().toLocaleLowerCase('ru')));
     const canManage = selected && (user?.role === 'ADMIN' || selected.members.some((m) => m.userId === user?.id && m.role === 'MANAGER'));
 
@@ -93,16 +161,51 @@ export default function EditorialProjects() {
             {fromMyTasks && <Link to={"/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")} className="inline-flex min-h-11 items-center rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold text-violet-800 dark:text-violet-200">← Вернуться к моим заданиям</Link>}
             {!fromMyTasks && <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><h2 className="text-xl font-semibold">Проекты</h2><p className="text-xs opacity-60">{projects.length} доступно · управление редакционными задачами</p></div>
-                {canCreate && <button type="button" onClick={() => setShowCreate((v) => !v)} aria-expanded={showCreate} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
+                {canCreate && <button type="button" onClick={() => showCreate ? setShowCreate(false) : startWizard()} aria-expanded={showCreate} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100">{showCreate ? 'Отмена' : '+ Новый проект'}</button>}
             </div>}
             {error && <p role="alert" className="rounded-xl border border-red-500/40 p-3 text-sm">{error}</p>}
-            {showCreate && canCreate && <form onSubmit={create} className="editorial-glass__surface space-y-3 rounded-2xl border border-current/15 p-4">
-                <h3 className="font-semibold">Создать проект</h3>
-                <label className="block text-sm">Название<input autoFocus required maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
-                <label className="block text-sm">Описание<textarea rows={2} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
-                <label className="block text-sm">Видимость<select value={visibility} onChange={(e) => setVisibility(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
-                <button disabled={creating} className="rounded-lg border border-current/30 px-4 py-2 text-sm font-semibold disabled:opacity-50">{creating ? 'Создание…' : 'Создать'}</button>
-            </form>}
+            {showCreate && canCreate && <div className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/75 sm:items-center sm:p-4" onMouseDown={e => { if (e.target === e.currentTarget) setShowCreate(false); }}>
+                <section role="dialog" aria-modal="true" aria-labelledby="project-wizard-title" className="editorial-project-wizard flex max-h-[94dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border p-5 shadow-2xl sm:rounded-3xl">
+                    <div className="flex items-center justify-between gap-3">
+                        <div><p className="text-xs opacity-70">Шаг {wizardStep} из 3</p><h3 id="project-wizard-title" className="text-lg font-bold">{['','Новый проект','Участники проекта','Задания проекта'][wizardStep]}</h3></div>
+                        <button type="button" onClick={() => setShowCreate(false)} aria-label="Закрыть мастер создания" className="rounded-xl border px-3 py-2">✕</button>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Этапы создания">{['Проект','Команда','Задания'].map((label,i) => <div key={label} className={`rounded-lg px-2 py-2 text-center text-xs font-semibold ${wizardStep === i+1 ? 'bg-violet-600 text-white' : 'editorial-project-wizard-step'}`}>{i+1}. {label}</div>)}</div>
+                    <div className="mt-4 min-h-0 space-y-3 overflow-y-auto pb-2">
+                        {error && <p role="alert" className="rounded-xl border border-rose-500/50 p-3 text-sm">{error}</p>}
+                        {wizardStep === 1 && <form id="editorial-wizard-project" onSubmit={create} className="space-y-3">
+                            <label className="block text-sm">Название проекта<input autoFocus required maxLength={120} value={title} onChange={e => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                            <label className="block text-sm">Описание<textarea rows={3} maxLength={5000} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                            <label className="block text-sm">Видимость<select value={visibility} onChange={e => setVisibility(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
+                            <button disabled={creating} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white disabled:opacity-50">{creating ? 'Создание…' : 'Создать проект и продолжить →'}</button>
+                        </form>}
+                        {wizardStep === 2 && <div className="space-y-3">
+                            <p className="text-sm opacity-75">Добавьте участников перед назначением заданий. Можно добавить нескольких подряд.</p>
+                            <div className="flex flex-wrap gap-2">{wizardMembers.map(m => <span key={m.id || m.userId} className="editorial-project-wizard-step rounded-lg px-3 py-2 text-xs">{m.user?.fullName || m.user?.username || m.userId}</span>)}</div>
+                            <form onSubmit={addWizardMember} className="space-y-3">
+                                <label className="block text-sm">Найти участника<input value={personQuery} onChange={e => { setPersonQuery(e.target.value); setMemberId(''); }} placeholder="Введите имя или логин" className="mt-1 w-full rounded-xl border p-3" autoComplete="off" /></label>
+                                {searching && <p className="text-xs opacity-70">Поиск…</p>}
+                                {people.length > 0 && <div className="max-h-40 overflow-auto rounded-xl border p-1">{people.filter(p => !wizardMembers.some(m => m.userId === p.id)).map(p => <button key={p.id} type="button" onClick={() => { setMemberId(p.id); setPersonQuery(`${p.fullName || p.username} (@${p.username})`); setPeople([]); }} className="block w-full rounded-lg p-3 text-left text-sm">{p.fullName || p.username} @{p.username}</button>)}</div>}
+                                <label className="block text-sm">Роль<select value={memberRole} onChange={e => setMemberRole(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="PARTICIPANT">Участник</option><option value="EDITOR">Редактор</option><option value="OBSERVER">Наблюдатель</option><option value="MANAGER">Руководитель</option></select></label>
+                                <button disabled={!memberId || wizardBusy} className="rounded-xl border border-violet-400 px-4 py-3 text-sm font-semibold disabled:opacity-50">+ Добавить участника</button>
+                            </form>
+                            <button type="button" onClick={() => { setError(''); setWizardStep(3); }} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white">Продолжить к заданиям →</button>
+                        </div>}
+                        {wizardStep === 3 && <div className="space-y-3">
+                            <p className="text-sm opacity-75">Создайте первые задания и назначьте их участникам. Можно завершить без заданий.</p>
+                            {wizardTasks.map((task,i) => <p key={task.id || i} className="editorial-project-wizard-step rounded-lg p-3 text-sm">✓ {task.title}</p>)}
+                            <form onSubmit={addWizardTask} className="space-y-3">
+                                <label className="block text-sm">Название задания<input required maxLength={160} value={wizardTaskTitle} onChange={e => setWizardTaskTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                                <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => setWizardTaskAssignee(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId}</option>)}</select></label>
+                                <label className="block text-sm">Срок<input type="datetime-local" value={wizardTaskDue} onChange={e => setWizardTaskDue(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                                <button disabled={wizardBusy || !wizardTaskTitle.trim()} className="rounded-xl border border-violet-400 px-4 py-3 text-sm font-semibold disabled:opacity-50">+ Добавить задание</button>
+                            </form>
+                            <button type="button" onClick={finishWizard} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white">Завершить и открыть проект ✓</button>
+                        </div>}
+                    </div>
+                    {wizardProject && <p className="mt-3 border-t pt-3 text-xs opacity-65">Проект уже сохранён. Если закрыть окно, его можно открыть позже и продолжить настройку.</p>}
+                </section>
+            </div>}
             <div className="min-w-0 space-y-3">
                 <aside className={`min-w-0 space-y-2 ${selected || fromMyTasks ? "hidden" : ""}`} aria-label="Список проектов">
                     {!loading && projects.length > 0 && <label className="block"><span className="sr-only">Поиск проектов</span><input type="search" value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="Найти проект…" className="w-full rounded-xl border border-current/15 bg-transparent px-3 py-3 text-sm" /></label>}
@@ -110,7 +213,7 @@ export default function EditorialProjects() {
                         <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
                             aria-current={selected?.id === project.id ? 'true' : undefined}
                             className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${selected?.id === project.id ? 'border-violet-400 bg-violet-50 text-violet-900 dark:border-violet-300 dark:bg-slate-700 dark:text-white' : 'border-violet-200/60 hover:border-violet-400 dark:border-slate-600'}`}>
-                            <strong className="block truncate text-sm">{project.title}</strong>
+                            <strong className="block truncate text-sm">{project.title} {project.completedAt && <span className="ml-2 rounded-lg border border-emerald-400/50 px-2 py-0.5 text-xs font-medium text-emerald-500">Завершён</span>}</strong>
                             <span className="mt-1 block text-xs opacity-60">{project.visibility === 'CLOSED' ? 'Закрытый' : 'Командный'} · {project.members.length} участн.</span>
                         </button>
                     ))}
@@ -119,9 +222,10 @@ export default function EditorialProjects() {
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
                         <section className="editorial-glass__surface min-w-0 space-y-4 rounded-2xl border border-violet-200/60 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>
+                                <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
+                            {selected.completedAt && <div role="status" className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-3 text-sm">✓ Проект завершён{selected.completedAt ? ` · ${new Date(selected.completedAt).toLocaleDateString('ru-RU')}` : ''}. Задания и материалы сохранены.</div>}
                             {!fromMyTasks && <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
                                 <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'text-violet-700 opacity-75 dark:text-slate-100'}`}>Задания</button>
                                 <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
