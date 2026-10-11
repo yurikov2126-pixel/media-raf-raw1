@@ -250,3 +250,32 @@ body[data-theme="dark"] .editorial-task-dialog {
 @media (prefers-reduced-motion: reduce) {
   .editorial-overview-stat { transition: none; transform: none !important; }
 }
+
+/* Editorial calendar — theme-scoped, accessible, responsive. */
+.editorial-glass .editorial-calendar { color: var(--ed-text); min-width: 0; }
+.editorial-glass .editorial-calendar-panel {
+  background: var(--ed-surface); border-color: var(--ed-border);
+  box-shadow: var(--ed-shadow); color: var(--ed-text);
+}
+.editorial-glass .editorial-calendar-control {
+  min-height: 44px; border: 1px solid var(--ed-border);
+  border-radius: .8rem; padding: .5rem .85rem; background: var(--ed-surface-strong);
+  color: var(--ed-text); font-weight: 600;
+}
+.editorial-glass .editorial-calendar-day { color: var(--ed-text); border: 1px solid transparent; }
+.editorial-glass .editorial-calendar-day:hover { background: rgba(139,92,246,.13); }
+.editorial-glass .editorial-calendar-day.is-today { border-color: var(--ed-accent); }
+.editorial-glass .editorial-calendar-day.is-selected { background: #7c3aed; color: white; }
+.editorial-glass .editorial-calendar-count {
+  border-radius: 999px; padding: 0 .4rem; background: rgba(139,92,246,.17); color: var(--ed-text);
+}
+.editorial-glass .editorial-calendar-day.is-selected .editorial-calendar-count { background: rgba(255,255,255,.25); color: #fff; }
+.editorial-glass .editorial-calendar-event {
+  border-color: var(--ed-border); background: var(--ed-surface-strong); color: var(--ed-text);
+}
+.editorial-glass .editorial-calendar-event:hover { border-color: var(--ed-accent); }
+.editorial-glass .editorial-calendar :is(button,select,a):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
+@media (max-width: 390px) {
+  .editorial-glass .editorial-calendar-day { min-height: 49px; }
+  .editorial-glass .editorial-calendar-panel { padding: .5rem; }
+}
