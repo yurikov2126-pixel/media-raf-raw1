@@ -167,3 +167,62 @@ body:has([data-theme="dark"]) .editorial-themed-dialog {
   .editorial-glass .editorial-review-inbox article,
   .editorial-glass .editorial-glass__projects aside > button { transition: none; transform: none !important; }
 }
+
+/* Task modal contrast: iOS PWA portal does not inherit the editor theme.
+   Scope to the task-details pane; do not recolor semantic status banners. */
+.editorial-task-dialog .editorial-task-details {
+  color: #f8f7ff;
+  --task-label: #e6def7;
+  --task-field: #28253c;
+  --task-field-border: #72658f;
+}
+.editorial-task-dialog .editorial-task-details form > label,
+.editorial-task-dialog .editorial-task-details > div > label,
+.editorial-task-dialog .editorial-task-details h6 {
+  color: var(--task-label) !important;
+  opacity: 1 !important;
+  font-weight: 600;
+}
+.editorial-task-dialog .editorial-task-details form > label {
+  display: block;
+}
+.editorial-task-dialog .editorial-task-details :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select) {
+  background-color: var(--task-field) !important;
+  border: 1px solid var(--task-field-border) !important;
+  color: #f8f7ff !important;
+  -webkit-text-fill-color: #f8f7ff !important;
+  color-scheme: dark;
+  opacity: 1;
+}
+.editorial-task-dialog .editorial-task-details :is(input,textarea)::placeholder {
+  color: #d0c9df !important;
+  opacity: 1;
+}
+.editorial-task-dialog .editorial-task-details :is(input,select,textarea):disabled {
+  opacity: .72 !important;
+  cursor: not-allowed;
+}
+.editorial-task-dialog .editorial-task-details select option {
+  background-color: #28253c;
+  color: #f8f7ff;
+}
+.editorial-task-dialog .editorial-task-details :is(input,select,textarea):focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 2px;
+  border-color: #c4b5fd !important;
+}
+/* Preserve a readable light-mode variant on systems without dark theme. */
+html:not(.dark) body:not(:has(.dark)):not(:has([data-theme="dark"])) .editorial-task-dialog .editorial-task-details {
+  color: #182033;
+  --task-label: #26324a;
+  --task-field: #fff;
+  --task-field-border: #9588ad;
+}
+html:not(.dark) body:not(:has(.dark)):not(:has([data-theme="dark"])) .editorial-task-dialog .editorial-task-details :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),textarea,select) {
+  color: #182033 !important;
+  -webkit-text-fill-color: #182033 !important;
+  color-scheme: light;
+}
+html:not(.dark) body:not(:has(.dark)):not(:has([data-theme="dark"])) .editorial-task-dialog .editorial-task-details select option {
+  background-color: #fff; color: #182033;
+}
