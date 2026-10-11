@@ -87,6 +87,7 @@ export default function EditorialCalendar() {
     const { token } = useAuth();
     const [view, setView] = useState('month');
     const [selected, setSelected] = useState(() => new Date());
+    const [dateChosen, setDateChosen] = useState(false);
     const [tasks, setTasks] = useState([]);
     const [events, setEvents] = useState([]);
     const [editing, setEditing] = useState(undefined);
@@ -157,9 +158,9 @@ export default function EditorialCalendar() {
         return due && !done(t.status) && due.getTime() >= now && due.getTime() < now + 7 * 86400000;
     }).sort((a, b) => dateOf(a.dueAt) - dateOf(b.dueAt)).slice(0, 7), [tasks, now]);
     const monthCount = tasks.filter(t => { const d = dateOf(t.dueAt); return d && d.getFullYear() === selected.getFullYear() && d.getMonth() === selected.getMonth(); }).length;
-    const navigate = delta => setSelected(previous => view === 'month'
+    const navigate = delta => { setDateChosen(false); setSelected(previous => view === 'month'
         ? new Date(previous.getFullYear(), previous.getMonth() + delta, Math.min(previous.getDate(), new Date(previous.getFullYear(), previous.getMonth() + delta + 1, 0).getDate()))
-        : shift(previous, delta * (view === 'week' ? 7 : 1)));
+        : shift(previous, delta * (view === 'week' ? 7 : 1))); };
     const title = view === 'month' ? selected.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
         : view === 'week' ? `${weekDays[0].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — ${weekDays[6].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`
         : selected.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -169,7 +170,7 @@ export default function EditorialCalendar() {
         const rows = byDate.get(key) || [];
         const eventCount = (eventsByDate.get(key) || []).length;
         const overdue = rows.some(t => isOverdue(t, now));
-        return <button key={key} type="button" onClick={() => setSelected(d)}
+        return <button key={key} type="button" onClick={() => { setSelected(d); setDateChosen(true); }}
             className="editorial-planner-day flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border p-1"
             data-selected={key === selectedKey} data-outside={outside} data-today={key === keyOf(new Date())}
             aria-pressed={key === selectedKey}
@@ -186,7 +187,6 @@ export default function EditorialCalendar() {
             <button type="button" className="editorial-planner-control min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold" onClick={() => setRefresh(v => v + 1)} disabled={loading}>{loading ? 'Загрузка…' : '↻ Обновить'}</button>
         </header>
         {error && <p role="alert" className="rounded-xl border border-rose-400 p-3 text-sm">{error}</p>}
-        <div className="flex justify-end"><button type="button" onClick={() => setEditing(null)} className="editorial-personal-event-primary min-h-11 rounded-xl px-5 font-semibold">＋ Личное событие</button></div>
         <div className="editorial-planner-layout grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
             <div className="space-y-4">
                 <section className="editorial-planner-panel rounded-3xl border p-3 sm:p-5" aria-label="Календарная сетка">
@@ -194,7 +194,7 @@ export default function EditorialCalendar() {
                         <div className="editorial-planner-segments inline-flex rounded-xl p-1" role="group" aria-label="Режим календаря">
                             {[['month','Месяц'],['week','Неделя'],['day','День']].map(([id,label]) => <button key={id} type="button" onClick={() => setView(id)} aria-pressed={view === id} className="min-h-10 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm">{label}</button>)}
                         </div>
-                        <button type="button" onClick={() => setSelected(new Date())} className="editorial-planner-control min-h-10 rounded-xl border px-3 text-sm font-semibold">Сегодня</button>
+                        <button type="button" onClick={() => { setSelected(new Date()); setDateChosen(true); }} className="editorial-planner-control min-h-10 rounded-xl border px-3 text-sm font-semibold">Сегодня</button>
                     </div>
                     <div className="my-5 flex items-center justify-between gap-2">
                         <button type="button" className="editorial-planner-control flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-xl" onClick={() => navigate(-1)} aria-label="Назад">‹</button>
@@ -216,6 +216,7 @@ export default function EditorialCalendar() {
                 </section>
                 <section className="editorial-planner-panel rounded-3xl border p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">На {dateLabel(selected)}</h3><span className="text-xs opacity-70">{selectedTasks.length} заданий · {selectedEvents.length} событий</span></div>
+                    {dateChosen && <button type="button" onClick={() => setEditing(null)} className="editorial-personal-event-primary mt-4 min-h-11 w-full rounded-xl px-5 font-semibold sm:w-auto">＋ Создать личное событие на {dateLabel(selected)}</button>}
                     {selectedEvents.length > 0 && <div className="mt-4 space-y-2">{selectedEvents.map(event => <button type="button" key={event.id} onClick={() => setEditing(event)} className="editorial-personal-event-row w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">{event.allDay ? 'Весь день' : timeLabel(dateOf(event.startsAt))} · Личное событие</span></button>)}</div>}
                     {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загружаем задания…</p>
                         : selectedTasks.length ? <div className="mt-4 space-y-2">{selectedTasks.map(t => <TaskRow key={t.id} task={t} now={now} />)}</div>
