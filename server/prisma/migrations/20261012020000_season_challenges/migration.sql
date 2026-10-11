@@ -3,6 +3,7 @@ CREATE UNIQUE INDEX "SeasonChallenge_seasonId_number_key" ON "SeasonChallenge"("
 ALTER TABLE "SeasonChallenge" ADD CONSTRAINT "SeasonChallenge_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES "GamificationSeason"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 CREATE TABLE "SeasonSubmission" ("id" TEXT NOT NULL,"seasonId" TEXT NOT NULL,"challengeId" TEXT NOT NULL,"userId" TEXT NOT NULL,"description" TEXT NOT NULL DEFAULT '',"status" TEXT NOT NULL DEFAULT 'SUBMITTED',"score" INTEGER,"feedback" TEXT NOT NULL DEFAULT '',"prize" TEXT NOT NULL DEFAULT '',"reviewedAt" TIMESTAMP(3),"submittedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "SeasonSubmission_pkey" PRIMARY KEY ("id"));
 CREATE UNIQUE INDEX "SeasonSubmission_seasonId_userId_key" ON "SeasonSubmission"("seasonId","userId");
+CREATE UNIQUE INDEX "SeasonSubmission_challengeId_key" ON "SeasonSubmission"("challengeId");
 CREATE INDEX "SeasonSubmission_seasonId_status_idx" ON "SeasonSubmission"("seasonId","status");
 ALTER TABLE "SeasonSubmission" ADD CONSTRAINT "SeasonSubmission_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES "GamificationSeason"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "SeasonSubmission" ADD CONSTRAINT "SeasonSubmission_challengeId_fkey" FOREIGN KEY ("challengeId") REFERENCES "SeasonChallenge"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
