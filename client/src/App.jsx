@@ -18,6 +18,9 @@ const EditorialOverview = lazy(() => import('./pages/EditorialOverview.jsx'));
 const EditorialCalendar = lazy(() => import('./pages/EditorialCalendar.jsx'));
 const EditorialContentPlan = lazy(() => import('./pages/EditorialContentPlan.jsx'));
 const EditorialProjects = lazy(() => import('./pages/EditorialProjects.jsx'));
+const EditorialFiles = lazy(() => import('./pages/EditorialFiles.jsx'));
+const EditorialShares = lazy(() => import('./pages/EditorialShares.jsx'));
+const EditorialShareLanding = lazy(() => import('./pages/EditorialShareLanding.jsx'));
 const EditorialMyTasks = lazy(() => import('./pages/EditorialMyTasks.jsx'));
 const EditorialReviewInbox = lazy(() => import('./pages/EditorialReviewInbox.jsx'));
 import Login from './pages/Login.jsx';
@@ -88,6 +91,7 @@ export default function App() {
             <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/login" element={<div className="page-enter"><Login /></div>} />
+                <Route path="/share/editorial/:token" element={<LazyPage><EditorialShareLanding /></LazyPage>} />
                 <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
 
                 <Route
@@ -107,7 +111,9 @@ export default function App() {
                         <Route path="reviews" element={<LazyPage><EditorialReviewInbox /></LazyPage>} />
                         <Route path="calendar" element={<LazyPage><EditorialCalendar /></LazyPage>} />
                         <Route path="content" element={<LazyPage><EditorialContentPlan /></LazyPage>} />
-                        {['files', 'shares', 'ideas'].map((section) => (
+                        <Route path="files" element={<LazyPage><EditorialFiles /></LazyPage>} />
+                        <Route path="shares" element={<LazyPage><EditorialShares /></LazyPage>} />
+                        {['ideas'].map((section) => (
                             <Route key={section} path={section} element={<EditorialSection title={{
                                 projects: 'Проекты', calendar: 'Календарь', files: 'Файлы',
                                 shares: 'Общий доступ', reviews: 'На проверке',
