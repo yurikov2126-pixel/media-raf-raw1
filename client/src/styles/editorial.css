@@ -402,3 +402,91 @@ html[data-theme="dark"] .editorial-personal-event-dialog select,
 html[data-theme="dark"] .editorial-personal-event-dialog input[type="date"],
 html.dark .editorial-personal-event-dialog select,
 html.dark .editorial-personal-event-dialog input[type="date"] { color-scheme: dark; }
+
+
+/* Content plan: explicit workspace tokens override legacy global button/card rules. */
+.editorial-glass .editorial-content-plan {
+  color: var(--ed-text); -webkit-text-fill-color: initial;
+}
+.editorial-glass .editorial-content-plan :is(h2,h3,strong) { color: var(--ed-text); }
+.editorial-glass .editorial-content-plan > div:first-child p,
+.editorial-glass .editorial-content-plan-calendar > span { color: var(--ed-muted); }
+.editorial-glass .editorial-content-plan-filters,
+.editorial-glass .editorial-content-plan-day-list,
+.editorial-glass .editorial-review-filters,
+.editorial-glass .editorial-review-summary,
+.editorial-glass .editorial-review-empty {
+  background: var(--ed-surface); color: var(--ed-text);
+  border-color: var(--ed-border); box-shadow: var(--ed-shadow);
+}
+.editorial-glass .editorial-content-plan-calendar > button {
+  background: var(--ed-surface-strong) !important;
+  color: var(--ed-text) !important; -webkit-text-fill-color: var(--ed-text);
+  border-color: var(--ed-border) !important;
+}
+.editorial-glass .editorial-content-plan-calendar > button[aria-pressed="true"] {
+  background: rgba(124,58,237,.23) !important;
+  border-color: #a78bfa !important;
+  box-shadow: inset 0 0 0 1px #8b5cf6;
+}
+.editorial-glass .editorial-content-plan-calendar > button[aria-pressed="true"] > span:first-child {
+  color: var(--ed-text) !important;
+}
+.editorial-glass .editorial-content-plan-calendar > button > span:last-child:not(:first-child) {
+  color: #fff !important; -webkit-text-fill-color: #fff;
+}
+.editorial-glass .editorial-content-plan-item,
+.editorial-glass .editorial-review-card {
+  background: var(--ed-surface-strong) !important;
+  color: var(--ed-text); border-color: var(--ed-border);
+}
+.editorial-glass .editorial-content-plan-item:disabled { cursor: default; opacity: 1; }
+.editorial-glass .editorial-content-plan :is(button[aria-label="Предыдущий месяц"],button[aria-label="Следующий месяц"]),
+.editorial-glass .editorial-review-refresh {
+  background: var(--ed-surface-strong); color: var(--ed-text);
+  border-color: var(--ed-border);
+}
+.editorial-glass .editorial-content-plan :is(button[aria-label="Предыдущий месяц"],button[aria-label="Следующий месяц"]):hover,
+.editorial-glass .editorial-review-refresh:hover { border-color: #a78bfa; }
+.editorial-glass .editorial-content-plan-filters select,
+.editorial-glass .editorial-review-filters :is(input,select) {
+  background: var(--ed-surface-strong); color: var(--ed-text);
+  border-color: var(--ed-border); color-scheme: light;
+}
+.dark .editorial-glass .editorial-content-plan-filters select,
+[data-theme="dark"] .editorial-glass .editorial-content-plan-filters select,
+.dark .editorial-glass .editorial-review-filters :is(input,select),
+[data-theme="dark"] .editorial-glass .editorial-review-filters :is(input,select) { color-scheme: dark; }
+.editorial-content-plan-dialog {
+  --ed-dialog-bg: #fff; --ed-dialog-text: #182033; --ed-dialog-border: #b9aaca;
+  background: var(--ed-dialog-bg); color: var(--ed-dialog-text);
+  border: 1px solid var(--ed-dialog-border);
+}
+.dark .editorial-content-plan-dialog,
+[data-theme="dark"] .editorial-content-plan-dialog {
+  --ed-dialog-bg: #201c37; --ed-dialog-text: #f6f3ff; --ed-dialog-border: #706287;
+}
+.editorial-content-plan-dialog :is(input,select,textarea) {
+  background: var(--ed-dialog-bg); color: var(--ed-dialog-text);
+  border-color: var(--ed-dialog-border); color-scheme: light;
+  font-size: 16px;
+}
+.dark .editorial-content-plan-dialog :is(input,select,textarea),
+[data-theme="dark"] .editorial-content-plan-dialog :is(input,select,textarea) { color-scheme: dark; }
+.editorial-glass .editorial-review-action,
+.editorial-glass .editorial-content-plan button.bg-violet-600 {
+  background: #7c3aed; color: #fff !important; -webkit-text-fill-color: #fff;
+}
+.editorial-glass .editorial-review-inbox > header p,
+.editorial-glass .editorial-review-summary span,
+.editorial-glass .editorial-review-empty { color: var(--ed-muted); }
+.editorial-glass .editorial-review-card:hover { border-color: #a78bfa; }
+.editorial-glass .editorial-review-inbox :is(button,input,select,a):focus-visible,
+.editorial-glass .editorial-content-plan :is(button,input,select,textarea):focus-visible {
+  outline: 3px solid #a78bfa; outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .editorial-glass .editorial-content-plan-filters { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .editorial-glass .editorial-content-plan-calendar > button { min-width: 0; }
+  .editorial-glass .editorial-review-action { width: 100%; justify-content: center; }
+}
