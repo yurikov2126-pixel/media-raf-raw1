@@ -1,6 +1,3 @@
-import { useEffect, useState } from 'react';
-import { api } from '../api/client.js';
-import { useAuth } from '../store/auth.jsx';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 const SECTIONS = [
@@ -12,17 +9,9 @@ const SECTIONS = [
 export default function Editorial() {
     const location = useLocation();
     const navigate = useNavigate();
-    const { token } = useAuth();
-    const [canManageProjects, setCanManageProjects] = useState(false);
-    useEffect(() => {
-        let active = true;
-        setCanManageProjects(false);
-        if (token) api('/editorial/workflow/navigation', { token })
-            .then(data => { if (active) setCanManageProjects(!!data.canManageProjects); })
-            .catch(() => { if (active) setCanManageProjects(false); });
-        return () => { active = false; };
-    }, [token]);
-    const sections = SECTIONS.filter(([path]) => path !== 'projects' || canManageProjects);
+    // The projects page is available to all authenticated editorial users.
+    // Creation and management permissions are enforced by the page and API.
+    const sections = SECTIONS;
     const currentPath = sections.find(([path]) => path
         ? location.pathname.startsWith(`/app/editorial/${path}`)
         : location.pathname === '/app/editorial')?.[0] ?? '';
