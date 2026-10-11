@@ -31,6 +31,8 @@ const PATHS = {
   panel: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></>,
 };
 
+export const ICON_NAMES = Object.freeze(Object.keys(PATHS));
+
 export default function Icon({
   name = 'sparkles',
   size = 20,
