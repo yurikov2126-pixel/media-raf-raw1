@@ -132,8 +132,8 @@ export default function Admin() {
     const currentMeta = TAB_META[tab] || { icon: '⚙️', label: 'Админка' };
 
     return (
-        <div className="flex">
-            <aside className="hidden xl:flex flex-col w-56 shrink-0 sticky top-0 h-screen py-8 pl-6 overflow-y-auto">
+        <div className="flex min-h-screen bg-gradient-to-br from-transparent via-transparent to-violet/5">
+            <aside className="hidden xl:flex flex-col w-64 shrink-0 sticky top-0 h-screen py-7 px-4 overflow-y-auto border-r border-white/10 bg-white/[0.025]">
                 <div className="mb-5">
                     <div className="font-bold text-xl">⚙️ Админка</div>
                     <div className="text-xs text-white/40 mt-1">Управление платформой</div>
@@ -141,9 +141,9 @@ export default function Admin() {
                 <AdminSidebar tab={tab} onSelect={setTab} badges={badges} />
             </aside>
 
-            <div className="flex-1 min-w-0 py-4 md:py-8 px-4 md:px-8">
+            <div className="flex-1 min-w-0 py-4 md:py-8 px-4 md:px-8 xl:px-10">
                 <div className="hidden xl:flex items-center justify-between mb-6">
-                    <h1 className="text-3xl font-bold">Админ-панель</h1>
+                    <div><div className="text-xs uppercase tracking-widest text-violet mb-1">Управление платформой</div><h1 className="text-3xl font-bold">{currentMeta.icon} {currentMeta.label}</h1><p className="text-sm text-white/45 mt-1">Администрирование Media_РАФ_RAW</p></div>
                     <button
                         type="button"
                         onClick={() => setPaletteOpen(true)}
@@ -188,7 +188,7 @@ export default function Admin() {
                     </button>
                 </div>
 
-                <div className="max-w-6xl">
+                <div className="max-w-7xl">
                     <Suspense fallback={<AdminSkeleton />}>
                         {tab === 'dash' && (
                             <Dashboard stats={stats} token={token} onReload={reloadAll} />
@@ -287,7 +287,7 @@ function AdminDrawer({ tab, onSelect, badges, onClose }) {
             onClick={onClose}
         >
             <div
-                className="w-72 max-w-[85vw] h-full bg-ink-800 p-5 overflow-y-auto"
+                className="w-80 max-w-[88vw] h-full bg-ink-800 p-5 overflow-y-auto border-r border-white/10"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between mb-5">
