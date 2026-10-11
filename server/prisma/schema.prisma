@@ -898,3 +898,31 @@ model EditorialContentPlanItem {
   @@index([publishAt])
   @@index([assigneeId, publishAt])
 }
+
+
+model EditorialLibraryFile {
+  id String @id @default(cuid())
+  name String
+  storageName String @unique
+  mimeType String
+  size Int
+  description String @default("")
+  uploaderId String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model EditorialFileShare {
+  id String @id @default(cuid())
+  token String @unique
+  title String
+  description String @default("")
+  fileIds Json
+  createdById String
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
