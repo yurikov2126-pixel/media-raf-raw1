@@ -120,7 +120,7 @@ export default function EditorialProjects() {
                     dueAt: wizardTaskDue ? new Date(wizardTaskDue).toISOString() : null,
                 },
             });
-            setWizardTasks(current => [...current, result.task || { id: String(Date.now()), title: wizardTaskTitle.trim() }]);
+            setWizardTasks(current => [...current, { ...(result.task || { id: String(Date.now()), title: wizardTaskTitle.trim() }), assigneeId: result.task?.assigneeId ?? (wizardTaskAssignee || null) }]);
             setWizardTaskTitle(''); setWizardTaskDue(''); setWizardTaskAssignee('');
         } catch (e) { setError(e.message); }
         finally { setWizardBusy(false); }
@@ -233,7 +233,21 @@ export default function EditorialProjects() {
                         </div>}
                         {wizardStep === 3 && <div className="space-y-3">
                             <p className="text-sm opacity-75">Создайте первые задания и назначьте их участникам. Можно завершить без заданий.</p>
-                            {wizardTasks.map((task,i) => <p key={task.id || i} className="editorial-project-wizard-step rounded-lg p-3 text-sm">✓ {task.title}</p>)}
+                            <section aria-label="Распределение заданий по команде" className="editorial-project-wizard-step space-y-3 rounded-xl border p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 className="text-sm font-bold">Команда и назначенные задания</h4>
+                                    <span className="text-xs opacity-75">{wizardMembers.filter(m => wizardTasks.some(t => t.assigneeId === m.userId)).length} из {wizardMembers.length} с заданиями</span>
+                                </div>
+                                {wizardMembers.length === 0 && <p className="text-sm opacity-70">Участники пока не добавлены. Можно назначить задания позже.</p>}
+                                <div className="space-y-2">{wizardMembers.map(m => {
+                                    const assigned = wizardTasks.filter(t => t.assigneeId === m.userId);
+                                    return <button key={m.userId} type="button" onClick={() => setWizardTaskAssignee(m.userId)} aria-pressed={wizardTaskAssignee === m.userId} className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm ${wizardTaskAssignee === m.userId ? 'border-violet-500 ring-1 ring-violet-500' : ''}`}>
+                                        <span className="min-w-0"><strong className="block truncate">{m.user?.fullName || m.user?.username || m.userId}</strong><span className="block text-xs opacity-70">{m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</span></span>
+                                        <span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold ${assigned.length ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'}`}>{assigned.length ? `Назначено: ${assigned.length}` : 'Нет заданий'}</span>
+                                    </button>;
+                                })}</div>
+                            </section>
+                            {wizardTasks.length > 0 && <div className="space-y-2"><h4 className="text-sm font-semibold">Созданные задания</h4>{wizardTasks.map((task,i) => <p key={task.id || i} className="editorial-project-wizard-step rounded-lg p-3 text-sm">✓ {task.title}{task.assigneeId ? ` · ${wizardMembers.find(m => m.userId === task.assigneeId)?.user?.fullName || wizardMembers.find(m => m.userId === task.assigneeId)?.user?.username || 'Исполнитель назначен'}` : ' · Без исполнителя'}</p>)}</div>}
                             <form onSubmit={addWizardTask} className="space-y-3">
                                 <label className="block text-sm">Название задания<input required maxLength={160} value={wizardTaskTitle} onChange={e => setWizardTaskTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
                                 <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => setWizardTaskAssignee(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</option>)}</select></label>
