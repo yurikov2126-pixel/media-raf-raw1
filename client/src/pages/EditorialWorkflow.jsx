@@ -150,7 +150,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const overdueCount = tasks.filter(isOverdue).length;
     const dueSoonCount = tasks.filter(isDueSoon).length;
     const reviewTasks = canEdit ? tasks.filter((task) => task.status === 'IN_REVIEW').sort((a,b) => {
-        const due = task => task.dueAt ? new Date(task.dueAt).getTime() : Infinity;
+        const due = task => { const time = task.dueAt ? new Date(task.dueAt).getTime() : Infinity; return Number.isNaN(time) ? Infinity : time; };
         return due(a) - due(b) || (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
     }) : [];
     const nextReviewTask = reviewTasks.find((task) => task.id !== selectedTaskId);
