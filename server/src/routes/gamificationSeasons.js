@@ -6,10 +6,12 @@ const router = Router();
 router.use(auth);
 
 router.get('/', async (_req, res) => {
+  const setting = await prisma.setting.findUnique({ where: { key: 'gamification_seasons_enabled' } });
+  if (setting?.value === 'false') return res.json({ enabled: false, seasons: [] });
   try {
     const now = new Date();
-    const seasons = await prisma.gamificationSeason.findMany({ orderBy: { startsAt: 'asc' } });
-    res.json({ seasons: seasons.map(s => ({
+    const seasons = await prisma.gamificationSeason.findMany({ where: { enabled: true }, orderBy: { startsAt: 'asc' } });
+    res.json({ enabled: true, seasons: seasons.map(s => ({
       ...s, status: now < s.startsAt ? 'upcoming' : now >= s.endsAt ? 'finished' : 'active'
     })) });
   } catch (error) { res.status(500).json({ error: 'Не удалось загрузить сезоны' }); }
@@ -17,8 +19,10 @@ router.get('/', async (_req, res) => {
 
 router.get('/:slug/leaderboard', async (req, res) => {
   try {
+    const setting = await prisma.setting.findUnique({ where: { key: 'gamification_seasons_enabled' } });
+    if (setting?.value === 'false') return res.status(404).json({ error: 'Сезоны отключены' });
     const season = await prisma.gamificationSeason.findUnique({ where: { slug: req.params.slug } });
-    if (!season) return res.status(404).json({ error: 'Сезон не найден' });
+    if (!season || !season.enabled) return res.status(404).json({ error: 'Сезон не найден' });
     const now = new Date();
     const until = now < season.endsAt ? now : season.endsAt;
     const grouped = await prisma.xpLog.groupBy({

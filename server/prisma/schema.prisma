@@ -932,6 +932,9 @@ model EditorialFileShare {
 }
 
 model GamificationSeason {
+  enabled Boolean @default(true)
+  rules String @default("")
+  rewards String @default("")
   id        String   @id @default(cuid())
   slug      String   @unique
   title     String
