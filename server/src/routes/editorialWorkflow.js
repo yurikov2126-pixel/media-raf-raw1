@@ -131,7 +131,7 @@ router.get('/projects/:projectId/operations', async (req, res, next) => {
         const tasks = await prisma.editorialTask.findMany({
             where: { projectId: project.id },
             select: { id: true, title: true, status: true, assigneeId: true, dueAt: true,
-                _count: { select: { files: true } } },
+                _count: { select: { materialFiles: true } } },
         });
         const now = Date.now();
         const finished = new Set(['DONE', 'APPROVED']);
@@ -141,7 +141,7 @@ router.get('/projects/:projectId/operations', async (req, res, next) => {
             if (task.status === 'IN_PROGRESS') totals.inProgress++;
             if (task.status === 'IN_REVIEW') totals.inReview++;
             if (task.status === 'REVISION') totals.revision++;
-            if (task._count.files) totals.withMaterials++;
+            if (task._count.materialFiles) totals.withMaterials++;
             if (!finished.has(task.status) && task.dueAt) {
                 const deadline = task.dueAt.getTime();
                 if (deadline < now) totals.overdue++;
