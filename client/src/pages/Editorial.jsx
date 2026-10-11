@@ -23,6 +23,14 @@ export default function Editorial() {
         return () => { active = false; };
     }, [token]);
     const sections = SECTIONS.filter(([path]) => path !== 'projects' || canManageProjects);
+    const currentPath = sections.find(([path]) => path
+        ? location.pathname.startsWith(`/app/editorial/${path}`)
+        : location.pathname === '/app/editorial')?.[0] ?? '';
+    const primaryPaths = ['my-tasks', 'projects', 'reviews'];
+    const primarySections = sections.filter(([path]) => primaryPaths.includes(path));
+    const secondarySections = sections.filter(([path]) => !primaryPaths.includes(path));
+    const isSecondaryActive = secondarySections.some(([path]) => path === currentPath);
+    const sectionUrl = (path) => path ? `/app/editorial/${path}` : '/app/editorial';
     return (
         <section className="editorial-glass mx-auto max-w-7xl px-3 py-3 sm:px-5 md:py-5" aria-label="Редакция">
             <header className="editorial-glass__header mb-2">
@@ -30,11 +38,22 @@ export default function Editorial() {
                 <h1 className="mt-1 text-2xl font-semibold text-violet-700 dark:text-violet-100">Редакция</h1>
 
             </header>
-            <div className="mb-3 sm:hidden"><label className="sr-only" htmlFor="editorial-section-picker">Раздел редакции</label><select id="editorial-section-picker" aria-label="Раздел редакции" value={sections.find(([path]) => (path ? location.pathname.startsWith(`/app/editorial/${path}`) : location.pathname === '/app/editorial'))?.[0] ?? ''} onChange={(event) => navigate(event.target.value ? `/app/editorial/${event.target.value}` : '/app/editorial')} className="w-full rounded-xl border border-current/15 bg-transparent px-3 py-2.5 text-sm font-medium">{sections.map(([path,label]) => <option key={path} value={path}>{label}</option>)}</select></div>
-            <nav aria-label="Разделы редакции" className="editorial-glass__nav mb-4 hidden gap-1.5 overflow-x-auto pb-2 sm:flex" data-no-route-swipe>
+            <nav aria-label="Быстрые разделы редакции" className="mb-4 flex items-center gap-2 sm:hidden" data-no-route-swipe>
+                {primarySections.map(([path, label]) => (
+                    <NavLink key={path} to={sectionUrl(path)} className={({isActive}) => `flex min-h-11 min-w-0 flex-1 items-center justify-center rounded-xl border px-2 py-2 text-center text-xs font-semibold transition-colors ${isActive ? 'border-violet-600 bg-violet-600 text-white shadow-sm dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-slate-300 bg-white text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'}`}>{label}</NavLink>
+                ))}
+                <label className="relative flex min-h-11 min-w-0 flex-1 items-center">
+                    <span className="sr-only">Другие разделы редакции</span>
+                    <select aria-label="Другие разделы редакции" value={isSecondaryActive ? currentPath : ''} onChange={(event) => navigate(sectionUrl(event.target.value))} className={`min-h-11 w-full appearance-none rounded-xl border px-2 pr-5 text-center text-xs font-semibold ${isSecondaryActive ? 'border-violet-600 bg-violet-600 text-white dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-slate-300 bg-white text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'}`}>
+                        <option value="" disabled>Ещё ▾</option>
+                        {secondarySections.map(([path, label]) => <option key={path} value={path}>{label}</option>)}
+                    </select>
+                </label>
+            </nav>
+            <nav aria-label="Разделы редакции" className="editorial-glass__nav mb-4 hidden flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/70 p-2 shadow-sm backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/70 sm:flex" data-no-route-swipe>
                 {sections.map(([path, label]) => (
-                    <NavLink key={path} end={!path} to={path || '/app/editorial'}
-                        className={({isActive}) => `shrink-0 rounded-lg border px-2.5 py-1.5 text-xs sm:text-sm transition-colors ${isActive ? 'border-violet-500 bg-violet-600 font-semibold text-white shadow-sm dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-slate-300 bg-white text-slate-800 hover:border-violet-500 hover:bg-violet-50 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-violet-300 dark:hover:bg-slate-700'}`}>
+                    <NavLink key={path} end={!path} to={sectionUrl(path)}
+                        className={({isActive}) => `inline-flex min-h-10 items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'border-violet-600 bg-violet-600 text-white shadow-sm dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-transparent text-slate-700 hover:border-violet-200 hover:bg-violet-50 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800'}`}>
                         {label}
                     </NavLink>
                 ))}
