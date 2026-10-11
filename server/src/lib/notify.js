@@ -70,7 +70,7 @@ function payloadToPush(type, payload) {
             assigned: 'Назначено задание', status: 'Изменён статус задания',
             comment: 'Новый комментарий', application: 'Заявка на задание',
             application_approved: 'Заявка одобрена', application_rejected: 'Заявка отклонена',
-            deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено',
+            deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено', deadline_changed: 'Изменён срок задания',
         };
         const query = new URLSearchParams();
         if (payload.projectId) query.set('project', payload.projectId);
