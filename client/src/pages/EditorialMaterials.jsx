@@ -63,6 +63,9 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const [progress,setProgress]=useState(null);
     const [batchProgress,setBatchProgress]=useState(null);
     const xhrRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const [dragActive,setDragActive] = useState(false);
+    const dragDepthRef = useRef(0);
     const cancelledRef = useRef(false);
     const [busy,setBusy]=useState(false);
     const [preview,setPreview]=useState(null);
@@ -189,9 +192,34 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         <div role="status" className="rounded-lg border border-current/15 bg-white/30 px-3 py-2 text-sm dark:bg-slate-800/30"><strong>Статус задания:</strong> {{TODO:'К выполнению',IN_PROGRESS:'В работе',IN_REVIEW:'На проверке',REVISION:'На доработке',APPROVED:'Утверждено',DONE:'Завершено'}[currentStatus]||currentStatus}</div>
         {canReview&&<p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/50 dark:text-amber-100">Материал ожидает вашего решения. Просмотрите галерею ниже, затем выберите «Утвердить» или «На доработку».</p>}
         {canUpload&&<div className="space-y-3 rounded-xl border border-current/15 bg-white/30 p-3 dark:bg-slate-800/30">
-            <label className="block text-sm font-medium">Выберите фотографии, видео или документы
-                <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.doc,.docx" disabled={busy} onChange={e=>{setSelected(prev=>[...prev,...Array.from(e.target.files||[]).map(file=>({file,caption:''}))]);e.target.value='';}} className="mt-2 block w-full text-sm" />
-            </label>
+            <div
+                role="button"
+                tabIndex={busy ? -1 : 0}
+                aria-label="Выбрать файлы или перетащить их сюда"
+                aria-disabled={busy}
+                onClick={() => { if (!busy) fileInputRef.current?.click(); }}
+                onKeyDown={event => { if (!busy && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); fileInputRef.current?.click(); } }}
+                onDragEnter={event => { event.preventDefault(); event.stopPropagation(); if (busy) return; dragDepthRef.current += 1; setDragActive(true); }}
+                onDragOver={event => { event.preventDefault(); event.stopPropagation(); if (!busy) event.dataTransfer.dropEffect = 'copy'; }}
+                onDragLeave={event => { event.preventDefault(); event.stopPropagation(); dragDepthRef.current = Math.max(0, dragDepthRef.current - 1); if (!dragDepthRef.current) setDragActive(false); }}
+                onDrop={event => {
+                    event.preventDefault(); event.stopPropagation();
+                    dragDepthRef.current = 0; setDragActive(false);
+                    if (busy) return;
+                    const dropped = Array.from(event.dataTransfer?.files || []);
+                    if (dropped.length) setSelected(previous => [...previous, ...dropped.map(file => ({ file, caption:'' }))]);
+                }}
+                className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400 ${dragActive && !busy ? 'border-violet-300 bg-violet-500/25' : 'border-violet-400/70 bg-violet-500/10 hover:bg-violet-500/15'} ${busy ? 'cursor-not-allowed opacity-50' : ''}`}
+            >
+                <span aria-hidden="true" className="text-2xl">📁</span>
+                <span className="text-sm font-semibold">{dragActive && !busy ? 'Отпустите файлы для добавления' : 'Перетащите файлы сюда или нажмите для выбора'}</span>
+                <span className="text-xs opacity-75">Фотографии, видео и документы · можно выбрать несколько</span>
+            </div>
+            <input ref={fileInputRef} type="file" multiple
+                accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.doc,.docx"
+                disabled={busy} aria-label="Выбрать файлы для загрузки"
+                onChange={event => { setSelected(previous => [...previous, ...Array.from(event.target.files || []).map(file => ({ file, caption:'' }))]); event.target.value = ''; }}
+                className="sr-only" tabIndex={-1} />
             {selected.map((item,i)=><div key={i} className="rounded-lg border border-current/10 p-2"><div className="flex items-center justify-between gap-2"><span className="min-w-0 truncate text-sm">{item.file.name}</span><button type="button" onClick={()=>setSelected(v=>v.filter((_,j)=>j!==i))} className="text-xs underline">Убрать</button></div><input value={item.caption} maxLength={1000} placeholder="Подпись к файлу" onChange={e=>setSelected(v=>v.map((x,j)=>j===i?{...x,caption:e.target.value}:x))} className="mt-2 w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm" /></div>)}
             {batchProgress&&<div role="status" className="space-y-2 rounded-lg border border-slate-300 p-3 dark:border-slate-600"><div className="text-sm font-medium">Файл {batchProgress.completed+1} из {batchProgress.total}: {batchProgress.name}</div><progress aria-label="Общий прогресс загрузки" value={batchUploadProgress(batchProgress.completed,batchProgress.total,progress)} max={100} className="w-full"/><div className="text-xs">Текущий файл: {progress||0}% · Загружено: {batchProgress.completed} из {batchProgress.total}</div><progress aria-label="Прогресс текущего файла" value={progress||0} max="100" className="w-full"/><button type="button" onClick={()=>{cancelledRef.current=true;xhrRef.current?.abort();}} className="min-h-11 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
             {selected.length>0&&<p className="text-xs opacity-65">Файлы загрузятся автоматически при отправке на проверку.</p>}

@@ -15,7 +15,7 @@ const STATUS_COLORS = {
     DONE: 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-400 dark:bg-teal-950 dark:text-teal-200',
 };
 const LABELS = { TODO: 'К выполнению', IN_PROGRESS: 'В работе', IN_REVIEW: 'На проверке', REVISION: 'Доработка', APPROVED: 'Утверждено', DONE: 'Завершено' };
-export default function EditorialWorkflow({ project, onError, linkedTaskId = null }) {
+export default function EditorialWorkflow({ project, onError, linkedTaskId = null, linkedTab = 'details', onTaskClose }) {
     const { token, user } = useAuth();
     const [stages, setStages] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -34,6 +34,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const [deadlineFilter, setDeadlineFilter] = useState('ALL');
     const [showFilters, setShowFilters] = useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
+    const closeTask = () => { setSelectedTaskId(null); onTaskClose?.(); };
     const closeButtonRef = useRef(null);
     const openedLinkRef = useRef(null);
     const dialogRef = useRef(null);
@@ -53,8 +54,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         return () => { active = false; };
     }, [project.id, token, canView]);
     useEffect(() => {
-        if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId)) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
-    }, [loading, linkedTaskId, tasks]);
+        if (!loading && linkedTaskId && openedLinkRef.current !== linkedTaskId && tasks.some((task) => task.id === linkedTaskId && (canEdit || task.assigneeId === user?.id))) { openedLinkRef.current = linkedTaskId; setSelectedTaskId(linkedTaskId); }
+    }, [loading, linkedTaskId, tasks, canEdit, user?.id]);
     // Socket.IO reuses the server's authenticated user channels. Refresh the
     // canonical workflow only when a mutation occurs, on reconnect or on focus.
     useEffect(() => {
@@ -103,7 +104,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         document.body.style.overflow = 'hidden';
         closeButtonRef.current?.focus();
         const onKeyDown = (event) => {
-            if (event.key === 'Escape') setSelectedTaskId(null);
+            if (event.key === 'Escape') closeTask();
             if (event.key === 'Tab' && dialogRef.current) {
                 const controls = Array.from(dialogRef.current.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter((element) => element.getClientRects().length > 0);
                 if (!controls.length) return;
@@ -148,7 +149,10 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const myTasksCount = tasks.filter((task) => task.assigneeId === user?.id && !isFinished(task)).length;
     const overdueCount = tasks.filter(isOverdue).length;
     const dueSoonCount = tasks.filter(isDueSoon).length;
-    const reviewTasks = canEdit ? tasks.filter((task) => task.status === 'IN_REVIEW') : [];
+    const reviewTasks = canEdit ? tasks.filter((task) => task.status === 'IN_REVIEW').sort((a,b) => {
+        const due = task => { const time = task.dueAt ? new Date(task.dueAt).getTime() : Infinity; return Number.isNaN(time) ? Infinity : time; };
+        return due(a) - due(b) || (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    }) : [];
     const nextReviewTask = reviewTasks.find((task) => task.id !== selectedTaskId);
     const visibleTasks = tasks.filter((task) => {
         if (deadlineFilter === 'OVERDUE' && !isOverdue(task)) return false;
@@ -166,10 +170,25 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     });
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
     return <section className="space-y-4">
-        {canEdit && tasks.some((task) => task.status === 'IN_REVIEW') && <section className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-100/30 p-3 dark:bg-amber-300/10" aria-label="Материалы на проверке">
-            <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">⏳ Ожидают проверки</h4><span className="text-sm opacity-70">{tasks.filter((task) => task.status === 'IN_REVIEW').length}</span></div>
-            <p className="text-xs opacity-70">Откройте задание, просмотрите файлы и утвердите результат или верните на доработку.</p>
-            {tasks.filter((task) => task.status === 'IN_REVIEW').map((task) => <button type="button" key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-center justify-between gap-3 rounded-lg border border-current/10 bg-white/50 px-3 py-3 text-left text-sm transition hover:bg-white/80 dark:bg-slate-900/40 dark:hover:bg-slate-900/70"><span className="min-w-0 truncate font-medium">{task.title}</span><span className="shrink-0 text-xs font-semibold text-violet-700 dark:text-violet-200">Проверить →</span></button>)}
+        {canEdit && !loading && <section className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-100/30 p-3 dark:bg-amber-300/10" aria-label="Материалы на проверке">
+            <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">⏳ Ожидают проверки</h4><span className="text-sm opacity-70">{reviewTasks.length}</span></div>
+            {reviewTasks.length === 0 ? <p className="text-sm opacity-70">Все материалы проверены. Новых работ пока нет.</p> : <>
+                <p className="text-xs opacity-70">Сначала показаны задания с ближайшим сроком.</p>
+                {reviewTasks.map(task => {
+                    const due = task.dueAt ? new Date(task.dueAt) : null;
+                    const validDue = due && !Number.isNaN(due.getTime());
+                    const overdue = validDue && due.getTime() < now;
+                    const assignee = task.assignee?.fullName || project.members.find(member => member.userId === task.assigneeId)?.user?.fullName || 'Не назначен';
+                    return <div key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-current/10 bg-white/50 px-3 py-3 dark:bg-slate-900/40">
+                        <div className="min-w-0 flex-1 space-y-1">
+                            <p className="break-words text-sm font-semibold">{task.title}</p>
+                            <p className="text-xs opacity-75">Исполнитель: {assignee}</p>
+                            <p className={`text-xs ${overdue ? 'font-semibold text-rose-700 dark:text-rose-300' : 'opacity-75'}`}>{validDue ? `${overdue ? 'Срок истёк' : 'Срок'}: ${due.toLocaleString('ru-RU', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}` : 'Без срока'}</p>
+                        </div>
+                        <button type="button" onClick={() => setSelectedTaskId(task.id)} className="min-h-11 shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700">Проверить материалы →</button>
+                    </div>;
+                })}
+            </>}
         </section>}
         <div className="grid grid-cols-3 gap-2" aria-label="Сводка задач">
             <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 p-3"><p className="text-[11px] opacity-65">Всего задач</p><p className="text-2xl font-bold tabular-nums">{tasks.length}</p></div>
@@ -227,16 +246,16 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                 </div>;
             })}</div>
         )}
-        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && createPortal(<div className="fixed inset-0 z-[9999] flex min-h-0 items-stretch justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTaskId(null); }}>
+        {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && createPortal(<div className="fixed inset-0 z-[9999] flex min-h-0 items-stretch justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTask(); }}>
             <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog editorial-task-dialog relative flex h-[100dvh] max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[min(88dvh,850px)] sm:max-w-3xl sm:rounded-2xl">
                 <div className="editorial-task-modal-header sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b border-slate-700 bg-slate-950 px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] text-slate-50 sm:gap-3 sm:px-5">
                     <div className="min-w-0"><p className="text-xs font-medium text-violet-300">Задание · {project.title}</p><h4 id="editorial-task-dialog-title" className="truncate text-base font-semibold">{tasks.find((task) => task.id === selectedTaskId)?.title}</h4></div>
                     {canEdit && nextReviewTask && <button type="button" title={`Открыть на проверку: ${nextReviewTask.title}`} onClick={() => setSelectedTaskId(nextReviewTask.id)} className="shrink-0 rounded-lg border border-violet-400/60 bg-violet-600 px-2.5 py-2 text-xs font-semibold text-white hover:bg-violet-500 sm:px-3 sm:text-sm"><span className="sm:hidden">Далее →</span><span className="hidden sm:inline">Следующая на проверке →</span></button>}
                     <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/app/editorial/projects?project=${encodeURIComponent(project.id)}&task=${encodeURIComponent(selectedTaskId)}`); } catch { onError('Не удалось скопировать ссылку на задание'); } }} className="ml-auto shrink-0 rounded-lg border border-slate-500 bg-slate-800 px-2.5 py-2 text-xs font-medium text-white hover:bg-slate-700 sm:px-3 sm:text-sm">Ссылка</button>
-                    <button type="button" ref={closeButtonRef} onClick={() => setSelectedTaskId(null)} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-500 bg-slate-800 px-2.5 py-2 text-xs font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-violet-300 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
+                    <button type="button" ref={closeButtonRef} onClick={closeTask} aria-label="Закрыть карточку задания" className="shrink-0 rounded-lg border border-slate-500 bg-slate-800 px-2.5 py-2 text-xs font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-violet-300 sm:px-3 sm:text-sm"><span className="sm:hidden">✕</span><span className="hidden sm:inline">Закрыть</span></button>
                 </div>
                 <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:p-5" data-no-route-swipe>
-                    <EditorialTaskErrorBoundary key={selectedTaskId}><EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} refresh={refresh} onError={onError} onClose={() => setSelectedTaskId(null)} /></EditorialTaskErrorBoundary>
+                    <EditorialTaskErrorBoundary key={selectedTaskId}><EditorialTaskDetails key={selectedTaskId} task={tasks.find((task) => task.id === selectedTaskId)} tasks={tasks} stages={stages} project={project} token={token} user={user} canEdit={canEdit} initialTab={selectedTaskId === linkedTaskId ? linkedTab : undefined} refresh={refresh} onError={onError} onClose={closeTask} /></EditorialTaskErrorBoundary>
                 </div>
                 <div className="editorial-task-modal-footer sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700">Закрыть задание</button></div>
             </div>

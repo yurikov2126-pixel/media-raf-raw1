@@ -8,7 +8,7 @@ const STATUSES = [
     ['REVISION', 'На доработке'], ['APPROVED', 'Утверждено'], ['DONE', 'Завершено'],
 ];
 
-export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, refresh, onError, onClose }) {
+export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, initialTab, refresh, onError, onClose }) {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
@@ -16,7 +16,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
-    const [tab, setTab] = useState(task.status === 'IN_REVIEW' ? 'materials' : 'details');
+    const [tab, setTab] = useState(initialTab || (task.status === 'IN_REVIEW' ? 'materials' : 'details'));
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
@@ -62,6 +62,10 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         </div>
         {task.status === 'IN_REVIEW' && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/50 dark:text-amber-100">⏳ На проверке — {canEdit ? 'ожидает вашего решения во вкладке «Материалы»' : 'ожидает решения редактора'}</div>}
         <div hidden={tab !== 'details'} className="space-y-4">
+        {task.assigneeId === user?.id && ['TODO', 'IN_PROGRESS', 'REVISION'].includes(task.status) && <div className="rounded-xl border border-violet-300 bg-violet-50 p-3 dark:border-violet-500 dark:bg-slate-800">
+            <button type="button" onClick={() => setTab('materials')} className="min-h-11 w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700">Загрузить файлы на проверку</button>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Выберите файлы во вкладке «Материалы», добавьте подписи и нажмите «Отправить на проверку».</p>
+        </div>}
         <form onSubmit={save} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <label className="block min-w-0 text-sm sm:col-span-2">Название
                 <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40 disabled:opacity-60" />

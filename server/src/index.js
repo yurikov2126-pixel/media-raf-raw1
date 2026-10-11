@@ -32,16 +32,21 @@ process.on('uncaughtException', (err) => {
 
 /* ─────────── Запуск ─────────── */
 initSocket(io);
-startCron();
-schedulePushCleanup();
-scheduleNotifyCleanup();
-schedulePasswordResetCleanup();
-scheduleInactivityCharge();
-scheduleDeadlineReminders();
-scheduleEditorialDeadlineReminders();
-scheduleDripUnlockNotifications();
-startPendingDeletionWorker();
-scheduleActionCleanup();
+
+if (process.env.PREVIEW_MODE !== 'true') {
+    startCron();
+    schedulePushCleanup();
+    scheduleNotifyCleanup();
+    schedulePasswordResetCleanup();
+    scheduleInactivityCharge();
+    scheduleDeadlineReminders();
+    scheduleEditorialDeadlineReminders();
+    scheduleDripUnlockNotifications();
+    startPendingDeletionWorker();
+    scheduleActionCleanup();
+} else {
+    console.log('[PREVIEW] Background jobs disabled');
+}
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () =>
