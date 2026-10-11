@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Icon, { ICON_NAMES } from '../../../../components/Icon.jsx';
 
-const LABELS = { home:'Дом',dashboard:'Главная',feed:'Лента',search:'Поиск',plus:'Добавить',message:'Сообщения',book:'Обучение',bell:'Уведомления',user:'Профиль',users:'Команда',more:'Ещё',trophy:'Награды',settings:'Настройки',sun:'Солнце',moon:'Луна',command:'Команда',arrowRight:'Стрелка',check:'Галочка',chevronRight:'Вправо',chevronDown:'Вниз',sparkles:'Искры',newspaper:'Редакция',calendar:'Календарь',clock:'Время',zap:'Молния',logOut:'Выход',x:'Закрыть',sliders:'Параметры',layers:'Слои',panel:'Панель' };
+const LABELS = { home:'Дом',dashboard:'Главная',feed:'Лента',search:'Поиск',plus:'Добавить',message:'Сообщения',book:'Обучение',library:'Библиотека знаний',bell:'Уведомления',user:'Профиль',users:'Команда',more:'Ещё',trophy:'Награды',settings:'Настройки',sun:'Солнце',moon:'Луна',command:'Команда',arrowRight:'Стрелка',check:'Галочка',chevronRight:'Вправо',chevronDown:'Вниз',sparkles:'Искры',newspaper:'Редакция',calendar:'Календарь',clock:'Время',zap:'Молния',logOut:'Выход',x:'Закрыть',sliders:'Параметры',layers:'Слои',panel:'Панель' };
 export default function IconPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
