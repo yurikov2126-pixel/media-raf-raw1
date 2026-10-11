@@ -1,0 +1,31 @@
+
+/* Sticker album: five independent pack identities */
+.sticker-pack{--sticker-accent:#a78bfa;--sticker-accent-rgb:167,139,250;position:relative;overflow:hidden;border:1px solid rgba(var(--sticker-accent-rgb),.28);background:linear-gradient(140deg,rgba(var(--sticker-accent-rgb),.13),rgba(14,15,29,.92) 62%)}
+.sticker-theme-media{--sticker-accent:#c084fc;--sticker-accent-rgb:192,132,252;background-image:radial-gradient(circle at 90% 5%,rgba(236,72,153,.23),transparent 45%),linear-gradient(135deg,rgba(126,34,206,.22),rgba(13,15,31,.94))}
+.sticker-theme-cat{--sticker-accent:#f9a8d4;--sticker-accent-rgb:249,168,212;background-image:radial-gradient(circle at 95% 5%,rgba(251,191,36,.2),transparent 48%),linear-gradient(135deg,rgba(244,114,182,.18),rgba(25,17,33,.94))}
+.sticker-theme-photo{--sticker-accent:#67e8f9;--sticker-accent-rgb:103,232,249;background-image:linear-gradient(90deg,rgba(103,232,249,.05) 1px,transparent 1px),linear-gradient(rgba(103,232,249,.05) 1px,transparent 1px),linear-gradient(135deg,rgba(8,145,178,.16),rgba(9,18,28,.96));background-size:28px 28px,28px 28px,auto}
+.sticker-theme-team{--sticker-accent:#facc15;--sticker-accent-rgb:250,204,21;background-image:repeating-linear-gradient(125deg,transparent,transparent 38px,rgba(250,204,21,.025) 40px),linear-gradient(135deg,rgba(234,88,12,.16),rgba(24,19,27,.95))}
+.sticker-theme-tula{--sticker-accent:#fda4af;--sticker-accent-rgb:253,164,175;background-image:radial-gradient(circle at 90% 10%,rgba(253,230,138,.18),transparent 55%),linear-gradient(135deg,rgba(180,83,9,.19),rgba(31,24,25,.94))}
+.sticker-pack-heading{display:flex;align-items:center;gap:16px}
+.sticker-pack-icon{display:grid;place-items:center;flex:none;width:64px;height:64px;font-size:32px;border-radius:20px;background:rgba(var(--sticker-accent-rgb),.16);border:1px solid rgba(var(--sticker-accent-rgb),.28)}
+.sticker-pack-style{display:inline-block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--sticker-accent);font-weight:800}
+.sticker-progress{height:6px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
+.sticker-progress>div{height:100%;border-radius:99px;background:var(--sticker-accent);transition:width .3s}
+.sticker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(min-width:640px){.sticker-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(min-width:1100px){.sticker-grid{grid-template-columns:repeat(8,minmax(0,1fr))}}
+.sticker-tile{position:relative;min-width:0;display:flex;align-items:center;flex-direction:column;gap:6px;padding:14px 8px;border-radius:18px;background:rgba(255,255,255,.055);border:1px solid rgba(var(--sticker-accent-rgb),.25);color:inherit;text-align:center;transition:transform .2s,border-color .2s,box-shadow .2s}
+.sticker-tile.is-owned:hover{transform:translateY(-4px);border-color:var(--sticker-accent);box-shadow:0 10px 28px rgba(var(--sticker-accent-rgb),.15)}
+.sticker-tile.is-locked{opacity:.55;cursor:default}
+.sticker-tile.rarity-epic{box-shadow:inset 0 0 22px rgba(168,85,247,.1)}
+.sticker-tile.rarity-legendary{border-color:rgba(251,191,36,.65);box-shadow:inset 0 0 25px rgba(251,191,36,.12)}
+.sticker-art{display:grid;place-items:center;width:100%;height:84px;font-size:46px}
+.sticker-art img{width:82px;height:82px;object-fit:contain}
+.sticker-title{font-size:12px;font-weight:700;overflow-wrap:anywhere;line-height:1.3}
+.sticker-rarity{font-size:10px;opacity:.7}
+.sticker-duplicate{position:absolute;top:6px;right:6px;background:var(--sticker-accent);color:#16111c;border-radius:99px;padding:1px 6px;font-size:11px;font-weight:800}
+.sticker-preview{border-color:rgba(var(--sticker-accent-rgb),.4);box-shadow:0 0 65px rgba(var(--sticker-accent-rgb),.2)}
+.sticker-preview-art{display:grid;place-items:center;min-height:180px;font-size:96px;animation:sticker-reveal .45s cubic-bezier(.2,1.3,.3,1)}
+.sticker-preview-art img{max-width:200px;max-height:200px;object-fit:contain}
+@keyframes sticker-reveal{from{transform:scale(.6) rotate(-8deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+@media(prefers-reduced-motion:reduce){.sticker-tile,.sticker-progress>div{transition:none}.sticker-preview-art{animation:none}}
