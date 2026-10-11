@@ -87,6 +87,15 @@ export default function AppExperienceEditor({ settings, update }) {
         <input type="checkbox" checked={commandEnabled} onChange={(e) => update({ command_palette_enabled: e.target.checked ? 'true' : 'false' })} />
       </label>
 
+      <div className="card p-4 space-y-4">
+        <div><div className="font-semibold">Дополнительные настройки оформления</div><p className="text-xs text-white/50 mt-1">Применяются ко всем основным страницам сайта после сохранения. Проверьте результат в предпросмотре.</p></div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2"><span className="text-sm font-medium">Плотность интерфейса</span><select className="input" value={settings.ui_density || 'standard'} onChange={e => update({ ui_density: e.target.value })}><option value="compact">Компактная</option><option value="standard">Стандартная</option><option value="spacious">Просторная</option></select></label>
+          <label className="space-y-2"><span className="text-sm font-medium">Форма кнопок</span><select className="input" value={settings.ui_button_shape || 'standard'} onChange={e => update({ ui_button_shape: e.target.value })}><option value="square">Почти прямоугольные</option><option value="standard">Стандартные</option><option value="pill">Овальные</option></select></label>
+          <label className="space-y-2"><span className="text-sm font-medium">Выразительность границ карточек</span><select className="input" value={settings.ui_card_border || 'normal'} onChange={e => update({ ui_card_border: e.target.value })}><option value="subtle">Мягкие</option><option value="normal">Стандартные</option><option value="strong">Контрастные</option></select></label>
+          <label className="space-y-2"><span className="text-sm font-medium">Тени карточек</span><select className="input" value={settings.ui_card_shadow || 'soft'} onChange={e => update({ ui_card_shadow: e.target.value })}><option value="none">Без теней</option><option value="soft">Мягкие</option><option value="strong">Выразительные</option></select></label>
+        </div>
+      </div>
       <div className="card p-4">
         <div className="font-semibold mb-3">Параметры интерфейса</div>
         <div className="grid md:grid-cols-3 gap-3">
