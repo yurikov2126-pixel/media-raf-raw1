@@ -76,7 +76,6 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
                 <label className="block text-sm font-semibold">Окончание<input required type="datetime-local" value={endsAt} onChange={e => setEndsAt(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /></label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> Весь день (пометка)</label>
                 <label className="block text-sm font-semibold">Заметки<textarea maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" placeholder="Детали и планы" /></label>
-                {eventsError && <p role="alert" className="rounded-xl border border-amber-400 p-3 text-sm">{eventsError}</p>}
         {error && <p role="alert" className="text-sm text-rose-500">{error}</p>}
                 <div className="flex flex-wrap gap-2 pt-2"><button disabled={busy} type="submit" className="editorial-personal-event-primary min-h-11 flex-1 rounded-xl px-4 font-semibold">{busy ? 'Сохранение…' : 'Сохранить'}</button>{event && <button disabled={busy} type="button" onClick={remove} className="editorial-personal-event-delete min-h-11 rounded-xl border px-4">Удалить</button>}</div>
             </form>
