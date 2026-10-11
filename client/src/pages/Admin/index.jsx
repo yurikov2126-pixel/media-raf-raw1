@@ -4,10 +4,9 @@ import { api } from '../../api/client.js';
 import { useAuth } from '../../store/auth.jsx';
 import { useSettings } from '../../store/settings.jsx';
 import { useNotifications } from '../../store/notifications.jsx';
-import { TABS } from './constants.js';
+import { TABS, TAB_GROUPS } from './constants.js';
 
 import AdminSkeleton from './components/AdminSkeleton.jsx';
-import AdminSidebar from './components/AdminSidebar.jsx';
 import AdminCommandPalette from './components/AdminCommandPalette.jsx';
 
 import Dashboard from './tabs/Dashboard.jsx';
@@ -51,7 +50,6 @@ export default function Admin() {
     const [settings, setSettings] = useState({});
     const [openReports, setOpenReports] = useState(0);
     const [pendingResets, setPendingResets] = useState(0);
-    const [drawerOpen, setDrawerOpen] = useState(false);
     const [paletteOpen, setPaletteOpen] = useState(false);
 
     const reloadReportsBadge = () => {
@@ -102,16 +100,6 @@ export default function Admin() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token]);
 
-    // Esc закрывает drawer
-    useEffect(() => {
-        if (!drawerOpen) return;
-        const onKey = (e) => {
-            if (e.key === 'Escape') setDrawerOpen(false);
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [drawerOpen]);
-
     // ⌘K / Ctrl+K открывает палитру
     useEffect(() => {
         const onKey = (e) => {
@@ -130,65 +118,26 @@ export default function Admin() {
     };
 
     const currentMeta = TAB_META[tab] || { icon: '⚙️', label: 'Админка' };
+    const activeGroup = TAB_GROUPS.find(group => group.tabs.some(([key]) => key === tab)) || TAB_GROUPS[0];
 
     return (
-        <div className="flex">
-            <aside className="hidden xl:flex flex-col w-56 shrink-0 sticky top-0 h-screen py-8 pl-6 overflow-y-auto">
-                <div className="mb-5">
-                    <div className="font-bold text-xl">⚙️ Админка</div>
-                    <div className="text-xs text-white/40 mt-1">Управление платформой</div>
+        <section className="editorial-glass mx-auto max-w-7xl px-3 py-3 sm:px-5 md:py-5" aria-label="Администрирование">
+            <header className="editorial-glass__header mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">MEDIA·RAF·RAW / Управление платформой</p>
+                    <h1 className="mt-1 text-2xl font-semibold text-violet-700 dark:text-violet-100">Админка</h1>
                 </div>
-                <AdminSidebar tab={tab} onSelect={setTab} badges={badges} />
-            </aside>
-
-            <div className="flex-1 min-w-0 py-4 md:py-8 px-4 md:px-8">
-                <div className="hidden xl:flex items-center justify-between mb-6">
-                    <h1 className="text-3xl font-bold">Админ-панель</h1>
-                    <button
-                        type="button"
-                        onClick={() => setPaletteOpen(true)}
-                        className="btn-ghost !py-2 text-sm flex items-center gap-2"
-                    >
-                        🔍 Поиск
-                        <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-white/15 text-white/50">
-                            ⌘K
-                        </kbd>
-                    </button>
-                </div>
-
-                <div className="xl:hidden mb-4 flex gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setDrawerOpen(true)}
-                        className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 transition text-left min-w-0"
-                    >
-                        <span className="text-xl shrink-0">☰</span>
-                        <div className="min-w-0 flex-1">
-                            <div className="text-[10px] uppercase tracking-wider text-white/40">
-                                Раздел админки
-                            </div>
-                            <div className="text-sm font-semibold truncate">
-                                {currentMeta.icon} {currentMeta.label}
-                            </div>
-                        </div>
-                        {(badges.moderation > 0 || badges['password-resets'] > 0) && (
-                            <span className="shrink-0 chip bg-pink/20 text-pink text-[10px]">
-                                {(badges.moderation || 0) + (badges['password-resets'] || 0)}
-                            </span>
-                        )}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setPaletteOpen(true)}
-                        className="shrink-0 w-12 rounded-2xl bg-white/5 hover:bg-white/10 transition grid place-items-center text-lg"
-                        aria-label="Поиск"
-                        title="Поиск (⌘K)"
-                    >
-                        🔍
-                    </button>
-                </div>
-
-                <div className="max-w-6xl">
+                <button type="button" onClick={() => setPaletteOpen(true)} className="rounded-xl border border-violet-300 px-4 py-2 text-sm font-medium text-violet-800 hover:bg-violet-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800" aria-label="Поиск по админке">⌕ Поиск <kbd className="ml-1 hidden text-xs opacity-60 sm:inline">⌘K</kbd></button>
+            </header>
+            <nav aria-label="Группы разделов админки" className="editorial-workspace-nav editorial-glass__nav mb-3 flex flex-wrap gap-2" data-no-route-swipe>
+                {TAB_GROUPS.map(group => <button key={group.key} type="button" aria-pressed={activeGroup.key === group.key} onClick={() => setTab(group.tabs[0][0])} className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${activeGroup.key === group.key ? 'border-violet-600 bg-violet-600 text-white dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-slate-300 bg-white text-slate-700 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}>{group.label}{group.key === 'people' && badges.moderation + badges['password-resets'] > 0 ? ` · ${badges.moderation + badges['password-resets']}` : ''}</button>)}
+            </nav>
+            <nav aria-label="Разделы группы" className="mb-5 flex flex-wrap gap-2" data-no-route-swipe>
+                {activeGroup.tabs.map(([key, label, icon]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)} className={`min-h-10 rounded-xl border px-3 py-2 text-sm transition-colors ${tab === key ? 'border-violet-500 bg-violet-100 font-semibold text-violet-900 dark:border-violet-400 dark:bg-violet-950/60 dark:text-violet-100' : 'border-slate-200 bg-white/70 text-slate-700 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200'}`}>{icon} {label}{badges[key] > 0 ? ` · ${badges[key]}` : ''}</button>)}
+            </nav>
+            <div className="editorial-glass__surface min-w-0 rounded-2xl border border-current/10 p-3 sm:p-5">
+                <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">{currentMeta.icon} {currentMeta.label}</h2>
+                <div className="min-w-0">
                     <Suspense fallback={<AdminSkeleton />}>
                         {tab === 'dash' && (
                             <Dashboard stats={stats} token={token} onReload={reloadAll} />
@@ -257,52 +206,7 @@ export default function Admin() {
                     </Suspense>
                 </div>
             </div>
-
-            {drawerOpen && (
-                <AdminDrawer
-                    tab={tab}
-                    onSelect={(k) => {
-                        setTab(k);
-                        setDrawerOpen(false);
-                    }}
-                    badges={badges}
-                    onClose={() => setDrawerOpen(false)}
-                />
-            )}
-
-            {paletteOpen && (
-                <AdminCommandPalette
-                    token={token}
-                    onClose={() => setPaletteOpen(false)}
-                />
-            )}
-        </div>
-    );
-}
-
-function AdminDrawer({ tab, onSelect, badges, onClose }) {
-    return (
-        <div
-            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm xl:hidden"
-            onClick={onClose}
-        >
-            <div
-                className="w-72 max-w-[85vw] h-full bg-ink-800 p-5 overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between mb-5">
-                    <div className="font-bold text-xl">⚙️ Админка</div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="text-white/40 hover:text-white text-2xl leading-none"
-                        aria-label="Закрыть"
-                    >
-                        ✕
-                    </button>
-                </div>
-                <AdminSidebar tab={tab} onSelect={onSelect} badges={badges} />
-            </div>
-        </div>
+            {paletteOpen && <AdminCommandPalette token={token} onClose={() => setPaletteOpen(false)} />}
+        </section>
     );
 }
