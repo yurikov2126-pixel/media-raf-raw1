@@ -4,6 +4,16 @@ import { api } from '../../../api/client.js';
 import { useToast } from '../../../store/toast.jsx';
 import Avatar from '../../../components/Avatar.jsx';
 
+function actionDetails(payload) {
+    if (!payload || typeof payload !== 'object') return [];
+    const labels = { userId: 'Пользователь', targetId: 'Объект', targetUserId: 'Получатель', id: 'Идентификатор', email: 'Электронная почта', username: 'Логин', fullName: 'Имя', reason: 'Причина', amount: 'Количество', xp: 'Опыт (XP)', before: 'До изменения', after: 'После изменения', count: 'Количество записей', affected: 'Затронуто', status: 'Статус', title: 'Название', courseId: 'Курс', module: 'Модуль', duration: 'Длительность', action: 'Операция' };
+    const secret = /password|secret|token|key|authorization|cookie|credential/i;
+    return Object.entries(payload).filter(([key]) => !secret.test(key)).map(([key, value]) => ({
+        label: labels[key] || key.replace(/([a-z])([A-Z])/g, '$1 $2'),
+        value: value === null ? '—' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value),
+    }));
+}
+
 const FAILED_CHIP = 'bg-pink/20 text-pink';
 
 function fmtDuration(ms) {
@@ -379,11 +389,17 @@ export default function Actions({ token }) {
                                                         <div className="space-y-2 text-xs">
                                                             <div>
                                                                 <div className="text-white/40 uppercase tracking-wider mb-1">
-                                                                    Payload
+                                                                    Подробности действия
                                                                 </div>
-                                                                <pre className="bg-black/40 rounded-xl p-3 overflow-x-auto font-mono text-[11px] leading-relaxed">
-{JSON.stringify(it.payload, null, 2)}
-                                                                    </pre>
+                                                                <div className="grid gap-2 sm:grid-cols-2 rounded-xl border border-white/10 p-3">
+                                                                    <div><span className="text-white/50">Операция:</span> {humanAction(it.action)}</div>
+                                                                    <div><span className="text-white/50">Код:</span> <code>{it.action}</code></div>
+                                                                    <div><span className="text-white/50">Администратор:</span> {it.admin?.fullName || 'Удалённый пользователь'}</div>
+                                                                    <div><span className="text-white/50">Время:</span> {fmtDate(it.createdAt)}</div>
+                                                                    <div><span className="text-white/50">Результат:</span> {it.error ? 'Ошибка' : 'Успешно'}</div>
+                                                                    <div><span className="text-white/50">Затронуто:</span> {it.affected ?? '—'}</div>
+                                                                    {actionDetails(it.payload).map(({ label, value }, index) => <div key={index} className="min-w-0 break-words"><span className="text-white/50">{label}:</span> <span className="whitespace-pre-wrap">{value}</span></div>)}
+                                                                </div>
                                                             </div>
                                                             {it.error && (
                                                                 <div>
