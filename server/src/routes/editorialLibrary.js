@@ -9,12 +9,25 @@ import { zipEntries, streamZip } from '../lib/editorialZip.js';
 
 const router = Router();
 const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial');
+const materialRoot = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
+const materialKey = id => `material:${id}`;
+const fileView = file => ({ ...publicFile(file), id: materialKey(file.id), taskId: file.taskId, version: file.version, caption: file.caption, source: 'material' });
+const materialIds = ids => ids.filter(id => typeof id === 'string' && id.startsWith('material:')).map(id => id.slice(9));
+const libraryIds = ids => ids.filter(id => typeof id === 'string' && !id.startsWith('material:'));
+const resolveFiles = async ids => {
+    const [library, materials] = await Promise.all([
+        prisma.editorialLibraryFile.findMany({ where: { id: { in: libraryIds(ids) } } }),
+        prisma.editorialMaterialFile.findMany({ where: { id: { in: materialIds(ids) } } }),
+    ]);
+    const byId = new Map([...library.map(f => [f.id, { ...f, diskPath: path.join(root, f.storageName) }]), ...materials.map(f => [materialKey(f.id), { ...f, id: materialKey(f.id), diskPath: path.join(materialRoot, f.storageName) }])]);
+    return ids.map(id => byId.get(id)).filter(Boolean);
+};
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
 const allowed = user => ['ADMIN', 'MENTOR'].includes(user.role);
-const publicFile = file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, description: file.description, createdAt: file.createdAt });
+const publicFile = file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, description: file.description || '', createdAt: file.createdAt });
 const archive = (res, files, filename) => {
     if (!files.length) return res.status(404).json({ error: 'Нет доступных файлов' });
-    const entries = zipEntries(files.map(file => ({ name: file.name, path: path.join(root, file.storageName), size: file.size })));
+    const entries = zipEntries(files.map(file => ({ name: file.name, path: file.diskPath || path.join(root, file.storageName), size: file.size })));
     const size = entries.reduce((sum, file) => sum + file.size + 200 + Buffer.byteLength(file.zipName), 0);
     if (size > 0xffffffff || entries.length > 65535) return res.status(413).json({ error: 'Архив слишком большой. Скачайте файлы по отдельности.' });
     res.setHeader('Content-Type', 'application/zip');
@@ -28,7 +41,7 @@ const sendFile = (res, next, file, download = false) => {
     res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(file.name)}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
-    res.sendFile(path.join(root, file.storageName), error => { if (error && !res.headersSent) next(error); });
+    res.sendFile(file.diskPath || path.join(root, file.storageName), error => { if (error && !res.headersSent) next(error); });
 };
 const getShare = async token => {
     if (!/^[a-f0-9]{48}$/.test(token || '')) return null;
@@ -36,7 +49,7 @@ const getShare = async token => {
     if (!share || share.revokedAt || (share.expiresAt && share.expiresAt <= new Date())) return null;
     return share;
 };
-const sharedFiles = async share => prisma.editorialLibraryFile.findMany({ where: { id: { in: Array.isArray(share.fileIds) ? share.fileIds : [] } }, orderBy: { createdAt: 'asc' } });
+const sharedFiles = async share => resolveFiles(Array.isArray(share.fileIds) ? share.fileIds : []);
 
 router.get('/public/:token', async (req, res, next) => {
     try {
@@ -59,7 +72,7 @@ router.get('/public/:token/files/:fileId', async (req, res, next) => {
     try {
         const share = await getShare(req.params.token);
         if (!share || !Array.isArray(share.fileIds) || !share.fileIds.includes(req.params.fileId)) return res.status(404).json({ error: 'Файл не найден' });
-        const file = await prisma.editorialLibraryFile.findUnique({ where: { id: req.params.fileId } });
+        const file = (await resolveFiles([req.params.fileId]))[0];
         if (!file) return res.status(404).json({ error: 'Файл не найден' });
         res.setHeader('Cache-Control', 'no-store');
         sendFile(res, next, file, req.query.download === '1');
@@ -68,6 +81,38 @@ router.get('/public/:token/files/:fileId', async (req, res, next) => {
 
 router.use(auth);
 router.use((req, res, next) => allowed(req.user) ? next() : res.status(403).json({ error: 'Доступно руководителям редакции' }));
+router.get('/folders', async (_req, res, next) => {
+    try {
+        const [projects, files] = await Promise.all([
+            prisma.editorialProject.findMany({ select: { id: true, title: true, tasks: { select: { id: true, title: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
+            prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
+        ]);
+        res.json({ folders: projects.map(p => ({ id: p.id, title: p.title, files: p.tasks.flatMap(t => t.materialFiles.map(f => ({ ...fileView(f), taskTitle: t.title, projectId: p.id }))) })), files: files.map(publicFile) });
+    } catch (error) { next(error); }
+});
+router.post('/shares/quick', async (req, res, next) => {
+    try {
+        const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId : null;
+        const fileId = typeof req.body?.fileId === 'string' ? req.body.fileId : null;
+        if (!!projectId === !!fileId) return res.status(400).json({ error: 'Выберите папку или файл' });
+        let ids = [];
+        let title = '';
+        if (projectId) {
+            const project = await prisma.editorialProject.findUnique({ where: { id: projectId }, select: { title: true, tasks: { select: { materialFiles: { select: { id: true } } } } } });
+            if (!project) return res.status(404).json({ error: 'Проект не найден' });
+            ids = project.tasks.flatMap(t => t.materialFiles.map(f => materialKey(f.id)));
+            title = project.title;
+        } else {
+            const file = (await resolveFiles([fileId]))[0];
+            if (!file) return res.status(404).json({ error: 'Файл не найден' });
+            ids = [fileId]; title = file.name;
+        }
+        if (!ids.length) return res.status(400).json({ error: 'Нет файлов для передачи' });
+        if (ids.length > 200) return res.status(413).json({ error: 'Для одной ссылки доступно не более 200 файлов' });
+        const share = await prisma.editorialFileShare.create({ data: { token: randomBytes(24).toString('hex'), title, fileIds: ids, createdById: req.user.id, expiresAt: new Date(Date.now() + 30 * 86400000) } });
+        res.status(201).json({ share });
+    } catch (error) { next(error); }
+});
 router.get('/files', async (_req, res, next) => {
     try { res.json({ files: (await prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 })).map(publicFile) }); }
     catch (error) { next(error); }
@@ -96,7 +141,7 @@ router.delete('/files/:fileId', async (req, res, next) => {
 });
 router.get('/files/:fileId', async (req, res, next) => {
     try {
-        const file = await prisma.editorialLibraryFile.findUnique({ where: { id: req.params.fileId } });
+        const file = (await resolveFiles([req.params.fileId]))[0];
         if (!file) return res.status(404).json({ error: 'Файл не найден' });
         sendFile(res, next, file, req.query.download === '1');
     } catch (error) { next(error); }
@@ -111,7 +156,7 @@ router.post('/shares', async (req, res, next) => {
         const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
         const fileIds = req.body.fileIds;
         if (!title || title.length > 160 || description.length > 2000 || !Array.isArray(fileIds) || !fileIds.length || fileIds.length > 200 || !fileIds.every(id => typeof id === 'string') || new Set(fileIds).size !== fileIds.length) return res.status(400).json({ error: 'Укажите название и выберите файлы' });
-        const count = await prisma.editorialLibraryFile.count({ where: { id: { in: fileIds } } });
+        const count = (await resolveFiles(fileIds)).length;
         if (count !== fileIds.length) return res.status(400).json({ error: 'Некоторые файлы не найдены' });
         const days = req.body.expiresInDays === null ? null : Number(req.body.expiresInDays ?? 30);
         if (days !== null && (!Number.isInteger(days) || days < 1 || days > 365)) return res.status(400).json({ error: 'Срок действия от 1 до 365 дней' });
