@@ -13,17 +13,17 @@ export async function runEditorialDeadlineReminders(now = new Date()) {
         where: {
             assigneeId: { not: null },
             dueAt: { gte: overdueSince, lte: upcoming },
-            status: { not: 'DONE' },
+            status: { notIn: ['DONE', 'APPROVED'] },
         },
         select: {
             id: true, title: true, dueAt: true, assigneeId: true,
-            project: { select: { id: true, title: true, members: { select: { userId: true } } } },
+            project: { select: { id: true, title: true, members: { select: { userId: true, crewPosition: true } } } },
         },
     });
     let due = 0;
     let overdue = 0;
     for (const task of tasks) {
-        if (!task.project.members.some((member) => member.userId === task.assigneeId)) continue;
+        if (!task.project.members.some((member) => member.userId === task.assigneeId && ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'VIDEO_EDITOR'].includes(member.crewPosition))) continue;
         const event = task.dueAt < now ? 'deadline_overdue' : 'deadline_soon';
         const dueKey = task.dueAt.toISOString();
         // Include the deadline in the marker: rescheduling enables a fresh reminder.
