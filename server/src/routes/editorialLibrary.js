@@ -24,7 +24,7 @@ const resolveFiles = async ids => {
 };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
 const allowed = user => ['ADMIN', 'MENTOR'].includes(user.role);
-const publicFile = file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, description: file.description, createdAt: file.createdAt });
+const publicFile = file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, description: file.description || '', createdAt: file.createdAt });
 const archive = (res, files, filename) => {
     if (!files.length) return res.status(404).json({ error: 'Нет доступных файлов' });
     const entries = zipEntries(files.map(file => ({ name: file.name, path: file.diskPath || path.join(root, file.storageName), size: file.size })));
