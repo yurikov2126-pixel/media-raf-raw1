@@ -29,6 +29,7 @@ import homeworkRouter from './routes/homework.js';
 import editorialRouter from './routes/editorial.js';
 import editorialWorkflowRouter from './routes/editorialWorkflow.js';
 import editorialMaterialsRouter from './routes/editorialMaterials.js';
+import editorialLibraryRouter from './routes/editorialLibrary.js';
 import editorialCalendarRouter from './routes/editorialCalendar.js';
 import editorialContentPlanRouter from './routes/editorialContentPlan.js';
 import { prisma } from './lib/prisma.js';
@@ -58,6 +59,8 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 // Статика загрузок (фото, видео, файлы, голосовые)
+// Editorial library files are private; never expose them through static /uploads.
+app.use('/uploads/editorial', (_req, res) => res.status(404).end());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 /* ─────────── Bot-метаданные ─────────── */
@@ -166,6 +169,7 @@ app.use('/api/practicals', requireModule('courses'), practicalsRouter);
 app.use('/api/homework', requireModule('courses'), homeworkRouter);
 app.use('/api/editorial/workflow', requireModule('editorial'), editorialWorkflowRouter);
 app.use('/api/editorial/materials', requireModule('editorial'), editorialMaterialsRouter);
+app.use('/api/editorial/library', editorialLibraryRouter);
 app.use('/api/editorial/calendar', requireModule('editorial'), editorialCalendarRouter);
 app.use('/api/editorial/content-plan', requireModule('editorial'), editorialContentPlanRouter);
 app.use('/api/editorial', requireModule('editorial'), editorialRouter);
