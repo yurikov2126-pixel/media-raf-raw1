@@ -17,6 +17,7 @@ export default function EditorialFiles() {
     const [files, setFiles] = useState([]);
     const [folders, setFolders] = useState([]);
     const [folder, setFolder] = useState(null);
+    const [personFolder, setPersonFolder] = useState(null);
     const [view, setView] = useState(() => localStorage.getItem('editorial-files-view') || 'grid');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -45,6 +46,15 @@ export default function EditorialFiles() {
             catch { window.prompt('Ссылка создана. Скопируйте её:', url); }
         } catch (e) { setError(e.message); }
     }
+    async function sharePerson(group) {
+        setError('');
+        try {
+            const { share: link } = await api('/editorial/library/shares', { token, method: 'POST', body: { title: folder.title + ' / ' + group.title, fileIds: group.files.map(file => file.id), expiresInDays: 30 } });
+            const url = window.location.origin + '/share/editorial/' + link.token;
+            try { await navigator.clipboard.writeText(url); window.alert('Ссылка скопирована: ' + url); }
+            catch { window.prompt('Скопируйте ссылку:', url); }
+        } catch (e) { setError(e.message); }
+    }
     function changeView(next) { setView(next); localStorage.setItem('editorial-files-view', next); }
     async function remove(file) {
         if (!window.confirm('Удалить файл «' + file.name + '»? Он также исчезнет из общих ссылок.')) return;
@@ -56,21 +66,24 @@ export default function EditorialFiles() {
         {progress !== null && <div role="status" className="space-y-1 text-sm"><span>Загрузка: {progress}%</span><progress max="100" value={progress} className="block w-full" /></div>}
         {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm"><button className="underline" onClick={() => setFolder(null)}>Все файлы</button>{folder && <span> / {folder.title}</span>}</div>
+            <div className="flex items-center gap-2 text-sm"><button className="underline" onClick={() => { setFolder(null); setPersonFolder(null); }}>Все файлы</button>{folder && <><span> / </span><button className="underline" onClick={() => setPersonFolder(null)}>{folder.title}</button></>}{personFolder && <span> / {personFolder.title}</span>}</div>
             <div className="flex rounded-lg border border-current/20 p-1" role="group" aria-label="Вид файлов"><button aria-pressed={view === 'grid'} className={`rounded px-3 py-2 text-sm ${view === 'grid' ? 'bg-violet-600 text-white' : ''}`} onClick={() => changeView('grid')}>▦ Значки</button><button aria-pressed={view === 'list'} className={`rounded px-3 py-2 text-sm ${view === 'list' ? 'bg-violet-600 text-white' : ''}`} onClick={() => changeView('list')}>☷ Список</button></div>
         </div>
         {!folder && <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
-            {folders.map(item => <article key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => setFolder(item)}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{item.title}</span><span className="block text-xs opacity-60">{item.files.length} файлов</span></button><button disabled={!item.files.length} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40" onClick={() => share(item, item.id)}>Общий доступ</button></article>)}
+            {folders.map(item => <article key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => { setFolder(item); setPersonFolder(null); }}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{item.title}</span><span className="block text-xs opacity-60">{item.files.length} файлов</span></button><button disabled={!item.files.length} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40" onClick={() => share(item, item.id)}>Общий доступ</button></article>)}
+        </div>}
+        {folder && !personFolder && <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
+            {(folder.folders || []).map(group => <article key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => setPersonFolder(group)}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{group.title}</span><span className="block text-xs opacity-60">{group.files.length} файлов</span></button><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => sharePerson(group)}>Общий доступ</button></article>)}
         </div>}
         {!folder && <h3 className="font-semibold">Общие файлы</h3>}
         <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
-            {(folder ? folder.files : files).map(file => <article key={file.id} className={view === 'grid' ? 'rounded-xl border border-current/20 p-4' : 'flex flex-wrap items-center gap-3 rounded-xl border border-current/20 p-3'}>
+            {(folder ? (personFolder ? personFolder.files : []) : files).map(file => <article key={file.id} className={view === 'grid' ? 'rounded-xl border border-current/20 p-4' : 'flex flex-wrap items-center gap-3 rounded-xl border border-current/20 p-3'}>
                 <div className="text-2xl">{file.mimeType.startsWith('image/') ? '🖼️' : file.mimeType.startsWith('video/') ? '🎬' : '📄'}</div>
                 <div className="min-w-0 flex-1"><h3 className="break-all font-semibold">{file.name}</h3><p className="my-1 text-xs opacity-70">{(file.size / 1048576).toFixed(2)} МБ · {new Date(file.createdAt).toLocaleDateString('ru-RU')}{file.taskTitle ? ' · ' + file.taskTitle : ''}{file.version ? ' · Версия ' + file.version : ''}</p></div>
                 <div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => downloadEditorialFile('/editorial/library/files/' + encodeURIComponent(file.id), token, file.name).catch(e => setError(e.message))}>Скачать</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => share(file)}>Общий доступ</button>{!file.source && <button className="rounded-lg border border-red-400/50 px-3 py-2 text-sm" onClick={() => remove(file)}>Удалить</button>}</div>
             </article>)}
         </div>
-        {folder && !folder.files.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">В проекте пока нет загруженных материалов.</p>}
+        {folder && !(folder.folders || []).length && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">В проекте пока нет загруженных материалов.</p>}
         {!folder && !files.length && !folders.length && !error && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">Здесь пока нет файлов и проектов.</p>}
     </div>;
 }
