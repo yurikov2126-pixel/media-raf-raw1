@@ -16,6 +16,7 @@ import { EditorialSection } from './pages/Editorial.jsx';
 const Editorial = lazy(() => import('./pages/Editorial.jsx'));
 const EditorialOverview = lazy(() => import('./pages/EditorialOverview.jsx'));
 const EditorialCalendar = lazy(() => import('./pages/EditorialCalendar.jsx'));
+const EditorialContentPlan = lazy(() => import('./pages/EditorialContentPlan.jsx'));
 const EditorialProjects = lazy(() => import('./pages/EditorialProjects.jsx'));
 const EditorialMyTasks = lazy(() => import('./pages/EditorialMyTasks.jsx'));
 const EditorialReviewInbox = lazy(() => import('./pages/EditorialReviewInbox.jsx'));
@@ -105,7 +106,8 @@ export default function App() {
                         <Route path="my-tasks" element={<LazyPage><EditorialMyTasks /></LazyPage>} />
                         <Route path="reviews" element={<LazyPage><EditorialReviewInbox /></LazyPage>} />
                         <Route path="calendar" element={<LazyPage><EditorialCalendar /></LazyPage>} />
-                        {['files', 'shares', 'ideas', 'content'].map((section) => (
+                        <Route path="content" element={<LazyPage><EditorialContentPlan /></LazyPage>} />
+                        {['files', 'shares', 'ideas'].map((section) => (
                             <Route key={section} path={section} element={<EditorialSection title={{
                                 projects: 'Проекты', calendar: 'Календарь', files: 'Файлы',
                                 shares: 'Общий доступ', reviews: 'На проверке',
