@@ -21,7 +21,21 @@ router.get('/:slug/challenges',async(req,res,next)=>{
   try {const season=await validSeason(req.params.slug);if(!season)return res.status(404).json({error:'Сезон недоступен'});
     const challenges=await prisma.seasonChallenge.findMany({where:{seasonId:season.id,active:true},orderBy:{number:'asc'}});
     const submission=await prisma.seasonSubmission.findUnique({where:{seasonId_userId:{seasonId:season.id,userId:req.user.id}},include:{files:{select:{id:true,name:true,mimeType:true,size:true}}}});
-    res.json({challenges,submission});
+    const taken=await prisma.seasonSubmission.findMany({where:{seasonId:season.id},select:{challengeId:true,userId:true}});
+    const owners=new Map(taken.map(x=>[x.challengeId,x.userId]));
+    res.json({challenges:challenges.map(c=>({...c,availability:owners.has(c.id)?owners.get(c.id)===req.user.id?'mine':'taken':'free'})),submission});
+  }catch(e){next(e)}
+});
+// Selecting a task immediately reserves it; unique DB constraint resolves concurrent clicks.
+router.post('/:slug/select',async(req,res,next)=>{
+  try {const season=await validSeason(req.params.slug),now=new Date();
+    if(!season||now<season.startsAt||now>=season.endsAt)return res.status(409).json({error:'Выбор заданий закрыт'});
+    const challenge=await prisma.seasonChallenge.findFirst({where:{id:req.body?.challengeId,seasonId:season.id,active:true}});
+    if(!challenge)return res.status(400).json({error:'Задание не найдено'});
+    const existing=await prisma.seasonSubmission.findUnique({where:{seasonId_userId:{seasonId:season.id,userId:req.user.id}}});
+    if(existing)return res.status(409).json({error:'Вы уже выбрали задание. Оно закреплено за вами до конца сезона.'});
+    try {const submission=await prisma.seasonSubmission.create({data:{seasonId:season.id,challengeId:challenge.id,userId:req.user.id,status:'SELECTED'}});return res.status(201).json({submission})}
+    catch(e){if(e.code==='P2002')return res.status(409).json({error:'Это задание уже выбрал другой участник. Обновите список.'});throw e}
   }catch(e){next(e)}
 });
 router.post('/:slug/submit',async(req,res,next)=>{
@@ -33,8 +47,9 @@ router.post('/:slug/submit',async(req,res,next)=>{
     const challenge=await prisma.seasonChallenge.findFirst({where:{id:challengeId,seasonId:season.id,active:true}});
     if(!challenge)return res.status(400).json({error:'Выберите задание'});
     const old=await prisma.seasonSubmission.findUnique({where:{seasonId_userId:{seasonId:season.id,userId:req.user.id}}});
-    if(old&&old.status!=='REVISION')return res.status(409).json({error:'Работа уже отправлена на проверку'});
+    if(old&&!['REVISION','SELECTED'].includes(old.status))return res.status(409).json({error:'Работа уже отправлена на проверку'});
     if(old&&old.challengeId!==challenge.id)return res.status(409).json({error:'При доработке нельзя менять задание'});
+    if(!old)return res.status(409).json({error:'Сначала закрепите за собой задание'});
     const submission=old?await prisma.seasonSubmission.update({where:{id:old.id},data:{description,status:'SUBMITTED',score:null,feedback:'',reviewedAt:null}}):await prisma.seasonSubmission.create({data:{seasonId:season.id,challengeId:challenge.id,userId:req.user.id,description}});
     res.json({submission});
   }catch(e){next(e)}
