@@ -38,7 +38,7 @@ export default function Editorial() {
                 <h1 className="mt-1 text-2xl font-semibold text-violet-700 dark:text-violet-100">Редакция</h1>
 
             </header>
-            <nav aria-label="Быстрые разделы редакции" className="mb-4 flex items-center gap-2 sm:hidden" data-no-route-swipe>
+            <nav aria-label="Быстрые разделы редакции" className="editorial-mobile-nav mb-4 sm:hidden" data-no-route-swipe>
                 {primarySections.map(([path, label]) => (
                     <NavLink key={path} to={sectionUrl(path)} className={({isActive}) => `flex min-h-11 min-w-0 flex-1 items-center justify-center rounded-xl border px-2 py-2 text-center text-xs font-semibold transition-colors ${isActive ? 'border-violet-600 bg-violet-600 text-white shadow-sm dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-slate-300 bg-white text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'}`}>{label}</NavLink>
                 ))}
@@ -50,7 +50,7 @@ export default function Editorial() {
                     </select>
                 </label>
             </nav>
-            <nav aria-label="Разделы редакции" className="editorial-glass__nav mb-4 hidden flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/70 p-2 shadow-sm backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/70 sm:flex" data-no-route-swipe>
+            <nav aria-label="Разделы редакции" className="editorial-workspace-nav editorial-glass__nav mb-4 hidden sm:flex" data-no-route-swipe>
                 {sections.map(([path, label]) => (
                     <NavLink key={path} end={!path} to={sectionUrl(path)}
                         className={({isActive}) => `inline-flex min-h-10 items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'border-violet-600 bg-violet-600 text-white shadow-sm dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-transparent text-slate-700 hover:border-violet-200 hover:bg-violet-50 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800'}`}>
