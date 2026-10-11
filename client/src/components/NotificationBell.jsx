@@ -158,6 +158,7 @@ export default function NotificationBell({ align = 'right' }) {
         else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);
         else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
+        else if (n.type === 'personal_calendar') nav('/app/editorial/calendar');
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');
