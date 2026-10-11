@@ -355,3 +355,37 @@ html[data-theme="dark"] .editorial-task-dialog .editorial-task-modal-footer butt
 @media (prefers-reduced-motion: reduce) {
   .editorial-glass .editorial-planner :is(button,a) { transition: none !important; transform: none !important; }
 }
+
+/* Private events: accessible surfaces in the existing editorial palette. */
+.editorial-glass .editorial-personal-event-primary {
+  background: #7c3aed; color: #fff; -webkit-text-fill-color: #fff;
+  box-shadow: 0 6px 16px rgba(124,58,237,.2);
+}
+.editorial-glass .editorial-personal-event-primary:hover { background: #6d28d9; }
+.editorial-glass .editorial-personal-event-row {
+  color: var(--ed-text); background: var(--ed-surface-strong);
+  border-color: var(--ed-border); border-left: 4px solid #06b6d4;
+}
+.editorial-glass .editorial-personal-event-row:hover { border-color: #8b5cf6; }
+.editorial-personal-event-dialog {
+  --event-surface: #fff; --event-text: #20283b; --event-border: #b9aaca;
+  background: var(--event-surface); color: var(--event-text);
+  border-color: var(--event-border); max-height: min(94dvh, 900px);
+  overflow-y: auto; overscroll-behavior: contain;
+}
+html.dark .editorial-personal-event-dialog,
+html[data-theme="dark"] .editorial-personal-event-dialog,
+body.dark .editorial-personal-event-dialog,
+body[data-theme="dark"] .editorial-personal-event-dialog {
+  --event-surface: #201d32; --event-text: #f6f3ff; --event-border: #706287;
+}
+.editorial-personal-event-dialog :is(input:not([type="checkbox"]),textarea) {
+  background: var(--event-surface); color: var(--event-text);
+  border-color: var(--event-border); color-scheme: light; font-size: 16px;
+}
+html.dark .editorial-personal-event-dialog :is(input,textarea),
+html[data-theme="dark"] .editorial-personal-event-dialog :is(input,textarea),
+body.dark .editorial-personal-event-dialog :is(input,textarea),
+body[data-theme="dark"] .editorial-personal-event-dialog :is(input,textarea) { color-scheme: dark; }
+.editorial-personal-event-dialog .editorial-personal-event-delete { border-color: #ef4444; color: #dc2626; }
+.editorial-personal-event-dialog :is(button,input,textarea):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
