@@ -9,7 +9,7 @@ const ROLES = ['MANAGER', 'EDITOR', 'PARTICIPANT', 'OBSERVER'];
 const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA', 'SOUND_ENGINEER', 'INTERVIEWER', 'VIDEO_EDITOR'];
 const CREW_LABELS = { LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф', LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора', ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр', INTERVIEWER: 'Интервьюер', VIDEO_EDITOR: 'Монтажёр' };
 const parseDay = value => {
-    if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return null;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
     const date = new Date(value + 'T00:00:00.000Z');
     return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
 };
