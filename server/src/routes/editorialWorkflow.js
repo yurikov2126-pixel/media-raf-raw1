@@ -68,6 +68,27 @@ router.get('/navigation', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// Cross-project review inbox. Scope every row to projects this user can edit.
+router.get('/review-inbox', async (req, res, next) => {
+    try {
+        const admin = isAdmin(req.user);
+        const tasks = await prisma.editorialTask.findMany({
+            where: {
+                status: 'IN_REVIEW',
+                ...(admin ? {} : { project: { members: { some: { userId: req.user.id, role: { in: ['MANAGER', 'EDITOR'] } } } } }),
+            },
+            select: {
+                id: true, projectId: true, title: true, status: true, dueAt: true, createdAt: true,
+                assignee: { select: { id: true, fullName: true } },
+                project: { select: { id: true, title: true } },
+            },
+            orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
+            take: 500,
+        });
+        res.json({ tasks });
+    } catch (error) { next(error); }
+});
+
 router.get('/my-tasks', async (req, res, next) => {
     try {
         const tasks = await prisma.editorialTask.findMany({
