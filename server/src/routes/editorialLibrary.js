@@ -98,7 +98,7 @@ router.get('/folders', async (_req, res, next) => {
             const grouped = new Map();
             for (const task of p.tasks) {
                 for (const file of task.materialFiles) {
-                    const personId = file.uploaderId || task.assigneeId;
+                    const personId = task.assigneeId || file.uploaderId;
                     const member = members.get(personId) || members.get(task.assigneeId);
                     const role = member?.role === 'MANAGER' ? 'Руководитель' : (roles[member?.crewPosition] || 'Участник команды');
                     const fullName = member?.user?.fullName?.trim() || member?.user?.username || 'Неизвестный участник';
