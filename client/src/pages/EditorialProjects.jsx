@@ -12,8 +12,10 @@ const CREW_POSITIONS = {
     ACTION_CAMERA: 'Оператор экшн-камеры',
     SOUND_ENGINEER: 'Звукорежиссёр',
     INTERVIEWER: 'Интервьюер',
+    VIDEO_EDITOR: 'Монтажёр',
 };
 const crewName = value => CREW_POSITIONS[value] || 'Участник команды';
+const DEADLINE_POSITIONS = new Set(['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'VIDEO_EDITOR']);
 
 export default function EditorialProjects() {
     const { token, user } = useAuth();
@@ -42,6 +44,8 @@ export default function EditorialProjects() {
     const [wizardTaskAssignee, setWizardTaskAssignee] = useState('');
     const [wizardTaskDue, setWizardTaskDue] = useState('');
     const [wizardBusy, setWizardBusy] = useState(false);
+    const selectedWizardMember = wizardMembers.find(m => m.userId === wizardTaskAssignee);
+    const wizardDeadlineAllowed = Boolean(selectedWizardMember && DEADLINE_POSITIONS.has(selectedWizardMember.crewPosition));
     const [projectTab, setProjectTab] = useState('tasks');
     const [projectQuery, setProjectQuery] = useState('');
     const [showMemberForm, setShowMemberForm] = useState(false);
@@ -108,6 +112,17 @@ export default function EditorialProjects() {
         } catch (e) { setError(e.message); }
         finally { setWizardBusy(false); }
     }
+    async function saveWizardProject(event) {
+        event.preventDefault();
+        if (!wizardProject || creating) return;
+        setCreating(true); setError('');
+        try {
+            const result = await api(`/editorial/projects/${wizardProject.id}`, { token, method: 'PATCH', body: { title, description, visibility, eventDate: eventDate || null } });
+            setWizardProject(result.project); setWizardStep(2);
+            await reload();
+        } catch (e) { setError(e.message); }
+        finally { setCreating(false); }
+    }
     async function addWizardTask(event) {
         event.preventDefault();
         if (!wizardProject || !wizardTaskTitle.trim() || wizardBusy) return;
@@ -117,7 +132,7 @@ export default function EditorialProjects() {
                 token, method: 'POST', body: {
                     title: wizardTaskTitle.trim(), assigneeId: wizardTaskAssignee || null,
                     parentId: null, isOpen: false,
-                    dueAt: wizardTaskDue ? new Date(wizardTaskDue).toISOString() : null,
+                    dueAt: wizardDeadlineAllowed && wizardTaskDue ? new Date(wizardTaskDue).toISOString() : null,
                 },
             });
             setWizardTasks(current => [...current, { ...(result.task || { id: String(Date.now()), title: wizardTaskTitle.trim() }), assigneeId: result.task?.assigneeId ?? (wizardTaskAssignee || null) }]);
@@ -209,15 +224,15 @@ export default function EditorialProjects() {
                         <div><p className="text-xs opacity-70">Шаг {wizardStep} из 3</p><h3 id="project-wizard-title" className="text-lg font-bold">{['','Новый проект','Участники проекта','Задания проекта'][wizardStep]}</h3></div>
                         <button type="button" onClick={() => setShowCreate(false)} aria-label="Закрыть мастер создания" className="rounded-xl border px-3 py-2">✕</button>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Этапы создания">{['Проект','Команда','Задания'].map((label,i) => <div key={label} className={`rounded-lg px-2 py-2 text-center text-xs font-semibold ${wizardStep === i+1 ? 'bg-violet-600 text-white' : 'editorial-project-wizard-step'}`}>{i+1}. {label}</div>)}</div>
+                    <nav className="mt-3 grid grid-cols-3 gap-2" aria-label="Этапы создания">{['Проект','Команда','Задания'].map((label,i) => <button type="button" key={label} disabled={!wizardProject && i !== 0} onClick={() => { setError(''); setWizardStep(i + 1); }} aria-current={wizardStep === i+1 ? 'step' : undefined} className={`rounded-lg px-2 py-2 text-center text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${wizardStep === i+1 ? 'bg-violet-600 text-white' : 'editorial-project-wizard-step'}`}>{i+1}. {label}</button>)}</nav>
                     <div className="mt-4 min-h-0 space-y-3 overflow-y-auto pb-2">
                         {error && <p role="alert" className="rounded-xl border border-rose-500/50 p-3 text-sm">{error}</p>}
-                        {wizardStep === 1 && <form id="editorial-wizard-project" onSubmit={create} className="space-y-3">
+                        {wizardStep === 1 && <form id="editorial-wizard-project" onSubmit={wizardProject ? saveWizardProject : create} className="space-y-3">
                             <label className="block text-sm">Название проекта<input autoFocus required maxLength={120} value={title} onChange={e => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
                             <label className="block text-sm">Описание<textarea rows={3} maxLength={5000} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
                             <label className="block text-sm">Дата мероприятия<input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /><span className="mt-1 block text-xs opacity-70">Появится в календаре участников проекта</span></label>
                             <label className="block text-sm">Видимость<select value={visibility} onChange={e => setVisibility(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
-                            <button disabled={creating} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white disabled:opacity-50">{creating ? 'Создание…' : 'Создать проект и продолжить →'}</button>
+                            <button disabled={creating} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white disabled:opacity-50">{creating ? 'Сохранение…' : wizardProject ? 'Сохранить и перейти к команде →' : 'Создать проект и продолжить →'}</button>
                         </form>}
                         {wizardStep === 2 && <div className="space-y-3">
                             <p className="text-sm opacity-75">Добавьте участников перед назначением заданий. Можно добавить нескольких подряд.</p>
@@ -241,7 +256,7 @@ export default function EditorialProjects() {
                                 {wizardMembers.length === 0 && <p className="text-sm opacity-70">Участники пока не добавлены. Можно назначить задания позже.</p>}
                                 <div className="space-y-2">{wizardMembers.map(m => {
                                     const assigned = wizardTasks.filter(t => t.assigneeId === m.userId);
-                                    return <button key={m.userId} type="button" onClick={() => setWizardTaskAssignee(m.userId)} aria-pressed={wizardTaskAssignee === m.userId} className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm ${wizardTaskAssignee === m.userId ? 'border-violet-500 ring-1 ring-violet-500' : ''}`}>
+                                    return <button key={m.userId} type="button" onClick={() => { setWizardTaskAssignee(m.userId); setWizardTaskDue(''); }} aria-pressed={wizardTaskAssignee === m.userId} className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm ${wizardTaskAssignee === m.userId ? 'border-violet-500 ring-1 ring-violet-500' : ''}`}>
                                         <span className="min-w-0"><strong className="block truncate">{m.user?.fullName || m.user?.username || m.userId}</strong><span className="block text-xs opacity-70">{m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</span></span>
                                         <span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold ${assigned.length ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'}`}>{assigned.length ? `Назначено: ${assigned.length}` : 'Нет заданий'}</span>
                                     </button>;
@@ -250,8 +265,9 @@ export default function EditorialProjects() {
                             {wizardTasks.length > 0 && <div className="space-y-2"><h4 className="text-sm font-semibold">Созданные задания</h4>{wizardTasks.map((task,i) => <p key={task.id || i} className="editorial-project-wizard-step rounded-lg p-3 text-sm">✓ {task.title}{task.assigneeId ? ` · ${wizardMembers.find(m => m.userId === task.assigneeId)?.user?.fullName || wizardMembers.find(m => m.userId === task.assigneeId)?.user?.username || 'Исполнитель назначен'}` : ' · Без исполнителя'}</p>)}</div>}
                             <form onSubmit={addWizardTask} className="space-y-3">
                                 <label className="block text-sm">Название задания<input required maxLength={160} value={wizardTaskTitle} onChange={e => setWizardTaskTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
-                                <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => setWizardTaskAssignee(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</option>)}</select></label>
-                                <label className="block text-sm">Срок<input type="datetime-local" value={wizardTaskDue} onChange={e => setWizardTaskDue(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                                <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => { setWizardTaskAssignee(e.target.value); setWizardTaskDue(''); }} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</option>)}</select></label>
+                                {wizardDeadlineAllowed && <label className="block text-sm">Дедлайн<input type="datetime-local" value={wizardTaskDue} onChange={e => setWizardTaskDue(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>}
+                                {selectedWizardMember && !wizardDeadlineAllowed && <p className="text-xs opacity-70">Для этой роли дедлайн не требуется.</p>}
                                 <button disabled={wizardBusy || !wizardTaskTitle.trim()} className="rounded-xl border border-violet-400 px-4 py-3 text-sm font-semibold disabled:opacity-50">+ Добавить задание</button>
                             </form>
                             <button type="button" onClick={finishWizard} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white">Завершить и открыть проект ✓</button>
