@@ -796,6 +796,7 @@ model EditorialTask {
   events EditorialTaskEvent[]
   materialFiles EditorialMaterialFile[]
   @@index([projectId, status])
+  @@index([projectId, workDate])
   @@index([assigneeId, dueAt])
   @@index([parentId])
 }
