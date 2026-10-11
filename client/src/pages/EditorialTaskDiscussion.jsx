@@ -28,7 +28,7 @@ export default function EditorialTaskDiscussion({ projectId, task, token, canEdi
         finally { setBusy(false); }
     }
     const ownApplication = data.applications.find((a) => a.userId === userId);
-    return <div className="space-y-5 border-t border-current/10 pt-4">
+    return <div className="editorial-discussion-panel space-y-5 border-t border-current/10 pt-4">
         {canEdit && <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={!!task.isOpen} disabled={busy || !!task.assigneeId} onChange={(e) => perform(() => api(base, { method: 'PATCH', token, body: { isOpen: e.target.checked } }))} />
             Открыть приём заявок на задачу
