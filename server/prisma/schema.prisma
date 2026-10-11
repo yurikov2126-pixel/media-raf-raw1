@@ -743,6 +743,7 @@ model EditorialProject {
 
 model EditorialProjectMember {
   id        String   @id @default(cuid())
+  crewPosition String?
   projectId String
   userId    String
   role      String   @default("PARTICIPANT")
