@@ -490,3 +490,12 @@ html.dark .editorial-personal-event-dialog input[type="date"] { color-scheme: da
   .editorial-glass .editorial-content-plan-calendar > button { min-width: 0; }
   .editorial-glass .editorial-review-action { width: 100%; justify-content: center; }
 }
+
+
+/* Three compact content-plan filters: platform, status, responsible member. */
+.editorial-glass .editorial-content-plan-filters > label { flex: 1 1 180px; min-width: 0; }
+.editorial-glass .editorial-content-plan-filters select { width: 100%; }
+@media (max-width: 639px) {
+  .editorial-glass .editorial-content-plan-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .editorial-glass .editorial-content-plan-filters > label:last-child { grid-column: 1 / -1; }
+}
