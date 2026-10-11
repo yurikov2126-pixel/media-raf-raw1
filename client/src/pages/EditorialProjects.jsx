@@ -88,7 +88,7 @@ export default function EditorialProjects() {
     const canManage = selected && (user?.role === 'ADMIN' || selected.members.some((m) => m.userId === user?.id && m.role === 'MANAGER'));
 
     return (
-        <div className="editorial-glass__projects space-y-4">
+        <div className="editorial-glass__projects editorial-workspace-content space-y-4">
             {fromReviews && <Link to="/app/editorial/reviews" className="inline-flex min-h-11 items-center rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold text-violet-800 dark:text-violet-200">← Вернуться к проверке</Link>}
             {fromMyTasks && <Link to={"/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")} className="inline-flex min-h-11 items-center rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold text-violet-800 dark:text-violet-200">← Вернуться к моим заданиям</Link>}
             {!fromMyTasks && <div className="flex flex-wrap items-center justify-between gap-3">
