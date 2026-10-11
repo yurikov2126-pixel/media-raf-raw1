@@ -24,6 +24,38 @@ function fmtDate(s) {
     });
 }
 
+const ACTION_LABELS = {
+    onboarding_reset_all: 'Повторное обучение для всех пользователей',
+    onboarding_reset_user: 'Повторное обучение пользователя',
+    gamification_settings_update: 'Изменены настройки геймификации',
+    gamification_grant_xp: 'Начислены или списаны баллы опыта',
+    gamification_reset_user: 'Сброшен прогресс пользователя',
+    gamification_reset_all: 'Сброшен прогресс всех пользователей',
+    gamification_achievement_create: 'Создано достижение',
+    gamification_achievement_delete: 'Удалено достижение',
+    gamification_levels_update: 'Изменены пороги уровней',
+    maintenance_delete_orphan_file: 'Удалён осиротевший файл',
+    maintenance_purge_orphan_files: 'Очищены осиротевшие файлы',
+};
+const ACTION_WORDS = {
+    create: 'Создание', created: 'Создание', add: 'Добавление', update: 'Изменение',
+    updated: 'Изменение', edit: 'Редактирование', delete: 'Удаление', remove: 'Удаление',
+    reset: 'Сброс', restore: 'Восстановление', grant: 'Начисление', revoke: 'Отзыв',
+    approve: 'Одобрение', reject: 'Отклонение', cleanup: 'Очистка', purge: 'Очистка',
+    user: 'пользователя', users: 'пользователей', course: 'курса', courses: 'курсов',
+    post: 'публикации', comment: 'комментария', report: 'жалобы', settings: 'настроек',
+    module: 'модуля', certificate: 'сертификата', backup: 'резервной копии',
+    achievement: 'достижения', quest: 'квеста', level: 'уровня', notification: 'уведомления',
+    password: 'пароля', moderation: 'модерации', gamification: 'геймификации',
+    onboarding: 'обучения', maintenance: 'обслуживания БД', file: 'файла',
+};
+function humanAction(action) {
+    if (ACTION_LABELS[action]) return ACTION_LABELS[action];
+    const words = String(action || '').split(/[_:.\\/\\-]+/).filter(Boolean);
+    const translated = words.map(word => ACTION_WORDS[word.toLowerCase()] || word);
+    return translated.join(' ').replace(/^./, letter => letter.toUpperCase());
+}
+
 function shortAction(a) {
     return a.length > 40 ? a.slice(0, 37) + '…' : a;
 }
@@ -166,14 +198,14 @@ export default function Actions({ token }) {
                         </label>
                         <input
                             className="input !py-1.5 !text-sm"
-                            placeholder="maintenance_…"
+                            placeholder="Поиск по коду действия"
                             value={action}
                             onChange={(e) => updateFilters({ action: e.target.value })}
                             list="admin-actions-list"
                         />
                         <datalist id="admin-actions-list">
                             {actionOptions.map((a) => (
-                                <option key={a} value={a} />
+                                <option key={a} value={a} label={humanAction(a)} />
                             ))}
                         </datalist>
                     </div>
@@ -308,7 +340,7 @@ export default function Actions({ token }) {
                                                                 className="font-mono text-xs"
                                                                 title={it.action}
                                                             >
-                                                                {shortAction(it.action)}
+                                                                {humanAction(it.action)}
                                                             </span>
                                                         {hasError && (
                                                             <span
