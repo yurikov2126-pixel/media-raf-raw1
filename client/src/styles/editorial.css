@@ -168,61 +168,85 @@ body:has([data-theme="dark"]) .editorial-themed-dialog {
   .editorial-glass .editorial-glass__projects aside > button { transition: none; transform: none !important; }
 }
 
-/* Task modal contrast: iOS PWA portal does not inherit the editor theme.
-   Scope to the task-details pane; do not recolor semantic status banners. */
-.editorial-task-dialog .editorial-task-details {
-  color: #f8f7ff;
-  --task-label: #e6def7;
-  --task-field: #28253c;
-  --task-field-border: #72658f;
-}
-.editorial-task-dialog .editorial-task-details form > label,
-.editorial-task-dialog .editorial-task-details > div > label,
-.editorial-task-dialog .editorial-task-details h6 {
-  color: var(--task-label) !important;
-  opacity: 1 !important;
-  font-weight: 600;
-}
-.editorial-task-dialog .editorial-task-details form > label {
-  display: block;
-}
-.editorial-task-dialog .editorial-task-details :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select) {
-  background-color: var(--task-field) !important;
-  border: 1px solid var(--task-field-border) !important;
-  color: #f8f7ff !important;
-  -webkit-text-fill-color: #f8f7ff !important;
-  color-scheme: dark;
-  opacity: 1;
-}
-.editorial-task-dialog .editorial-task-details :is(input,textarea)::placeholder {
-  color: #d0c9df !important;
-  opacity: 1;
-}
-.editorial-task-dialog .editorial-task-details :is(input,select,textarea):disabled {
-  opacity: .72 !important;
-  cursor: not-allowed;
-}
-.editorial-task-dialog .editorial-task-details select option {
-  background-color: #28253c;
-  color: #f8f7ff;
-}
-.editorial-task-dialog .editorial-task-details :is(input,select,textarea):focus-visible {
-  outline: 2px solid #c4b5fd;
-  outline-offset: 2px;
-  border-color: #c4b5fd !important;
-}
-/* Preserve a readable light-mode variant on systems without dark theme. */
-html:not(.dark) body:not(:has(.dark)):not(:has([data-theme="dark"])) .editorial-task-dialog .editorial-task-details {
-  color: #182033;
-  --task-label: #26324a;
+/* Modal palette is anchored to its own component rather than inherited utility colors. */
+.editorial-task-dialog {
+  --ed-dialog-surface: #fbfaff;
+  --ed-dialog-card: #fff;
+  --ed-dialog-border: #b8aacd;
+  --ed-dialog-text: #242d42;
+  --ed-dialog-muted: #46516a;
+  --task-label: #28364d;
   --task-field: #fff;
-  --task-field-border: #9588ad;
+  --task-field-border: #9987b5;
+  background: var(--ed-dialog-surface) !important;
+  color: var(--ed-dialog-text) !important;
 }
-html:not(.dark) body:not(:has(.dark)):not(:has([data-theme="dark"])) .editorial-task-dialog .editorial-task-details :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),textarea,select) {
-  color: #182033 !important;
-  -webkit-text-fill-color: #182033 !important;
-  color-scheme: light;
+html.dark .editorial-task-dialog,
+html[data-theme="dark"] .editorial-task-dialog,
+body.dark .editorial-task-dialog,
+body[data-theme="dark"] .editorial-task-dialog {
+  --ed-dialog-surface: #191827;
+  --ed-dialog-card: #25233a;
+  --ed-dialog-border: #635779;
+  --ed-dialog-text: #f6f3ff;
+  --ed-dialog-muted: #d3cde4;
+  --task-label: #ede7fb;
+  --task-field: #29263f;
+  --task-field-border: #817298;
 }
-html:not(.dark) body:not(:has(.dark)):not(:has([data-theme="dark"])) .editorial-task-dialog .editorial-task-details select option {
-  background-color: #fff; color: #182033;
+.editorial-task-dialog .editorial-task-details {
+  color: var(--ed-dialog-text) !important;
+  --task-label: var(--ed-dialog-text);
+}
+.editorial-task-dialog .editorial-task-details :is(form > label, h6) {
+  color: var(--ed-dialog-text) !important;
+  opacity: 1 !important;
+}
+.editorial-task-dialog .editorial-task-details :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),textarea,select) {
+  background: var(--ed-dialog-card) !important;
+  border: 1px solid var(--ed-dialog-border) !important;
+  color: var(--ed-dialog-text) !important;
+  -webkit-text-fill-color: var(--ed-dialog-text) !important;
+}
+.editorial-task-dialog .editorial-task-details :is(input,textarea)::placeholder { color: var(--ed-dialog-muted) !important; }
+.editorial-task-dialog .editorial-task-details :is(input,textarea,select):disabled {
+  opacity: .7 !important; -webkit-text-fill-color: var(--ed-dialog-text) !important;
+}
+.editorial-task-dialog .editorial-task-modal-header,
+.editorial-task-dialog .editorial-task-modal-footer {
+  background: var(--ed-dialog-surface) !important;
+  color: var(--ed-dialog-text) !important;
+  border-color: var(--ed-dialog-border) !important;
+}
+.editorial-task-dialog .editorial-task-modal-header p { color: var(--ed-dialog-muted) !important; }
+.editorial-task-dialog .editorial-task-modal-header h4 { color: var(--ed-dialog-text) !important; }
+.editorial-task-dialog .editorial-task-modal-footer button {
+  background: var(--ed-dialog-card) !important;
+  color: var(--ed-dialog-text) !important;
+  border-color: var(--ed-dialog-border) !important;
+}
+.editorial-task-dialog .editorial-task-details button[type="submit"] {
+  background: #7c3aed !important; color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+.editorial-task-dialog .editorial-task-details [role="tab"][aria-selected="true"] {
+  background: #7c3aed !important; color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+.editorial-overview { color: var(--ed-text); }
+.editorial-overview-stat,.editorial-overview-panel {
+  border-color: var(--ed-border); background: var(--ed-surface);
+  color: var(--ed-text); box-shadow: var(--ed-shadow);
+}
+.editorial-overview-item,.editorial-overview-action,.editorial-overview-refresh {
+  background: var(--ed-surface-strong); border-color: var(--ed-border); color: var(--ed-text);
+}
+.editorial-overview-item:hover,.editorial-overview-action:hover {
+  border-color: var(--ed-accent); background: var(--ed-surface);
+}
+.editorial-overview a:focus-visible,.editorial-overview button:focus-visible {
+  outline: 3px solid #a78bfa; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .editorial-overview-stat { transition: none; transform: none !important; }
 }

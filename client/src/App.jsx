@@ -14,6 +14,7 @@ import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
 import Landing from './pages/Landing.jsx';
 import { EditorialSection } from './pages/Editorial.jsx';
 const Editorial = lazy(() => import('./pages/Editorial.jsx'));
+const EditorialOverview = lazy(() => import('./pages/EditorialOverview.jsx'));
 const EditorialProjects = lazy(() => import('./pages/EditorialProjects.jsx'));
 const EditorialMyTasks = lazy(() => import('./pages/EditorialMyTasks.jsx'));
 const EditorialReviewInbox = lazy(() => import('./pages/EditorialReviewInbox.jsx'));
@@ -98,7 +99,7 @@ export default function App() {
                     <Route index element={<LazyPage><Dashboard /></LazyPage>} />
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
-                        <Route index element={<EditorialSection title="Обзор" />} />
+                        <Route index element={<LazyPage><EditorialOverview /></LazyPage>} />
                         <Route path="projects" element={<LazyPage><EditorialProjects /></LazyPage>} />
                         <Route path="my-tasks" element={<LazyPage><EditorialMyTasks /></LazyPage>} />
                         <Route path="reviews" element={<LazyPage><EditorialReviewInbox /></LazyPage>} />
