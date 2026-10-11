@@ -98,7 +98,7 @@ export default function MobileNav({ links, user }) {
     const navKey = standalone ? 'nav_pwa_items' : 'nav_mobile_items';
     const moreKey = standalone ? 'nav_pwa_more_items' : 'nav_mobile_more_items';
     const resolve = (item) => ({ ...item, to: item.to === '/app/u/me' ? `/app/u/${user.username}` : item.to });
-    const allowed = (item) => !item.roles || item.roles.includes(user?.role);
+    const allowed = (item) => (!item.roles || item.roles.includes(user?.role)) && (item.action === 'more' || (typeof item.to === 'string' && item.to.startsWith('/app') && !item.to.startsWith('//'))) && (item.to !== '/app/admin' || user?.role === 'ADMIN') && (item.to !== '/app/mentor' || ['ADMIN', 'MENTOR'].includes(user?.role));
     const primaryItems = parseMenu(siteSettings[navKey], primary).filter(allowed).map(resolve).slice(0, 5);
     const extraItems = parseMenu(siteSettings[moreKey], extra).filter(allowed).filter(item => item.action !== 'more').map(resolve);
     return (
