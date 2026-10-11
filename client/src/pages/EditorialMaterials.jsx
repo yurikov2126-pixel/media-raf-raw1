@@ -187,7 +187,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
         }catch(e){onError(e.message);}
         finally{setBusy(false);}
     }
-    return <section className="space-y-4" aria-label="Материалы задания">
+    return <section className="editorial-materials-panel space-y-4" aria-label="Материалы задания">
         <div><h3 className="font-semibold">Материалы и согласование</h3><p className="text-xs opacity-65">Файлы доступны только участникам проекта. Предыдущие версии сохраняются.</p></div>
         <div role="status" className="rounded-lg border border-current/15 bg-white/30 px-3 py-2 text-sm dark:bg-slate-800/30"><strong>Статус задания:</strong> {{TODO:'К выполнению',IN_PROGRESS:'В работе',IN_REVIEW:'На проверке',REVISION:'На доработке',APPROVED:'Утверждено',DONE:'Завершено'}[currentStatus]||currentStatus}</div>
         {canReview&&<p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/50 dark:text-amber-100">Материал ожидает вашего решения. Просмотрите галерею ниже, затем выберите «Утвердить» или «На доработку».</p>}
