@@ -25,13 +25,14 @@ export default function EditorialOverview() {
         Promise.allSettled([
             api('/editorial/workflow/my-tasks', { token }),
             api('/editorial/workflow/review-inbox', { token }),
-        ]).then(([mine, inbox]) => {
+            api('/editorial/workflow/navigation', { token }),
+        ]).then(([mine, inbox, navigation]) => {
             if (!active) return;
             if (mine.status === 'fulfilled') setPersonal(mine.value.tasks || []);
             else { setPersonal([]); setError('Не удалось загрузить личные задания.'); }
             if (inbox.status === 'fulfilled') {
                 setReviews(inbox.value.tasks || []);
-                setCanReview(true);
+                setCanReview(navigation.status === 'fulfilled' && !!navigation.value.canManageProjects);
             } else { setReviews([]); setCanReview(false); }
         }).finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
