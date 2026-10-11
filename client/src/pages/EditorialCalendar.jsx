@@ -146,8 +146,8 @@ export default function EditorialCalendar() {
     const eventsByDate = useMemo(() => {
         const map = new Map();
         events.forEach(event => {
-            const start = dateOf(event.startsAt);
-            const end = dateOf(event.endsAt);
+            const start = event.projectEvent ? new Date(Number(event.eventDate.slice(0, 4)), Number(event.eventDate.slice(5, 7)) - 1, Number(event.eventDate.slice(8, 10))) : dateOf(event.startsAt);
+            const end = event.projectEvent ? shift(start, 1) : dateOf(event.endsAt);
             if (!start || !end) return;
             for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate()), i = 0; d < end && i < 32; d = shift(d, 1), i++) {
                 const key = keyOf(d);
@@ -244,7 +244,7 @@ export default function EditorialCalendar() {
                 <section className="editorial-planner-panel rounded-3xl border p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">На {dateLabel(selected)}</h3><span className="text-xs opacity-70">{selectedTasks.length} заданий · {selectedEvents.length} событий</span></div>
                     {dateChosen && <button type="button" onClick={() => setEditing(null)} className="editorial-personal-event-primary mt-4 min-h-11 w-full rounded-xl px-5 font-semibold sm:w-auto">＋ Создать личное событие на {dateLabel(selected)}</button>}
-                    {selectedEvents.length > 0 && <div className="mt-4 space-y-2">{selectedEvents.map(event => <button type="button" key={event.id} onClick={() => setEditing(event)} className="editorial-personal-event-row w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">{event.allDay ? 'Весь день' : timeLabel(dateOf(event.startsAt))} · {event.seriesId ? '↻ Повторяющееся событие' : 'Личное событие'}</span></button>)}</div>}
+                    {selectedEvents.length > 0 && <div className="mt-4 space-y-2">{selectedEvents.map(event => event.projectEvent ? <Link key={event.id} to={`/app/editorial/projects?project=${encodeURIComponent(event.projectId)}`} className="editorial-personal-event-row block w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">Мероприятие проекта · Открыть проект ↗</span></Link> : <button type="button" key={event.id} onClick={() => setEditing(event)} className="editorial-personal-event-row w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">{event.allDay ? 'Весь день' : timeLabel(dateOf(event.startsAt))} · {event.seriesId ? '↻ Повторяющееся событие' : 'Личное событие'}</span></button>)}</div>}
                     {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загружаем задания…</p>
                         : selectedTasks.length ? <div className="mt-4 space-y-2">{selectedTasks.map(t => <TaskRow key={t.id} task={t} now={now} />)}</div>
                         : selectedEvents.length ? null : <p className="editorial-planner-empty mt-4 rounded-2xl p-5 text-sm">На этот день нет заданий и событий.</p>}
