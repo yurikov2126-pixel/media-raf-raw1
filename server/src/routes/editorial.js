@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { createNotification } from '../lib/notify.js';
@@ -158,8 +160,32 @@ router.delete('/projects/:id', async (req, res, next) => {
         if (!project) return res.status(404).json({ error: 'Проект не найден' });
         if (!isAdmin(req.user) && project.createdById !== req.user.id) return res.status(403).json({ error: 'Удалить проект может только создатель или администратор' });
         if (!project.completedAt) return res.status(409).json({ error: 'Сначала завершите проект' });
-        await prisma.editorialProject.delete({ where: { id: project.id } });
-        res.json({ ok: true });
+        const files = await prisma.editorialMaterialFile.findMany({
+            where: { task: { projectId: project.id } },
+            select: { id: true, storageName: true },
+        });
+        const ids = new Set(files.map(file => 'material:' + file.id));
+        await prisma.$transaction(async tx => {
+            const shares = await tx.editorialFileShare.findMany({ where: { revokedAt: null }, select: { id: true, fileIds: true } });
+            for (const share of shares) {
+                if (Array.isArray(share.fileIds) && share.fileIds.some(id => ids.has(id))) {
+                    await tx.editorialFileShare.update({ where: { id: share.id }, data: { revokedAt: new Date() } });
+                }
+            }
+            await tx.editorialProject.delete({ where: { id: project.id } });
+        });
+        const root = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
+        const failures = [];
+        for (const file of files) {
+            try {
+                await fs.unlink(path.join(root, file.storageName));
+                await fs.unlink(path.join(root, 'thumbnails', file.storageName + '.webp')).catch(error => { if (error.code !== 'ENOENT') throw error; });
+            } catch (error) {
+                if (error.code !== 'ENOENT') failures.push(file.storageName);
+            }
+        }
+        if (failures.length) console.error('[editorial] files requiring cleanup:', failures);
+        res.json({ ok: true, cleanupPending: failures.length });
     } catch (error) { next(error); }
 });
 
