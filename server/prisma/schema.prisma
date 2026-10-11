@@ -76,6 +76,7 @@ model User {
   xpLog        XpLog[]
   dailyQuests  DailyQuest[]
   editorialXpAwards EditorialTaskXpAward[]
+  seasonSubmissions SeasonSubmission[]
   seasonScores GamificationSeasonScore[]
 
   // Курсы: практики и ДЗ
@@ -943,6 +944,8 @@ model GamificationSeason {
   endsAt    DateTime
   createdAt DateTime @default(now())
   scores    GamificationSeasonScore[]
+  challenges SeasonChallenge[]
+  submissions SeasonSubmission[]
 
   @@index([startsAt, endsAt])
 }
@@ -968,4 +971,48 @@ model EditorialTaskXpAward {
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, awardedAt])
+}
+
+model SeasonChallenge {
+  id String @id @default(cuid())
+  seasonId String
+  number Int
+  type String
+  title String
+  brief String
+  criteria String @default("")
+  active Boolean @default(true)
+  season GamificationSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  submissions SeasonSubmission[]
+  @@unique([seasonId, number])
+}
+
+model SeasonSubmission {
+  id String @id @default(cuid())
+  seasonId String
+  challengeId String
+  userId String
+  description String @default("")
+  status String @default("SUBMITTED")
+  score Int?
+  feedback String @default("")
+  prize String @default("")
+  reviewedAt DateTime?
+  submittedAt DateTime @default(now())
+  season GamificationSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  challenge SeasonChallenge @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files SeasonSubmissionFile[]
+  @@unique([seasonId, userId])
+  @@index([seasonId, status])
+}
+
+model SeasonSubmissionFile {
+  id String @id @default(cuid())
+  submissionId String
+  name String
+  storageName String @unique
+  mimeType String
+  size Int
+  submission SeasonSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 }
