@@ -78,6 +78,8 @@ model User {
   editorialXpAwards EditorialTaskXpAward[]
   seasonSubmissions SeasonSubmission[]
   seasonScores GamificationSeasonScore[]
+  stickerInventory StickerInventory[]
+  stickerGrants StickerGrant[]
 
   // Курсы: практики и ДЗ
   supervisedPracticals PracticalWork[]       @relation("PracticalSupervisor")
@@ -1016,4 +1018,49 @@ model SeasonSubmissionFile {
   mimeType String
   size Int
   submission SeasonSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+}
+
+model StickerPack {
+  id String @id @default(cuid())
+  slug String @unique
+  title String
+  description String @default("")
+  active Boolean @default(true)
+  stickers Sticker[]
+}
+
+model Sticker {
+  id String @id @default(cuid())
+  packId String
+  number Int
+  title String
+  emoji String
+  rarity String @default("COMMON")
+  active Boolean @default(true)
+  pack StickerPack @relation(fields:[packId],references:[id],onDelete:Cascade)
+  inventory StickerInventory[]
+  grants StickerGrant[]
+  @@unique([packId,number])
+}
+
+model StickerInventory {
+  userId String
+  stickerId String
+  quantity Int @default(0)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  sticker Sticker @relation(fields:[stickerId],references:[id],onDelete:Cascade)
+  @@id([userId,stickerId])
+  @@index([stickerId])
+}
+
+model StickerGrant {
+  id String @id @default(cuid())
+  userId String
+  stickerId String
+  quantity Int
+  reason String @default("")
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  sticker Sticker @relation(fields:[stickerId],references:[id],onDelete:Cascade)
+  @@index([userId,createdAt])
 }
