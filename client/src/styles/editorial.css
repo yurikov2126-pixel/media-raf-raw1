@@ -558,3 +558,27 @@ html.dark .editorial-personal-event-dialog input[type="date"] { color-scheme: da
     min-height: 44px;
   }
 }
+
+
+/* Guided project creation: one accessible, theme-aware modal for three stages. */
+.editorial-project-wizard {
+  --wizard-bg: #fff; --wizard-fg: #20283b; --wizard-border: #b9aaca; --wizard-field: #f7f5fc;
+  background: var(--wizard-bg); color: var(--wizard-fg); border-color: var(--wizard-border);
+}
+html.dark .editorial-project-wizard,
+html[data-theme="dark"] .editorial-project-wizard,
+body.dark .editorial-project-wizard,
+body[data-theme="dark"] .editorial-project-wizard {
+  --wizard-bg: #201d32; --wizard-fg: #f6f3ff; --wizard-border: #706287; --wizard-field: #29233e;
+}
+.editorial-project-wizard-step { background: var(--wizard-field); color: var(--wizard-fg); border: 1px solid var(--wizard-border); }
+.editorial-project-wizard :is(input,select,textarea) {
+  background: var(--wizard-field); color: var(--wizard-fg); border-color: var(--wizard-border);
+  color-scheme: light; font-size: 16px;
+}
+html.dark .editorial-project-wizard :is(input,select,textarea),
+html[data-theme="dark"] .editorial-project-wizard :is(input,select,textarea),
+body.dark .editorial-project-wizard :is(input,select,textarea),
+body[data-theme="dark"] .editorial-project-wizard :is(input,select,textarea) { color-scheme: dark; }
+.editorial-project-wizard :is(button,input,select,textarea):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
+@media (max-width: 639px) { .editorial-project-wizard { max-height: 94dvh; padding-bottom: max(16px,env(safe-area-inset-bottom)); } }
