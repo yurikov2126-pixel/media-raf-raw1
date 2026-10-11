@@ -51,6 +51,14 @@ async function notifyEditorial(tx, project, task, recipients, event, actorId) {
 
 function notFound(res) { return res.status(404).json({ error: 'Проект не найден' }); }
 function validText(value, max) { return typeof value === 'string' && !!value.trim() && value.trim().length <= max; }
+function workDay(value, project) {
+    if (value === null || value === '') return null;
+    if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return undefined;
+    const day = new Date(value + 'T00:00:00.000Z');
+    if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== value) return undefined;
+    if (!project.eventDate || day < project.eventDate || day > (project.eventEndDate || project.eventDate)) return undefined;
+    return day;
+}
 function dateValue(value) {
     if (value === null || value === '') return null;
     if (typeof value !== 'string' || !value.trim()) return undefined;
@@ -189,16 +197,18 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
     try {
         const project = await getProject(req.params.projectId);
         if (!project || !canEdit(project, req.user)) return notFound(res);
-        const { title, description = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, isOpen = false } = req.body;
+        const { title, description = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, workDate = null, isOpen = false } = req.body;
         if (!validText(title, 160) || typeof description !== 'string' || description.length > 10000) return res.status(400).json({ error: 'Некорректное название или описание' });
         if (stageId && !(await prisma.editorialStage.findFirst({ where: { id: stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
         if (parentId && !(await prisma.editorialTask.findFirst({ where: { id: parentId, projectId: project.id } }))) return res.status(400).json({ error: 'Родительская задача не найдена' });
         if (assigneeId && !project.members.some((m) => m.userId === assigneeId)) return res.status(400).json({ error: 'Исполнитель должен быть участником проекта' });
+        const day = workDay(workDate, project);
+        if (day === undefined) return res.status(400).json({ error: 'День задания должен входить в даты проекта' });
         const due = dateValue(dueAt);
         if (due && !deadlineAllowed(project, assigneeId)) return res.status(400).json({ error: 'Дедлайн доступен только фотографу, видеографу и монтажёру' });
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
         if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
-        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
+        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, workDate: day, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
         if (task.assigneeId) await notifyEditorial(prisma, project, task, [task.assigneeId], 'assigned', req.user.id);
         res.status(201).json({ task });
     } catch (error) { next(error); }
@@ -238,6 +248,11 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             if (req.body.stageId !== undefined) {
                 if (req.body.stageId !== null && !(await prisma.editorialStage.findFirst({ where: { id: req.body.stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
                 data.stageId = req.body.stageId;
+            }
+            if (req.body.workDate !== undefined) {
+                const day = workDay(req.body.workDate, project);
+                if (day === undefined) return res.status(400).json({ error: 'День задания должен входить в даты проекта' });
+                data.workDate = day;
             }
             if (req.body.dueAt !== undefined) {
                 const due = dateValue(req.body.dueAt);

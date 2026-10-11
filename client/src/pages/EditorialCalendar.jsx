@@ -147,9 +147,9 @@ export default function EditorialCalendar() {
         const map = new Map();
         events.forEach(event => {
             const start = event.projectEvent ? new Date(Number(event.eventDate.slice(0, 4)), Number(event.eventDate.slice(5, 7)) - 1, Number(event.eventDate.slice(8, 10))) : dateOf(event.startsAt);
-            const end = event.projectEvent ? shift(start, 1) : dateOf(event.endsAt);
+            const end = event.projectEvent ? shift(new Date(Number((event.eventEndDate || event.eventDate).slice(0, 4)), Number((event.eventEndDate || event.eventDate).slice(5, 7)) - 1, Number((event.eventEndDate || event.eventDate).slice(8, 10))), 1) : dateOf(event.endsAt);
             if (!start || !end) return;
-            for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate()), i = 0; d < end && i < 32; d = shift(d, 1), i++) {
+            for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate()), i = 0; d < end && i < 370; d = shift(d, 1), i++) {
                 const key = keyOf(d);
                 map.set(key, [...(map.get(key) || []), event]);
             }

@@ -8,6 +8,17 @@ router.use(auth);
 const ROLES = ['MANAGER', 'EDITOR', 'PARTICIPANT', 'OBSERVER'];
 const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA', 'SOUND_ENGINEER', 'INTERVIEWER', 'VIDEO_EDITOR'];
 const CREW_LABELS = { LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф', LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора', ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр', INTERVIEWER: 'Интервьюер', VIDEO_EDITOR: 'Монтажёр' };
+const parseDay = value => {
+    if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return null;
+    const date = new Date(value + 'T00:00:00.000Z');
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
+};
+const validateEventRange = (start, end) => {
+    if (end && !start) return 'Укажите дату начала проекта';
+    if (start && end && end < start) return 'Дата окончания не может быть раньше начала';
+    if (start && end && (end - start) / 86400000 > 365) return 'Проект не может длиться более 366 дней';
+    return null;
+};
 const validCrewPosition = value => value === null || CREW_POSITIONS.includes(value);
 const isAdmin = (user) => user.role === 'ADMIN';
 const canManage = (project, user) => isAdmin(user) || project.members.some((m) => m.userId === user.id && m.role === 'MANAGER');
@@ -30,11 +41,14 @@ router.post('/projects', async (req, res, next) => {
         const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
         const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
         const visibility = req.body.visibility === 'TEAM' ? 'TEAM' : 'CLOSED';
-        const eventDate = typeof req.body.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.eventDate) ? new Date(`${req.body.eventDate}T00:00:00.000Z`) : null;
-        if (req.body.eventDate && (!eventDate || Number.isNaN(eventDate.getTime()) || eventDate.toISOString().slice(0, 10) !== req.body.eventDate)) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
+        const eventDate = req.body.eventDate ? parseDay(req.body.eventDate) : null;
+        const eventEndDate = req.body.eventEndDate ? parseDay(req.body.eventEndDate) : null;
+        if ((req.body.eventDate && !eventDate) || (req.body.eventEndDate && !eventEndDate)) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
+        const rangeError = validateEventRange(eventDate, eventEndDate);
+        if (rangeError) return res.status(400).json({ error: rangeError });
         if (!title || title.length > 120 || description.length > 5000) return res.status(400).json({ error: 'Проверьте название и описание' });
         const project = await prisma.editorialProject.create({
-            data: { title, description, visibility, eventDate, createdById: req.user.id, members: { create: { userId: req.user.id, role: 'MANAGER' } } },
+            data: { title, description, visibility, eventDate, eventEndDate, createdById: req.user.id, members: { create: { userId: req.user.id, role: 'MANAGER' } } },
             include: { members: { include: { user: { select: { id: true, fullName: true, username: true } } } } },
         });
         res.status(201).json({ project: clean(project) });
@@ -74,13 +88,14 @@ router.patch('/projects/:id', async (req, res, next) => {
             if (typeof req.body.description !== 'string' || req.body.description.length > 5000) return res.status(400).json({ error: 'Некорректное описание' });
             data.description = req.body.description.trim();
         }
-        if (req.body.eventDate !== undefined) {
-            if (req.body.eventDate === null || req.body.eventDate === '') data.eventDate = null;
-            else {
-                const date = typeof req.body.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.eventDate) ? new Date(`${req.body.eventDate}T00:00:00.000Z`) : null;
-                if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== req.body.eventDate) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
-                data.eventDate = date;
-            }
+        if (req.body.eventDate !== undefined || req.body.eventEndDate !== undefined) {
+            const start = req.body.eventDate === undefined ? project.eventDate : req.body.eventDate ? parseDay(req.body.eventDate) : null;
+            const finish = req.body.eventEndDate === undefined ? project.eventEndDate : req.body.eventEndDate ? parseDay(req.body.eventEndDate) : null;
+            if ((req.body.eventDate && !start) || (req.body.eventEndDate && !finish)) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
+            const rangeError = validateEventRange(start, finish);
+            if (rangeError) return res.status(400).json({ error: rangeError });
+            data.eventDate = start;
+            data.eventEndDate = finish;
         }
         if (req.body.completed !== undefined) {
             if (typeof req.body.completed !== 'boolean') return res.status(400).json({ error: 'Некорректный статус проекта' });
