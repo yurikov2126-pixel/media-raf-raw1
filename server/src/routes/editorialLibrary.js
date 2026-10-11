@@ -22,9 +22,12 @@ const archive = (res, files, filename) => {
     streamZip(entries).on('error', error => { console.error('[editorial-share] zip failed', error); res.destroy(error); }).pipe(res);
 };
 const sendFile = (res, next, file, download = false) => {
+    const previewSafe = file.mimeType.startsWith('image/') && file.mimeType !== 'image/svg+xml' || file.mimeType.startsWith('video/') || file.mimeType === 'application/pdf';
+    if (!previewSafe) download = true;
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(file.name)}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.sendFile(path.join(root, file.storageName), error => { if (error && !res.headersSent) next(error); });
 };
 const getShare = async token => {
