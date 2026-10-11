@@ -59,6 +59,9 @@ const DEFAULTS = {
     ui_button_shape: 'standard',
     ui_card_border: 'normal',
     ui_card_shadow: 'soft',
+    ui_input_style: 'outlined',
+    ui_chip_shape: 'pill',
+    ui_hover_effect: 'subtle',
 
     footer_description: 'MEDIA·RAF·RAW · Твоя медиа-команда',
     footer_copyright: '© MEDIA-RAF-RAW',
@@ -137,8 +140,11 @@ export function SettingsProvider({ children }) {
         root.style.setProperty('--ui-density', ({compact:'0.8',standard:'1',spacious:'1.2'})[raw.ui_density] || '1');
         root.style.setProperty('--ui-button-radius', ({square:'6px',standard:'12px',pill:'999px'})[raw.ui_button_shape] || '12px');
         root.style.setProperty('--ui-card-border-opacity', ({subtle:'0.07',normal:'0.13',strong:'0.3'})[raw.ui_card_border] || '0.13');
+        root.dataset.uiInputStyle = ['outlined','filled','minimal'].includes(raw.ui_input_style) ? raw.ui_input_style : 'outlined';
+        root.dataset.uiChipShape = ['pill','rounded','square'].includes(raw.ui_chip_shape) ? raw.ui_chip_shape : 'pill';
+        root.dataset.uiHoverEffect = ['none','subtle','lift'].includes(raw.ui_hover_effect) ? raw.ui_hover_effect : 'subtle';
         root.style.setProperty('--ui-card-shadow', ({none:'none',soft:'0 8px 28px rgba(0,0,0,.12)',strong:'0 12px 36px rgba(0,0,0,.3)'})[raw.ui_card_shadow] || '0 8px 28px rgba(0,0,0,.12)');
-    }, [raw.brand_accent_1, raw.brand_accent_2, raw.brand_accent_3, raw.ui_font_scale, raw.ui_radius, raw.ui_motion, raw.ui_density, raw.ui_button_shape, raw.ui_card_border, raw.ui_card_shadow]);
+    }, [raw.brand_accent_1, raw.brand_accent_2, raw.brand_accent_3, raw.ui_font_scale, raw.ui_radius, raw.ui_motion, raw.ui_density, raw.ui_button_shape, raw.ui_card_border, raw.ui_card_shadow, raw.ui_input_style, raw.ui_chip_shape, raw.ui_hover_effect]);
 
     useEffect(() => {
         if (raw.site_name) document.title = raw.site_name;
