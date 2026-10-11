@@ -11,11 +11,6 @@ export default function Backups({ token }) {
     const [showCreate, setShowCreate] = useState(false);
     const [restoreTarget, setRestoreTarget] = useState(null);
     const [loadingInfo, setLoadingInfo] = useState(false);
-    const [storageHealth, setStorageHealth] = useState(null);
-    const [storageError, setStorageError] = useState('');
-    const [storageLoading, setStorageLoading] = useState(false);
-    const checkStorage = async () => { setStorageLoading(true); setStorageError(''); try { setStorageHealth(await api('/admin/maintenance/editorial-storage', { token })); } catch (e) { setStorageError(e.message); } finally { setStorageLoading(false); } };
-
     const loadList = () => api('/admin/backups', { token }).then(setList).catch(() => {});
 
     const loadInfo = async () => {
@@ -126,11 +121,7 @@ export default function Backups({ token }) {
 
     return (
         <div className="space-y-4">
-            <section className="card p-5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">🔎 Проверка файлов редакции</h2><p className="text-sm text-white/50">Проверка существования и размера файлов в постоянных хранилищах. Ничего не удаляет.</p></div><button className="btn-ghost !py-2 text-sm" disabled={storageLoading} onClick={checkStorage}>{storageLoading ? 'Проверяем…' : 'Проверить хранилища'}</button></div>
-                {storageError && <p role="alert" className="text-sm text-pink">{storageError}</p>}
-                {storageHealth && <div className="grid gap-3 sm:grid-cols-2">{storageHealth.checks.map(check => <div key={check.key} className="rounded-xl border border-white/10 p-4"><h3 className="font-semibold">{check.label}</h3><p className="text-sm text-white/60">В базе: {check.total} · Отсутствуют: {check.missingCount} · Размер не совпадает: {check.sizeMismatchCount}</p><p className={check.readable && !check.missingCount && !check.sizeMismatchCount ? 'text-lime text-sm' : 'text-orange-300 text-sm'}>{check.readable && !check.missingCount && !check.sizeMismatchCount ? '✓ Проверка пройдена' : '⚠ Требуется внимание'}</p>{check.missing.length > 0 && <details className="mt-2 text-xs"><summary>Отсутствующие файлы (до 50)</summary>{check.missing.map(file => <p key={file.id} className="break-all">{file.name}</p>)}</details>}{check.sizeMismatches.length > 0 && <details className="mt-2 text-xs"><summary>Несовпадение размеров (до 50)</summary>{check.sizeMismatches.map(file => <p key={file.id} className="break-all">{file.name}: {file.expected} / {file.actual} байт</p>)}</details>}</div>)}</div>}
-            </section>
+
             <div className="card p-5">
                 <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
                     <div>
