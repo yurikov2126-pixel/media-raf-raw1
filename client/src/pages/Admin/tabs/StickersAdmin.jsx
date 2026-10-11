@@ -7,7 +7,8 @@ export default function StickersAdmin({token}){
  const load=()=>Promise.all([api('/stickers/admin/catalog',{token}),api('/stickers/admin/users',{token}),api('/stickers/admin/grants',{token}),api('/stickers/admin/reward-rules',{token})]).then(([a,b,c,d])=>{setPacks(a.packs||[]);setUsers(b.users||[]);setGrants(c.grants||[]);setRules(d.rules||[])}).catch(e=>setError(e.message));
  useEffect(()=>{load()},[token]);
  const mediaPack=packs.find(p=>p.slug==='media-days');
- const mappedBulk=bulkFiles.map(file=>({file,number:Number(file.name.match(/^(\\d{1,2})[_\\s.-]/)?.[1]),validType:['image/png','image/jpeg','image/webp'].includes(file.type)&&file.size<=3*1024*1024})).map(x=>({...x,sticker:mediaPack?.stickers.find(st=>st.number===x.number)}));
+ const bulkNumber=file=>{const match=file.name.match(/^(\d{1,2})[_\s.-]/);return match?Number(match[1]):null};
+ const mappedBulk=bulkFiles.map(file=>({file,number:bulkNumber(file),validType:['image/png','image/jpeg','image/webp'].includes(file.type)&&file.size<=3*1024*1024})).map(x=>({...x,sticker:mediaPack?.stickers.find(st=>st.number===x.number)}));
  const bulkValid=!!mediaPack&&mappedBulk.length===16&&mappedBulk.every(x=>x.sticker&&x.validType)&&new Set(mappedBulk.map(x=>x.number)).size===16;
  const uploadBulk=async()=>{if(!bulkValid||busy)return;setBusy(true);setError('');setSuccess('');let completed=0;try{
   for(const item of [...mappedBulk].sort((a,b)=>a.number-b.number)){
