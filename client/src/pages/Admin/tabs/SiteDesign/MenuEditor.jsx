@@ -61,7 +61,7 @@ export default function MenuEditor({ settings, update }) {
     const key = area === 'extra' && cfg.extra ? cfg.extra : cfg.key;
     const fallback = device === 'desktop' ? DEFAULT_DESKTOP : area === 'extra' ? DEFAULT_EXTRA : DEFAULT_MOBILE;
     const saved = parse(settings[key], fallback);
-    const items = device === 'desktop' && !settings.nav_desktop_customized
+    const items = device === 'desktop' && settings.nav_desktop_customized !== 'true'
         ? [...saved, ...DEFAULT_DESKTOP.filter(item => !saved.some(existing => existing.to === item.to))]
         : saved;
     const setItems = (value) => update({ [key]: JSON.stringify(value), ...(device === 'desktop' ? { nav_desktop_customized: 'true' } : {}) });
