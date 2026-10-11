@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma.js';
 const router = Router();
 router.use(auth);
 const ROLES = ['MANAGER', 'EDITOR', 'PARTICIPANT', 'OBSERVER'];
+const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA'];
+const validCrewPosition = value => value === null || CREW_POSITIONS.includes(value);
 const isAdmin = (user) => user.role === 'ADMIN';
 const canManage = (project, user) => isAdmin(user) || project.members.some((m) => m.userId === user.id && m.role === 'MANAGER');
 const clean = (project) => ({ ...project, members: project.members.map((m) => ({ ...m, user: m.user ? { id: m.user.id, fullName: m.user.fullName, username: m.user.username } : undefined })) });
@@ -77,16 +79,33 @@ router.post('/projects/:id/members', async (req, res, next) => {
         const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, include: { members: true } });
         if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
         const { userId, role } = req.body;
+        const crewPosition = req.body.crewPosition ?? null;
+        if (!validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
         if (project.createdById === userId && role !== 'MANAGER') return res.status(400).json({ error: 'Создатель должен оставаться руководителем' });
         if (typeof userId !== 'string' || !ROLES.includes(role)) return res.status(400).json({ error: 'Некорректный участник или роль' });
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isBanned: true } });
         if (!user || user.isBanned) return res.status(404).json({ error: 'Пользователь не найден' });
         const member = await prisma.editorialProjectMember.upsert({
             where: { projectId_userId: { projectId: project.id, userId } },
-            create: { projectId: project.id, userId, role },
-            update: { role },
+            create: { projectId: project.id, userId, role, crewPosition },
+            update: { role, ...(req.body.crewPosition !== undefined ? { crewPosition } : {}) },
         });
         res.json({ member });
+    } catch (error) { next(error); }
+});
+
+router.patch('/projects/:id/members/:userId/crew', async (req, res, next) => {
+    try {
+        const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, include: { members: true } });
+        if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
+        const crewPosition = req.body?.crewPosition;
+        if (!validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
+        const result = await prisma.editorialProjectMember.updateMany({
+            where: { projectId: project.id, userId: req.params.userId },
+            data: { crewPosition },
+        });
+        if (!result.count) return res.status(404).json({ error: 'Участник не найден' });
+        res.json({ ok: true });
     } catch (error) { next(error); }
 });
 
