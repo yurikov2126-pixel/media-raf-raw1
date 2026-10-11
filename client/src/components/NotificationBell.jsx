@@ -8,6 +8,7 @@ import { isIOS, isStandalone } from '../lib/push.js';
 
 const ICONS = {
     message: '💬',
+    personal_calendar: '🗓️',
     mention: '📣',
     post: '📝',
     certificate: '🏆',
@@ -23,6 +24,7 @@ const ICONS = {
 };
 
 const TITLES = {
+    personal_calendar: (p) => `Напоминание: ${p.eventTitle || 'Личное событие'}`,
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
     mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
