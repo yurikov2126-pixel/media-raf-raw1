@@ -1,0 +1,40 @@
+import { useState } from 'react';
+
+const sections = [['landing', 'Лендинг'], ['dashboard', 'Главная'], ['editorial', 'Редакция'], ['learning', 'Обучение'], ['profile', 'Профиль']];
+const asBool = (value) => value !== false && value !== 'false';
+function PreviewCard({ title, subtitle, icon, style }) {
+    return <article style={style} className="border p-4 space-y-2"><div className="text-2xl">{icon}</div><h4 className="font-semibold">{title}</h4><p className="text-xs opacity-60">{subtitle}</p></article>;
+}
+export default function SitePreview({ settings }) {
+    const [section, setSection] = useState('dashboard');
+    const [device, setDevice] = useState('desktop');
+    const accent = /^#[0-9a-f]{6}$/i.test(settings.brand_accent_1 || '') ? settings.brand_accent_1 : '#7C3AED';
+    const accent2 = /^#[0-9a-f]{6}$/i.test(settings.brand_accent_2 || '') ? settings.brand_accent_2 : '#EC4899';
+    const light = settings.theme_default === 'light';
+    const radius = { compact: 10, standard: 18, soft: 28 }[settings.ui_radius] || 18;
+    const density = settings.ui_density === 'compact' ? 10 : settings.ui_density === 'spacious' ? 22 : 16;
+    const cardStyle = { borderRadius: radius, padding: density, borderColor: light ? '#d5d9e4' : '#343347', background: light ? '#fff' : '#1c1b2b' };
+    const btnStyle = { background: accent, borderRadius: settings.ui_button_shape === 'pill' ? 999 : settings.ui_button_shape === 'square' ? 6 : 12, color: '#fff', padding: '9px 16px', display: 'inline-block' };
+    const heading = settings.brand_logo_text || settings.site_name || 'MEDIA·RAF·RAW';
+    return <section className="mb-5 rounded-2xl border border-white/15 overflow-hidden" aria-label="Расширенный предпросмотр сайта">
+        <div className="p-3 bg-white/5 border-b border-white/10 flex flex-wrap justify-between gap-3 items-center">
+            <div><div className="font-semibold text-sm">Предпросмотр разделов сайта</div><div className="text-xs text-white/50">Демонстрационные данные · настройки не опубликованы · без переходов на настоящий сайт</div></div>
+            <div className="flex gap-2"><button type="button" aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')} className={device === 'desktop' ? 'chip bg-violet text-white' : 'chip bg-white/10'}>🖥 ПК</button><button type="button" aria-pressed={device === 'mobile'} onClick={() => setDevice('mobile')} className={device === 'mobile' ? 'chip bg-violet text-white' : 'chip bg-white/10'}>📱 Телефон</button></div>
+        </div>
+        <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/10">{sections.map(([key,label]) => <button key={key} type="button" onClick={() => setSection(key)} aria-pressed={section === key} className={section === key ? 'chip bg-violet text-white whitespace-nowrap' : 'chip bg-white/10 whitespace-nowrap'}>{label}</button>)}</div>
+        <div className="p-3 md:p-5 bg-black/25 overflow-x-auto"><div style={{ maxWidth: device === 'mobile' ? 390 : 1100, margin: '0 auto', background: light ? '#f3f5f9' : '#11111d', color: light ? '#171827' : '#f7f7fb', fontSize: (Number(settings.ui_font_scale) || 1) * 14, borderRadius: 16, overflow: 'hidden', transition: 'max-width .2s' }}>
+            <header style={{ background: light ? '#fff' : '#191827', borderBottom: '1px solid #7773', padding: 15 }} className="flex items-center justify-between gap-3"><strong style={{ color: accent }}>{heading}</strong><span style={{ opacity: .6 }}>⌕　☷　●</span></header>
+            <div className={device === 'desktop' && section !== 'landing' ? 'flex' : ''}>
+                {device === 'desktop' && section !== 'landing' && <aside style={{ width: 170, padding: 14, borderRight: '1px solid #7773', flexShrink: 0 }} className="space-y-3 text-xs"><p>⌂ Главная</p><p>▦ Лента</p><p>▤ Редакция</p><p>◈ Обучение</p><p>◉ Профиль</p></aside>}
+                <main style={{ padding: density + 6, minHeight: 440, flex: 1, minWidth: 0 }} className="space-y-5">
+                    {section === 'landing' && <><div style={{ padding: '30px 10px', textAlign: 'center' }}><p style={{ color: accent }}>{settings.landing_hero_badge || 'Студенческий медиацентр'}</p><h2 className="text-3xl font-bold mt-3">{settings.landing_hero_title_prefix || 'Создаём'} <span style={{ color: accent2 }}>{settings.landing_hero_title_accent || 'контент'}</span>{settings.landing_hero_title_suffix || ', который цепляет'}</h2><p className="mt-3 opacity-60">{settings.landing_hero_subtitle || 'Медиацентр для студентов'}</p><span className="mt-4" style={btnStyle}>{settings.landing_hero_cta_primary || 'Присоединиться'}</span></div><h3 className="font-semibold">{settings.landing_features_title || 'Что мы делаем'}</h3><div className="grid grid-cols-2 gap-3"><PreviewCard icon="📸" title="Фото" subtitle="Съёмки и репортажи" style={cardStyle}/><PreviewCard icon="🎬" title="Видео" subtitle="Истории в кадре" style={cardStyle}/></div></>}
+                    {section === 'dashboard' && <><h2 className="text-xl font-bold">{settings.dashboard_welcome_title || 'Твоя медиа-команда в одном месте'}</h2><p className="opacity-60">{settings.dashboard_welcome_subtitle || 'Рабочее пространство'}</p>{asBool(settings.dashboard_show_quick_actions) && <div className="grid grid-cols-2 gap-3"><PreviewCard icon="✎" title="Новая публикация" subtitle="Поделиться материалом" style={cardStyle}/><PreviewCard icon="💬" title="Открыть чаты" subtitle="Команда и сообщения" style={cardStyle}/></div>}{asBool(settings.dashboard_show_learning) && <PreviewCard icon="📚" title="Продолжить обучение" subtitle="Основы фотографии" style={cardStyle}/ >}{asBool(settings.dashboard_show_gamification) && <PreviewCard icon="🏆" title="Твой прогресс" subtitle="Уровень 4 · 850 XP" style={cardStyle}/ >}{asBool(settings.dashboard_show_notifications) && <PreviewCard icon="🔔" title="Уведомления" subtitle="Всё спокойно" style={cardStyle}/>}</>}
+                    {section === 'editorial' && <><h2 className="text-xl font-bold">Редакция</h2><p className="opacity-60">Проекты, задания, материалы и команда</p><div className="grid grid-cols-2 gap-3"><PreviewCard icon="📅" title="Календарь" subtitle="Съёмки и дедлайны" style={cardStyle}/><PreviewCard icon="📁" title="Файлы редакции" subtitle="Папки проектов и участников" style={cardStyle}/></div><PreviewCard icon="📷" title="Форум Агро Про" subtitle="3 задания · 2 участника" style={cardStyle}/><span style={btnStyle}>Открыть проект</span></>}
+                    {section === 'learning' && <><h2 className="text-xl font-bold">Обучение</h2><div className="grid grid-cols-2 gap-3"><PreviewCard icon="📷" title="Основы фотографии" subtitle="6 уроков" style={cardStyle}/><PreviewCard icon="🎞️" title="Монтаж видео" subtitle="8 уроков" style={cardStyle}/></div><PreviewCard icon="🎓" title="Твой сертификат" subtitle="Пройди курс и получи награду" style={cardStyle}/></>}
+                    {section === 'profile' && <><div className="flex gap-3 items-center"><div style={{ background: accent, borderRadius: 99, padding: 18 }}>👤</div><div><h2 className="font-bold text-xl">Участник медиацентра</h2><p className="opacity-60">Фотограф · 850 XP</p></div></div><div className="grid grid-cols-2 gap-3"><PreviewCard icon="🏅" title="Достижения" subtitle="12 наград" style={cardStyle}/><PreviewCard icon="📸" title="Публикации" subtitle="24 материала" style={cardStyle}/></div></>}
+                </main>
+            </div>
+            <footer style={{ padding: 16, borderTop: '1px solid #7773', opacity: .65, fontSize: 12 }}>{settings.footer_description || 'MEDIA·RAF·RAW · Твоя медиа-команда'}　{settings.footer_copyright || ''}</footer>
+        </div></div>
+    </section>;
+}
