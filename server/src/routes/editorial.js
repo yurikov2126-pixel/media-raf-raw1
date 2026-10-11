@@ -124,6 +124,13 @@ router.patch('/projects/:id/members/:userId/crew', async (req, res, next) => {
         });
         if (!result.count) return res.status(404).json({ error: 'Участник не найден' });
         res.json({ ok: true });
+        // A role change should notify the participant as well as an initial invitation.
+        if (req.params.userId !== req.user.id) {
+            void createNotification(req.params.userId, 'editorial', {
+                event: 'project_joined', projectId: project.id, projectTitle: project.title,
+                crewPosition, crewRole: CREW_LABELS[crewPosition] || 'Участник команды',
+            }).catch((error) => console.error('Editorial crew notification failed', error));
+        }
     } catch (error) { next(error); }
 });
 
