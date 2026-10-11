@@ -54,7 +54,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             parentId: parentId || null, dueAt: dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
-    return <section className="min-w-0 space-y-4" aria-label={`Карточка задачи ${task.title}`}>
+    return <section className="editorial-task-details min-w-0 space-y-4" aria-label={`Карточка задачи ${task.title}`}>
         <div className="flex min-w-0 flex-wrap gap-2 border-b border-current/10 pb-3" role="tablist" aria-label="Содержимое задания">
             <button type="button" role="tab" aria-selected={tab === 'details'} onClick={() => setTab('details')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'details' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Детали</button>
             <button type="button" role="tab" aria-selected={tab === 'materials'} onClick={() => setTab('materials')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'materials' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Материалы</button>
