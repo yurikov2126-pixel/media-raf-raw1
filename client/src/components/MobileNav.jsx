@@ -1,10 +1,13 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../store/auth.jsx';
 import { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 
 export default function MobileNav({ links, user }) {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { logout } = useAuth();
     const [moreOpen, setMoreOpen] = useState(false);
     const [typing, setTyping] = useState(false);
     const [searchActive, setSearchActive] = useState(false);
@@ -58,6 +61,13 @@ export default function MobileNav({ links, user }) {
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     if (isChatRoom || typing || searchActive) return null;
+
+    const handleLogout = () => {
+        if (!window.confirm('Выйти из аккаунта?')) return;
+        setMoreOpen(false);
+        logout();
+        navigate('/login', { replace: true });
+    };
 
     const primary = [
         { to: '/app', label: 'Главная', icon: 'dashboard', end: true },
@@ -127,6 +137,17 @@ export default function MobileNav({ links, user }) {
                                     <span>{item.label}</span>
                                 </NavLink>
                             ))}
+                        </div>
+                        <div className="mt-3 border-t border-white/10 pt-3">
+                            <button
+                                type="button"
+                                className="ui-mobile-logout flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold"
+                                onClick={handleLogout}
+                                aria-label="Выйти из аккаунта"
+                            >
+                                <Icon name="logOut" size={20} />
+                                <span>Выйти из аккаунта</span>
+                            </button>
                         </div>
                     </div>
                 </div>
