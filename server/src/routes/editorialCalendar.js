@@ -72,7 +72,19 @@ router.get('/', async (req, res, next) => {
             orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
             take: 1000,
         });
-        res.json({ events });
+        const projects = await prisma.editorialProject.findMany({
+            where: {
+                eventDate: { not: null, gte: from, lt: to },
+                OR: [{ members: { some: { userId: req.user.id } } }, ...(req.user.role === 'ADMIN' ? [{}] : [])],
+            },
+            select: { id: true, title: true, description: true, eventDate: true },
+        });
+        const projectEvents = projects.map(project => ({
+            id: `project:${project.id}`, projectId: project.id, title: project.title,
+            description: project.description, eventDate: project.eventDate.toISOString().slice(0, 10),
+            allDay: true, projectEvent: true,
+        }));
+        res.json({ events: [...events, ...projectEvents] });
     } catch (error) { next(error); }
 });
 router.post('/', async (req, res, next) => {
