@@ -1,35 +1,61 @@
-export default function MenuEditor({ settings, update }) {
-    const items = (() => {
-        try { return JSON.parse(settings.nav_items || '[]'); } catch { return []; }
-    })();
+import { useState } from 'react';
 
-    const updateItem = (idx, patch) => update({ nav_items: JSON.stringify(items.map((it, i) => i === idx ? { ...it, ...patch } : it)) });
-    const addItem = () => update({ nav_items: JSON.stringify([...items, { to: '/app/new', label: 'Новый раздел', icon: 'sparkles' }]) });
-    const removeItem = (idx) => update({ nav_items: JSON.stringify(items.filter((_, i) => i !== idx)) });
-    const moveItem = (idx, dir) => {
-        const arr = [...items];
-        const j = idx + dir;
-        if (j < 0 || j >= arr.length) return;
-        [arr[idx], arr[j]] = [arr[j], arr[idx]];
-        update({ nav_items: JSON.stringify(arr) });
-    };
-
-    return (
-        <div className="space-y-3">
-            <div className="text-xs text-white/50">Пункты меню в сайдбаре. Для новых пунктов используйте имена иконок Design System: dashboard, feed, message, book, bell, trophy, users, settings.</div>
-            <div className="space-y-2">
-                {items.map((it, i) => (
-                    <div key={i} className="card p-3 grid grid-cols-[60px_1fr_1fr_auto_auto_auto] gap-2 items-center">
-                        <input className="input !py-2 text-center text-lg" value={it.icon || ''} onChange={(e) => updateItem(i, { icon: e.target.value })} />
-                        <input className="input !py-2 text-sm" placeholder="Название" value={it.label || ''} onChange={(e) => updateItem(i, { label: e.target.value })} />
-                        <input className="input !py-2 text-sm font-mono" placeholder="/app/..." value={it.to || ''} onChange={(e) => updateItem(i, { to: e.target.value })} />
-                        <button onClick={() => moveItem(i, -1)} disabled={i === 0} className="btn-ghost !p-1.5 text-xs disabled:opacity-30">↑</button>
-                        <button onClick={() => moveItem(i, 1)} disabled={i === items.length - 1} className="btn-ghost !p-1.5 text-xs disabled:opacity-30">↓</button>
-                        <button onClick={() => removeItem(i)} className="text-white/40 hover:text-pink px-2">✕</button>
-                    </div>
-                ))}
+const DEFAULT_MOBILE = [
+    { to: '/app', label: 'Главная', icon: 'dashboard' },
+    { to: '/app/feed', label: 'Лента', icon: 'feed' },
+    { to: '/app/u/me', label: 'Профиль', icon: 'user' },
+    { to: '/app/chats', label: 'Чаты', icon: 'message' },
+    { action: 'more', label: 'Ещё', icon: 'more' },
+];
+const DEFAULT_EXTRA = [
+    { to: '/app/courses', label: 'Обучение', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/editorial', label: 'Редакция', icon: 'book' },
+    { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
+    { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
+    { to: '/app/mentor', label: 'Руководителю', icon: 'users', roles: ['MENTOR', 'ADMIN'] },
+    { to: '/app/admin', label: 'Админка', icon: 'settings', roles: ['ADMIN'] },
+];
+const parse = (raw, fallback) => { try { const v = JSON.parse(raw || 'null'); return Array.isArray(v) ? v : fallback; } catch { return fallback; } };
+const CONFIG = {
+    desktop: { key: 'nav_items', label: 'ПК · боковое меню' },
+    mobile: { key: 'nav_mobile_items', extra: 'nav_mobile_more_items', label: 'Мобильный браузер' },
+    pwa: { key: 'nav_pwa_items', extra: 'nav_pwa_more_items', label: 'PWA · установленное приложение' },
+};
+function ItemsEditor({ items, onChange, mobile = false, more = false }) {
+    const patch = (i, p) => onChange(items.map((x, j) => i === j ? { ...x, ...p } : x));
+    const move = (i, step) => { const j = i + step; if (j < 0 || j >= items.length) return; const a = [...items]; [a[i], a[j]] = [a[j], a[i]]; onChange(a); };
+    return <div className="space-y-2">
+        {items.map((item, i) => <div key={i} className="card p-3 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <label className="text-xs text-white/60">Иконка<input className="input mt-1" value={item.icon || ''} onChange={e => patch(i, { icon: e.target.value })} /></label>
+                <label className="text-xs text-white/60">Название<input className="input mt-1" value={item.label || ''} onChange={e => patch(i, { label: e.target.value })} /></label>
+                <label className="text-xs text-white/60">Адрес<input className="input mt-1" value={item.action === 'more' ? 'Открыть «Ещё»' : item.to || ''} disabled={item.action === 'more'} onChange={e => patch(i, { to: e.target.value })} placeholder="/app/..." /></label>
             </div>
-            <button onClick={addItem} className="chip bg-white/5 hover:bg-white/10">＋ Добавить пункт</button>
-        </div>
-    );
+            <div className="flex gap-2 items-center flex-wrap">
+                <button type="button" className="btn-ghost !py-1 text-xs" disabled={!i} onClick={() => move(i, -1)}>↑ Выше</button>
+                <button type="button" className="btn-ghost !py-1 text-xs" disabled={i === items.length - 1} onClick={() => move(i, 1)}>↓ Ниже</button>
+                <button type="button" className="btn-ghost !py-1 text-xs text-pink" onClick={() => onChange(items.filter((_, j) => i !== j))}>Удалить</button>
+                {mobile && !more && <span className="text-xs text-white/40">В нижней панели рекомендуется не больше 5 пунктов</span>}
+            </div>
+        </div>)}
+        <button type="button" className="btn-ghost text-sm" onClick={() => onChange([...items, { to: '/app', label: 'Новый пункт', icon: 'dashboard' }])}>＋ Добавить пункт</button>
+    </div>;
+}
+export default function MenuEditor({ settings, update }) {
+    const [device, setDevice] = useState('desktop');
+    const [area, setArea] = useState('primary');
+    const cfg = CONFIG[device];
+    const key = area === 'extra' && cfg.extra ? cfg.extra : cfg.key;
+    const fallback = device === 'desktop' ? [] : area === 'extra' ? DEFAULT_EXTRA : DEFAULT_MOBILE;
+    const items = parse(settings[key], fallback);
+    const setItems = (value) => update({ [key]: JSON.stringify(value) });
+    return <div className="space-y-5">
+        <div><h3 className="font-semibold">Настройка навигации для разных устройств</h3><p className="text-sm text-white/50">Каждый вариант сохраняется отдельно. Права доступа проверяются сайтом независимо от меню.</p></div>
+        <div className="flex flex-wrap gap-2">{Object.entries(CONFIG).map(([value, c]) => <button type="button" key={value} aria-pressed={device === value} className={device === value ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => { setDevice(value); setArea('primary'); }}>{c.label}</button>)}</div>
+        {cfg.extra && <div className="flex gap-2"><button type="button" className={area === 'primary' ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => setArea('primary')}>Нижняя панель</button><button type="button" className={area === 'extra' ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => setArea('extra')}>Меню «Ещё»</button></div>}
+        <div className="rounded-xl border border-white/10 p-3 text-xs text-white/60">{device === 'desktop' ? 'Боковая навигация на компьютере.' : area === 'primary' ? 'Пункты нижней панели. Для открытия дополнительного меню оставьте пункт с действием «Ещё».' : 'Пункты, которые открываются в меню «Ещё».'}</div>
+        <ItemsEditor key={key} items={items} onChange={setItems} mobile={device !== 'desktop'} more={area === 'extra'}/>
+        {device !== 'desktop' && <button type="button" className="btn-ghost text-xs" onClick={() => update({ [key]: JSON.stringify(fallback) })}>Восстановить стандартные пункты</button>}
+    </div>;
 }

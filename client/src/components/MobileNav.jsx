@@ -3,11 +3,15 @@ import { useAuth } from '../store/auth.jsx';
 import { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
+import { useSettings } from '../store/settings.jsx';
 
 export default function MobileNav({ links, user }) {
     const location = useLocation();
     const navigate = useNavigate();
     const { logout } = useAuth();
+    const { raw: siteSettings } = useSettings();
+    const [standalone, setStandalone] = useState(() => typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true));
+    useEffect(() => { const media = window.matchMedia('(display-mode: standalone)'); const refresh = () => setStandalone(media.matches || window.navigator.standalone === true); media.addEventListener?.('change', refresh); return () => media.removeEventListener?.('change', refresh); }, []);
     const [moreOpen, setMoreOpen] = useState(false);
     const [typing, setTyping] = useState(false);
     const [searchActive, setSearchActive] = useState(false);
@@ -90,10 +94,17 @@ export default function MobileNav({ links, user }) {
             : []),
     ];
 
+    const parseMenu = (value, fallback) => { try { const v = JSON.parse(value || 'null'); return Array.isArray(v) ? v : fallback; } catch { return fallback; } };
+    const navKey = standalone ? 'nav_pwa_items' : 'nav_mobile_items';
+    const moreKey = standalone ? 'nav_pwa_more_items' : 'nav_mobile_more_items';
+    const resolve = (item) => ({ ...item, to: item.to === '/app/u/me' ? `/app/u/${user.username}` : item.to });
+    const allowed = (item) => (!item.roles || item.roles.includes(user?.role)) && (item.action === 'more' || (typeof item.to === 'string' && item.to.startsWith('/app') && !item.to.startsWith('//'))) && (item.to !== '/app/admin' || user?.role === 'ADMIN') && (item.to !== '/app/mentor' || ['ADMIN', 'MENTOR'].includes(user?.role));
+    const primaryItems = parseMenu(siteSettings[navKey], primary).filter(allowed).map(resolve).slice(0, 5);
+    const extraItems = parseMenu(siteSettings[moreKey], extra).filter(allowed).filter(item => item.action !== 'more').map(resolve);
     return (
         <>
             <nav className="ui-mobile-nav md:hidden" aria-label="Основная навигация">
-                {primary.map((item) => {
+                {primaryItems.map((item) => {
                     if (item.action === 'more') {
                         return (
                             <button
@@ -126,7 +137,7 @@ export default function MobileNav({ links, user }) {
                     <div className="ui-more-sheet" onClick={(e) => e.stopPropagation()}>
                         <div className="ui-more-sheet__handle" />
                         <div className="ui-more-grid">
-                            {extra.map((item) => (
+                            {extraItems.map((item) => (
                                 <NavLink
                                     key={item.to}
                                     to={item.to}
