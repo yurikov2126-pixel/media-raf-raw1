@@ -9,6 +9,7 @@ import { isIOS, isStandalone } from '../lib/push.js';
 const ICONS = {
     message: '💬',
     personal_calendar: '🗓️',
+    editorial: '📋',
     mention: '📣',
     post: '📝',
     certificate: '🏆',
@@ -25,6 +26,7 @@ const ICONS = {
 
 const TITLES = {
     personal_calendar: (p) => `Напоминание: ${p.eventTitle || 'Личное событие'}`,
+    editorial: (p) => ({ assigned: 'Вам назначено задание', status: 'Изменён статус задания', comment: 'Новый комментарий к заданию', application: 'Новая заявка на задание', application_approved: 'Ваша заявка одобрена', application_rejected: 'Решение по вашей заявке', deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено', review_submitted: 'Материал отправлен на проверку', review_approved: 'Материал утверждён', review_revision: 'Материал возвращён на доработку' }[p.event] || 'Событие редакции') + (p.taskTitle ? `: ${p.taskTitle}` : ''),
     message: (p) => `Новое сообщение от ${p.senderName || 'пользователя'}`,
     mention: (p) => mentionTitle(p),
     post: (p) => `Новый пост от ${p.authorName || 'автора'}`,
@@ -161,6 +163,7 @@ export default function NotificationBell({ align = 'right' }) {
         else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post') nav(`/app/u/${p.authorUsername}`);
         else if (n.type === 'personal_calendar') nav('/app/editorial/calendar');
+        else if (n.type === 'editorial') { const q = new URLSearchParams(); if (p.projectId) q.set('project', p.projectId); if (p.projectId && p.taskId) q.set('task', p.taskId); nav(`/app/editorial/projects${q.toString() ? `?${q}` : ''}`); }
         else if (n.type === 'certificate') nav(`/app/certificates/${p.certificateId}`);
         else if (n.type === 'report') nav('/app/admin?tab=moderation');
         else if (n.type === 'password_reset') nav('/app/admin?tab=password-resets');

@@ -4,10 +4,12 @@ import { createNotification } from './notify.js';
 
 const MINUTE_MS = 60000;
 let scheduled = false;
+let running = false;
+const GRACE_MS = 15 * MINUTE_MS;
 
-// A short grace period tolerates cron drift; old events never generate late reminders.
+// Recover reminders missed during a brief restart or worker delay (up to 15 minutes).
 export async function runPersonalEventReminders(now = new Date()) {
-    const from = new Date(now.getTime() - 2 * MINUTE_MS);
+    const from = new Date(now.getTime() - GRACE_MS);
     const to = new Date(now.getTime() + 1440 * MINUTE_MS + 2 * MINUTE_MS);
     const events = await prisma.personalCalendarEvent.findMany({
         where: {
@@ -20,7 +22,7 @@ export async function runPersonalEventReminders(now = new Date()) {
     let sent = 0;
     for (const event of events) {
         const target = event.startsAt.getTime() - event.reminderMinutes * MINUTE_MS;
-        if (target > now.getTime() || target < now.getTime() - 2 * MINUTE_MS) continue;
+        if (target > now.getTime() || target < now.getTime() - GRACE_MS) continue;
         const reminderKey = `personal-event:${event.id}:${event.startsAt.toISOString()}:${event.reminderMinutes}`;
         const marker = `"reminderKey":"${reminderKey}"`;
         const already = await prisma.notification.findFirst({
@@ -40,9 +42,17 @@ export async function runPersonalEventReminders(now = new Date()) {
 
 export function schedulePersonalEventReminders() {
     if (scheduled) return;
-    cron.schedule('*/1 * * * *', async () => {
-        try { await runPersonalEventReminders(); }
-        catch (error) { console.error('[personal-calendar-reminders]', error); }
-    });
     scheduled = true;
+    const tick = async () => {
+        if (running) return;
+        running = true;
+        try {
+            const result = await runPersonalEventReminders();
+            if (result.sent) console.log('[personal-calendar-reminders] sent:', result.sent);
+        } catch (error) { console.error('[personal-calendar-reminders]', error); }
+        finally { running = false; }
+    };
+    cron.schedule('* * * * *', tick);
+    // Check immediately after server start instead of waiting for the next minute.
+    void tick();
 }
