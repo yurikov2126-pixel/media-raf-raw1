@@ -83,7 +83,7 @@ export default function MobileNav({ links, user }) {
 
     const extra = [
         { to: '/app/courses', label: 'Обучение', icon: 'book' },
-        { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+        { to: '/app/wiki', label: 'Wiki', icon: 'library' },
         { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
         { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
         ...(user?.role === 'MENTOR' || user?.role === 'ADMIN'
