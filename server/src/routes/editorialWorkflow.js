@@ -197,18 +197,19 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
     try {
         const project = await getProject(req.params.projectId);
         if (!project || !canEdit(project, req.user)) return notFound(res);
-        const { title, description = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, workDate = null, isOpen = false } = req.body;
+        const { title, description = '', location = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, workDate = null, isOpen = false } = req.body;
         if (!validText(title, 160) || typeof description !== 'string' || description.length > 10000) return res.status(400).json({ error: 'Некорректное название или описание' });
         if (stageId && !(await prisma.editorialStage.findFirst({ where: { id: stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
         if (parentId && !(await prisma.editorialTask.findFirst({ where: { id: parentId, projectId: project.id } }))) return res.status(400).json({ error: 'Родительская задача не найдена' });
         if (assigneeId && !project.members.some((m) => m.userId === assigneeId)) return res.status(400).json({ error: 'Исполнитель должен быть участником проекта' });
+        if (typeof location !== 'string' || location.length > 300) return res.status(400).json({ error: 'Локация должна быть короче 300 символов' });
         const day = workDay(workDate, project);
         if (day === undefined) return res.status(400).json({ error: 'День задания должен входить в даты проекта' });
         const due = dateValue(dueAt);
         if (due && !deadlineAllowed(project, assigneeId)) return res.status(400).json({ error: 'Дедлайн доступен только фотографу, видеографу и монтажёру' });
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
         if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
-        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, workDate: day, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
+        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, location: location.trim(), stageId, parentId, assigneeId, dueAt: due, workDate: day, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
         if (task.assigneeId) await notifyEditorial(prisma, project, task, [task.assigneeId], 'assigned', req.user.id);
         res.status(201).json({ task });
     } catch (error) { next(error); }
@@ -248,6 +249,10 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             if (req.body.stageId !== undefined) {
                 if (req.body.stageId !== null && !(await prisma.editorialStage.findFirst({ where: { id: req.body.stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
                 data.stageId = req.body.stageId;
+            }
+            if (req.body.location !== undefined) {
+                if (typeof req.body.location !== 'string' || req.body.location.length > 300) return res.status(400).json({ error: 'Некорректная локация' });
+                data.location = req.body.location.trim();
             }
             if (req.body.workDate !== undefined) {
                 const day = workDay(req.body.workDate, project);
