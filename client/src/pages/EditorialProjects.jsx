@@ -11,6 +11,7 @@ const CREW_POSITIONS = {
     GIMBAL: 'Оператор стабилизатора',
     ACTION_CAMERA: 'Оператор экшн-камеры',
     SOUND_ENGINEER: 'Звукорежиссёр',
+    INTERVIEWER: 'Интервьюер',
 };
 const crewName = value => CREW_POSITIONS[value] || 'Без съёмочной позиции';
 
