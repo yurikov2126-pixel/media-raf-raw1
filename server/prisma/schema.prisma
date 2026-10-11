@@ -1099,6 +1099,7 @@ model StickerAutoAward {
   userId String
   ruleId String
   stickerId String
+  seenAt DateTime?
   createdAt DateTime @default(now())
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   @@unique([userId,ruleId])
