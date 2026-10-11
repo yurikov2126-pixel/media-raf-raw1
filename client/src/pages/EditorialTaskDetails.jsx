@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialTaskDiscussion from './EditorialTaskDiscussion.jsx';
 import EditorialMaterials from './EditorialMaterials.jsx';
+import { canHaveDeadline } from './editorialDeadlines.js';
 
 const STATUSES = [
     ['TODO', 'К выполнению'], ['IN_PROGRESS', 'В работе'], ['IN_REVIEW', 'На проверке'],
@@ -23,6 +24,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         setParentId(task.parentId || '');
         setDueAt(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     }, [task]);
+    const deadlineAllowed = canHaveDeadline(project.members, assigneeId);
     const base = `/editorial/workflow/projects/${project.id}/tasks/${task.id}`;
     const descendants = new Set([task.id]);
     let changed = true;
@@ -51,7 +53,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
             title: title.trim(), description, assigneeId: assigneeId || null,
-            parentId: parentId || null, dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+            parentId: parentId || null, dueAt: deadlineAllowed && dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
     return <section className="editorial-task-details min-w-0 space-y-4" aria-label={`Карточка задачи ${task.title}`}>
@@ -74,13 +76,13 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
                 <textarea maxLength={10000} rows={3} disabled={!canEdit || saving} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
             </label>
             <label className="block min-w-0 text-sm">Исполнитель
-                <select disabled={!canEdit || saving} value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
+                <select disabled={!canEdit || saving} value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setDueAt(''); }} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
                     <option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}
                 </select>
             </label>
-            <label className="block text-sm">Срок
+            {deadlineAllowed && <label className="block text-sm">Дедлайн
                 <input type="datetime-local" disabled={!canEdit || saving} value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
-            </label>
+            </label>}
             <label className="block text-sm">Родительская задача
                 <select disabled={!canEdit || saving} value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
                     <option value="">Нет</option>{availableParents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
