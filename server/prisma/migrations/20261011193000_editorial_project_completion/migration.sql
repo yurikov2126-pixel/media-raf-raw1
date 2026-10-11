@@ -1,0 +1,1 @@
+ALTER TABLE "EditorialProject" ADD COLUMN "completedAt" TIMESTAMP(3);
