@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -22,6 +23,43 @@ function validate(body) {
     if (typeof body.allDay !== 'boolean') return { error: 'Некорректное значение «Весь день»' };
     return { data: { title, description, startsAt, endsAt, allDay: body.allDay } };
 }
+
+const REPEAT = new Set(['NONE', 'DAILY', 'WEEKLY', 'WEEKDAYS', 'MONTHLY']);
+function repeatPayload(body) {
+    const repeat = body.repeat ?? 'NONE';
+    if (!REPEAT.has(repeat)) return { error: 'Некорректный тип повторения' };
+    if (repeat === 'NONE') return { repeat, until: null };
+    if (typeof body.repeatUntil !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.repeatUntil)) return { error: 'Укажите дату окончания повторения' };
+    const until = parseDate(body.repeatUntil + 'T23:59:59.999Z');
+    if (!until) return { error: 'Некорректная дата окончания повторения' };
+    return { repeat, until };
+}
+function occurrences(data, repeat, until) {
+    if (repeat === 'NONE') return [{ ...data }];
+    const origin = data.startsAt;
+    if (until < origin || until - origin > 366 * 86400000) return null;
+    const duration = data.endsAt - origin;
+    const list = [];
+    const cursor = new Date(origin);
+    for (let step = 0; step < 367 && cursor <= until; step++) {
+        const weekday = cursor.getUTCDay();
+        if (repeat !== 'WEEKDAYS' || (weekday !== 0 && weekday !== 6)) {
+            list.push({ ...data, startsAt: new Date(cursor), endsAt: new Date(cursor.getTime() + duration) });
+        }
+        if (repeat === 'DAILY' || repeat === 'WEEKDAYS') cursor.setUTCDate(cursor.getUTCDate() + 1);
+        if (repeat === 'WEEKLY') cursor.setUTCDate(cursor.getUTCDate() + 7);
+        if (repeat === 'MONTHLY') {
+            const year = origin.getUTCFullYear();
+            const month = origin.getUTCMonth() + step + 1;
+            const next = new Date(Date.UTC(year, month, 1, origin.getUTCHours(), origin.getUTCMinutes(), origin.getUTCSeconds(), origin.getUTCMilliseconds()));
+            const maxDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+            next.setUTCDate(Math.min(origin.getUTCDate(), maxDay));
+            cursor.setTime(next.getTime());
+        }
+    }
+    return list.length && list.length <= 366 ? list : null;
+}
+
 router.get('/', async (req, res, next) => {
     try {
         const from = parseDate(req.query.from);
@@ -39,14 +77,41 @@ router.post('/', async (req, res, next) => {
     try {
         const result = validate(req.body || {});
         if (result.error) return res.status(400).json({ error: result.error });
-        const event = await prisma.personalCalendarEvent.create({ data: { ...result.data, ownerId: req.user.id } });
-        res.status(201).json({ event });
+        const recurrence = repeatPayload(req.body || {});
+        if (recurrence.error) return res.status(400).json({ error: recurrence.error });
+        const instances = occurrences(result.data, recurrence.repeat, recurrence.until);
+        if (!instances) return res.status(400).json({ error: 'Повторение должно завершаться в течение года' });
+        const seriesId = recurrence.repeat === 'NONE' ? null : randomUUID();
+        const event = await prisma.$transaction(async tx => {
+            if (seriesId) {
+                await tx.personalCalendarEvent.createMany({ data: instances.map(instance => ({ ...instance, ownerId: req.user.id, seriesId })) });
+                return tx.personalCalendarEvent.findFirst({ where: { ownerId: req.user.id, seriesId }, orderBy: { startsAt: 'asc' } });
+            }
+            return tx.personalCalendarEvent.create({ data: { ...result.data, ownerId: req.user.id } });
+        });
+        res.status(201).json({ event, created: instances.length });
     } catch (error) { next(error); }
 });
 router.patch('/:id', async (req, res, next) => {
     try {
         const result = validate(req.body || {});
         if (result.error) return res.status(400).json({ error: result.error });
+        if (req.body.scope === 'series') {
+            const existing = await prisma.personalCalendarEvent.findFirst({ where: { id: req.params.id, ownerId: req.user.id } });
+            if (!existing) return res.status(404).json({ error: 'Событие не найдено' });
+            if (!existing.seriesId) return res.status(400).json({ error: 'Событие не является повторяющимся' });
+            const recurrence = repeatPayload(req.body || {});
+            if (recurrence.error) return res.status(400).json({ error: recurrence.error });
+            if (recurrence.repeat === 'NONE') return res.status(400).json({ error: 'Для серии выберите повторение' });
+            const instances = occurrences(result.data, recurrence.repeat, recurrence.until);
+            if (!instances) return res.status(400).json({ error: 'Повторение должно завершаться в течение года' });
+            const event = await prisma.$transaction(async tx => {
+                await tx.personalCalendarEvent.deleteMany({ where: { ownerId: req.user.id, seriesId: existing.seriesId } });
+                await tx.personalCalendarEvent.createMany({ data: instances.map(instance => ({ ...instance, ownerId: req.user.id, seriesId: existing.seriesId })) });
+                return tx.personalCalendarEvent.findFirst({ where: { ownerId: req.user.id, seriesId: existing.seriesId }, orderBy: { startsAt: 'asc' } });
+            });
+            return res.json({ event, updated: instances.length });
+        }
         const updated = await prisma.personalCalendarEvent.updateMany({
             where: { id: req.params.id, ownerId: req.user.id }, data: result.data,
         });
@@ -57,7 +122,12 @@ router.patch('/:id', async (req, res, next) => {
 });
 router.delete('/:id', async (req, res, next) => {
     try {
-        const result = await prisma.personalCalendarEvent.deleteMany({ where: { id: req.params.id, ownerId: req.user.id } });
+        const existing = await prisma.personalCalendarEvent.findFirst({ where: { id: req.params.id, ownerId: req.user.id } });
+        if (!existing) return res.status(404).json({ error: 'Событие не найдено' });
+        const where = req.query.scope === 'series' && existing.seriesId
+            ? { ownerId: req.user.id, seriesId: existing.seriesId }
+            : { id: req.params.id, ownerId: req.user.id };
+        const result = await prisma.personalCalendarEvent.deleteMany({ where });
         if (!result.count) return res.status(404).json({ error: 'Событие не найдено' });
         res.status(204).end();
     } catch (error) { next(error); }

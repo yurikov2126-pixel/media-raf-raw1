@@ -858,6 +858,7 @@ model EditorialMaterialFile {
 }
 
 model PersonalCalendarEvent {
+  seriesId    String?
   id          String   @id @default(cuid())
   ownerId     String
   title       String
@@ -871,4 +872,5 @@ model PersonalCalendarEvent {
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, startsAt])
+  @@index([ownerId, seriesId])
 }

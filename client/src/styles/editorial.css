@@ -389,3 +389,16 @@ body.dark .editorial-personal-event-dialog :is(input,textarea),
 body[data-theme="dark"] .editorial-personal-event-dialog :is(input,textarea) { color-scheme: dark; }
 .editorial-personal-event-dialog .editorial-personal-event-delete { border-color: #ef4444; color: #dc2626; }
 .editorial-personal-event-dialog :is(button,input,textarea):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
+
+/* Recurring event controls follow the personal event dialog theme. */
+.editorial-personal-event-dialog select,
+.editorial-personal-event-dialog input[type="date"] {
+  background: var(--event-surface); color: var(--event-text);
+  border-color: var(--event-border); font-size: 16px; color-scheme: light;
+}
+.editorial-personal-event-dialog fieldset,
+.editorial-personal-event-dialog form > div.rounded-xl { border-color: var(--event-border); }
+html[data-theme="dark"] .editorial-personal-event-dialog select,
+html[data-theme="dark"] .editorial-personal-event-dialog input[type="date"],
+html.dark .editorial-personal-event-dialog select,
+html.dark .editorial-personal-event-dialog input[type="date"] { color-scheme: dark; }
