@@ -21,6 +21,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const [stages, setStages] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [taskTitle, setTaskTitle] = useState('');
+    const [taskLocation, setTaskLocation] = useState('');
     const [taskAssignee, setTaskAssignee] = useState('');
     const [taskParent, setTaskParent] = useState('');
     const [taskOpen, setTaskOpen] = useState(false);
@@ -131,8 +132,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     async function submit(event) {
         event.preventDefault(); setBusy(true); onError('');
         try {
-                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: deadlineAllowed && taskDue ? new Date(taskDue).toISOString() : null, workDate: taskDay || (project.eventDate ? project.eventDate.slice(0, 10) : null) } });
-                setTaskTitle(''); setTaskDay(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false); setComposer(null);
+                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, location: taskLocation.trim(), assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: deadlineAllowed && taskDue ? new Date(taskDue).toISOString() : null, workDate: taskDay || (project.eventDate ? project.eventDate.slice(0, 10) : null) } });
+                setTaskTitle(''); setTaskLocation(''); setTaskDay(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false); setComposer(null);
             await refresh();
         } catch (e) { onError(e.message); }
         finally { setBusy(false); }
@@ -210,7 +211,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => { setTaskAssignee(e.target.value); setTaskDue(''); }}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
                 {project.eventDate && <label className="block text-sm">День выполнения<input type="date" required min={project.eventDate.slice(0, 10)} max={(project.eventEndDate || project.eventDate).slice(0, 10)} value={taskDay || project.eventDate.slice(0, 10)} onChange={e => setTaskDay(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" /></label>}
                 <label className="block text-sm">Родительская задача<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskParent} onChange={(e) => setTaskParent(e.target.value)}><option value="">Нет (основная задача)</option>{tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
-                {deadlineAllowed && <label className="block text-sm">Дедлайн<input type="datetime-local" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} /></label>}
+                <label className="block text-sm">Локация<input maxLength={300} value={taskLocation} onChange={e => setTaskLocation(e.target.value)} placeholder="Где выполнять задание" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" /></label>}
+                 {deadlineAllowed && <label className="block text-sm">Дедлайн<input type="datetime-local" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} /></label>}
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={taskOpen} onChange={(e) => setTaskOpen(e.target.checked)} />Открыть приём заявок</label>
                 <button disabled={busy} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100 disabled:opacity-50">Создать задачу</button>
             </form>}
@@ -241,7 +243,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                     {list.map((task) => {
                         const canChange = canEdit || task.assigneeId === user?.id;
                         return <div key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-current/10 bg-white/35 px-3 py-3 dark:bg-slate-800/35">
-                            <div className="min-w-0 flex-1"><button type="button" onClick={() => setSelectedTaskId(task.id)} className="text-left text-sm font-medium underline-offset-2 hover:underline break-words">{task.title}</button><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.workDate ? ' · День: ' + new Date(task.workDate).toLocaleDateString('ru-RU') : ''}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}{isOverdue(task) ? ' · Просрочено' : isDueSoon(task) ? ' · Скоро срок' : ''}</div></div>
+                            <div className="min-w-0 flex-1"><button type="button" onClick={() => setSelectedTaskId(task.id)} className="text-left text-sm font-medium underline-offset-2 hover:underline break-words">{task.title}</button><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.location ? ' · ' + task.location : ''}{task.workDate ? ' · День: ' + new Date(task.workDate).toLocaleDateString('ru-RU') : ''}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}{isOverdue(task) ? ' · Просрочено' : isDueSoon(task) ? ' · Скоро срок' : ''}</div></div>
                             {canChange ? <select aria-label={`Статус задачи: ${task.title}`} value={task.status} onChange={(e) => setStatus(task, e.target.value)} className={`rounded-lg border p-2 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>
                                 {Object.entries(LABELS).filter(([key]) => canEdit || key === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                             </select> : <span className={`rounded-lg border px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>{LABELS[task.status] || task.status}</span>}
