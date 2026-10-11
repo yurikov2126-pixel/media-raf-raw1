@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma.js';
 const router = Router();
 router.use(auth);
 const ROLES = ['MANAGER', 'EDITOR', 'PARTICIPANT', 'OBSERVER'];
-const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA'];
+const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA', 'SOUND_ENGINEER'];
 const validCrewPosition = value => value === null || CREW_POSITIONS.includes(value);
 const isAdmin = (user) => user.role === 'ADMIN';
 const canManage = (project, user) => isAdmin(user) || project.members.some((m) => m.userId === user.id && m.role === 'MANAGER');
