@@ -3,49 +3,153 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 
-const weekdays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-const monthName = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' });
-const dayKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const taskDate = value => { if (!value) return null; const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d; };
-const taskLink = task => `/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&tab=details&from=my-tasks`;
-const STATUS = { TODO:'К выполнению', IN_PROGRESS:'В работе', IN_REVIEW:'На проверке', REVISION:'На доработке', APPROVED:'Утверждено', DONE:'Завершено' };
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const STATUS = { TODO: 'К выполнению', IN_PROGRESS: 'В работе', IN_REVIEW: 'Ожидает проверки', REVISION: 'На доработке', APPROVED: 'Утверждено', DONE: 'Завершено' };
+const done = status => ['DONE', 'APPROVED'].includes(status);
+const dateOf = value => { if (!value) return null; const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d; };
+const keyOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const startOfWeek = d => { const result = new Date(d.getFullYear(), d.getMonth(), d.getDate()); result.setDate(result.getDate() - ((result.getDay() + 6) % 7)); return result; };
+const shift = (d, n) => { const next = new Date(d.getFullYear(), d.getMonth(), d.getDate()); next.setDate(next.getDate() + n); return next; };
+const dateLabel = d => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+const timeLabel = d => d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const taskLink = t => `/app/editorial/projects?project=${encodeURIComponent(t.projectId)}&task=${encodeURIComponent(t.id)}&tab=details&from=my-tasks`;
+const isOverdue = (task, now) => !done(task.status) && dateOf(task.dueAt)?.getTime() < now;
+const tone = (task, now) => isOverdue(task, now) ? 'overdue' : done(task.status) ? 'done' : task.status === 'REVISION' ? 'revision' : task.status === 'IN_REVIEW' ? 'review' : 'active';
+
+function TaskRow({ task, now }) {
+    const due = dateOf(task.dueAt);
+    return <Link to={taskLink(task)} className="editorial-planner-task group flex min-w-0 items-center gap-3 rounded-2xl border p-3 sm:p-4" data-tone={tone(task, now)}>
+        <span className="editorial-planner-task-marker shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+            <strong className="block break-words text-sm font-semibold">{task.title}</strong>
+            <span className="mt-1 block truncate text-xs opacity-75">{task.project?.title || 'Редакционное задание'} · {STATUS[task.status] || task.status}</span>
+        </span>
+        <span className="shrink-0 text-right text-xs font-semibold"><span className="block">{due ? timeLabel(due) : '—'}</span><span className="mt-1 block opacity-60" aria-hidden="true">Открыть ↗</span></span>
+    </Link>;
+}
+
 export default function EditorialCalendar() {
     const { token } = useAuth();
-    const [month,setMonth] = useState(() => new Date(new Date().getFullYear(),new Date().getMonth(),1));
-    const [selected,setSelected] = useState(() => dayKey(new Date()));
-    const [tasks,setTasks] = useState([]);
-    const [loading,setLoading] = useState(true);
-    const [error,setError] = useState('');
-    const [reload,setReload] = useState(0);
+    const [view, setView] = useState('month');
+    const [selected, setSelected] = useState(() => new Date());
+    const [tasks, setTasks] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [refresh, setRefresh] = useState(0);
+    const now = Date.now();
     useEffect(() => {
-        let active = true; setLoading(true); setError('');
-        api('/editorial/workflow/my-tasks', { token }).then(data => { if (active) setTasks(data.tasks || []); })
-            .catch(err => { if (active) { setError(err.message || 'Не удалось загрузить календарь'); setTasks([]); } })
+        let active = true;
+        setLoading(true); setError('');
+        api('/editorial/workflow/my-tasks', { token })
+            .then(data => { if (active) setTasks(data.tasks || []); })
+            .catch(err => { if (active) { setError(err.message || 'Не удалось загрузить задания'); setTasks([]); } })
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
-    },[token,reload]);
+    }, [token, refresh]);
+
     const byDate = useMemo(() => {
         const map = new Map();
-        tasks.forEach(task => { const d = taskDate(task.dueAt); if (!d) return; const key = dayKey(d); map.set(key,[...(map.get(key)||[]),task]); });
+        tasks.forEach(task => {
+            const date = dateOf(task.dueAt);
+            if (!date) return;
+            const key = keyOf(date);
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(task);
+        });
+        map.forEach(rows => rows.sort((a, b) => dateOf(a.dueAt) - dateOf(b.dueAt)));
         return map;
-    },[tasks]);
-    const first = new Date(month.getFullYear(),month.getMonth(),1);
-    const offset = (first.getDay()+6)%7;
-    const total = new Date(month.getFullYear(),month.getMonth()+1,0).getDate();
-    const cells = [...Array(offset).fill(null), ...Array.from({length:total},(_,i)=>new Date(month.getFullYear(),month.getMonth(),i+1))];
-    while (cells.length % 7) cells.push(null);
-    const changeMonth = delta => { const d = new Date(month.getFullYear(),month.getMonth()+delta,1); setMonth(d); setSelected(dayKey(d)); };
-    const selectedTasks = (byDate.get(selected)||[]).slice().sort((a,b)=>new Date(a.dueAt)-new Date(b.dueAt));
-    const monthCount = tasks.filter(t=>{const d=taskDate(t.dueAt);return d && d.getFullYear()===month.getFullYear() && d.getMonth()===month.getMonth();}).length;
-    return <section className="editorial-calendar space-y-4" aria-label="Календарь заданий">
-        <header className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Календарь</h2><p className="text-sm opacity-75">Сроки ваших заданий по дням · в этом месяце: {loading ? '…' : monthCount}</p></div><button className="editorial-calendar-control rounded-xl border px-4 py-2 text-sm font-semibold" type="button" disabled={loading} onClick={()=>setReload(n=>n+1)}>Обновить</button></header>
+    }, [tasks]);
+
+    const monthStart = new Date(selected.getFullYear(), selected.getMonth(), 1);
+    const first = startOfWeek(monthStart);
+    const lastDay = new Date(selected.getFullYear(), selected.getMonth() + 1, 0);
+    const end = shift(lastDay, 6 - ((lastDay.getDay() + 6) % 7));
+    const daysInMonthGrid = Math.round((end - first) / 86400000) + 1;
+    const monthDays = Array.from({ length: daysInMonthGrid }, (_, i) => shift(first, i));
+    const weekStart = startOfWeek(selected);
+    const weekDays = Array.from({ length: 7 }, (_, i) => shift(weekStart, i));
+    const selectedKey = keyOf(selected);
+    const selectedTasks = byDate.get(selectedKey) || [];
+    const upcoming = useMemo(() => tasks.filter(t => {
+        const due = dateOf(t.dueAt);
+        return due && !done(t.status) && due.getTime() >= now && due.getTime() < now + 7 * 86400000;
+    }).sort((a, b) => dateOf(a.dueAt) - dateOf(b.dueAt)).slice(0, 7), [tasks, now]);
+    const monthCount = tasks.filter(t => { const d = dateOf(t.dueAt); return d && d.getFullYear() === selected.getFullYear() && d.getMonth() === selected.getMonth(); }).length;
+    const navigate = delta => setSelected(previous => view === 'month'
+        ? new Date(previous.getFullYear(), previous.getMonth() + delta, Math.min(previous.getDate(), new Date(previous.getFullYear(), previous.getMonth() + delta + 1, 0).getDate()))
+        : shift(previous, delta * (view === 'week' ? 7 : 1)));
+    const title = view === 'month' ? selected.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+        : view === 'week' ? `${weekDays[0].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — ${weekDays[6].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`
+        : selected.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    const renderDay = (d, outside = false) => {
+        const key = keyOf(d);
+        const rows = byDate.get(key) || [];
+        const overdue = rows.some(t => isOverdue(t, now));
+        return <button key={key} type="button" onClick={() => setSelected(d)}
+            className="editorial-planner-day flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border p-1"
+            data-selected={key === selectedKey} data-outside={outside} data-today={key === keyOf(new Date())}
+            aria-pressed={key === selectedKey}
+            aria-label={`${dateLabel(d)}, заданий: ${rows.length}${overdue ? ', есть просроченные' : ''}`}>
+            <span className="text-sm font-semibold">{d.getDate()}</span>
+            {rows.length > 0 && <span className="editorial-planner-day-count rounded-full px-1.5 text-[10px] font-bold">{rows.length}</span>}
+            {overdue && <span className="editorial-planner-overdue-dot" aria-hidden="true" />}
+        </button>;
+    };
+
+    return <section className="editorial-calendar editorial-planner space-y-5" aria-label="Личный календарь">
+        <header className="editorial-planner-heading flex flex-wrap items-center justify-between gap-3">
+            <div><span className="editorial-planner-eyebrow text-xs font-bold uppercase tracking-widest">Личное пространство</span><h2 className="mt-1 text-2xl font-bold">Мой календарь</h2><p className="mt-1 text-sm opacity-75">Задания, сроки и планы на неделю — только для вас</p></div>
+            <button type="button" className="editorial-planner-control min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold" onClick={() => setRefresh(v => v + 1)} disabled={loading}>{loading ? 'Загрузка…' : '↻ Обновить'}</button>
+        </header>
         {error && <p role="alert" className="rounded-xl border border-rose-400 p-3 text-sm">{error}</p>}
-        <div className="editorial-calendar-surface rounded-2xl border p-3 sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-2"><button type="button" className="editorial-calendar-control min-h-11 rounded-xl border px-4" onClick={()=>changeMonth(-1)} aria-label="Предыдущий месяц">←</button><h3 className="text-center text-base font-semibold capitalize">{monthName.format(month)}</h3><button type="button" className="editorial-calendar-control min-h-11 rounded-xl border px-4" onClick={()=>changeMonth(1)} aria-label="Следующий месяц">→</button></div>
-            <div className="editorial-calendar-grid grid grid-cols-7 gap-1 sm:gap-2">{weekdays.map(w=><span key={w} className="py-2 text-center text-xs font-semibold opacity-65">{w}</span>)}{cells.map((d,i)=>d ? <button key={dayKey(d)} type="button" aria-label={`${d.toLocaleDateString('ru-RU')}, заданий: ${(byDate.get(dayKey(d))||[]).length}`} aria-pressed={selected===dayKey(d)} onClick={()=>setSelected(dayKey(d))} className="editorial-calendar-day relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border p-1 text-sm sm:min-h-20"><span className="font-semibold">{d.getDate()}</span>{byDate.has(dayKey(d))&&<span className="editorial-calendar-count rounded-full px-1.5 text-[10px] font-semibold">{byDate.get(dayKey(d)).length}</span>}</button> : <span key={`blank-${i}`} aria-hidden="true"/>)}</div>
+        <div className="editorial-planner-layout grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
+            <div className="space-y-4">
+                <section className="editorial-planner-panel rounded-3xl border p-3 sm:p-5" aria-label="Календарная сетка">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="editorial-planner-segments inline-flex rounded-xl p-1" role="group" aria-label="Режим календаря">
+                            {[['month','Месяц'],['week','Неделя'],['day','День']].map(([id,label]) => <button key={id} type="button" onClick={() => setView(id)} aria-pressed={view === id} className="min-h-10 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm">{label}</button>)}
+                        </div>
+                        <button type="button" onClick={() => setSelected(new Date())} className="editorial-planner-control min-h-10 rounded-xl border px-3 text-sm font-semibold">Сегодня</button>
+                    </div>
+                    <div className="my-5 flex items-center justify-between gap-2">
+                        <button type="button" className="editorial-planner-control flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-xl" onClick={() => navigate(-1)} aria-label="Назад">‹</button>
+                        <h3 className="text-center text-base font-bold capitalize sm:text-lg">{title}</h3>
+                        <button type="button" className="editorial-planner-control flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-xl" onClick={() => navigate(1)} aria-label="Вперёд">›</button>
+                    </div>
+                    {view !== 'day' && <div className="editorial-planner-grid grid grid-cols-7 gap-1 sm:gap-2">
+                        {WEEKDAYS.map(w => <span key={w} className="py-2 text-center text-xs font-semibold opacity-60">{w}</span>)}
+                        {(view === 'month' ? monthDays : weekDays).map(d => renderDay(d, view === 'month' && d.getMonth() !== selected.getMonth()))}
+                    </div>}
+                    {view === 'day' && <div className="editorial-planner-day-focus rounded-2xl p-5 text-center">
+                        <span className="text-xs font-semibold uppercase tracking-widest opacity-70">{selected.toLocaleDateString('ru-RU', { weekday: 'long' })}</span>
+                        <strong className="mt-2 block text-5xl font-bold">{selected.getDate()}</strong>
+                        <span className="mt-2 block text-sm opacity-75">{selectedTasks.length} заданий со сроком</span>
+                    </div>}
+                    <div className="editorial-planner-legend mt-5 flex flex-wrap gap-x-4 gap-y-2 border-t pt-4 text-xs">
+                        <span><i data-tone="active" />В работе</span><span><i data-tone="review" />На проверке</span><span><i data-tone="revision" />Доработка</span><span><i data-tone="overdue" />Просрочено</span>
+                    </div>
+                </section>
+                <section className="editorial-planner-panel rounded-3xl border p-4 sm:p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">На {dateLabel(selected)}</h3><span className="text-xs opacity-70">{selectedTasks.length} заданий</span></div>
+                    {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загружаем задания…</p>
+                        : selectedTasks.length ? <div className="mt-4 space-y-2">{selectedTasks.map(t => <TaskRow key={t.id} task={t} now={now} />)}</div>
+                        : <p className="editorial-planner-empty mt-4 rounded-2xl p-5 text-sm">На этот день нет заданий со сроком. Можно спокойно планировать работу.</p>}
+                </section>
+            </div>
+            <aside className="space-y-4">
+                <section className="editorial-planner-panel rounded-3xl border p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Ближайшие 7 дней</h3><span className="editorial-planner-mini-count rounded-full px-2 py-1 text-xs font-bold">{upcoming.length}</span></div>
+                    {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загрузка…</p>
+                        : upcoming.length ? <div className="mt-4 space-y-2">{upcoming.map(t => <div key={t.id}><p className="mb-1 text-xs font-semibold opacity-65">{dateLabel(dateOf(t.dueAt))}</p><TaskRow task={t} now={now} /></div>)}</div>
+                        : <p className="editorial-planner-empty mt-4 rounded-2xl p-4 text-sm">На ближайшую неделю нет запланированных сроков.</p>}
+                </section>
+                <section className="editorial-planner-tip rounded-3xl border p-4 sm:p-5">
+                    <span className="text-xl" aria-hidden="true">✦</span><h3 className="mt-2 font-bold">Всё под рукой</h3><p className="mt-2 text-sm opacity-80">Выберите дату, чтобы увидеть задания. Нажмите на карточку — откроется её подробная информация.</p>
+                    <Link to="/app/editorial/my-tasks" className="mt-4 inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-semibold">Все мои задания ↗</Link>
+                </section>
+            </aside>
         </div>
-        <section className="editorial-calendar-surface rounded-2xl border p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Задания на {new Date(`${selected}T12:00:00`).toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</h3><button type="button" className="editorial-calendar-control rounded-lg border px-3 py-2 text-xs" onClick={()=>{const today=new Date();setMonth(new Date(today.getFullYear(),today.getMonth(),1));setSelected(dayKey(today));}}>Сегодня</button></div>
-            {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загружаем сроки…</p> : selectedTasks.length ? <div className="mt-3 space-y-2">{selectedTasks.map(t=><Link key={t.id} to={taskLink(t)} className="editorial-calendar-item flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3"><span className="min-w-0"><strong className="block break-words text-sm">{t.title}</strong><span className="text-xs opacity-70">{t.project?.title || 'Проект'} · {STATUS[t.status] || t.status}</span></span><span className="text-xs font-semibold">{taskDate(t.dueAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} ↗</span></Link>)}</div> : <p className="mt-4 text-sm opacity-70">На выбранный день заданий со сроком нет.</p>}
-        </section>
+        <p className="text-xs opacity-60">В календаре отображаются только назначенные вам задания с установленным сроком. Личные события появятся в следующем этапе.</p>
     </section>;
 }
