@@ -35,26 +35,26 @@ export default function EditorialReviewInbox() {
         return text.includes(search.trim().toLocaleLowerCase('ru'));
     });
 
-    return <section className="editorial-review-inbox editorial-workspace-content space-y-4 text-slate-900 dark:text-slate-100" aria-label="Единая очередь проверки">
+    return <section className="editorial-review-inbox editorial-workspace-content space-y-4" aria-label="Единая очередь проверки">
         <header className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-xl font-bold">На проверке</h2><p className="text-sm opacity-70">Материалы из проектов, в которых вы можете согласовывать задания</p></div>
-            <button type="button" onClick={() => setRefresh(value => value + 1)} className="min-h-11 rounded-lg border border-current/20 px-4 py-2 text-sm">Обновить</button>
+            <button type="button" onClick={() => setRefresh(value => value + 1)} className="editorial-review-refresh min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold">Обновить</button>
         </header>
         {error && <p role="alert" className="rounded-lg border border-rose-400 p-3 text-sm">{error}</p>}
-        <div className="grid gap-2 sm:grid-cols-3">
-            <label className="text-sm">Поиск<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Задание или исполнитель" className="mt-1 block w-full rounded-lg border border-current/20 bg-transparent p-2" /></label>
-            <label className="text-sm">Проект<select value={projectFilter} onChange={event => setProjectFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-current/20 bg-transparent p-2"><option value="ALL">Все проекты</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label>
-            <label className="text-sm">Срок<select value={deadlineFilter} onChange={event => setDeadlineFilter(event.target.value)} className="mt-1 block w-full rounded-lg border border-current/20 bg-transparent p-2"><option value="ALL">Любой</option><option value="OVERDUE">Просрочено</option><option value="SOON">Ближайшие 7 дней</option></select></label>
+        <div className="editorial-review-filters grid gap-3 rounded-2xl border p-4 sm:grid-cols-3">
+            <label className="text-sm">Поиск<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Задание или исполнитель" className="mt-1 block min-h-11 w-full rounded-xl border p-3" /></label>
+            <label className="text-sm">Проект<select value={projectFilter} onChange={event => setProjectFilter(event.target.value)} className="mt-1 block min-h-11 w-full rounded-xl border p-3"><option value="ALL">Все проекты</option>{projects.map(project => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label>
+            <label className="text-sm">Срок<select value={deadlineFilter} onChange={event => setDeadlineFilter(event.target.value)} className="mt-1 block min-h-11 w-full rounded-xl border p-3"><option value="ALL">Любой</option><option value="OVERDUE">Просрочено</option><option value="SOON">Ближайшие 7 дней</option></select></label>
         </div>
-        <p className="text-sm opacity-70">Найдено: {shown.length}</p>
-        {loading ? <p role="status">Загружаем материалы…</p> : shown.length === 0 ? <p className="rounded-xl border border-current/15 p-5 text-sm opacity-70">{tasks.length ? 'По выбранным фильтрам ничего нет.' : 'Все материалы проверены. Новых работ пока нет.'}</p> :
+        <div className="editorial-review-summary flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm"><strong>Ожидают проверки: {tasks.length}</strong><span>Показано: {shown.length}</span></div>
+        {loading ? <p role="status">Загружаем материалы…</p> : shown.length === 0 ? <p className="editorial-review-empty rounded-2xl border p-6 text-sm">{tasks.length ? 'По выбранным фильтрам ничего нет.' : 'Все материалы проверены. Новых работ пока нет.'}</p> :
             <div className="space-y-2">{shown.map(task => {
                 const due = task.dueAt ? new Date(task.dueAt) : null;
                 const valid = due && !Number.isNaN(due.getTime());
                 const overdue = valid && due.getTime() < now;
-                return <article key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-current/15 bg-white/60 p-4 dark:bg-slate-800/60">
+                return <article key={task.id} className="editorial-review-card flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 sm:p-5">
                     <div className="min-w-0 flex-1 space-y-1"><h3 className="break-words font-semibold">{task.title}</h3><p className="text-xs opacity-75">{task.project?.title || 'Проект'} · {task.assignee?.fullName || 'Исполнитель не назначен'}</p><p className={`text-xs ${overdue ? 'font-semibold text-rose-700 dark:text-rose-300' : 'opacity-75'}`}>{valid ? `${overdue ? 'Просрочено' : 'Срок'}: ${due.toLocaleString('ru-RU')}` : 'Без срока'}</p></div>
-                    <Link className="inline-flex min-h-11 items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white" to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&tab=materials&from=reviews`}>Проверить материалы →</Link>
+                    <Link className="editorial-review-action inline-flex min-h-11 items-center rounded-xl px-4 py-2 text-sm font-semibold" to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&tab=materials&from=reviews`}>Проверить материалы →</Link>
                 </article>;
             })}</div>}
     </section>;
