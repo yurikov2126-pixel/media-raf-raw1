@@ -80,6 +80,7 @@ model User {
   seasonScores GamificationSeasonScore[]
   stickerInventory StickerInventory[]
   stickerGrants StickerGrant[]
+  stickerAutoAwards StickerAutoAward[]
   stickerOffersSent StickerTrade[] @relation("StickerTradeSender")
   stickerOffersReceived StickerTrade[] @relation("StickerTradeReceiver")
 
@@ -1080,4 +1081,24 @@ model StickerTrade {
   receiver User @relation("StickerTradeReceiver",fields:[receiverId],references:[id],onDelete:Cascade)
   @@index([receiverId,status])
   @@index([senderId,status])
+}
+
+model StickerRewardRule {
+  id String @id @default(cuid())
+  event String @unique
+  stickerId String
+  threshold Int @default(1)
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@index([enabled])
+}
+
+model StickerAutoAward {
+  id String @id @default(cuid())
+  userId String
+  ruleId String
+  stickerId String
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@unique([userId,ruleId])
 }

@@ -1,13 +1,16 @@
 import {Router} from 'express';
 import {auth} from '../middleware/auth.js';
 import {prisma} from '../lib/prisma.js';
+import {syncStickerRewards} from '../lib/stickerRewards.js';
 const router=Router();router.use(auth);
 router.get('/catalog',async(req,res,next)=>{try{
+ await syncStickerRewards(req.user.id);
  const [packs,owned]=await Promise.all([prisma.stickerPack.findMany({where:{active:true},include:{stickers:{where:{active:true},orderBy:{number:'asc'}}},orderBy:{title:'asc'}}),prisma.stickerInventory.findMany({where:{userId:req.user.id,quantity:{gt:0}},select:{stickerId:true,quantity:true}})]);
  const quantities=new Map(owned.map(x=>[x.stickerId,x.quantity]));
  res.json({packs:packs.map(p=>({...p,stickers:p.stickers.map(s=>({...s,quantity:quantities.get(s.id)||0}))}))});
  }catch(e){next(e)}});
-router.get('/my',async(req,res,next)=>{try{const inventory=await prisma.stickerInventory.findMany({where:{userId:req.user.id,quantity:{gt:0}},include:{sticker:{include:{pack:true}}}});res.json({inventory})}catch(e){next(e)}});
+router.get('/my',async(req,res,next)=>{try{
+ await syncStickerRewards(req.user.id);const inventory=await prisma.stickerInventory.findMany({where:{userId:req.user.id,quantity:{gt:0}},include:{sticker:{include:{pack:true}}}});res.json({inventory})}catch(e){next(e)}});
 router.get('/admin/users',async(req,res,next)=>{if(req.user.role!=='ADMIN')return res.status(403).json({error:'Нет доступа'});try{
  const users=await prisma.user.findMany({select:{id:true,fullName:true,username:true},orderBy:{fullName:'asc'},take:500});res.json({users});
  }catch(e){next(e)}});
@@ -61,4 +64,11 @@ router.post('/trades/:id/resolve',async(req,res,next)=>{try{
  },{isolationLevel:'Serializable'});res.json({trade:result});
  }catch(e){if(e.status)return res.status(e.status).json({error:e.message});if(e.code==='P2034')return res.status(409).json({error:'Конфликт обмена. Повторите действие'});next(e)}});
 
+router.get('/admin/reward-rules',async(req,res,next)=>{if(req.user.role!=='ADMIN')return res.status(403).json({error:'Нет доступа'});try{res.json({rules:await prisma.stickerRewardRule.findMany({orderBy:{event:'asc'}})})}catch(e){next(e)}});
+router.put('/admin/reward-rules/:id',async(req,res,next)=>{if(req.user.role!=='ADMIN')return res.status(403).json({error:'Нет доступа'});try{
+ const {stickerId,threshold,enabled}=req.body||{};
+ if(typeof stickerId!=='string'||!Number.isInteger(threshold)||threshold<1||threshold>100000||typeof enabled!=='boolean')return res.status(400).json({error:'Некорректные настройки награды'});
+ const sticker=await prisma.sticker.findUnique({where:{id:stickerId}});if(!sticker)return res.status(404).json({error:'Стикер не найден'});
+ const rule=await prisma.stickerRewardRule.update({where:{id:req.params.id},data:{stickerId,threshold,enabled}});res.json({rule});
+ }catch(e){if(e.code==='P2025')return res.status(404).json({error:'Правило не найдено'});next(e)}});
 export default router;

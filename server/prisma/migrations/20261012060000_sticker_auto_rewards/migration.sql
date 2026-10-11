@@ -1,0 +1,14 @@
+CREATE TABLE "StickerRewardRule" ("id" TEXT NOT NULL,"event" TEXT NOT NULL,"stickerId" TEXT NOT NULL,"threshold" INTEGER NOT NULL DEFAULT 1,"enabled" BOOLEAN NOT NULL DEFAULT true,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "StickerRewardRule_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "StickerRewardRule_event_key" ON "StickerRewardRule"("event");
+CREATE INDEX "StickerRewardRule_enabled_idx" ON "StickerRewardRule"("enabled");
+CREATE TABLE "StickerAutoAward" ("id" TEXT NOT NULL,"userId" TEXT NOT NULL,"ruleId" TEXT NOT NULL,"stickerId" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "StickerAutoAward_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "StickerAutoAward_userId_ruleId_key" ON "StickerAutoAward"("userId","ruleId");
+ALTER TABLE "StickerAutoAward" ADD CONSTRAINT "StickerAutoAward_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_FIRST_POST','FIRST_POST','sticker_media-days_1',1);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_POSTS_10','POSTS_10','sticker_media-days_7',10);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_FIRST_COMMENT','FIRST_COMMENT','sticker_cat-emotions_1',1);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_COMMENTS_25','COMMENTS_25','sticker_cat-emotions_11',25);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_FIRST_LESSON','FIRST_LESSON','sticker_photo-tech_1',1);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_LESSONS_10','LESSONS_10','sticker_photo-tech_16',10);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_FIRST_SEASON_APPROVAL','FIRST_SEASON_APPROVAL','sticker_team_11',1);
+INSERT INTO "StickerRewardRule" ("id","event","stickerId","threshold") VALUES ('rule_SEASON_APPROVALS_3','SEASON_APPROVALS_3','sticker_team_16',3);
