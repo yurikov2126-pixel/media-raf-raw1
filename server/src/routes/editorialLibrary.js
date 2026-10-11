@@ -84,10 +84,35 @@ router.use((req, res, next) => allowed(req.user) ? next() : res.status(403).json
 router.get('/folders', async (_req, res, next) => {
     try {
         const [projects, files] = await Promise.all([
-            prisma.editorialProject.findMany({ select: { id: true, title: true, tasks: { select: { id: true, title: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
+            prisma.editorialProject.findMany({ select: { id: true, title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } }, tasks: { select: { id: true, title: true, assigneeId: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true, uploaderId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
             prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
         ]);
-        res.json({ folders: projects.map(p => ({ id: p.id, title: p.title, files: p.tasks.flatMap(t => t.materialFiles.map(f => ({ ...fileView(f), taskTitle: t.title, projectId: p.id }))) })), files: files.map(publicFile) });
+        const roles = {
+            LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф',
+            LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора',
+            ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр',
+            INTERVIEWER: 'Интервьюер', VIDEO_EDITOR: 'Монтажёр',
+        };
+        const projectFolders = projects.map(p => {
+            const members = new Map(p.members.map(m => [m.userId, m]));
+            const grouped = new Map();
+            for (const task of p.tasks) {
+                for (const file of task.materialFiles) {
+                    const personId = file.uploaderId || task.assigneeId;
+                    const member = members.get(personId) || members.get(task.assigneeId);
+                    const role = member?.role === 'MANAGER' ? 'Руководитель' : (roles[member?.crewPosition] || 'Участник команды');
+                    const fullName = member?.user?.fullName?.trim() || member?.user?.username || 'Неизвестный участник';
+                    const nameParts = fullName.split(/\\s+/);
+                    const personName = nameParts.length > 1 ? fullName : fullName;
+                    const name = role + ' - ' + personName;
+                    const key = personId || 'unassigned';
+                    if (!grouped.has(key)) grouped.set(key, { id: key, title: name, files: [] });
+                    grouped.get(key).files.push({ ...fileView(file), taskTitle: task.title, projectId: p.id });
+                }
+            }
+            return { id: p.id, title: p.title, folders: [...grouped.values()].sort((a,b) => a.title.localeCompare(b.title, 'ru')), files: [...grouped.values()].flatMap(g => g.files) };
+        });
+        res.json({ folders: projectFolders, files: files.map(publicFile) });
     } catch (error) { next(error); }
 });
 router.post('/shares/quick', async (req, res, next) => {
