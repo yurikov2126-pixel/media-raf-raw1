@@ -875,3 +875,20 @@ model PersonalCalendarEvent {
   @@index([ownerId, startsAt])
   @@index([ownerId, seriesId])
 }
+
+
+model EditorialContentPlanItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  platform    String
+  status      String   @default("IDEA")
+  publishAt   DateTime
+  assigneeId  String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([publishAt])
+  @@index([assigneeId, publishAt])
+}
