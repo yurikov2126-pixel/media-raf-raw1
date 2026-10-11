@@ -6,6 +6,7 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 const XP_LABELS = {
     post_created: 'Публикация поста',
+    editorial_task_accepted: 'Принятое редакционное задание',
     comment_created: 'Комментарий',
     lesson_completed: 'Пройденный урок',
     test_passed: 'Сданный тест',
