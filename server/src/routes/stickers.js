@@ -7,6 +7,18 @@ import {auth} from '../middleware/auth.js';
 import {prisma} from '../lib/prisma.js';
 import {syncStickerRewards} from '../lib/stickerRewards.js';
 const router=Router();router.use(auth);
+router.get('/rewards/unseen',async(req,res,next)=>{try{
+ await syncStickerRewards(req.user.id);
+ const awards=await prisma.stickerAutoAward.findMany({where:{userId:req.user.id,seenAt:null},orderBy:{createdAt:'asc'},take:20});
+ const stickerIds=[...new Set(awards.map(a=>a.stickerId))];
+ const stickers=await prisma.sticker.findMany({where:{id:{in:stickerIds}},include:{pack:{select:{title:true,slug:true}}}});
+ const byId=new Map(stickers.map(st=>[st.id,st]));
+ res.json({awards:awards.map(a=>({id:a.id,ruleId:a.ruleId,sticker:byId.get(a.stickerId)||null,createdAt:a.createdAt}))});
+ }catch(e){next(e)}});
+router.post('/rewards/:id/seen',async(req,res,next)=>{try{
+ const result=await prisma.stickerAutoAward.updateMany({where:{id:req.params.id,userId:req.user.id,seenAt:null},data:{seenAt:new Date()}});
+ res.json({acknowledged:result.count>0});
+ }catch(e){next(e)}});
 router.get('/catalog',async(req,res,next)=>{try{
  await syncStickerRewards(req.user.id);
  const [packs,owned]=await Promise.all([prisma.stickerPack.findMany({where:{active:true},include:{stickers:{where:{active:true},orderBy:{number:'asc'}}},orderBy:{title:'asc'}}),prisma.stickerInventory.findMany({where:{userId:req.user.id,quantity:{gt:0}},select:{stickerId:true,quantity:true}})]);

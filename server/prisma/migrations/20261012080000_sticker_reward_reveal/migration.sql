@@ -1,0 +1,1 @@
+ALTER TABLE "StickerAutoAward" ADD COLUMN "seenAt" TIMESTAMP(3);
