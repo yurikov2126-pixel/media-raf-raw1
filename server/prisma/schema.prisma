@@ -725,6 +725,7 @@ model SavedPost {
 model EditorialProject {
   id          String   @id @default(cuid())
   eventDate   DateTime? @db.Date
+  eventEndDate DateTime? @db.Date
   completedAt DateTime?
   title       String
   description String   @default("")
@@ -779,6 +780,7 @@ model EditorialTask {
   assigneeId String?
   createdById String
   dueAt DateTime?
+  workDate DateTime? @db.Date
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   project EditorialProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
