@@ -1,4 +1,5 @@
 import React from 'react';
+import CatStickerArtwork from './CatStickerArtwork.jsx';
 
 // Original, self-contained vector illustrations for all 16 Media Days stickers.
 // Custom artwork uploaded by an admin always takes precedence.
@@ -29,6 +30,7 @@ const palettes = {
 export function isMediaDaysArtwork(sticker){return sticker?.pack?.slug==='media-days'||sticker?.packSlug==='media-days'}
 export default function StickerArtwork({sticker,className='',style}){
  const number=Number(sticker?.number);
+ if(sticker?.pack?.slug==='cat-emotions'||sticker?.packSlug==='cat-emotions')return <CatStickerArtwork sticker={sticker} className={className} style={style}/>;
  if(!isMediaDaysArtwork(sticker)||!Number.isInteger(number)||number<1||number>16)return <span className={className} style={style}>{sticker?.emoji||'🎴'}</span>;
  const [base,accent,light]=palettes[sticker.rarity]||palettes.COMMON;
  const id='art-'+number;
