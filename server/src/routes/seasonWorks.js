@@ -60,6 +60,17 @@ router.get('/files/:fileId',async(req,res,next)=>{
     res.sendFile(path.join(root,file.storageName),err=>{if(err&&!res.headersSent)next(err)});
   }catch(e){next(e)}
 });
+// Final standings: approved creative work is mandatory. Creative score 70%, participation XP 30%.
+// Participation is capped at 1000 XP for transparent, stable normalization.
+router.get('/:slug/results',async(req,res,next)=>{
+  try {const season=await validSeason(req.params.slug);if(!season)return res.status(404).json({error:'Сезон недоступен'});
+    const approved=await prisma.seasonSubmission.findMany({where:{seasonId:season.id,status:'APPROVED'},include:{user:{select:{id:true,username:true,fullName:true}}}});
+    const sums=await prisma.xpLog.groupBy({by:['userId'],where:{userId:{in:approved.map(s=>s.userId)},createdAt:{gte:season.startsAt,lt:season.endsAt}},_sum:{amount:true}});
+    const xpMap=new Map(sums.map(x=>[x.userId,Math.max(0,x._sum.amount||0)]));
+    const items=approved.map(s=>{const xp=xpMap.get(s.userId)||0;return {user:s.user,creativeScore:s.score||0,xp,finalScore:Math.round((s.score||0)*0.7+Math.min(100,xp/10)*0.3),prize:s.prize}}).sort((a,b)=>b.finalScore-a.finalScore||b.creativeScore-a.creativeScore||b.xp-a.xp);
+    res.json({items:items.map((item,i)=>({...item,rank:i+1})),formula:'70% creative + 30% XP (1000 XP cap)'});
+  }catch(e){next(e)}
+});
 router.get('/admin/submissions',async(req,res,next)=>{
   if(!admin(req))return res.status(403).json({error:'Только администратору'});
   try {const submissions=await prisma.seasonSubmission.findMany({include:{user:{select:{id:true,fullName:true,username:true}},challenge:{select:{title:true,type:true}},season:{select:{title:true}},files:{select:{id:true,name:true,mimeType:true,size:true}}},orderBy:{submittedAt:'desc'},take:500});res.json({submissions})}catch(e){next(e)}
