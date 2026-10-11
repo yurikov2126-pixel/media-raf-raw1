@@ -335,6 +335,16 @@ function MaintenanceBlock({ token, onReload }) {
     const [lastCleanup, setLastCleanup] = useState(null);
     const [error, setError] = useState('');
     const [expandedKey, setExpandedKey] = useState(null);
+    const [storageHealth, setStorageHealth] = useState(null);
+    const [storageError, setStorageError] = useState('');
+    const [storageLoading, setStorageLoading] = useState(false);
+    const checkStorage = async () => {
+        setStorageLoading(true); setStorageError('');
+        try { setStorageHealth(await api('/admin/maintenance/editorial-storage', { token })); }
+        catch (e) { setStorageError(e.message); }
+        finally { setStorageLoading(false); }
+    };
+
 
     const runScan = async () => {
         setScanning(true);
@@ -375,6 +385,14 @@ function MaintenanceBlock({ token, onReload }) {
 
     return (
         <div className="card p-5">
+            <section className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div><h3 className="font-semibold">Файлы редакции и вложения заданий</h3><p className="text-xs text-white/50">Проверка целостности хранилищ. Без удаления файлов.</p></div>
+                    <button type="button" className="btn-ghost !py-2 text-sm" onClick={checkStorage} disabled={storageLoading}>{storageLoading ? 'Проверяем…' : 'Проверить файлы'}</button>
+                </div>
+                {storageError && <p role="alert" className="text-sm text-pink">{storageError}</p>}
+                {storageHealth && <div className="grid gap-3 md:grid-cols-2">{storageHealth.checks.map(check => <div key={check.key} className="rounded-xl border border-white/10 p-3"><h4 className="font-semibold">{check.label}</h4><p className="text-xs text-white/60">В базе: {check.total} · Нет на диске: {check.missingCount} · Размер отличается: {check.sizeMismatchCount}</p><p className={check.readable && !check.missingCount && !check.sizeMismatchCount ? 'text-lime text-sm' : 'text-orange-300 text-sm'}>{check.readable && !check.missingCount && !check.sizeMismatchCount ? '✓ Всё в порядке' : '⚠ Требует внимания'}</p>{[...(check.missing || []).map(x => x.name), ...(check.sizeMismatches || []).map(x => x.name)].length > 0 && <details className="mt-2 text-xs"><summary>Проблемные файлы</summary>{[...(check.missing || []).map(x => x.name), ...(check.sizeMismatches || []).map(x => x.name)].map((name, i) => <p key={i} className="break-all">{name}</p>)}</details>}</div>)}</div>}
+            </section>
             <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
                 <div className="flex-1 min-w-[220px]">
                     <div className="font-bold text-lg">🧹 Обслуживание базы данных</div>
