@@ -35,6 +35,7 @@ router.put('/admin/stickers/:id',async(req,res,next)=>{if(req.user.role!=='ADMIN
  const sticker=await prisma.sticker.update({where:{id:req.params.id},data:{title:title.trim(),emoji,rarity,active}});res.json({sticker});
  }catch(e){if(e.code==='P2025')return res.status(404).json({error:'Стикер не найден'});next(e)}});
 router.get('/admin/catalog',async(req,res,next)=>{if(req.user.role!=='ADMIN')return res.status(403).json({error:'Нет доступа'});try{const packs=await prisma.stickerPack.findMany({include:{stickers:{orderBy:{number:'asc'}}},orderBy:{title:'asc'}});res.json({packs})}catch(e){next(e)}});
+router.get('/participants',async(req,res,next)=>{try{const users=await prisma.user.findMany({where:{id:{not:req.user.id},isBanned:false},select:{id:true,fullName:true,username:true},orderBy:{fullName:'asc'},take:500});res.json({users})}catch(e){next(e)}});
 router.get('/trades',async(req,res,next)=>{try{const offers=await prisma.stickerTrade.findMany({where:{OR:[{senderId:req.user.id},{receiverId:req.user.id}]},orderBy:{createdAt:'desc'},take:100});res.json({offers})}catch(e){next(e)}});
 router.post('/trades',async(req,res,next)=>{try{
  const {receiverId,offeredStickerId,requestedStickerId}=req.body||{};
