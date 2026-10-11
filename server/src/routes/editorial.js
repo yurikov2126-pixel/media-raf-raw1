@@ -96,13 +96,14 @@ router.post('/projects/:id/members', async (req, res, next) => {
         if (typeof userId !== 'string' || !ROLES.includes(role)) return res.status(400).json({ error: 'Некорректный участник или роль' });
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isBanned: true } });
         if (!user || user.isBanned) return res.status(404).json({ error: 'Пользователь не найден' });
+        const previousMember = project.members.find((m) => m.userId === userId);
         const member = await prisma.editorialProjectMember.upsert({
             where: { projectId_userId: { projectId: project.id, userId } },
             create: { projectId: project.id, userId, role, crewPosition },
             update: { role, ...(req.body.crewPosition !== undefined ? { crewPosition } : {}) },
         });
         res.json({ member });
-        if (userId !== req.user.id) {
+        if (userId !== req.user.id && (!previousMember || (req.body.crewPosition !== undefined && previousMember.crewPosition !== member.crewPosition))) {
             await createNotification(userId, 'editorial', {
                 event: 'project_joined', projectId: project.id, projectTitle: project.title,
                 crewPosition: member.crewPosition, crewRole: CREW_LABELS[member.crewPosition] || 'Участник команды',
