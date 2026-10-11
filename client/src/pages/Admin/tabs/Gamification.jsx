@@ -3,6 +3,7 @@ import { api } from '../../../api/client.js';
 import { useToast } from '../../../store/toast.jsx';
 import Avatar from '../../../components/Avatar.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import SeasonsPanel from './SeasonsPanel.jsx';
 
 const XP_LABELS = {
     post_created: 'Публикация поста',
@@ -388,6 +389,8 @@ export default function Gamification({ token }) {
                     </button>
                 ))}
             </div>
+
+            <SeasonsPanel token={token} />
 
             {/* ═══════════ ОСНОВНОЕ ═══════════ */}
             {subtab === 'general' && (

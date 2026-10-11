@@ -75,6 +75,7 @@ model User {
   achievements UserAchievement[]
   xpLog        XpLog[]
   dailyQuests  DailyQuest[]
+  seasonScores GamificationSeasonScore[]
 
   // Курсы: практики и ДЗ
   supervisedPracticals PracticalWork[]       @relation("PracticalSupervisor")
@@ -926,4 +927,29 @@ model EditorialFileShare {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+model GamificationSeason {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  description String @default("")
+  startsAt  DateTime
+  endsAt    DateTime
+  createdAt DateTime @default(now())
+  scores    GamificationSeasonScore[]
+
+  @@index([startsAt, endsAt])
+}
+
+model GamificationSeasonScore {
+  seasonId String
+  userId   String
+  xp       Int      @default(0)
+  updatedAt DateTime @updatedAt
+  season   GamificationSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user     User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([seasonId, userId])
+  @@index([seasonId, xp])
 }

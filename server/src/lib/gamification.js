@@ -161,6 +161,7 @@ export async function awardXp({ userId, amount, reason, meta = {}, silent = fals
         throw e;
     }
 
+    // Season totals derive from XP logs, avoiding a second write that could drift.
     const newAchievements = await checkNewAchievements(userId);
 
     const result = {
