@@ -1038,6 +1038,7 @@ model Sticker {
   number Int
   title String
   emoji String
+  imageUrl String? @db.Text
   rarity String @default("COMMON")
   active Boolean @default(true)
   pack StickerPack @relation(fields:[packId],references:[id],onDelete:Cascade)
