@@ -6,7 +6,7 @@ const DEFAULT_DESKTOP = [
     { to: '/app/feed', label: 'Лента', icon: 'feed' },
     { to: '/app/chats', label: 'Чаты', icon: 'message' },
     { to: '/app/courses', label: 'Обучение', icon: 'book' },
-    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'library' },
     { to: '/app/editorial', label: 'Редакция', icon: 'newspaper' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/mentor', label: 'Руководителю', icon: 'users', roles: ['MENTOR', 'ADMIN'] },
@@ -21,7 +21,7 @@ const DEFAULT_MOBILE = [
 ];
 const DEFAULT_EXTRA = [
     { to: '/app/courses', label: 'Обучение', icon: 'book' },
-    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'library' },
     { to: '/app/editorial', label: 'Редакция', icon: 'book' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
