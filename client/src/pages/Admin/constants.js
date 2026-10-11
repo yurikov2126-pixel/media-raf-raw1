@@ -5,7 +5,6 @@ export const TAB_GROUPS = [
         tabs: [
             ['dash', 'Дашборд', '📊'],
             ['analytics', 'Аналитика', '📈'],
-            ['actions', 'История действий', '📜'],
         ],
     },
     {
@@ -49,6 +48,7 @@ export const TAB_GROUPS = [
         key: 'system',
         label: 'Система',
         tabs: [
+            ['actions', 'История действий', '📜'],
             ['backups', 'Бэкапы', '🗄️'],
             ['settings', 'Настройки', '⚙️'],
         ],
