@@ -40,6 +40,7 @@ export default function EditorialProjects() {
     const [searching, setSearching] = useState(false);
     const [memberRole, setMemberRole] = useState('PARTICIPANT');
     const [savingMember, setSavingMember] = useState(false);
+    const [updatingCompletion, setUpdatingCompletion] = useState(false);
     const canCreate = ['ADMIN', 'MENTOR'].includes(user?.role);
     useEffect(() => {
         let active = true;
@@ -134,6 +135,23 @@ export default function EditorialProjects() {
         finally { setSavingMember(false); }
     }
 
+    async function toggleProjectCompletion() {
+        if (!selected || updatingCompletion) return;
+        const completed = !selected.completedAt;
+        if (!window.confirm(completed
+            ? 'Завершить проект? Он останется в списке, все задания и материалы сохранятся.'
+            : 'Вернуть проект в работу?')) return;
+        setUpdatingCompletion(true); setError('');
+        try {
+            const result = await api(`/editorial/projects/${selected.id}`, {
+                token, method: 'PATCH', body: { completed },
+            });
+            setSelected(result.project);
+            setProjects(current => current.map(p => p.id === result.project.id ? result.project : p));
+        } catch (e) { setError(e.message); }
+        finally { setUpdatingCompletion(false); }
+    }
+
     const filteredProjects = projects.filter((project) => `${project.title} ${project.description || ''}`.toLocaleLowerCase('ru').includes(projectQuery.trim().toLocaleLowerCase('ru')));
     const canManage = selected && (user?.role === 'ADMIN' || selected.members.some((m) => m.userId === user?.id && m.role === 'MANAGER'));
 
@@ -195,7 +213,7 @@ export default function EditorialProjects() {
                         <button type="button" key={project.id} onClick={() => { setSelected(project); setProjectTab('tasks'); setShowMemberForm(false); }}
                             aria-current={selected?.id === project.id ? 'true' : undefined}
                             className={`block w-full min-w-0 rounded-xl border p-3 text-left transition-colors ${selected?.id === project.id ? 'border-violet-400 bg-violet-50 text-violet-900 dark:border-violet-300 dark:bg-slate-700 dark:text-white' : 'border-violet-200/60 hover:border-violet-400 dark:border-slate-600'}`}>
-                            <strong className="block truncate text-sm">{project.title}</strong>
+                            <strong className="block truncate text-sm">{project.title} {project.completedAt && <span className="ml-2 rounded-lg border border-emerald-400/50 px-2 py-0.5 text-xs font-medium text-emerald-500">Завершён</span>}</strong>
                             <span className="mt-1 block text-xs opacity-60">{project.visibility === 'CLOSED' ? 'Закрытый' : 'Командный'} · {project.members.length} участн.</span>
                         </button>
                     ))}
@@ -204,9 +222,10 @@ export default function EditorialProjects() {
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
                         <section className="editorial-glass__surface min-w-0 space-y-4 rounded-2xl border border-violet-200/60 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>
+                                <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
+                            {selected.completedAt && <div role="status" className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-3 text-sm">✓ Проект завершён{selected.completedAt ? ` · ${new Date(selected.completedAt).toLocaleDateString('ru-RU')}` : ''}. Задания и материалы сохранены.</div>}
                             {!fromMyTasks && <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
                                 <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'text-violet-700 opacity-75 dark:text-slate-100'}`}>Задания</button>
                                 <button type="button" role="tab" aria-selected={projectTab === 'team'} onClick={() => setProjectTab('team')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'team' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'opacity-65'}`}>Команда · {selected.members.length}</button>
