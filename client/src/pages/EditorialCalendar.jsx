@@ -28,11 +28,70 @@ function TaskRow({ task, now }) {
     </Link>;
 }
 
+
+const localInput = date => {
+    const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return d.toISOString().slice(0, 16);
+};
+function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
+    const start = event ? new Date(event.startsAt) : new Date(date.getFullYear(), date.getMonth(), date.getDate(), 10);
+    const finish = event ? new Date(event.endsAt) : new Date(start.getTime() + 3600000);
+    const [title, setTitle] = useState(event?.title || '');
+    const [description, setDescription] = useState(event?.description || '');
+    const [startsAt, setStartsAt] = useState(localInput(start));
+    const [endsAt, setEndsAt] = useState(localInput(finish));
+    const [allDay, setAllDay] = useState(event?.allDay || false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const submit = async e => {
+        e.preventDefault();
+        setError('');
+        const startDate = new Date(startsAt);
+        const endDate = new Date(endsAt);
+        if (!title.trim() || !Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) {
+            setError('Проверьте название и время окончания'); return;
+        }
+        setBusy(true);
+        try {
+            await api(event ? `/editorial/calendar/${event.id}` : '/editorial/calendar', {
+                token, method: event ? 'PATCH' : 'POST',
+                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay },
+            });
+            onSaved();
+        } catch (err) { setError(err.message || 'Не удалось сохранить событие'); }
+        finally { setBusy(false); }
+    };
+    const remove = async () => {
+        if (!event || !window.confirm('Удалить личное событие?')) return;
+        setBusy(true); setError('');
+        try { await api(`/editorial/calendar/${event.id}`, { token, method: 'DELETE' }); onSaved(); }
+        catch (err) { setError(err.message || 'Не удалось удалить событие'); setBusy(false); }
+    };
+    return <div className="editorial-personal-event-overlay fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/65 p-0 sm:items-center sm:p-4" onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="personal-event-heading" className="editorial-personal-event-dialog w-full max-w-lg rounded-t-3xl border p-5 shadow-2xl sm:rounded-3xl">
+            <div className="mb-4 flex items-center justify-between gap-2"><h3 id="personal-event-heading" className="text-lg font-bold">{event ? 'Редактировать событие' : 'Новое личное событие'}</h3><button type="button" onClick={onCancel} aria-label="Закрыть" className="editorial-planner-control rounded-xl border px-3 py-2">✕</button></div>
+            <form onSubmit={submit} className="space-y-3">
+                <label className="block text-sm font-semibold">Название<input autoFocus required maxLength={160} value={title} onChange={e => setTitle(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" placeholder="Например, съёмка портрета" /></label>
+                <label className="block text-sm font-semibold">Начало<input required type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /></label>
+                <label className="block text-sm font-semibold">Окончание<input required type="datetime-local" value={endsAt} onChange={e => setEndsAt(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /></label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> Весь день (пометка)</label>
+                <label className="block text-sm font-semibold">Заметки<textarea maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" placeholder="Детали и планы" /></label>
+                {eventsError && <p role="alert" className="rounded-xl border border-amber-400 p-3 text-sm">{eventsError}</p>}
+        {error && <p role="alert" className="text-sm text-rose-500">{error}</p>}
+                <div className="flex flex-wrap gap-2 pt-2"><button disabled={busy} type="submit" className="editorial-personal-event-primary min-h-11 flex-1 rounded-xl px-4 font-semibold">{busy ? 'Сохранение…' : 'Сохранить'}</button>{event && <button disabled={busy} type="button" onClick={remove} className="editorial-personal-event-delete min-h-11 rounded-xl border px-4">Удалить</button>}</div>
+            </form>
+        </section>
+    </div>;
+}
+
 export default function EditorialCalendar() {
     const { token } = useAuth();
     const [view, setView] = useState('month');
     const [selected, setSelected] = useState(() => new Date());
     const [tasks, setTasks] = useState([]);
+    const [events, setEvents] = useState([]);
+    const [editing, setEditing] = useState(undefined);
+    const [eventsError, setEventsError] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [refresh, setRefresh] = useState(0);
@@ -47,6 +106,29 @@ export default function EditorialCalendar() {
         return () => { active = false; };
     }, [token, refresh]);
 
+    useEffect(() => {
+        let active = true;
+        setEventsError('');
+        const from = new Date(selected.getFullYear(), selected.getMonth() - 2, 1).toISOString();
+        const to = new Date(selected.getFullYear(), selected.getMonth() + 3, 1).toISOString();
+        api(`/editorial/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { token })
+            .then(data => { if (active) setEvents(data.events || []); })
+            .catch(err => { if (active) { setEvents([]); setEventsError(err.message || 'Не удалось загрузить личные события'); } });
+        return () => { active = false; };
+    }, [token, selected.getFullYear(), selected.getMonth(), refresh]);
+    const eventsByDate = useMemo(() => {
+        const map = new Map();
+        events.forEach(event => {
+            const start = dateOf(event.startsAt);
+            const end = dateOf(event.endsAt);
+            if (!start || !end) return;
+            for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate()), i = 0; d < end && i < 32; d = shift(d, 1), i++) {
+                const key = keyOf(d);
+                map.set(key, [...(map.get(key) || []), event]);
+            }
+        });
+        return map;
+    }, [events]);
     const byDate = useMemo(() => {
         const map = new Map();
         tasks.forEach(task => {
@@ -70,6 +152,7 @@ export default function EditorialCalendar() {
     const weekDays = Array.from({ length: 7 }, (_, i) => shift(weekStart, i));
     const selectedKey = keyOf(selected);
     const selectedTasks = byDate.get(selectedKey) || [];
+    const selectedEvents = eventsByDate.get(selectedKey) || [];
     const upcoming = useMemo(() => tasks.filter(t => {
         const due = dateOf(t.dueAt);
         return due && !done(t.status) && due.getTime() >= now && due.getTime() < now + 7 * 86400000;
@@ -85,14 +168,15 @@ export default function EditorialCalendar() {
     const renderDay = (d, outside = false) => {
         const key = keyOf(d);
         const rows = byDate.get(key) || [];
+        const eventCount = (eventsByDate.get(key) || []).length;
         const overdue = rows.some(t => isOverdue(t, now));
         return <button key={key} type="button" onClick={() => setSelected(d)}
             className="editorial-planner-day flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border p-1"
             data-selected={key === selectedKey} data-outside={outside} data-today={key === keyOf(new Date())}
             aria-pressed={key === selectedKey}
-            aria-label={`${dateLabel(d)}, заданий: ${rows.length}${overdue ? ', есть просроченные' : ''}`}>
+            aria-label={`${dateLabel(d)}, заданий: ${rows.length}, личных событий: ${eventCount}${overdue ? ', есть просроченные' : ''}`}>
             <span className="text-sm font-semibold">{d.getDate()}</span>
-            {rows.length > 0 && <span className="editorial-planner-day-count rounded-full px-1.5 text-[10px] font-bold">{rows.length}</span>}
+            {rows.length + eventCount > 0 && <span className="editorial-planner-day-count rounded-full px-1.5 text-[10px] font-bold">{rows.length + eventCount}</span>}
             {overdue && <span className="editorial-planner-overdue-dot" aria-hidden="true" />}
         </button>;
     };
@@ -103,6 +187,7 @@ export default function EditorialCalendar() {
             <button type="button" className="editorial-planner-control min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold" onClick={() => setRefresh(v => v + 1)} disabled={loading}>{loading ? 'Загрузка…' : '↻ Обновить'}</button>
         </header>
         {error && <p role="alert" className="rounded-xl border border-rose-400 p-3 text-sm">{error}</p>}
+        <div className="flex justify-end"><button type="button" onClick={() => setEditing(null)} className="editorial-personal-event-primary min-h-11 rounded-xl px-5 font-semibold">＋ Личное событие</button></div>
         <div className="editorial-planner-layout grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
             <div className="space-y-4">
                 <section className="editorial-planner-panel rounded-3xl border p-3 sm:p-5" aria-label="Календарная сетка">
@@ -131,10 +216,11 @@ export default function EditorialCalendar() {
                     </div>
                 </section>
                 <section className="editorial-planner-panel rounded-3xl border p-4 sm:p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">На {dateLabel(selected)}</h3><span className="text-xs opacity-70">{selectedTasks.length} заданий</span></div>
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">На {dateLabel(selected)}</h3><span className="text-xs opacity-70">{selectedTasks.length} заданий · {selectedEvents.length} событий</span></div>
+                    {selectedEvents.length > 0 && <div className="mt-4 space-y-2">{selectedEvents.map(event => <button type="button" key={event.id} onClick={() => setEditing(event)} className="editorial-personal-event-row w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">{event.allDay ? 'Весь день' : timeLabel(dateOf(event.startsAt))} · Личное событие</span></button>)}</div>}
                     {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загружаем задания…</p>
                         : selectedTasks.length ? <div className="mt-4 space-y-2">{selectedTasks.map(t => <TaskRow key={t.id} task={t} now={now} />)}</div>
-                        : <p className="editorial-planner-empty mt-4 rounded-2xl p-5 text-sm">На этот день нет заданий со сроком. Можно спокойно планировать работу.</p>}
+                        : selectedEvents.length ? null : <p className="editorial-planner-empty mt-4 rounded-2xl p-5 text-sm">На этот день нет заданий и событий.</p>}
                 </section>
             </div>
             <aside className="space-y-4">
@@ -150,6 +236,7 @@ export default function EditorialCalendar() {
                 </section>
             </aside>
         </div>
-        <p className="text-xs opacity-60">В календаре отображаются только назначенные вам задания с установленным сроком. Личные события появятся в следующем этапе.</p>
+        <p className="text-xs opacity-60">Редакционные задания отображаются автоматически. Личные события доступны только вам.</p>
+        {editing !== undefined && <PersonalEventForm key={editing?.id || 'new'} event={editing} date={selected} token={token} onCancel={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); setRefresh(v => v + 1); }} />}
     </section>;
 }
