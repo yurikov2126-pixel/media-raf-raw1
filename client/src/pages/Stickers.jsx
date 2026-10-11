@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import '../styles/sticker-album.css';
 import {api} from '../api/client.js';
 import {useAuth} from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
