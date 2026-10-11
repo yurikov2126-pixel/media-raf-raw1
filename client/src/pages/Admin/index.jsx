@@ -44,6 +44,8 @@ export default function Admin() {
     const setTab = (t) => setSearchParams({ tab: t }, { replace: true });
 
     const [stats, setStats] = useState({});
+    const [loadError, setLoadError] = useState('');
+    const [refreshing, setRefreshing] = useState(false);
     const [users, setUsers] = useState([]);
     const [courses, setCourses] = useState([]);
     const [certificates, setCertificates] = useState([]);
@@ -64,12 +66,23 @@ export default function Admin() {
             .catch(() => {});
     };
 
-    const reloadAll = () => {
-        api('/admin/stats', { token }).then(setStats).catch(() => {});
-        api('/admin/users', { token }).then(setUsers).catch(() => {});
-        api('/admin/courses', { token }).then(setCourses).catch(() => {});
-        api('/admin/certificates', { token }).then(setCertificates).catch(() => {});
-        api('/admin/settings', { token }).then(setSettings).catch(() => {});
+    const reloadAll = async () => {
+        setRefreshing(true);
+        setLoadError('');
+        const requests = [
+            ['/admin/stats', setStats],
+            ['/admin/users', setUsers],
+            ['/admin/courses', setCourses],
+            ['/admin/certificates', setCertificates],
+            ['/admin/settings', setSettings],
+        ];
+        const results = await Promise.allSettled(requests.map(async ([url, setter]) => {
+            const data = await api(url, { token });
+            setter(data);
+        }));
+        const failures = results.map((result, index) => result.status === 'rejected' ? requests[index][0] : null).filter(Boolean);
+        if (failures.length) setLoadError('Не удалось загрузить данные: ' + failures.join(', ') + '. Попробуйте обновить.');
+        setRefreshing(false);
         reloadReportsBadge();
         reloadResetsBadge();
     };
@@ -136,7 +149,8 @@ export default function Admin() {
                 {activeGroup.tabs.map(([key, label, icon]) => <button key={key} type="button" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)} className={`min-h-10 rounded-xl border px-3 py-2 text-sm transition-colors ${tab === key ? 'border-violet-500 bg-violet-100 font-semibold text-violet-900 dark:border-violet-400 dark:bg-violet-950/60 dark:text-violet-100' : 'border-slate-200 bg-white/70 text-slate-700 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200'}`}>{icon} {label}{badges[key] > 0 ? ` · ${badges[key]}` : ''}</button>)}
             </nav>
             <div className="editorial-glass__surface min-w-0 rounded-2xl border border-current/10 p-3 sm:p-5">
-                <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">{currentMeta.icon} {currentMeta.label}</h2>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentMeta.icon} {currentMeta.label}</h2><button type="button" disabled={refreshing} onClick={reloadAll} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">{refreshing ? "Обновление…" : "↻ Обновить данные"}</button></div>
+                {loadError && <div role="alert" className="mb-4 rounded-xl border border-rose-400/50 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-200">{loadError}</div>}
                 <div className="min-w-0">
                     <Suspense fallback={<AdminSkeleton />}>
                         {tab === 'dash' && (
