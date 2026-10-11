@@ -35,7 +35,7 @@ export default function EditorialReviewInbox() {
         return text.includes(search.trim().toLocaleLowerCase('ru'));
     });
 
-    return <section className="space-y-4 text-slate-900 dark:text-slate-100" aria-label="Единая очередь проверки">
+    return <section className="editorial-review-inbox editorial-workspace-content space-y-4 text-slate-900 dark:text-slate-100" aria-label="Единая очередь проверки">
         <header className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-xl font-bold">На проверке</h2><p className="text-sm opacity-70">Материалы из проектов, в которых вы можете согласовывать задания</p></div>
             <button type="button" onClick={() => setRefresh(value => value + 1)} className="min-h-11 rounded-lg border border-current/20 px-4 py-2 text-sm">Обновить</button>
