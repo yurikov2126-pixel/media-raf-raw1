@@ -67,6 +67,27 @@ router.post(
     })
 );
 
+/* Проверки редакционных данных: диагностика без автоматического удаления. */
+router.get('/maintenance/editorial-integrity', safe(async (_req, res) => {
+    const [tasks, shares, library, materials] = await Promise.all([
+        prisma.editorialTask.findMany({ select: { id: true, title: true, workDate: true, project: { select: { eventDate: true, eventEndDate: true } } } }),
+        prisma.editorialFileShare.findMany({ where: { revokedAt: null }, select: { id: true, title: true, fileIds: true, expiresAt: true } }),
+        prisma.editorialLibraryFile.findMany({ select: { id: true } }),
+        prisma.editorialMaterialFile.findMany({ select: { id: true } }),
+    ]);
+    const badTaskDates = tasks.filter(task => task.workDate && task.project.eventDate &&
+        (task.workDate < task.project.eventDate || task.workDate > (task.project.eventEndDate || task.project.eventDate)));
+    const validFiles = new Set([...library.map(f => 'library:' + f.id), ...materials.map(f => 'material:' + f.id)]);
+    const brokenShares = shares.filter(share => Array.isArray(share.fileIds) && share.fileIds.some(id => !validFiles.has(id)));
+    const expiredShares = shares.filter(share => share.expiresAt && share.expiresAt < new Date());
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ checkedAt: new Date().toISOString(), checks: [
+        { key: 'taskDates', label: 'Задания за пределами дат проекта', count: badTaskDates.length, details: badTaskDates.slice(0, 30).map(t => ({ id: t.id, title: t.title })) },
+        { key: 'brokenShares', label: 'Ссылки с отсутствующими файлами', count: brokenShares.length, details: brokenShares.slice(0, 30).map(s => ({ id: s.id, title: s.title })) },
+        { key: 'expiredShares', label: 'Истёкшие, но не отозванные ссылки', count: expiredShares.length, details: expiredShares.slice(0, 30).map(s => ({ id: s.id, title: s.title })) },
+    ] });
+}));
+
 /* Новые файловые хранилища редакции: только диагностика, без удаления. */
 router.get('/maintenance/editorial-storage', safe(async (_req, res) => {
     const roots = [

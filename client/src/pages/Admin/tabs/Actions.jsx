@@ -374,9 +374,12 @@ export default function Actions({ token }) {
                                                                 isOpen ? null : it.id
                                                             )
                                                         }
-                                                        className="text-white/40 hover:text-white text-xs"
+                                                        className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet"
+                                                        type="button"
+                                                        aria-expanded={isOpen}
+                                                        aria-label={isOpen ? 'Скрыть подробности действия' : 'Показать подробности действия'}
                                                     >
-                                                        {isOpen ? '▾' : '▸'}
+                                                        {isOpen ? 'Скрыть ▲' : 'Подробнее ▼'}
                                                     </button>
                                                 </td>
                                             </tr>
