@@ -48,7 +48,6 @@ export default function EditorialProjects() {
     const [personQuery, setPersonQuery] = useState('');
     const [people, setPeople] = useState([]);
     const [searching, setSearching] = useState(false);
-    const [memberRole, setMemberRole] = useState('PARTICIPANT');
     const [crewPosition, setCrewPosition] = useState('');
     const [crewSavingId, setCrewSavingId] = useState(null);
     const [savingMember, setSavingMember] = useState(false);
@@ -98,7 +97,7 @@ export default function EditorialProjects() {
         if (!wizardProject || !memberId || wizardBusy) return;
         setWizardBusy(true); setError('');
         try {
-            await api(`/editorial/projects/${wizardProject.id}/members`, { token, method: 'POST', body: { userId: memberId, role: memberRole, crewPosition: crewPosition || null } });
+            await api(`/editorial/projects/${wizardProject.id}/members`, { token, method: 'POST', body: { userId: memberId, role: 'PARTICIPANT', crewPosition: crewPosition || null } });
             const result = await api('/editorial/projects', { token });
             const project = result.projects.find(p => p.id === wizardProject.id);
             if (project) { setWizardProject(project); setWizardMembers(project.members); setProjects(result.projects); }
@@ -140,7 +139,7 @@ export default function EditorialProjects() {
         if (!selected || savingMember) return;
         setSavingMember(true); setError('');
         try {
-            await api(`/editorial/projects/${selected.id}/members`, { token, method: 'POST', body: { userId: memberId.trim(), role: memberRole, crewPosition: crewPosition || null } });
+            await api(`/editorial/projects/${selected.id}/members`, { token, method: 'POST', body: { userId: memberId.trim(), role: 'PARTICIPANT', crewPosition: crewPosition || null } });
             setMemberId(''); setPersonQuery(''); setPeople([]);
             await reload();
         } catch (e) { setError(e.message); }
@@ -211,7 +210,6 @@ export default function EditorialProjects() {
                                 {searching && <p className="text-xs opacity-70">Поиск…</p>}
                                 {people.length > 0 && <div className="max-h-40 overflow-auto rounded-xl border p-1">{people.filter(p => !wizardMembers.some(m => m.userId === p.id)).map(p => <button key={p.id} type="button" onClick={() => { setMemberId(p.id); setPersonQuery(`${p.fullName || p.username} (@${p.username})`); setPeople([]); }} className="block w-full rounded-lg p-3 text-left text-sm">{p.fullName || p.username} @{p.username}</button>)}</div>}
                                 <label className="block text-sm">Съёмочная позиция<select value={crewPosition} onChange={e => setCrewPosition(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Без съёмочной позиции</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                                <label className="block text-sm">Права в проекте<select value={memberRole} onChange={e => setMemberRole(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="PARTICIPANT">Участник</option><option value="EDITOR">Редактор</option><option value="OBSERVER">Наблюдатель</option><option value="MANAGER">Руководитель</option></select></label>
                                 <button disabled={!memberId || wizardBusy} className="rounded-xl border border-violet-400 px-4 py-3 text-sm font-semibold disabled:opacity-50">+ Добавить участника</button>
                             </form>
                             <button type="button" onClick={() => { setError(''); setWizardStep(3); }} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white">Продолжить к заданиям →</button>
@@ -263,7 +261,6 @@ export default function EditorialProjects() {
                                     {searching && <p className="text-xs opacity-60">Поиск…</p>}
                                     {people.length > 0 && <div className="max-h-44 overflow-auto rounded-lg border border-current/15 p-1">{people.map((person) => <button type="button" key={person.id} onClick={() => { setMemberId(person.id); setPersonQuery(person.fullName + ' (@' + person.username + ')'); setPeople([]); }} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-current/10">{person.fullName} <span className="opacity-60">@{person.username}</span></button>)}</div>}
                                     <label className="block text-sm">Съёмочная позиция<select value={crewPosition} onChange={e => setCrewPosition(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Без съёмочной позиции</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                                    <label className="block text-sm">Права в проекте<select value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2"><option value="PARTICIPANT">Участник</option><option value="EDITOR">Редактор</option><option value="OBSERVER">Наблюдатель</option><option value="MANAGER">Руководитель</option></select></label>
                                     <button disabled={!memberId || savingMember} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">{savingMember ? 'Сохранение…' : 'Добавить участника'}</button>
                                 </form>}
                             </div>}
