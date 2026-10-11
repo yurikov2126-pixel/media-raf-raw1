@@ -75,7 +75,7 @@ router.get('/', async (req, res, next) => {
         const projects = await prisma.editorialProject.findMany({
             where: {
                 eventDate: { not: null, gte: from, lt: to },
-                OR: [{ members: { some: { userId: req.user.id } } }, ...(req.user.role === 'ADMIN' ? [{}] : [])],
+                ...(req.user.role === 'ADMIN' ? {} : { members: { some: { userId: req.user.id } } }),
             },
             select: { id: true, title: true, description: true, eventDate: true },
         });
