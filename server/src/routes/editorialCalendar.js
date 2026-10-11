@@ -74,14 +74,16 @@ router.get('/', async (req, res, next) => {
         });
         const projects = await prisma.editorialProject.findMany({
             where: {
-                eventDate: { not: null, gte: from, lt: to },
+                eventDate: { not: null, lt: to },
+                OR: [{ eventEndDate: { gte: from } }, { eventEndDate: null, eventDate: { gte: from } }],
                 ...(req.user.role === 'ADMIN' ? {} : { members: { some: { userId: req.user.id } } }),
             },
-            select: { id: true, title: true, description: true, eventDate: true },
+            select: { id: true, title: true, description: true, eventDate: true, eventEndDate: true },
         });
         const projectEvents = projects.map(project => ({
             id: `project:${project.id}`, projectId: project.id, title: project.title,
             description: project.description, eventDate: project.eventDate.toISOString().slice(0, 10),
+            eventEndDate: (project.eventEndDate || project.eventDate).toISOString().slice(0, 10),
             allDay: true, projectEvent: true,
         }));
         res.json({ events: [...events, ...projectEvents] });
