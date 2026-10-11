@@ -66,6 +66,7 @@ function payloadToPush(type, payload) {
     }
     if (type === 'editorial') {
         const titles = {
+            project_created: 'Создан новый командный проект', project_joined: 'Вас добавили в проект',
             assigned: 'Назначено задание', status: 'Изменён статус задания',
             comment: 'Новый комментарий', application: 'Заявка на задание',
             application_approved: 'Заявка одобрена', application_rejected: 'Заявка отклонена',
@@ -76,7 +77,7 @@ function payloadToPush(type, payload) {
         if (payload.projectId && payload.taskId) query.set('task', payload.taskId);
         return {
             title: titles[payload.event] || 'Редакция',
-            body: payload.taskTitle || payload.projectTitle || '',
+            body: payload.event === 'project_joined' ? `${payload.projectTitle || 'Проект'} · Роль: ${payload.crewRole || 'Участник команды'}` : (payload.taskTitle || payload.projectTitle || ''),
             url: '/app/editorial/projects' + (query.toString() ? '?' + query.toString() : ''),
             tag: 'editorial-' + (payload.taskId || 'project') + '-' + (payload.event || 'event'),
         };
