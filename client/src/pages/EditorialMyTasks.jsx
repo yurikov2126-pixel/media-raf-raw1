@@ -84,14 +84,14 @@ export default function EditorialMyTasks() {
             {[['Активных',summary.active],['Скоро срок',summary.soon],['Просрочено',summary.overdue],['На доработке',summary.revision]].map(([label,count]) =>
                 <div key={label} className="rounded-xl border border-slate-300 bg-white p-3 dark:border-slate-600 dark:bg-slate-800"><strong className="block text-2xl">{count}</strong><span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span></div>)}
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-2" role="group" aria-label="Фильтр заданий" data-no-route-swipe>
-            {[['ACTIVE','Активные'],...STATUS_ORDER.map(status => [status,STATUS_LABELS[status]]),['ALL','Все']].map(([value,label]) =>
+        <div className="editorial-task-filters" role="group" aria-label="Фильтр заданий" data-no-route-swipe>
+            {[['ACTIVE','Активные'],...STATUS_ORDER.map(status => [status,status === 'IN_REVIEW' ? 'Ожидают решения' : STATUS_LABELS[status]]),['ALL','Все']].map(([value,label]) =>
                 <button key={value} type="button" aria-pressed={filter===value} onClick={() => setFilter(value)}
                     className={`min-h-11 shrink-0 rounded-lg border px-3 py-2 text-sm font-medium ${filter===value ? 'border-violet-700 bg-violet-700 text-white dark:border-violet-300 dark:bg-violet-200 dark:text-slate-950' : 'border-slate-300 bg-white text-slate-800 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100'}`}>{label}</button>)}
         </div>
         {error && <div role="alert" className="rounded-lg border border-rose-400 bg-rose-50 p-3 text-sm text-rose-900 dark:bg-rose-950 dark:text-rose-100">{error} <button type="button" onClick={() => sync()} className="ml-2 font-semibold underline">Повторить</button></div>}
         {loading ? <p role="status" className="p-4 text-sm">Загружаем задания…</p> :
-            shown.length === 0 ? <div className="rounded-xl border border-slate-300 bg-white p-6 text-center text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">В этой категории заданий пока нет.</div> :
+            shown.length === 0 ? <div className="editorial-empty-state rounded-xl border p-6 text-center text-sm">В этой категории заданий пока нет.</div> :
             <div className="grid gap-3 md:grid-cols-2">
                 {shown.map(task => {
                     const deadline = deadlineState(task,now);

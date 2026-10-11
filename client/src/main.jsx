@@ -14,6 +14,7 @@ import { OnboardingProvider } from './store/onboarding.jsx';
 import { GamificationProvider } from './store/gamification.jsx';
 import './styles/index.css';
 import './styles/ui2.css';
+import './styles/editorial.css';
 import './styles/profile2.css';
 import './styles/notifications2.css';
 
