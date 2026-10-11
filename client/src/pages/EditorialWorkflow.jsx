@@ -169,7 +169,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         return (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0);
     });
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
-    return <section className="space-y-4">
+    return <section className="editorial-workflow-refined space-y-4">
         {canEdit && !loading && <section className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-100/30 p-3 dark:bg-amber-300/10" aria-label="Материалы на проверке">
             <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">⏳ Ожидают проверки</h4><span className="text-sm opacity-70">{reviewTasks.length}</span></div>
             {reviewTasks.length === 0 ? <p className="text-sm opacity-70">Все материалы проверены. Новых работ пока нет.</p> : <>
@@ -201,8 +201,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             <button type="button" onClick={() => { setDeadlineFilter('SOON'); setAssigneeFilter('ALL'); }} aria-pressed={deadlineFilter === 'SOON'} className="rounded-lg px-2 py-1 text-amber-800 hover:bg-amber-400/10 dark:text-amber-200">7 дней · <strong>{dueSoonCount}</strong></button>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Задания <span className="text-xs font-normal opacity-50">· {tasks.length}</span></h4>{canEdit && <div className="flex gap-2"><button type="button" onClick={() => setComposer((v) => v === 'task' ? null : 'task')} className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 dark:bg-violet-200 dark:text-slate-950 dark:hover:bg-violet-100">+ Задача</button></div>}</div>
-        {canEdit && composer && <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-3 dark:border-slate-600 dark:bg-slate-800/70">
-            {composer === 'task' && <form onSubmit={submit} className="space-y-3">
+        {canEdit && composer && <div className="editorial-workflow-composer rounded-xl border p-4">
+            {composer === 'task' && <form onSubmit={submit} className="editorial-workflow-composer-form space-y-3">
                 <label className="block text-sm">Новая задача<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={160} required value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} /></label>
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
                 <label className="block text-sm">Родительская задача<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskParent} onChange={(e) => setTaskParent(e.target.value)}><option value="">Нет (основная задача)</option>{tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
@@ -228,7 +228,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
         <div className="flex items-center justify-between gap-2"><p className="text-xs opacity-60">Показано {visibleTasks.length} из {tasks.length}</p><button type="button" onClick={() => { setQuery(''); setStatusFilter('ALL'); setAssigneeFilter('ALL'); setDeadlineFilter('ALL'); setSortBy('recent'); }} className="text-xs font-medium text-violet-700 underline dark:text-violet-200">Сбросить всё</button></div>
         <div className="flex gap-2 text-xs"><button type="button" onClick={() => setView('board')} aria-pressed={view === 'board'} className={`rounded-lg px-3 py-1.5 ${view === "board" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>По статусам</button><button type="button" onClick={() => setView('list')} aria-pressed={view === 'list'} className={`rounded-lg px-3 py-1.5 ${view === "list" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>Список</button></div>
         </div>}
-        {loading ? <p role="status">Загружаем задачи…</p> : visibleTasks.length === 0 ? <p className="rounded-xl border border-current/15 p-4 text-sm opacity-60">{tasks.length === 0 ? 'Пока нет заданий.' : 'Нет заданий по выбранным фильтрам.'}</p> : (
+        {loading ? <p role="status">Загружаем задачи…</p> : visibleTasks.length === 0 ? <p className="editorial-workflow-empty rounded-xl border p-4 text-sm">{tasks.length === 0 ? 'Пока нет заданий.' : 'Нет заданий по выбранным фильтрам.'}</p> : (
             <div className={view === 'board' ? "grid min-w-0 gap-3 xl:grid-cols-2" : "space-y-2"}>{(view === 'board' ? Object.entries(LABELS).map(([id, title]) => ({ id, title })) : [{ id: 'all', title: 'Все задания' }]).map((stage) => {
                 const list = stage.id === 'all' ? visibleTasks : visibleTasks.filter((task) => task.status === stage.id);
                 if (!list.length) return null;

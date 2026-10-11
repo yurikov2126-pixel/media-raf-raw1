@@ -499,3 +499,62 @@ html.dark .editorial-personal-event-dialog input[type="date"] { color-scheme: da
   .editorial-glass .editorial-content-plan-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .editorial-glass .editorial-content-plan-filters > label:last-child { grid-column: 1 / -1; }
 }
+
+
+/* Project and task workspace: replace opaque grey legacy panels with editorial surfaces. */
+.editorial-glass .editorial-projects-refined,
+.editorial-glass .editorial-workflow-refined { color: var(--ed-text); }
+.editorial-glass .editorial-projects-refined :is(h2,h3,h4,h5),
+.editorial-glass .editorial-workflow-refined :is(h3,h4,h5) { color: var(--ed-text); }
+.editorial-glass .editorial-projects-refined :is(form,article),
+.editorial-glass .editorial-workflow-refined :is(.editorial-workflow-composer,.editorial-workflow-review-queue,.editorial-workflow-empty) {
+  background: var(--ed-surface) !important;
+  color: var(--ed-text) !important;
+  border: 1px solid var(--ed-border) !important;
+  border-radius: 1rem;
+  box-shadow: var(--ed-shadow);
+}
+.editorial-glass .editorial-workflow-refined .editorial-workflow-review-queue > div > div {
+  background: var(--ed-surface-strong) !important; border-color: var(--ed-border) !important;
+}
+.editorial-glass .editorial-projects-refined :is(input:not([type="checkbox"]),select,textarea),
+.editorial-glass .editorial-workflow-refined :is(input:not([type="checkbox"]),select,textarea) {
+  background: var(--ed-surface-strong) !important;
+  color: var(--ed-text) !important;
+  border: 1px solid var(--ed-border) !important;
+  border-radius: .8rem; font-size: 16px;
+  -webkit-text-fill-color: var(--ed-text);
+  color-scheme: light;
+}
+.dark .editorial-glass .editorial-projects-refined :is(input,select,textarea),
+.dark .editorial-glass .editorial-workflow-refined :is(input,select,textarea),
+[data-theme="dark"] .editorial-glass .editorial-projects-refined :is(input,select,textarea),
+[data-theme="dark"] .editorial-glass .editorial-workflow-refined :is(input,select,textarea) { color-scheme: dark; }
+.editorial-glass .editorial-workflow-refined .editorial-workflow-composer-form label {
+  color: var(--ed-text); font-weight: 550;
+}
+.editorial-glass .editorial-workflow-refined .editorial-workflow-composer-form label > :is(input,select) {
+  display: block; min-height: 44px; margin-top: .4rem; padding: .65rem .85rem;
+}
+.editorial-glass .editorial-workflow-refined .editorial-workflow-composer-form label:has(input[type="checkbox"]) {
+  display: flex; align-items: center; gap: .65rem;
+}
+.editorial-glass .editorial-workflow-refined .editorial-workflow-composer-form input[type="checkbox"] {
+  accent-color: #7c3aed; width: 17px; height: 17px;
+}
+.editorial-glass .editorial-workflow-refined :is(button.bg-violet-600,button.bg-violet-700),
+.editorial-glass .editorial-projects-refined :is(button.bg-violet-600,button.bg-violet-700) {
+  background: #7c3aed !important; color: white !important; -webkit-text-fill-color: white;
+  border-radius: .8rem;
+}
+.editorial-glass .editorial-workflow-refined button[aria-pressed="true"] { font-weight: 700; }
+.editorial-glass .editorial-workflow-refined :is(button,input,select,textarea):focus-visible,
+.editorial-glass .editorial-projects-refined :is(button,input,select,textarea):focus-visible {
+  outline: 3px solid #a78bfa; outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .editorial-glass .editorial-workflow-refined .editorial-workflow-composer { padding: .85rem; }
+  .editorial-glass .editorial-workflow-refined .editorial-workflow-composer-form button[type="submit"] {
+    min-height: 44px;
+  }
+}
