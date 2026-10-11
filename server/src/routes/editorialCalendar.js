@@ -29,7 +29,7 @@ function repeatPayload(body) {
     const repeat = body.repeat ?? 'NONE';
     if (!REPEAT.has(repeat)) return { error: 'Некорректный тип повторения' };
     if (repeat === 'NONE') return { repeat, until: null };
-    if (typeof body.repeatUntil !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(body.repeatUntil)) return { error: 'Укажите дату окончания повторения' };
+    if (typeof body.repeatUntil !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.repeatUntil)) return { error: 'Укажите дату окончания повторения' };
     const until = parseDate(body.repeatUntil + 'T23:59:59.999Z');
     if (!until) return { error: 'Некорректная дата окончания повторения' };
     return { repeat, until };
