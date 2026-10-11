@@ -53,7 +53,7 @@ function notFound(res) { return res.status(404).json({ error: 'Проект не
 function validText(value, max) { return typeof value === 'string' && !!value.trim() && value.trim().length <= max; }
 function workDay(value, project) {
     if (value === null || value === '') return null;
-    if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return undefined;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
     const day = new Date(value + 'T00:00:00.000Z');
     if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== value) return undefined;
     if (!project.eventDate || day < project.eventDate || day > (project.eventEndDate || project.eventDate)) return undefined;
