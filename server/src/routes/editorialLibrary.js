@@ -27,7 +27,7 @@ const allowed = user => ['ADMIN', 'MENTOR'].includes(user.role);
 const publicFile = file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, description: file.description || '', createdAt: file.createdAt });
 const archive = (res, files, filename) => {
     if (!files.length) return res.status(404).json({ error: 'Нет доступных файлов' });
-    const entries = zipEntries(files.map(file => ({ name: file.name, path: file.diskPath || path.join(root, file.storageName), size: file.size })));
+    const entries = zipEntries(files.map(file => ({ name: file.name, zipFolder: file.zipFolder, path: file.diskPath || path.join(root, file.storageName), size: file.size })));
     const size = entries.reduce((sum, file) => sum + file.size + 200 + Buffer.byteLength(file.zipName), 0);
     if (size > 0xffffffff || entries.length > 65535) return res.status(413).json({ error: 'Архив слишком большой. Скачайте файлы по отдельности.' });
     res.setHeader('Content-Type', 'application/zip');
@@ -49,6 +49,34 @@ const getShare = async token => {
     if (!share || share.revokedAt || (share.expiresAt && share.expiresAt <= new Date())) return null;
     return share;
 };
+const roleNames = {
+    LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф',
+    LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора',
+    ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр',
+    INTERVIEWER: 'Интервьюер', VIDEO_EDITOR: 'Монтажёр',
+};
+const shareFolderName = (member, fullName) => {
+    const parts = String(fullName || 'Неизвестный участник').trim().split(/\\s+/);
+    const person = parts.length === 2 ? parts[1] + ' ' + parts[0] : parts.join(' ');
+    return (member?.role === 'MANAGER' ? 'Руководитель' : roleNames[member?.crewPosition] || 'Участник команды') + ' - ' + person;
+};
+const sharedFolderPaths = async files => {
+    const materialIdsInShare = files.filter(f => f.id.startsWith('material:')).map(f => f.id.slice(9));
+    if (!materialIdsInShare.length) return new Map();
+    const materials = await prisma.editorialMaterialFile.findMany({
+        where: { id: { in: materialIdsInShare } },
+        select: { id: true, uploaderId: true, task: { select: { assigneeId: true, projectId: true, project: { select: { title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
+    });
+    const paths = new Map();
+    for (const material of materials) {
+        const project = material.task.project;
+        const personId = material.task.assigneeId || material.uploaderId;
+        const member = project.members.find(m => m.userId === personId);
+        const name = member?.user?.fullName || member?.user?.username || 'Неизвестный участник';
+        paths.set(materialKey(material.id), { projectId: material.task.projectId, projectTitle: project.title, personId, folder: shareFolderName(member, name) });
+    }
+    return paths;
+};
 const sharedFiles = async share => resolveFiles(Array.isArray(share.fileIds) ? share.fileIds : []);
 
 router.get('/public/:token', async (req, res, next) => {
@@ -56,8 +84,9 @@ router.get('/public/:token', async (req, res, next) => {
         const share = await getShare(req.params.token);
         if (!share) return res.status(404).json({ error: 'Ссылка недоступна или срок её действия истёк' });
         const files = await sharedFiles(share);
+        const paths = await sharedFolderPaths(files);
         res.setHeader('Cache-Control', 'no-store');
-        res.json({ share: { title: share.title, description: share.description, createdAt: share.createdAt, expiresAt: share.expiresAt }, files: files.map(publicFile) });
+        res.json({ share: { title: share.title, description: share.description, createdAt: share.createdAt, expiresAt: share.expiresAt }, files: files.map(file => ({ ...publicFile(file), ...(paths.get(file.id) || {}) })) });
     } catch (error) { next(error); }
 });
 router.get('/public/:token/archive', async (req, res, next) => {
@@ -65,7 +94,9 @@ router.get('/public/:token/archive', async (req, res, next) => {
         const share = await getShare(req.params.token);
         if (!share) return res.status(404).json({ error: 'Ссылка недоступна' });
         res.setHeader('Cache-Control', 'no-store');
-        return archive(res, await sharedFiles(share), 'editorial-share.zip');
+        const files = await sharedFiles(share);
+        const paths = await sharedFolderPaths(files);
+        return archive(res, files.map(file => ({ ...file, zipFolder: paths.get(file.id)?.folder || '' })), 'editorial-share.zip');
     } catch (error) { next(error); }
 });
 router.get('/public/:token/files/:fileId', async (req, res, next) => {
