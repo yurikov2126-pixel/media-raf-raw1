@@ -41,6 +41,7 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
     const [startsAt, setStartsAt] = useState(localInput(start));
     const [endsAt, setEndsAt] = useState(localInput(finish));
     const [allDay, setAllDay] = useState(event?.allDay || false);
+    const [reminderMinutes, setReminderMinutes] = useState(event?.reminderMinutes == null ? '' : String(event.reminderMinutes));
     const [scope, setScope] = useState('one');
     const [repeat, setRepeat] = useState('NONE');
     const [repeatUntil, setRepeatUntil] = useState(() => {
@@ -65,7 +66,7 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
         try {
             await api(event ? `/editorial/calendar/${event.id}` : '/editorial/calendar', {
                 token, method: event ? 'PATCH' : 'POST',
-                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay, scope: event?.seriesId && scope === 'series' ? 'series' : 'one', repeat: event?.seriesId && scope === 'one' ? 'NONE' : repeat, repeatUntil },
+                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay, reminderMinutes: reminderMinutes === '' ? null : Number(reminderMinutes), scope: event?.seriesId && scope === 'series' ? 'series' : 'one', repeat: event?.seriesId && scope === 'one' ? 'NONE' : repeat, repeatUntil },
             });
             onSaved();
         } catch (err) { setError(err.message || 'Не удалось сохранить событие'); }
@@ -92,6 +93,15 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
                     </select></label>
                     {repeat !== 'NONE' && <label className="block text-sm font-semibold">Повторять до<input type="date" required value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /><span className="mt-1 block text-xs opacity-70">Не более года. Время повторений сохраняется по UTC; при переходе на летнее время местный час может измениться.</span></label>}
                 </div>}
+                <label className="block text-sm font-semibold">Напомнить
+                    <select value={reminderMinutes} onChange={e => setReminderMinutes(e.target.value)} className="mt-1 block w-full rounded-xl border p-3">
+                        <option value="">Без напоминания</option>
+                        <option value="10">За 10 минут</option>
+                        <option value="30">За 30 минут</option>
+                        <option value="60">За 1 час</option>
+                        <option value="1440">За 1 день</option>
+                    </select>
+                </label>
                 <label className="block text-sm font-semibold">Заметки<textarea maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" placeholder="Детали и планы" /></label>
         {error && <p role="alert" className="text-sm text-rose-500">{error}</p>}
                 <div className="flex flex-wrap gap-2 pt-2"><button disabled={busy} type="submit" className="editorial-personal-event-primary min-h-11 flex-1 rounded-xl px-4 font-semibold">{busy ? 'Сохранение…' : 'Сохранить'}</button>{event && <button disabled={busy} type="button" onClick={remove} className="editorial-personal-event-delete min-h-11 rounded-xl border px-4">Удалить</button>}</div>
