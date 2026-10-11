@@ -1004,6 +1004,7 @@ model SeasonSubmission {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   files SeasonSubmissionFile[]
   @@unique([seasonId, userId])
+  @@unique([challengeId])
   @@index([seasonId, status])
 }
 
