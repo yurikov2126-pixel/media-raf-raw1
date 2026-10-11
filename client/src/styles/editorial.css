@@ -250,3 +250,40 @@ body[data-theme="dark"] .editorial-task-dialog {
 @media (prefers-reduced-motion: reduce) {
   .editorial-overview-stat { transition: none; transform: none !important; }
 }
+
+/* Calendar: same editorial surfaces in both themes. */
+.editorial-calendar { color: var(--ed-text); }
+.editorial-calendar-surface { color: var(--ed-text); background: var(--ed-surface); border-color: var(--ed-border); box-shadow: var(--ed-shadow); }
+.editorial-calendar-control,.editorial-calendar-day,.editorial-calendar-item {
+  background: var(--ed-surface-strong); border-color: var(--ed-border); color: var(--ed-text);
+}
+.editorial-calendar-day[aria-pressed="true"] { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.editorial-calendar-count { background: #ddd6fe; color: #3b0764; }
+.editorial-calendar-day[aria-pressed="true"] .editorial-calendar-count { background: #fff; color: #5b21b6; }
+.editorial-calendar-item:hover,.editorial-calendar-control:hover { border-color: var(--ed-accent); }
+.editorial-calendar :is(button,a):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
+/* Personal task cards: remove inherited white background strips from inner sections. */
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card { background: var(--ed-surface); border-color: var(--ed-border); }
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-meta,
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-actions {
+  background: transparent !important; box-shadow: none !important;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-actions a {
+  background: var(--ed-surface-strong); color: #6d28d9; border-color: #b69cf0;
+}
+.dark .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-actions a,
+[data-theme="dark"] .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-actions a { color: #e9ddff; }
+/* Light modal header: buttons should match the form, not a dark navbar. */
+html[data-theme="light"] .editorial-task-dialog .editorial-task-modal-header > button {
+  background: #f2ecfb !important; color: #33254b !important; border-color: #b8aacd !important;
+}
+html[data-theme="light"] .editorial-task-dialog .editorial-task-modal-header > button:hover { background: #e9defb !important; }
+html[data-theme="light"] .editorial-task-dialog .editorial-task-modal-footer button {
+  background: #ede6f8 !important; color: #302244 !important; -webkit-text-fill-color: #302244 !important;
+  border: 1px solid #aa96c7 !important;
+}
+html[data-theme="dark"] .editorial-task-dialog .editorial-task-modal-footer button {
+  background: #312d49 !important; color: #fff !important; -webkit-text-fill-color: #fff !important;
+}
+.editorial-task-dialog .editorial-task-modal-header > button:focus-visible,
+.editorial-task-dialog .editorial-task-modal-footer button:focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
