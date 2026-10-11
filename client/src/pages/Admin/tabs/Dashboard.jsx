@@ -336,11 +336,12 @@ function MaintenanceBlock({ token, onReload }) {
     const [error, setError] = useState('');
     const [expandedKey, setExpandedKey] = useState(null);
     const [storageHealth, setStorageHealth] = useState(null);
+    const [editorialIntegrity, setEditorialIntegrity] = useState(null);
     const [storageError, setStorageError] = useState('');
     const [storageLoading, setStorageLoading] = useState(false);
     const checkStorage = async () => {
         setStorageLoading(true); setStorageError('');
-        try { setStorageHealth(await api('/admin/maintenance/editorial-storage', { token })); }
+        try { const [storage, integrity] = await Promise.all([api('/admin/maintenance/editorial-storage', { token }), api('/admin/maintenance/editorial-integrity', { token })]); setStorageHealth(storage); setEditorialIntegrity(integrity); }
         catch (e) { setStorageError(e.message); }
         finally { setStorageLoading(false); }
     };
@@ -387,10 +388,11 @@ function MaintenanceBlock({ token, onReload }) {
         <div className="card p-5">
             <section className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div><h3 className="font-semibold">Файлы редакции и вложения заданий</h3><p className="text-xs text-white/50">Проверка целостности хранилищ. Без удаления файлов.</p></div>
+                    <div><h3 className="font-semibold">Файлы редакции и вложения заданий</h3><p className="text-xs text-white/50">Проверка файлов, дат заданий и общих ссылок. Только диагностика, без удаления.</p></div>
                     <button type="button" className="btn-ghost !py-2 text-sm" onClick={checkStorage} disabled={storageLoading}>{storageLoading ? 'Проверяем…' : 'Проверить файлы'}</button>
                 </div>
                 {storageError && <p role="alert" className="text-sm text-pink">{storageError}</p>}
+                {editorialIntegrity && <div className="grid gap-3 md:grid-cols-3">{editorialIntegrity.checks.map(check => <div key={check.key} className="rounded-xl border border-white/10 p-3"><h4 className="font-semibold">{check.label}</h4><p className={check.count ? 'text-orange-300 text-sm' : 'text-lime text-sm'}>{check.count ? 'Найдено: ' + check.count : '✓ Не обнаружено'}</p>{check.details.length > 0 && <details className="mt-2 text-xs"><summary>Посмотреть записи</summary>{check.details.map(item => <p className="mt-1 break-words" key={item.id}>{item.title} <span className="opacity-50">({item.id})</span></p>)}</details>}</div>)}</div>}
                 {storageHealth && <div className="grid gap-3 md:grid-cols-2">{storageHealth.checks.map(check => <div key={check.key} className="rounded-xl border border-white/10 p-3"><h4 className="font-semibold">{check.label}</h4><p className="text-xs text-white/60">В базе: {check.total} · Нет на диске: {check.missingCount} · Размер отличается: {check.sizeMismatchCount}</p><p className={check.readable && !check.missingCount && !check.sizeMismatchCount ? 'text-lime text-sm' : 'text-orange-300 text-sm'}>{check.readable && !check.missingCount && !check.sizeMismatchCount ? '✓ Всё в порядке' : '⚠ Требует внимания'}</p>{[...(check.missing || []).map(x => x.name), ...(check.sizeMismatches || []).map(x => x.name)].length > 0 && <details className="mt-2 text-xs"><summary>Проблемные файлы</summary>{[...(check.missing || []).map(x => x.name), ...(check.sizeMismatches || []).map(x => x.name)].map((name, i) => <p key={i} className="break-all">{name}</p>)}</details>}</div>)}</div>}
             </section>
             <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
