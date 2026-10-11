@@ -269,6 +269,7 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'UPDATED', details: JSON.stringify({ before: Object.fromEntries(Object.keys(data).map((key) => [key, task[key] instanceof Date ? task[key].toISOString() : task[key]])), after: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value])) }) } });
             if (data.assigneeId && data.assigneeId !== task.assigneeId) await notifyEditorial(tx, project, result, [data.assigneeId], 'assigned', req.user.id);
             if (data.status && data.status !== task.status) await notifyEditorial(tx, project, result, [task.assigneeId, task.createdById], 'status', req.user.id);
+            if (data.dueAt !== undefined && (data.dueAt?.getTime() ?? null) !== (task.dueAt?.getTime() ?? null)) await notifyEditorial(tx, project, result, [result.assigneeId], 'deadline_changed', req.user.id);
             return result;
         });
         res.json({ task: updated });
