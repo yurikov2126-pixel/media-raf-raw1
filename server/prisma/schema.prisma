@@ -80,6 +80,8 @@ model User {
   seasonScores GamificationSeasonScore[]
   stickerInventory StickerInventory[]
   stickerGrants StickerGrant[]
+  stickerOffersSent StickerTrade[] @relation("StickerTradeSender")
+  stickerOffersReceived StickerTrade[] @relation("StickerTradeReceiver")
 
   // Курсы: практики и ДЗ
   supervisedPracticals PracticalWork[]       @relation("PracticalSupervisor")
@@ -1063,4 +1065,19 @@ model StickerGrant {
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   sticker Sticker @relation(fields:[stickerId],references:[id],onDelete:Cascade)
   @@index([userId,createdAt])
+}
+
+model StickerTrade {
+  id String @id @default(cuid())
+  senderId String
+  receiverId String
+  offeredStickerId String
+  requestedStickerId String
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  sender User @relation("StickerTradeSender",fields:[senderId],references:[id],onDelete:Cascade)
+  receiver User @relation("StickerTradeReceiver",fields:[receiverId],references:[id],onDelete:Cascade)
+  @@index([receiverId,status])
+  @@index([senderId,status])
 }
