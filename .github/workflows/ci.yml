@@ -17,6 +17,7 @@ jobs:
 
     steps:
       - name: Start local PostgreSQL 16 without Docker
+        working-directory: /tmp
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-16
