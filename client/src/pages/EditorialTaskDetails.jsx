@@ -14,6 +14,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [description, setDescription] = useState(task.description || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
     const [parentId, setParentId] = useState(task.parentId || '');
+    const [workDate, setWorkDate] = useState(task.workDate ? task.workDate.slice(0, 10) : '');
     const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
@@ -22,6 +23,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         setTitle(task.title); setDescription(task.description || '');
         setAssigneeId(task.assigneeId || '');
         setParentId(task.parentId || '');
+        setWorkDate(task.workDate ? task.workDate.slice(0, 10) : '');
         setDueAt(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
     }, [task]);
     const deadlineAllowed = canHaveDeadline(project.members, assigneeId);
@@ -53,7 +55,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
             title: title.trim(), description, assigneeId: assigneeId || null,
-            parentId: parentId || null, dueAt: deadlineAllowed && dueAt ? new Date(dueAt).toISOString() : null,
+            parentId: parentId || null, workDate: workDate || null, dueAt: deadlineAllowed && dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
     return <section className="editorial-task-details min-w-0 space-y-4" aria-label={`Карточка задачи ${task.title}`}>
@@ -83,6 +85,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             {deadlineAllowed && <label className="block text-sm">Дедлайн
                 <input type="datetime-local" disabled={!canEdit || saving} value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
             </label>}
+            {project.eventDate && <label className="block text-sm">День выполнения<input type="date" min={project.eventDate.slice(0, 10)} max={(project.eventEndDate || project.eventDate).slice(0, 10)} disabled={!canEdit || saving} value={workDate} onChange={e => setWorkDate(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" /></label>}
             <label className="block text-sm">Родительская задача
                 <select disabled={!canEdit || saving} value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
                     <option value="">Нет</option>{availableParents.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
