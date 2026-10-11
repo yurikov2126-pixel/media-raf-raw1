@@ -34,30 +34,68 @@ function repeatPayload(body) {
     if (!until) return { error: 'Некорректная дата окончания повторения' };
     return { repeat, until };
 }
-function occurrences(data, repeat, until) {
+function zoneParts(date, zone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(date);
+    const get = type => Number(parts.find(part => part.type === type).value);
+    return { year: get('year'), month: get('month'), day: get('day'),
+        hour: get('hour'), minute: get('minute'), second: get('second') };
+}
+function localToInstant(local, zone) {
+    const target = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+    let instant = target;
+    for (let i = 0; i < 5; i++) {
+        const actual = zoneParts(new Date(instant), zone);
+        const seen = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+        const delta = target - seen;
+        if (!delta) return new Date(instant);
+        instant += delta;
+    }
+    // Nonexistent local times (DST spring-forward) are rejected instead of silently shifting.
+    return null;
+}
+function occurrences(data, repeat, until, zone = 'UTC') {
     if (repeat === 'NONE') return [{ ...data }];
     const origin = data.startsAt;
     if (until < origin || until - origin > 366 * 86400000) return null;
     const duration = data.endsAt - origin;
     const list = [];
-    const cursor = new Date(origin);
-    for (let step = 0; step < 367 && cursor <= until; step++) {
-        const weekday = cursor.getUTCDay();
-        if (repeat !== 'WEEKDAYS' || (weekday !== 0 && weekday !== 6)) {
-            list.push({ ...data, startsAt: new Date(cursor), endsAt: new Date(cursor.getTime() + duration) });
-        }
-        if (repeat === 'DAILY' || repeat === 'WEEKDAYS') cursor.setUTCDate(cursor.getUTCDate() + 1);
-        if (repeat === 'WEEKLY') cursor.setUTCDate(cursor.getUTCDate() + 7);
+    const local = zoneParts(origin, zone);
+    const originalDay = local.day;
+    const firstMonth = local.month;
+    const firstYear = local.year;
+    for (let step = 0; step < 367; step++) {
+        let year = firstYear, month = firstMonth, day = originalDay;
         if (repeat === 'MONTHLY') {
-            const year = origin.getUTCFullYear();
-            const month = origin.getUTCMonth() + step + 1;
-            const next = new Date(Date.UTC(year, month, 1, origin.getUTCHours(), origin.getUTCMinutes(), origin.getUTCSeconds(), origin.getUTCMilliseconds()));
-            const maxDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-            next.setUTCDate(Math.min(origin.getUTCDate(), maxDay));
-            cursor.setTime(next.getTime());
+            const monthDate = new Date(Date.UTC(firstYear, firstMonth - 1 + step, 1));
+            year = monthDate.getUTCFullYear();
+            month = monthDate.getUTCMonth() + 1;
+            const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+            day = Math.min(originalDay, lastDay);
+        } else {
+            const offset = step * (repeat === 'WEEKLY' ? 7 : 1);
+            const dayDate = new Date(Date.UTC(firstYear, firstMonth - 1, originalDay + offset));
+            year = dayDate.getUTCFullYear();
+            month = dayDate.getUTCMonth() + 1;
+            day = dayDate.getUTCDate();
         }
+        const localDate = { ...local, year, month, day };
+        const startsAt = localToInstant(localDate, zone);
+        if (!startsAt) continue;
+        if (startsAt > until) break;
+        const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+        if (repeat === 'WEEKDAYS' && (weekday === 0 || weekday === 6)) continue;
+        list.push({ ...data, startsAt, endsAt: new Date(startsAt.getTime() + duration) });
     }
     return list.length && list.length <= 366 ? list : null;
+}
+function recurrenceZone(body) {
+    const zone = body.timeZone || 'UTC';
+    if (typeof zone !== 'string' || zone.length > 100) return null;
+    try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); return zone; }
+    catch { return null; }
 }
 
 router.get('/', async (req, res, next) => {
@@ -79,7 +117,9 @@ router.post('/', async (req, res, next) => {
         if (result.error) return res.status(400).json({ error: result.error });
         const recurrence = repeatPayload(req.body || {});
         if (recurrence.error) return res.status(400).json({ error: recurrence.error });
-        const instances = occurrences(result.data, recurrence.repeat, recurrence.until);
+        const zone = recurrenceZone(req.body || {});
+        if (!zone) return res.status(400).json({ error: 'Некорректный часовой пояс' });
+        const instances = occurrences(result.data, recurrence.repeat, recurrence.until, zone);
         if (!instances) return res.status(400).json({ error: 'Повторение должно завершаться в течение года' });
         const seriesId = recurrence.repeat === 'NONE' ? null : randomUUID();
         const event = await prisma.$transaction(async tx => {
