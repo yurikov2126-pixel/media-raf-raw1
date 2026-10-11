@@ -42,6 +42,7 @@ model User {
   editorialTaskApplications EditorialTaskApplication[]
   editorialTaskEvents EditorialTaskEvent[]
   editorialMaterialFiles EditorialMaterialFile[]
+  personalCalendarEvents PersonalCalendarEvent[]
 
   // Базовые связи
   albums        PhotoAlbum[]
@@ -854,4 +855,20 @@ model EditorialMaterialFile {
   task EditorialTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
   uploader User @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
   @@index([taskId, version])
+}
+
+model PersonalCalendarEvent {
+  id          String   @id @default(cuid())
+  ownerId     String
+  title       String
+  description String   @default("")
+  startsAt    DateTime
+  endsAt      DateTime
+  allDay      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, startsAt])
 }
