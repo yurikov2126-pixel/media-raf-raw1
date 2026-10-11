@@ -27,6 +27,8 @@ router.use('/projects/:projectId', (req, res, next) => {
     next();
 });
 
+const DEADLINE_ROLES = new Set(['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'VIDEO_EDITOR']);
+const deadlineAllowed = (project, assigneeId) => DEADLINE_ROLES.has(project.members.find(member => member.userId === assigneeId)?.crewPosition);
 const STATUSES = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'REVISION', 'APPROVED', 'DONE'];
 const isAdmin = (user) => user.role === 'ADMIN';
 const memberRole = (project, user) => project.members.find((member) => member.userId === user.id)?.role;
@@ -193,6 +195,7 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
         if (parentId && !(await prisma.editorialTask.findFirst({ where: { id: parentId, projectId: project.id } }))) return res.status(400).json({ error: 'Родительская задача не найдена' });
         if (assigneeId && !project.members.some((m) => m.userId === assigneeId)) return res.status(400).json({ error: 'Исполнитель должен быть участником проекта' });
         const due = dateValue(dueAt);
+        if (due && !deadlineAllowed(project, assigneeId)) return res.status(400).json({ error: 'Дедлайн доступен только фотографу, видеографу и монтажёру' });
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
         if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
         const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, stageId, parentId, assigneeId, dueAt: due, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
@@ -238,9 +241,11 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             }
             if (req.body.dueAt !== undefined) {
                 const due = dateValue(req.body.dueAt);
+                if (due && !deadlineAllowed(project, data.assigneeId !== undefined ? data.assigneeId : task.assigneeId)) return res.status(400).json({ error: 'Дедлайн доступен только фотографу, видеографу и монтажёру' });
                 if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
                 data.dueAt = due;
             }
+            if (data.assigneeId !== undefined && !deadlineAllowed(project, data.assigneeId)) data.dueAt = null;
             if (req.body.parentId !== undefined) {
                 const parentId = req.body.parentId;
                 if (parentId === task.id) return res.status(400).json({ error: 'Задача не может быть собственной подзадачей' });
