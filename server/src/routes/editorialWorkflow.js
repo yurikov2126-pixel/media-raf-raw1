@@ -123,6 +123,44 @@ router.get('/people', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// Aggregated project monitoring; only members and administrators can inspect these figures.
+router.get('/projects/:projectId/operations', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const tasks = await prisma.editorialTask.findMany({
+            where: { projectId: project.id },
+            select: { id: true, title: true, status: true, assigneeId: true, dueAt: true,
+                _count: { select: { files: true } } },
+        });
+        const now = Date.now();
+        const finished = new Set(['DONE', 'APPROVED']);
+        const totals = { total: tasks.length, completed: 0, inProgress: 0, inReview: 0, revision: 0, overdue: 0, dueSoon: 0, withMaterials: 0 };
+        for (const task of tasks) {
+            if (finished.has(task.status)) totals.completed++;
+            if (task.status === 'IN_PROGRESS') totals.inProgress++;
+            if (task.status === 'IN_REVIEW') totals.inReview++;
+            if (task.status === 'REVISION') totals.revision++;
+            if (task._count.files) totals.withMaterials++;
+            if (!finished.has(task.status) && task.dueAt) {
+                const deadline = task.dueAt.getTime();
+                if (deadline < now) totals.overdue++;
+                else if (deadline <= now + 7 * 86400000) totals.dueSoon++;
+            }
+        }
+        const members = project.members.map(member => {
+            const assigned = tasks.filter(task => task.assigneeId === member.userId);
+            return { userId: member.userId, crewPosition: member.crewPosition, role: member.role,
+                total: assigned.length, completed: assigned.filter(task => finished.has(task.status)).length,
+                inProgress: assigned.filter(task => task.status === 'IN_PROGRESS').length,
+                inReview: assigned.filter(task => task.status === 'IN_REVIEW').length,
+                overdue: assigned.filter(task => task.dueAt && !finished.has(task.status) && task.dueAt.getTime() < now).length };
+        });
+        res.json({ totals, members, unassigned: tasks.filter(task => !task.assigneeId).length,
+            completionPercent: tasks.length ? Math.round(totals.completed / tasks.length * 100) : 0 });
+    } catch (error) { next(error); }
+});
+
 router.get('/projects/:projectId/workflow', async (req, res, next) => {
     try {
         const project = await getProject(req.params.projectId);
