@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { createNotification } from '../lib/notify.js';
 
 const router = Router();
 router.use(auth);
 const ROLES = ['MANAGER', 'EDITOR', 'PARTICIPANT', 'OBSERVER'];
 const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA', 'SOUND_ENGINEER', 'INTERVIEWER'];
+const CREW_LABELS = { LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф', LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора', ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр', INTERVIEWER: 'Интервьюер' };
 const validCrewPosition = value => value === null || CREW_POSITIONS.includes(value);
 const isAdmin = (user) => user.role === 'ADMIN';
 const canManage = (project, user) => isAdmin(user) || project.members.some((m) => m.userId === user.id && m.role === 'MANAGER');
@@ -34,6 +36,15 @@ router.post('/projects', async (req, res, next) => {
             include: { members: { include: { user: { select: { id: true, fullName: true, username: true } } } } },
         });
         res.status(201).json({ project: clean(project) });
+        if (visibility === 'TEAM') {
+            const recipients = await prisma.user.findMany({
+                where: { id: { not: req.user.id }, isBanned: false },
+                select: { id: true },
+            });
+            await Promise.allSettled(recipients.map(({ id }) => createNotification(id, 'editorial', {
+                event: 'project_created', projectId: project.id, projectTitle: project.title,
+            })));
+        }
     } catch (error) { next(error); }
 });
 
@@ -91,6 +102,12 @@ router.post('/projects/:id/members', async (req, res, next) => {
             update: { role, ...(req.body.crewPosition !== undefined ? { crewPosition } : {}) },
         });
         res.json({ member });
+        if (userId !== req.user.id) {
+            await createNotification(userId, 'editorial', {
+                event: 'project_joined', projectId: project.id, projectTitle: project.title,
+                crewPosition: member.crewPosition, crewRole: CREW_LABELS[member.crewPosition] || 'Участник команды',
+            });
+        }
     } catch (error) { next(error); }
 });
 
@@ -105,6 +122,17 @@ router.patch('/projects/:id/members/:userId/crew', async (req, res, next) => {
             data: { crewPosition },
         });
         if (!result.count) return res.status(404).json({ error: 'Участник не найден' });
+        res.json({ ok: true });
+    } catch (error) { next(error); }
+});
+
+router.delete('/projects/:id', async (req, res, next) => {
+    try {
+        const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, select: { id: true, createdById: true, completedAt: true } });
+        if (!project) return res.status(404).json({ error: 'Проект не найден' });
+        if (!isAdmin(req.user) && project.createdById !== req.user.id) return res.status(403).json({ error: 'Удалить проект может только создатель или администратор' });
+        if (!project.completedAt) return res.status(409).json({ error: 'Сначала завершите проект' });
+        await prisma.editorialProject.delete({ where: { id: project.id } });
         res.json({ ok: true });
     } catch (error) { next(error); }
 });
