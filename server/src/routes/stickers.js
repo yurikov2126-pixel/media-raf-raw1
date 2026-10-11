@@ -1,4 +1,8 @@
 import {Router} from 'express';
+import multer from 'multer';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
 import {auth} from '../middleware/auth.js';
 import {prisma} from '../lib/prisma.js';
 import {syncStickerRewards} from '../lib/stickerRewards.js';
@@ -26,6 +30,38 @@ router.post('/admin/grant',async(req,res,next)=>{if(req.user.role!=='ADMIN')retu
  }catch(e){next(e)}});
 router.get('/admin/grants',async(req,res,next)=>{if(req.user.role!=='ADMIN')return res.status(403).json({error:'Нет доступа'});try{
  const grants=await prisma.stickerGrant.findMany({include:{user:{select:{fullName:true,username:true}},sticker:{select:{title:true,emoji:true}}},orderBy:{createdAt:'desc'},take:100});res.json({grants});
+ }catch(e){next(e)}});
+
+// Admin-only artwork upload. Stored in the existing public uploads directory.
+const stickerArtUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:3*1024*1024,files:1}});
+router.post('/admin/stickers/:id/artwork', (req,res,next)=>{
+ if(req.user.role!=='ADMIN')return res.status(403).json({error:'Нет доступа'});
+ stickerArtUpload.single('file')(req,res,err=>{if(err)return res.status(400).json({error:err.code==='LIMIT_FILE_SIZE'?'Изображение должно быть не больше 3 МБ':'Ошибка загрузки изображения'});next()});
+},async(req,res,next)=>{try{
+ const sticker=await prisma.sticker.findUnique({where:{id:req.params.id},select:{id:true,imageUrl:true}});
+ if(!sticker)return res.status(404).json({error:'Стикер не найден'});
+ const bytes=req.file?.buffer;
+ if(!bytes)return res.status(400).json({error:'Выберите изображение'});
+ const png=bytes.length>=8&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+ const jpg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+ const webp=bytes.length>=12&&bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP';
+ if(!png&&!jpg&&!webp)return res.status(400).json({error:'Поддерживаются только PNG, JPEG и WebP'});
+ const ext=png?'png':jpg?'jpg':'webp';
+ const root=path.resolve('uploads/stickers');
+ await fs.mkdir(root,{recursive:true});
+ const name=randomUUID()+'.'+ext;
+ const dest=path.join(root,name);
+ await fs.writeFile(dest,bytes,{flag:'wx'});
+ const imageUrl='/uploads/stickers/'+name;
+ try{
+  await prisma.sticker.update({where:{id:sticker.id},data:{imageUrl}});
+ }catch(e){await fs.unlink(dest).catch(()=>{});throw e}
+ // Never remove remote images or arbitrary paths.
+ if(sticker.imageUrl?.startsWith('/uploads/stickers/')){
+  const previous=path.basename(sticker.imageUrl);
+  if(/^[a-f0-9-]{36}\.(png|jpg|webp)$/.test(previous))await fs.unlink(path.join(root,previous)).catch(()=>{});
+ }
+ res.status(201).json({imageUrl});
  }catch(e){next(e)}});
 
 // Admin catalog editor: existing stickers can be renamed and hidden without destroying inventories.
