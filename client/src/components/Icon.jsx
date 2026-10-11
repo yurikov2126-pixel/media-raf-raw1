@@ -5,6 +5,7 @@ const PATHS = {
   search: <><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></>,
   plus: <><path d="M12 5v14"/><path d="M5 12h14"/></>,
   message: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-5.2 4v-4.2a2.5 2.5 0 0 1-1.8-2.3z"/><path d="M7.5 8h9M7.5 11.5h6"/></>,
+  library: <><path d="M4 5h4v15H4zM9 3h4v17H9zM15 6l4-1 3 14-4 1z"/><path d="M5.5 9h1M10 8h2M17 10l2-.4M4 17h4M9 17h4"/></>,
   book: <><path d="M5 4.5h9.5A3.5 3.5 0 0 1 18 8v11.5H7.5A2.5 2.5 0 0 1 5 17z"/><path d="M7.5 19.5A2.5 2.5 0 0 0 10 17V4.5"/><path d="M12.5 9h3"/></>,
   bell: <><path d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20h4"/></>,
   user: <><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></>,

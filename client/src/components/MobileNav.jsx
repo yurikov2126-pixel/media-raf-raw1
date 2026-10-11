@@ -83,7 +83,7 @@ export default function MobileNav({ links, user }) {
 
     const extra = [
         { to: '/app/courses', label: 'Обучение', icon: 'book' },
-        { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+        { to: '/app/wiki', label: 'Wiki', icon: 'library' },
         { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
         { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
         ...(user?.role === 'MENTOR' || user?.role === 'ADMIN'
@@ -97,7 +97,7 @@ export default function MobileNav({ links, user }) {
     const parseMenu = (value, fallback) => { try { const v = JSON.parse(value || 'null'); return Array.isArray(v) ? v : fallback; } catch { return fallback; } };
     const navKey = standalone ? 'nav_pwa_items' : 'nav_mobile_items';
     const moreKey = standalone ? 'nav_pwa_more_items' : 'nav_mobile_more_items';
-    const resolve = (item) => ({ ...item, to: item.to === '/app/u/me' ? `/app/u/${user.username}` : item.to });
+    const resolve = (item) => ({ ...item, icon: item.to === '/app/wiki' && item.icon === 'book' ? 'library' : item.icon, to: item.to === '/app/u/me' ? `/app/u/${user.username}` : item.to });
     const allowed = (item) => (!item.roles || item.roles.includes(user?.role)) && (item.action === 'more' || (typeof item.to === 'string' && item.to.startsWith('/app') && !item.to.startsWith('//'))) && (item.to !== '/app/admin' || user?.role === 'ADMIN') && (item.to !== '/app/mentor' || ['ADMIN', 'MENTOR'].includes(user?.role));
     const primaryItems = parseMenu(siteSettings[navKey], primary).filter(allowed).map(resolve).slice(0, 5);
     const extraItems = parseMenu(siteSettings[moreKey], extra).filter(allowed).filter(item => item.action !== 'more').map(resolve);

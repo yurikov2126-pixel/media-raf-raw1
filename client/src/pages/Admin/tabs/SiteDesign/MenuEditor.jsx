@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import IconPicker from './IconPicker.jsx';
+import MenuPreview from './MenuPreview.jsx';
 
 const DEFAULT_DESKTOP = [
     { to: '/app', label: 'Главная', icon: 'dashboard', end: true },
     { to: '/app/feed', label: 'Лента', icon: 'feed' },
     { to: '/app/chats', label: 'Чаты', icon: 'message' },
     { to: '/app/courses', label: 'Обучение', icon: 'book' },
-    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'library' },
     { to: '/app/editorial', label: 'Редакция', icon: 'newspaper' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/mentor', label: 'Руководителю', icon: 'users', roles: ['MENTOR', 'ADMIN'] },
@@ -21,7 +22,7 @@ const DEFAULT_MOBILE = [
 ];
 const DEFAULT_EXTRA = [
     { to: '/app/courses', label: 'Обучение', icon: 'book' },
-    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'library' },
     { to: '/app/editorial', label: 'Редакция', icon: 'book' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
@@ -64,12 +65,15 @@ export default function MenuEditor({ settings, update }) {
     const items = device === 'desktop' && settings.nav_desktop_customized !== 'true'
         ? [...saved, ...DEFAULT_DESKTOP.filter(item => !saved.some(existing => existing.to === item.to))]
         : saved;
+    const previewPrimary = device === 'desktop' ? items : parse(settings[cfg.key], DEFAULT_MOBILE);
+    const previewExtra = device === 'desktop' ? [] : parse(settings[cfg.extra], DEFAULT_EXTRA);
     const setItems = (value) => update({ [key]: JSON.stringify(value), ...(device === 'desktop' ? { nav_desktop_customized: 'true' } : {}) });
     return <div className="space-y-5">
         <div><h3 className="font-semibold">Настройка навигации для разных устройств</h3><p className="text-sm text-white/50">Каждый вариант сохраняется отдельно. Права доступа проверяются сайтом независимо от меню.</p></div>
         <div className="flex flex-wrap gap-2">{Object.entries(CONFIG).map(([value, c]) => <button type="button" key={value} aria-pressed={device === value} className={device === value ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => { setDevice(value); setArea('primary'); }}>{c.label}</button>)}</div>
         {cfg.extra && <div className="flex gap-2"><button type="button" className={area === 'primary' ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => setArea('primary')}>Нижняя панель</button><button type="button" className={area === 'extra' ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => setArea('extra')}>Меню «Ещё»</button></div>}
         <div className="rounded-xl border border-white/10 p-3 text-xs text-white/60">{device === 'desktop' ? 'Полный список пунктов реального бокового меню. Системные разделы также можно переставлять или скрывать; доступ по ролям остаётся защищённым.' : area === 'primary' ? 'Пункты нижней панели. Для открытия дополнительного меню оставьте пункт с действием «Ещё».' : 'Пункты, которые открываются в меню «Ещё».'}</div>
+        <MenuPreview device={device} primary={previewPrimary} extra={previewExtra} settings={settings}/>
         <ItemsEditor key={key} items={items} onChange={setItems} mobile={device !== 'desktop'} more={area === 'extra'}/>
         <button type="button" className="btn-ghost text-xs" onClick={() => update({ [key]: JSON.stringify(fallback), ...(device === 'desktop' ? { nav_desktop_customized: 'true' } : {}) })}>Восстановить стандартные пункты</button>
     </div>;

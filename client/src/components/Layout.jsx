@@ -17,7 +17,7 @@ const FALLBACK_LINKS = [
     { to: '/app/feed', label: 'Лента', icon: 'feed' },
     { to: '/app/chats', label: 'Чаты', icon: 'message' },
     { to: '/app/courses', label: 'Обучение', icon: 'book' },
-    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'library' },
 ];
 
 const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
@@ -26,7 +26,7 @@ function normalizeLinks(items) {
     const legacy = { '🏠': 'dashboard', '💬': 'message', '🎓': 'book', '📖': 'book', '🏆': 'trophy', '⚙️': 'settings' };
     return items.map((item) => ({
         ...item,
-        icon: legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles'),
+        icon: item.to === '/app/wiki' && item.icon === 'book' ? 'library' : (legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles')),
     }));
 }
 
