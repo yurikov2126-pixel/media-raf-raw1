@@ -24,7 +24,7 @@ router.get('/catalog',async(req,res,next)=>{try{
  const [packs,owned]=await Promise.all([prisma.stickerPack.findMany({where:{active:true},include:{stickers:{where:{active:true},orderBy:{number:'asc'}}},orderBy:{title:'asc'}}),prisma.stickerInventory.findMany({where:{userId:req.user.id,quantity:{gt:0}},select:{stickerId:true,quantity:true}})]);
  const quantities=new Map(owned.map(x=>[x.stickerId,x.quantity]));
  const isAdmin=req.user.role==='ADMIN';
- res.json({packs:packs.map(p=>({...p,stickers:p.stickers.map(s=>({...s,quantity:isAdmin?Math.max(1,quantities.get(s.id)||0):quantities.get(s.id)||0}))}))});
+ res.json({packs:packs.map(p=>({...p,stickers:p.stickers.map(s=>({...s,quantity:quantities.get(s.id)||0,adminUnlocked:isAdmin}))}))});
  }catch(e){next(e)}});
 router.get('/my',async(req,res,next)=>{try{
  await syncStickerRewards(req.user.id);const inventory=await prisma.stickerInventory.findMany({where:{userId:req.user.id,quantity:{gt:0}},include:{sticker:{include:{pack:true}}}});res.json({inventory})}catch(e){next(e)}});
