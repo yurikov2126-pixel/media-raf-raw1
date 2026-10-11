@@ -41,7 +41,8 @@ router.post('/projects', async (req, res, next) => {
         const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
         const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
         const visibility = req.body.visibility === 'TEAM' ? 'TEAM' : 'CLOSED';
-        const eventDate = typeof req.body.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.eventDate) ? new Date(`${req.body.eventDate}T00:00:00.000Z`) : null;
+        const eventDate = req.body.eventDate ? parseDay(req.body.eventDate) : null;
+        const eventEndDate = req.body.eventEndDate ? parseDay(req.body.eventEndDate) : null;
         if ((req.body.eventDate && !eventDate) || (req.body.eventEndDate && !eventEndDate)) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
         const rangeError = validateEventRange(eventDate, eventEndDate);
         if (rangeError) return res.status(400).json({ error: rangeError });
