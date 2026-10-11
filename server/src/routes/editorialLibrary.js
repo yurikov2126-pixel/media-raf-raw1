@@ -84,10 +84,10 @@ router.use((req, res, next) => allowed(req.user) ? next() : res.status(403).json
 router.get('/folders', async (_req, res, next) => {
     try {
         const [projects, files] = await Promise.all([
-            prisma.editorialProject.findMany({ select: { id: true, title: true, tasks: { select: { id: true, title: true, materials: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
+            prisma.editorialProject.findMany({ select: { id: true, title: true, tasks: { select: { id: true, title: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
             prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
         ]);
-        res.json({ folders: projects.map(p => ({ id: p.id, title: p.title, files: p.tasks.flatMap(t => t.materials.map(f => ({ ...fileView(f), taskTitle: t.title, projectId: p.id }))) })), files: files.map(publicFile) });
+        res.json({ folders: projects.map(p => ({ id: p.id, title: p.title, files: p.tasks.flatMap(t => t.materialFiles.map(f => ({ ...fileView(f), taskTitle: t.title, projectId: p.id }))) })), files: files.map(publicFile) });
     } catch (error) { next(error); }
 });
 router.post('/shares/quick', async (req, res, next) => {
@@ -98,9 +98,9 @@ router.post('/shares/quick', async (req, res, next) => {
         let ids = [];
         let title = '';
         if (projectId) {
-            const project = await prisma.editorialProject.findUnique({ where: { id: projectId }, select: { title: true, tasks: { select: { materials: { select: { id: true } } } } } });
+            const project = await prisma.editorialProject.findUnique({ where: { id: projectId }, select: { title: true, tasks: { select: { materialFiles: { select: { id: true } } } } } });
             if (!project) return res.status(404).json({ error: 'Проект не найден' });
-            ids = project.tasks.flatMap(t => t.materials.map(f => materialKey(f.id)));
+            ids = project.tasks.flatMap(t => t.materialFiles.map(f => materialKey(f.id)));
             title = project.title;
         } else {
             const file = (await resolveFiles([fileId]))[0];
