@@ -13,7 +13,7 @@ const CREW_POSITIONS = {
     SOUND_ENGINEER: 'Звукорежиссёр',
     INTERVIEWER: 'Интервьюер',
 };
-const crewName = value => CREW_POSITIONS[value] || 'Без съёмочной позиции';
+const crewName = value => CREW_POSITIONS[value] || 'Участник команды';
 
 export default function EditorialProjects() {
     const { token, user } = useAuth();
@@ -53,6 +53,7 @@ export default function EditorialProjects() {
     const [crewSavingId, setCrewSavingId] = useState(null);
     const [savingMember, setSavingMember] = useState(false);
     const [updatingCompletion, setUpdatingCompletion] = useState(false);
+    const [deletingProject, setDeletingProject] = useState(false);
     const canCreate = ['ADMIN', 'MENTOR'].includes(user?.role);
     useEffect(() => {
         let active = true;
@@ -159,6 +160,19 @@ export default function EditorialProjects() {
         finally { setCrewSavingId(null); }
     }
 
+    async function deleteCompletedProject() {
+        if (!selected?.completedAt || deletingProject) return;
+        const confirmation = window.prompt(`Удалить завершённый проект «${selected.title}» со всеми заданиями и материалами? Для подтверждения введите УДАЛИТЬ`);
+        if (confirmation !== 'УДАЛИТЬ') return;
+        setDeletingProject(true); setError('');
+        try {
+            await api(`/editorial/projects/${selected.id}`, { token, method: 'DELETE' });
+            setProjects(current => current.filter(p => p.id !== selected.id));
+            setSelected(null);
+        } catch (e) { setError(e.message); }
+        finally { setDeletingProject(false); }
+    }
+
     async function toggleProjectCompletion() {
         if (!selected || updatingCompletion) return;
         const completed = !selected.completedAt;
@@ -205,12 +219,12 @@ export default function EditorialProjects() {
                         </form>}
                         {wizardStep === 2 && <div className="space-y-3">
                             <p className="text-sm opacity-75">Добавьте участников перед назначением заданий. Можно добавить нескольких подряд.</p>
-                            <div className="flex flex-wrap gap-2">{wizardMembers.map(m => <span key={m.id || m.userId} className="editorial-project-wizard-step rounded-lg px-3 py-2 text-xs">{m.user?.fullName || m.user?.username || m.userId} · {crewName(m.crewPosition)}</span>)}</div>
+                            <div className="flex flex-wrap gap-2">{wizardMembers.map(m => <span key={m.id || m.userId} className="editorial-project-wizard-step rounded-lg px-3 py-2 text-xs">{m.user?.fullName || m.user?.username || m.userId} · {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</span>)}</div>
                             <form onSubmit={addWizardMember} className="space-y-3">
                                 <label className="block text-sm">Найти участника<input value={personQuery} onChange={e => { setPersonQuery(e.target.value); setMemberId(''); }} placeholder="Введите имя или логин" className="mt-1 w-full rounded-xl border p-3" autoComplete="off" /></label>
                                 {searching && <p className="text-xs opacity-70">Поиск…</p>}
                                 {people.length > 0 && <div className="max-h-40 overflow-auto rounded-xl border p-1">{people.filter(p => !wizardMembers.some(m => m.userId === p.id)).map(p => <button key={p.id} type="button" onClick={() => { setMemberId(p.id); setPersonQuery(`${p.fullName || p.username} (@${p.username})`); setPeople([]); }} className="block w-full rounded-lg p-3 text-left text-sm">{p.fullName || p.username} @{p.username}</button>)}</div>}
-                                <label className="block text-sm">Съёмочная позиция<select value={crewPosition} onChange={e => setCrewPosition(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Без съёмочной позиции</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                                <label className="block text-sm">Роль<select value={crewPosition} onChange={e => setCrewPosition(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Без роли</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                                 <button disabled={!memberId || wizardBusy} className="rounded-xl border border-violet-400 px-4 py-3 text-sm font-semibold disabled:opacity-50">+ Добавить участника</button>
                             </form>
                             <button type="button" onClick={() => { setError(''); setWizardStep(3); }} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white">Продолжить к заданиям →</button>
@@ -220,7 +234,7 @@ export default function EditorialProjects() {
                             {wizardTasks.map((task,i) => <p key={task.id || i} className="editorial-project-wizard-step rounded-lg p-3 text-sm">✓ {task.title}</p>)}
                             <form onSubmit={addWizardTask} className="space-y-3">
                                 <label className="block text-sm">Название задания<input required maxLength={160} value={wizardTaskTitle} onChange={e => setWizardTaskTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
-                                <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => setWizardTaskAssignee(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {crewName(m.crewPosition)}</option>)}</select></label>
+                                <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => setWizardTaskAssignee(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</option>)}</select></label>
                                 <label className="block text-sm">Срок<input type="datetime-local" value={wizardTaskDue} onChange={e => setWizardTaskDue(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
                                 <button disabled={wizardBusy || !wizardTaskTitle.trim()} className="rounded-xl border border-violet-400 px-4 py-3 text-sm font-semibold disabled:opacity-50">+ Добавить задание</button>
                             </form>
@@ -249,6 +263,7 @@ export default function EditorialProjects() {
                                 <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
+                            {selected.completedAt && (user?.role === 'ADMIN' || selected.createdById === user?.id) && <button type="button" disabled={deletingProject} onClick={deleteCompletedProject} className="min-h-11 rounded-xl border border-rose-500/50 px-3 py-2 text-sm font-semibold text-rose-500 disabled:opacity-50">{deletingProject ? 'Удаление…' : 'Удалить завершённый проект'}</button>}
                             {selected.completedAt && <div role="status" className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-3 text-sm">✓ Проект завершён{selected.completedAt ? ` · ${new Date(selected.completedAt).toLocaleDateString('ru-RU')}` : ''}. Задания и материалы сохранены.</div>}
                             {!fromMyTasks && <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
                                 <button type="button" role="tab" aria-selected={projectTab === 'tasks'} onClick={() => setProjectTab('tasks')} className={`rounded-lg px-3 py-2 text-sm ${projectTab === 'tasks' ? 'bg-violet-600 text-white font-semibold dark:bg-violet-200 dark:text-slate-950' : 'text-violet-700 opacity-75 dark:text-slate-100'}`}>Задания</button>
@@ -256,12 +271,12 @@ export default function EditorialProjects() {
                             </div>}
                             {projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} linkedTaskId={selected.id === linkedProjectId ? linkedTaskId : null} linkedTab={linkedTab} onTaskClose={fromMyTasks ? () => navigate("/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")) : undefined} /> : <div className="space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Участники</h4>{canManage && <button type="button" onClick={() => setShowMemberForm((v) => !v)} className="rounded-lg border border-current/20 px-3 py-2 text-xs">{showMemberForm ? 'Скрыть форму' : '+ Участник'}</button>}</div>
-                                {selected.members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 py-2 text-sm"><span className="min-w-0 break-words">{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span><div className="flex flex-wrap items-center gap-2"><span className="text-xs opacity-60">{crewName(member.crewPosition)}</span>{canManage && <select aria-label={`Съёмочная позиция: ${member.user?.fullName || member.userId}`} disabled={!!crewSavingId} value={member.crewPosition || ''} onChange={e => changeCrewPosition(member.userId, e.target.value)} className="min-h-10 rounded-lg border p-2 text-xs"><option value="">Без съёмочной позиции</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>}</div><span className="text-xs opacity-60">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span></div>)}
+                                {selected.members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 py-2 text-sm"><span className="min-w-0 break-words">{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span><div className="flex flex-wrap items-center gap-2"><span className="text-xs opacity-60">{member.role === 'MANAGER' ? 'Руководитель' : crewName(member.crewPosition)}</span>{canManage && member.role !== 'MANAGER' && <select aria-label={`Роль: ${member.user?.fullName || member.userId}`} disabled={!!crewSavingId} value={member.crewPosition || ''} onChange={e => changeCrewPosition(member.userId, e.target.value)} className="min-h-10 rounded-lg border p-2 text-xs"><option value="">Без роли</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>}</div><span className="text-xs opacity-60">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span></div>)}
                                 {canManage && showMemberForm && <form onSubmit={addMember} className="space-y-3 rounded-xl border border-current/10 p-3">
                                     <label className="block text-sm">Найти участника<input value={personQuery} onChange={(e) => { setPersonQuery(e.target.value); setMemberId(''); }} placeholder="Имя или логин" autoComplete="off" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
                                     {searching && <p className="text-xs opacity-60">Поиск…</p>}
                                     {people.length > 0 && <div className="max-h-44 overflow-auto rounded-lg border border-current/15 p-1">{people.map((person) => <button type="button" key={person.id} onClick={() => { setMemberId(person.id); setPersonQuery(person.fullName + ' (@' + person.username + ')'); setPeople([]); }} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-current/10">{person.fullName} <span className="opacity-60">@{person.username}</span></button>)}</div>}
-                                    <label className="block text-sm">Съёмочная позиция<select value={crewPosition} onChange={e => setCrewPosition(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Без съёмочной позиции</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                                    <label className="block text-sm">Роль<select value={crewPosition} onChange={e => setCrewPosition(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="">Без роли</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                                     <button disabled={!memberId || savingMember} className="rounded-lg border border-current/30 px-3 py-2 text-sm disabled:opacity-50">{savingMember ? 'Сохранение…' : 'Добавить участника'}</button>
                                 </form>}
                             </div>}
