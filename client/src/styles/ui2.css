@@ -1969,3 +1969,26 @@ html.dark .editorial-task-dialog :is(input,textarea)::placeholder {
   color: #f1f5f9;
   border-color: #475569;
 }
+
+/* Mobile account logout lives in the More sheet, not the five-tab navigation. */
+.ui-more-sheet .ui-mobile-logout {
+  color: #fecaca;
+  background: rgba(239, 68, 68, .10);
+  border: 1px solid rgba(248, 113, 113, .32);
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.ui-more-sheet .ui-mobile-logout:hover,
+.ui-more-sheet .ui-mobile-logout:focus-visible {
+  background: rgba(239, 68, 68, .19);
+  border-color: rgba(248, 113, 113, .7);
+}
+.ui-more-sheet .ui-mobile-logout:focus-visible {
+  outline: 2px solid #f87171;
+  outline-offset: 2px;
+}
+html:not(.dark) .ui-more-sheet .ui-mobile-logout,
+[data-theme="light"] .ui-more-sheet .ui-mobile-logout {
+  color: #b91c1c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
