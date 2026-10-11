@@ -2003,3 +2003,12 @@ html:not(.dark) .ui-more-sheet .ui-mobile-logout,
 }
 .card.p-4 { padding: calc(1rem * var(--ui-density, 1)); }
 .card.p-5 { padding: calc(1.25rem * var(--ui-density, 1)); }
+
+/* Scoped component design options; do not alter editorial dialogs or lightboxes. */
+html[data-ui-input-style="filled"] .ui-shell .input { background-color: rgba(148,163,184,.13); }
+html[data-ui-input-style="minimal"] .ui-shell .input { border-color: transparent; border-bottom-color: rgba(148,163,184,.45); border-radius: 4px; }
+html[data-ui-chip-shape="rounded"] .ui-shell .chip { border-radius: 10px; }
+html[data-ui-chip-shape="square"] .ui-shell .chip { border-radius: 4px; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  html[data-ui-hover-effect="lift"] .ui-shell .card:not(.editorial-glass__dialog):hover { transform: translateY(-2px); transition: transform 180ms ease; }
+}
