@@ -49,12 +49,12 @@ export default function Layout() {
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
     const legacyExtras = [
         ...(isEnabled('editorial') && Object.prototype.hasOwnProperty.call(modules, 'editorial') ? [{ to: '/app/editorial', label: 'Редакция', icon: 'newspaper' }] : []),
-        ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'trophy' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
+        ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'trophy' }, { to: '/app/stickers', label: 'Стикеры', icon: 'image' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
         ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
         ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
     ];
     const configured = siteSettings.nav_desktop_customized === 'true';
-    const candidates = [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to) && (!configured || extra.to === '/app/seasons'))];
+    const candidates = [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to) && (!configured || ['/app/seasons','/app/stickers'].includes(extra.to)))];
     const links = normalizeLinks(candidates).filter(l => {
         if (typeof l.to !== 'string' || !l.to.startsWith('/app') || l.to.startsWith('//')) return false;
         if (l.to === '/app/admin' && !isAdmin) return false;
@@ -63,7 +63,7 @@ export default function Layout() {
         const key = moduleKeyForPath(l.to);
         if (key && !isEnabled(key)) return false;
         if (l.to === '/app/editorial' && (!isEnabled('editorial') || !Object.prototype.hasOwnProperty.call(modules, 'editorial'))) return false;
-        if ((l.to === '/app/leaderboard' || l.to === '/app/seasons') && !gamifEnabled) return false;
+        if ((l.to === '/app/leaderboard' || l.to === '/app/seasons' || l.to === '/app/stickers') && !gamifEnabled) return false;
         return true;
     });
     const SWIPE_ORDER = links.map((l) => l.to);
