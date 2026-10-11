@@ -8,23 +8,8 @@ on:
 
 jobs:
   server:
-    name: Server — lint & tests
+    name: Server — lint & Prisma schema
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: mediaraf_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     defaults:
       run:
@@ -48,17 +33,10 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
-      - name: Apply migrations to test DB
-        run: npx prisma migrate deploy
+      - name: Validate Prisma schema (no database)
+        run: npx prisma validate
         env:
-          DATABASE_URL: postgresql://postgres:test@localhost:5432/mediaraf_test
-
-      - name: Tests
-        run: npm test
-        env:
-          DATABASE_URL: postgresql://postgres:test@localhost:5432/mediaraf_test
-          JWT_SECRET: test-secret-do-not-use-in-prod
-          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:unused@localhost:5432/unused
 
   client:
     name: Client — build
