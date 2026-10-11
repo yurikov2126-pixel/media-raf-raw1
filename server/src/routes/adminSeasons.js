@@ -53,4 +53,32 @@ router.put('/:id', async (req,res,next) => {
     res.json({ season });
   } catch(e) { next(e); }
 });
+// Tasks can be edited while preserving their identity and existing submissions.
+router.get('/:id/challenges',async(req,res,next)=>{
+ try {const season=await prisma.gamificationSeason.findUnique({where:{id:req.params.id}});if(!season)return res.status(404).json({error:'Сезон не найден'});
+ const challenges=await prisma.seasonChallenge.findMany({where:{seasonId:season.id},include:{_count:{select:{submissions:true}}},orderBy:{number:'asc'}});res.json({challenges});}catch(e){next(e)}
+});
+const taskFields=body=>{
+ const number=Number(body.number),type=body.type,title=String(body.title??'').trim(),brief=String(body.brief??'').trim(),criteria=String(body.criteria??'');
+ if(!Number.isInteger(number)||number<1||number>1000||!['PHOTO','VIDEO'].includes(type)||!title||title.length>160||!brief||brief.length>4000||criteria.length>2000||typeof body.active!=='boolean')return null;
+ return {number,type,title,brief,criteria,active:body.active};
+};
+router.post('/:id/challenges',async(req,res,next)=>{
+ try {if(!await prisma.gamificationSeason.findUnique({where:{id:req.params.id}}))return res.status(404).json({error:'Сезон не найден'});
+ const data=taskFields(req.body||{});if(!data)return res.status(400).json({error:'Некорректные поля задания'});
+ const challenge=await prisma.seasonChallenge.create({data:{...data,seasonId:req.params.id}});res.status(201).json({challenge});}catch(e){if(e.code==='P2002')return res.status(409).json({error:'Номер задания уже занят'});next(e)}
+});
+router.put('/:id/challenges/:challengeId',async(req,res,next)=>{
+ try {const current=await prisma.seasonChallenge.findFirst({where:{id:req.params.challengeId,seasonId:req.params.id},include:{_count:{select:{submissions:true}}}});
+ if(!current)return res.status(404).json({error:'Задание не найдено'});
+ const data=taskFields(req.body||{});if(!data)return res.status(400).json({error:'Некорректные поля задания'});
+ if(current._count.submissions>0&&!data.active)return res.status(409).json({error:'Нельзя скрыть задание, уже закреплённое за участником'});
+ const challenge=await prisma.seasonChallenge.update({where:{id:current.id},data});res.json({challenge});}catch(e){if(e.code==='P2002')return res.status(409).json({error:'Номер задания уже занят'});next(e)}
+});
+router.delete('/:id/challenges/:challengeId',async(req,res,next)=>{
+ try {const current=await prisma.seasonChallenge.findFirst({where:{id:req.params.challengeId,seasonId:req.params.id},include:{_count:{select:{submissions:true}}}});
+ if(!current)return res.status(404).json({error:'Задание не найдено'});
+ if(current._count.submissions)return res.status(409).json({error:'Нельзя удалить задание, закреплённое за участником'});
+ await prisma.seasonChallenge.delete({where:{id:current.id}});res.json({ok:true});}catch(e){next(e)}
+});
 export default router;

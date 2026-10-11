@@ -38,7 +38,6 @@ export default function Leaderboard() {
                     <h1 className="text-3xl md:text-5xl font-bold flex items-center gap-3">
                         🏆 Рейтинг
                     </h1>
-                    <Link to="/app/seasons" className="inline-block mt-2 text-violet-soft hover:underline">🏆 Сезоны: правила, награды и рейтинг →</Link>
                     <p className="text-white/50 mt-1">
                         Топ студентов медиацентра
                     </p>

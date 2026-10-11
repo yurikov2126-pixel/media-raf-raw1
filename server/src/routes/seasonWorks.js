@@ -38,6 +38,24 @@ router.post('/:slug/select',async(req,res,next)=>{
     catch(e){if(e.code==='P2002')return res.status(409).json({error:'Это задание уже выбрал другой участник. Обновите список.'});throw e}
   }catch(e){next(e)}
 });
+// A reservation may be cancelled or switched only before the first submission.
+// Switching is atomic; the unique challengeId index prevents double booking.
+router.post('/:slug/change',async(req,res,next)=>{
+ try {const season=await validSeason(req.params.slug),now=new Date();
+ if(!season||now<season.startsAt||now>=season.endsAt)return res.status(409).json({error:'Изменение выбора закрыто'});
+ const old=await prisma.seasonSubmission.findUnique({where:{seasonId_userId:{seasonId:season.id,userId:req.user.id}},include:{_count:{select:{files:true}}}});
+ if(!old)return res.status(404).json({error:'Вы ещё не выбрали задание'});
+ if(old.status!=='SELECTED'||old._count.files)return res.status(409).json({error:'После отправки работы или загрузки файлов смена задания недоступна'});
+ const challengeId=req.body?.challengeId;
+ if(challengeId===null){await prisma.seasonSubmission.delete({where:{id:old.id}});return res.json({ok:true,cancelled:true})}
+ if(typeof challengeId!=='string')return res.status(400).json({error:'Укажите новое задание'});
+ const nextChallenge=await prisma.seasonChallenge.findFirst({where:{id:challengeId,seasonId:season.id,active:true}});
+ if(!nextChallenge)return res.status(404).json({error:'Задание недоступно'});
+ if(nextChallenge.id===old.challengeId)return res.json({submission:old});
+ try {const submission=await prisma.seasonSubmission.update({where:{id:old.id},data:{challengeId:nextChallenge.id}});return res.json({submission})}
+ catch(e){if(e.code==='P2002')return res.status(409).json({error:'Задание уже занято другим участником'});throw e}
+ }catch(e){next(e)}
+});
 router.post('/:slug/submit',async(req,res,next)=>{
   try {
     const season=await validSeason(req.params.slug),now=new Date();

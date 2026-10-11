@@ -1,0 +1,18 @@
+import {useEffect,useState} from 'react';
+import {api} from '../../../api/client.js';
+const blank={number:1,type:'PHOTO',title:'',brief:'',criteria:'Идея (40), техника (30), история (30)',active:true};
+export default function SeasonChallengesAdmin({token,seasonId}){
+ const [tasks,setTasks]=useState([]),[draft,setDraft]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const endpoint='/admin/seasons/'+encodeURIComponent(seasonId)+'/challenges';
+ const load=()=>api(endpoint,{token}).then(r=>setTasks(r.challenges||[])).catch(e=>setError(e.message));
+ useEffect(()=>{setDraft(null);load()},[seasonId,token]);
+ const save=async()=>{setBusy(true);setError('');try{await api(endpoint+(draft.id?'/'+encodeURIComponent(draft.id):''),{token,method:draft.id?'PUT':'POST',body:{...draft,number:Number(draft.number)}});setDraft(null);await load()}catch(e){setError(e.message)}finally{setBusy(false)}};
+ const remove=async(t)=>{if(!window.confirm('Удалить задание «'+t.title+'»?'))return;setBusy(true);setError('');try{await api(endpoint+'/'+encodeURIComponent(t.id),{token,method:'DELETE'});await load()}catch(e){setError(e.message)}finally{setBusy(false)}};
+ return <div className="card p-4 space-y-3"><h4 className="font-bold">📷 Творческие задания сезона</h4><p className="text-xs opacity-60">Редактирование доступно для всех заданий. Удаление и скрытие занятых заданий запрещено, чтобы сохранить работы участников.</p>{error&&<p role="alert" className="text-red-400">{error}</p>}
+ <div className="space-y-2">{tasks.map(t=><div key={t.id} className="flex justify-between gap-3 border border-white/10 rounded-lg p-3"><div className="min-w-0"><strong>{t.number}. {t.type==='PHOTO'?'📷':'🎥'} {t.title}</strong><p className="text-xs opacity-60">{t.active?'Активно':'Скрыто'} · Выбрано: {t._count?.submissions||0}</p></div><div className="flex gap-2"><button className="chip" onClick={()=>setDraft({...t})}>Изменить</button><button className="chip" disabled={busy||!!t._count?.submissions} onClick={()=>remove(t)}>Удалить</button></div></div>)}</div>
+ <button className="chip" onClick={()=>setDraft({...blank,number:Math.max(0,...tasks.map(t=>t.number))+1})}>+ Добавить задание</button>
+ {draft&&<div className="space-y-3 border-t border-white/10 pt-4"><h4 className="font-semibold">{draft.id?'Редактирование задания':'Новое задание'}</h4><div className="grid grid-cols-2 gap-3"><label className="text-sm">Номер<input className="input w-full" type="number" min="1" value={draft.number} onChange={e=>setDraft({...draft,number:e.target.value})}/></label><label className="text-sm">Формат<select className="input w-full" value={draft.type} onChange={e=>setDraft({...draft,type:e.target.value})}><option value="PHOTO">Фото</option><option value="VIDEO">Видео</option></select></label></div>
+ {[['title','Название'],['brief','Описание и требования'],['criteria','Критерии оценки']].map(([key,label])=><label key={key} className="text-sm block">{label}{key==='title'?<input className="input w-full mt-1" value={draft[key]} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>:<textarea className="input w-full mt-1" rows={3} value={draft[key]} onChange={e=>setDraft({...draft,[key]:e.target.value})}/>}</label>)}
+ <label className="flex gap-2 text-sm"><input type="checkbox" disabled={!!draft._count?.submissions} checked={draft.active} onChange={e=>setDraft({...draft,active:e.target.checked})}/> Задание доступно для выбора</label><div className="flex gap-2"><button className="btn-primary" disabled={busy} onClick={save}>Сохранить</button><button className="chip" onClick={()=>setDraft(null)}>Отмена</button></div></div>}
+ </div>;
+}
