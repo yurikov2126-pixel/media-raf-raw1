@@ -30,6 +30,7 @@ export default function EditorialProjects() {
     const [error, setError] = useState('');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [eventDate, setEventDate] = useState('');
     const [visibility, setVisibility] = useState('CLOSED');
     const [creating, setCreating] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
@@ -83,7 +84,7 @@ export default function EditorialProjects() {
     }, [token, linkedProjectId]);
 
     function startWizard() {
-        setTitle(''); setDescription(''); setVisibility('CLOSED');
+        setTitle(''); setDescription(''); setEventDate(''); setVisibility('CLOSED');
         setWizardStep(1); setWizardProject(null); setWizardMembers([]); setWizardTasks([]);
         setWizardTaskTitle(''); setWizardTaskAssignee(''); setWizardTaskDue('');
         setMemberId(''); setCrewPosition(''); setPersonQuery(''); setPeople([]); setError(''); setShowCreate(true);
@@ -129,7 +130,7 @@ export default function EditorialProjects() {
         if (creating) return;
         setCreating(true); setError('');
         try {
-            const result = await api('/editorial/projects', { token, method: 'POST', body: { title, description, visibility } });
+            const result = await api('/editorial/projects', { token, method: 'POST', body: { title, description, visibility, eventDate: eventDate || null } });
             setWizardProject(result.project); setWizardStep(2); setWizardMembers(result.project.members || []);
             await reload();
         } catch (e) { setError(e.message); }
@@ -214,6 +215,7 @@ export default function EditorialProjects() {
                         {wizardStep === 1 && <form id="editorial-wizard-project" onSubmit={create} className="space-y-3">
                             <label className="block text-sm">Название проекта<input autoFocus required maxLength={120} value={title} onChange={e => setTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
                             <label className="block text-sm">Описание<textarea rows={3} maxLength={5000} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                            <label className="block text-sm">Дата мероприятия<input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /><span className="mt-1 block text-xs opacity-70">Появится в календаре участников проекта</span></label>
                             <label className="block text-sm">Видимость<select value={visibility} onChange={e => setVisibility(e.target.value)} className="mt-1 w-full rounded-xl border p-3"><option value="CLOSED">Закрытый — по приглашению</option><option value="TEAM">Командный — виден участникам сайта</option></select></label>
                             <button disabled={creating} className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white disabled:opacity-50">{creating ? 'Создание…' : 'Создать проект и продолжить →'}</button>
                         </form>}

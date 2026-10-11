@@ -30,9 +30,11 @@ router.post('/projects', async (req, res, next) => {
         const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
         const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
         const visibility = req.body.visibility === 'TEAM' ? 'TEAM' : 'CLOSED';
+        const eventDate = typeof req.body.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.eventDate) ? new Date(`${req.body.eventDate}T00:00:00.000Z`) : null;
+        if (req.body.eventDate && (!eventDate || Number.isNaN(eventDate.getTime()) || eventDate.toISOString().slice(0, 10) !== req.body.eventDate)) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
         if (!title || title.length > 120 || description.length > 5000) return res.status(400).json({ error: 'Проверьте название и описание' });
         const project = await prisma.editorialProject.create({
-            data: { title, description, visibility, createdById: req.user.id, members: { create: { userId: req.user.id, role: 'MANAGER' } } },
+            data: { title, description, visibility, eventDate, createdById: req.user.id, members: { create: { userId: req.user.id, role: 'MANAGER' } } },
             include: { members: { include: { user: { select: { id: true, fullName: true, username: true } } } } },
         });
         res.status(201).json({ project: clean(project) });
@@ -71,6 +73,14 @@ router.patch('/projects/:id', async (req, res, next) => {
         if (req.body.description !== undefined) {
             if (typeof req.body.description !== 'string' || req.body.description.length > 5000) return res.status(400).json({ error: 'Некорректное описание' });
             data.description = req.body.description.trim();
+        }
+        if (req.body.eventDate !== undefined) {
+            if (req.body.eventDate === null || req.body.eventDate === '') data.eventDate = null;
+            else {
+                const date = typeof req.body.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.eventDate) ? new Date(`${req.body.eventDate}T00:00:00.000Z`) : null;
+                if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== req.body.eventDate) return res.status(400).json({ error: 'Некорректная дата мероприятия' });
+                data.eventDate = date;
+            }
         }
         if (req.body.completed !== undefined) {
             if (typeof req.body.completed !== 'boolean') return res.status(400).json({ error: 'Некорректный статус проекта' });
