@@ -41,6 +41,13 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
     const [startsAt, setStartsAt] = useState(localInput(start));
     const [endsAt, setEndsAt] = useState(localInput(finish));
     const [allDay, setAllDay] = useState(event?.allDay || false);
+    const [scope, setScope] = useState('one');
+    const [repeat, setRepeat] = useState('NONE');
+    const [repeatUntil, setRepeatUntil] = useState(() => {
+        const d = new Date(start);
+        d.setMonth(d.getMonth() + 3);
+        return localInput(d).slice(0, 10);
+    });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const submit = async e => {
@@ -51,20 +58,23 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
         if (!title.trim() || !Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) {
             setError('Проверьте название и время окончания'); return;
         }
+        if ((!event || scope === 'series') && repeat !== 'NONE' && repeatUntil < startsAt.slice(0, 10)) {
+            setError('Дата окончания повторения должна быть не раньше начала'); return;
+        }
         setBusy(true);
         try {
             await api(event ? `/editorial/calendar/${event.id}` : '/editorial/calendar', {
                 token, method: event ? 'PATCH' : 'POST',
-                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay },
+                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay, scope: event?.seriesId && scope === 'series' ? 'series' : 'one', repeat: event?.seriesId && scope === 'one' ? 'NONE' : repeat, repeatUntil },
             });
             onSaved();
         } catch (err) { setError(err.message || 'Не удалось сохранить событие'); }
         finally { setBusy(false); }
     };
     const remove = async () => {
-        if (!event || !window.confirm('Удалить личное событие?')) return;
+        if (!event || !window.confirm(scope === 'series' && event.seriesId ? 'Удалить всю серию повторений?' : 'Удалить это событие?')) return;
         setBusy(true); setError('');
-        try { await api(`/editorial/calendar/${event.id}`, { token, method: 'DELETE' }); onSaved(); }
+        try { await api(`/editorial/calendar/${event.id}${scope === 'series' && event.seriesId ? '?scope=series' : ''}`, { token, method: 'DELETE' }); onSaved(); }
         catch (err) { setError(err.message || 'Не удалось удалить событие'); setBusy(false); }
     };
     return <div className="editorial-personal-event-overlay fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/65 p-0 sm:items-center sm:p-4" onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -75,6 +85,13 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
                 <label className="block text-sm font-semibold">Начало<input required type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /></label>
                 <label className="block text-sm font-semibold">Окончание<input required type="datetime-local" value={endsAt} onChange={e => setEndsAt(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /></label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} /> Весь день (пометка)</label>
+                {event?.seriesId && <fieldset className="rounded-xl border p-3"><legend className="px-1 text-sm font-semibold">Что изменить?</legend><label className="mr-4 inline-flex items-center gap-2 text-sm"><input type="radio" name="event-scope" checked={scope === 'one'} onChange={() => setScope('one')} /> Только это событие</label><label className="inline-flex items-center gap-2 text-sm"><input type="radio" name="event-scope" checked={scope === 'series'} onChange={() => setScope('series')} /> Всю серию</label></fieldset>}
+                {(!event || (event.seriesId && scope === 'series')) && <div className="space-y-3 rounded-xl border p-3">
+                    <label className="block text-sm font-semibold">Повторение<select className="mt-1 block w-full rounded-xl border p-3" value={repeat} onChange={e => setRepeat(e.target.value)}>
+                        <option value="NONE">Не повторять</option><option value="DAILY">Каждый день</option><option value="WEEKLY">Каждую неделю</option><option value="WEEKDAYS">По будням</option><option value="MONTHLY">Каждый месяц</option>
+                    </select></label>
+                    {repeat !== 'NONE' && <label className="block text-sm font-semibold">Повторять до<input type="date" required value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /><span className="mt-1 block text-xs opacity-70">Не более года. Время повторений сохраняется по UTC; при переходе на летнее время местный час может измениться.</span></label>}
+                </div>}
                 <label className="block text-sm font-semibold">Заметки<textarea maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" placeholder="Детали и планы" /></label>
         {error && <p role="alert" className="text-sm text-rose-500">{error}</p>}
                 <div className="flex flex-wrap gap-2 pt-2"><button disabled={busy} type="submit" className="editorial-personal-event-primary min-h-11 flex-1 rounded-xl px-4 font-semibold">{busy ? 'Сохранение…' : 'Сохранить'}</button>{event && <button disabled={busy} type="button" onClick={remove} className="editorial-personal-event-delete min-h-11 rounded-xl border px-4">Удалить</button>}</div>
@@ -217,7 +234,7 @@ export default function EditorialCalendar() {
                 <section className="editorial-planner-panel rounded-3xl border p-4 sm:p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">На {dateLabel(selected)}</h3><span className="text-xs opacity-70">{selectedTasks.length} заданий · {selectedEvents.length} событий</span></div>
                     {dateChosen && <button type="button" onClick={() => setEditing(null)} className="editorial-personal-event-primary mt-4 min-h-11 w-full rounded-xl px-5 font-semibold sm:w-auto">＋ Создать личное событие на {dateLabel(selected)}</button>}
-                    {selectedEvents.length > 0 && <div className="mt-4 space-y-2">{selectedEvents.map(event => <button type="button" key={event.id} onClick={() => setEditing(event)} className="editorial-personal-event-row w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">{event.allDay ? 'Весь день' : timeLabel(dateOf(event.startsAt))} · Личное событие</span></button>)}</div>}
+                    {selectedEvents.length > 0 && <div className="mt-4 space-y-2">{selectedEvents.map(event => <button type="button" key={event.id} onClick={() => setEditing(event)} className="editorial-personal-event-row w-full rounded-xl border p-3 text-left"><strong className="block text-sm">{event.title}</strong><span className="text-xs opacity-75">{event.allDay ? 'Весь день' : timeLabel(dateOf(event.startsAt))} · {event.seriesId ? '↻ Повторяющееся событие' : 'Личное событие'}</span></button>)}</div>}
                     {loading ? <p role="status" className="mt-4 text-sm opacity-70">Загружаем задания…</p>
                         : selectedTasks.length ? <div className="mt-4 space-y-2">{selectedTasks.map(t => <TaskRow key={t.id} task={t} now={now} />)}</div>
                         : selectedEvents.length ? null : <p className="editorial-planner-empty mt-4 rounded-2xl p-5 text-sm">На этот день нет заданий и событий.</p>}
