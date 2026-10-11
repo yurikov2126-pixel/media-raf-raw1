@@ -1,0 +1,1 @@
+ALTER TABLE "EditorialTask" ADD COLUMN "location" TEXT NOT NULL DEFAULT '';
