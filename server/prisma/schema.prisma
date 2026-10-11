@@ -724,6 +724,7 @@ model SavedPost {
 
 model EditorialProject {
   id          String   @id @default(cuid())
+  eventDate   DateTime? @db.Date
   completedAt DateTime?
   title       String
   description String   @default("")
