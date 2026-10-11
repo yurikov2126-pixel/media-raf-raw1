@@ -149,7 +149,10 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const myTasksCount = tasks.filter((task) => task.assigneeId === user?.id && !isFinished(task)).length;
     const overdueCount = tasks.filter(isOverdue).length;
     const dueSoonCount = tasks.filter(isDueSoon).length;
-    const reviewTasks = canEdit ? tasks.filter((task) => task.status === 'IN_REVIEW') : [];
+    const reviewTasks = canEdit ? tasks.filter((task) => task.status === 'IN_REVIEW').sort((a,b) => {
+        const due = task => task.dueAt ? new Date(task.dueAt).getTime() : Infinity;
+        return due(a) - due(b) || (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    }) : [];
     const nextReviewTask = reviewTasks.find((task) => task.id !== selectedTaskId);
     const visibleTasks = tasks.filter((task) => {
         if (deadlineFilter === 'OVERDUE' && !isOverdue(task)) return false;
@@ -167,10 +170,25 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     });
     if (!canView) return <p className="text-sm opacity-70">Задачи доступны только участникам проекта.</p>;
     return <section className="space-y-4">
-        {canEdit && tasks.some((task) => task.status === 'IN_REVIEW') && <section className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-100/30 p-3 dark:bg-amber-300/10" aria-label="Материалы на проверке">
-            <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">⏳ Ожидают проверки</h4><span className="text-sm opacity-70">{tasks.filter((task) => task.status === 'IN_REVIEW').length}</span></div>
-            <p className="text-xs opacity-70">Откройте задание, просмотрите файлы и утвердите результат или верните на доработку.</p>
-            {tasks.filter((task) => task.status === 'IN_REVIEW').map((task) => <button type="button" key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-center justify-between gap-3 rounded-lg border border-current/10 bg-white/50 px-3 py-3 text-left text-sm transition hover:bg-white/80 dark:bg-slate-900/40 dark:hover:bg-slate-900/70"><span className="min-w-0 truncate font-medium">{task.title}</span><span className="shrink-0 text-xs font-semibold text-violet-700 dark:text-violet-200">Проверить →</span></button>)}
+        {canEdit && !loading && <section className="space-y-2 rounded-xl border border-amber-300/40 bg-amber-100/30 p-3 dark:bg-amber-300/10" aria-label="Материалы на проверке">
+            <div className="flex items-center justify-between gap-2"><h4 className="font-semibold">⏳ Ожидают проверки</h4><span className="text-sm opacity-70">{reviewTasks.length}</span></div>
+            {reviewTasks.length === 0 ? <p className="text-sm opacity-70">Все материалы проверены. Новых работ пока нет.</p> : <>
+                <p className="text-xs opacity-70">Сначала показаны задания с ближайшим сроком.</p>
+                {reviewTasks.map(task => {
+                    const due = task.dueAt ? new Date(task.dueAt) : null;
+                    const validDue = due && !Number.isNaN(due.getTime());
+                    const overdue = validDue && due.getTime() < now;
+                    const assignee = task.assignee?.fullName || project.members.find(member => member.userId === task.assigneeId)?.user?.fullName || 'Не назначен';
+                    return <div key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-current/10 bg-white/50 px-3 py-3 dark:bg-slate-900/40">
+                        <div className="min-w-0 flex-1 space-y-1">
+                            <p className="break-words text-sm font-semibold">{task.title}</p>
+                            <p className="text-xs opacity-75">Исполнитель: {assignee}</p>
+                            <p className={`text-xs ${overdue ? 'font-semibold text-rose-700 dark:text-rose-300' : 'opacity-75'}`}>{validDue ? `${overdue ? 'Срок истёк' : 'Срок'}: ${due.toLocaleString('ru-RU', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}` : 'Без срока'}</p>
+                        </div>
+                        <button type="button" onClick={() => setSelectedTaskId(task.id)} className="min-h-11 shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700">Проверить материалы →</button>
+                    </div>;
+                })}
+            </>}
         </section>}
         <div className="grid grid-cols-3 gap-2" aria-label="Сводка задач">
             <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 p-3"><p className="text-[11px] opacity-65">Всего задач</p><p className="text-2xl font-bold tabular-nums">{tasks.length}</p></div>
