@@ -1,3 +1,4 @@
+const localDatetime = value => { if (!value) return ''; const d = new Date(value); const pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialTaskDiscussion from './EditorialTaskDiscussion.jsx';
@@ -12,19 +13,20 @@ const STATUSES = [
 export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, initialTab, refresh, onError, onClose }) {
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || '');
+    const [location, setLocation] = useState(task.location || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
     const [parentId, setParentId] = useState(task.parentId || '');
     const [workDate, setWorkDate] = useState(task.workDate ? task.workDate.slice(0, 10) : '');
-    const [dueAt, setDueAt] = useState(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
+    const [dueAt, setDueAt] = useState(task.dueAt ? localDatetime(task.dueAt) : '');
     const [dependencyId, setDependencyId] = useState('');
     const [saving, setSaving] = useState(false);
     const [tab, setTab] = useState(initialTab || (task.status === 'IN_REVIEW' ? 'materials' : 'details'));
     useEffect(() => {
-        setTitle(task.title); setDescription(task.description || '');
+        setTitle(task.title); setDescription(task.description || ''); setLocation(task.location || '');
         setAssigneeId(task.assigneeId || '');
         setParentId(task.parentId || '');
         setWorkDate(task.workDate ? task.workDate.slice(0, 10) : '');
-        setDueAt(task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '');
+        setDueAt(task.dueAt ? localDatetime(task.dueAt) : '');
     }, [task]);
     const deadlineAllowed = canHaveDeadline(project.members, assigneeId);
     const base = `/editorial/workflow/projects/${project.id}/tasks/${task.id}`;
@@ -54,7 +56,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     function save(event) {
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
-            title: title.trim(), description, assigneeId: assigneeId || null,
+            title: title.trim(), description, location: location.trim(), assigneeId: assigneeId || null,
             parentId: parentId || null, workDate: workDate || null, dueAt: deadlineAllowed && dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
@@ -74,6 +76,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             <label className="block min-w-0 text-sm sm:col-span-2">Название
                 <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40 disabled:opacity-60" />
             </label>
+            <label className="block text-sm md:col-span-2">Локация<input maxLength={300} disabled={!canEdit || saving} value={location} onChange={e => setLocation(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" placeholder="Где выполняется задание" /></label>
             <label className="block text-sm md:col-span-2">Описание
                 <textarea maxLength={10000} rows={3} disabled={!canEdit || saving} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
             </label>
