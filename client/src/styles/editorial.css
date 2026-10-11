@@ -84,3 +84,86 @@
 @media (prefers-reduced-motion: reduce) {
   .editorial-glass .editorial-workspace-nav a { transition: none; transform: none !important; }
 }
+
+/* Phase 2: consistent project, workflow, review and dialog surfaces. */
+.editorial-glass :is(.editorial-glass__surface, .editorial-workspace-content form.editorial-glass__surface),
+.editorial-glass .editorial-review-inbox article {
+  background: var(--ed-surface);
+  color: var(--ed-text);
+  border: 1px solid var(--ed-border);
+  border-radius: 1rem;
+  box-shadow: var(--ed-shadow);
+  backdrop-filter: blur(12px);
+}
+.editorial-glass :is(.editorial-glass__projects, .editorial-review-inbox) { min-width: 0; color: var(--ed-text); }
+.editorial-glass :is(.editorial-glass__projects, .editorial-review-inbox) :is(h2,h3,h4,h5,h6) { color: var(--ed-text); }
+.editorial-glass :is(.editorial-glass__projects, .editorial-review-inbox) :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea) {
+  min-width: 0; max-width: 100%; background: var(--ed-surface-strong);
+  border: 1px solid var(--ed-border); border-radius: .75rem;
+  color: var(--ed-text); color-scheme: light; font-size: 16px;
+}
+.dark .editorial-glass :is(.editorial-glass__projects,.editorial-review-inbox) :is(input,select,textarea),
+[data-theme="dark"] .editorial-glass :is(.editorial-glass__projects,.editorial-review-inbox) :is(input,select,textarea) { color-scheme: dark; }
+.editorial-glass :is(.editorial-glass__projects,.editorial-review-inbox) :is(input,textarea)::placeholder { color: var(--ed-muted); opacity: .9; }
+.editorial-glass :is(.editorial-glass__projects,.editorial-review-inbox) :is(button,a):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
+.editorial-glass .editorial-glass__projects aside > button:not([aria-current="true"]) {
+  background: var(--ed-surface); border: 1px solid var(--ed-border); color: var(--ed-text);
+  border-radius: .85rem; transition: border-color .18s, transform .18s;
+}
+.editorial-glass .editorial-glass__projects aside > button:hover { border-color: #a78bfa; transform: translateY(-1px); }
+.editorial-glass .editorial-glass__projects [role="tablist"] { flex-wrap: wrap; gap: .4rem; }
+.editorial-glass .editorial-glass__projects [role="tablist"] [role="tab"][aria-selected="false"] {
+  color: var(--ed-text); opacity: 1; background: var(--ed-surface);
+  border: 1px solid var(--ed-border);
+}
+.editorial-glass .editorial-review-inbox > .grid { min-width: 0; }
+.editorial-glass .editorial-review-inbox article { transition: transform .18s, border-color .18s; }
+.editorial-glass .editorial-review-inbox article:hover { border-color: #a78bfa; transform: translateY(-1px); }
+.editorial-glass .editorial-review-inbox article > div { min-width: 0; }
+.editorial-glass .editorial-review-inbox article a { text-align: center; justify-content: center; }
+.editorial-glass .editorial-review-inbox > p { color: var(--ed-muted); }
+
+/* Dialogs are portals: their theme is explicit, not inherited from .editorial-glass. */
+.editorial-themed-dialog {
+  --ed-dialog-surface: #fff; --ed-dialog-card: #f7f5fc;
+  --ed-dialog-border: #ded6ed; --ed-dialog-text: #182033; --ed-dialog-muted: #526077;
+  color: var(--ed-dialog-text); background: var(--ed-dialog-surface);
+}
+html.dark .editorial-themed-dialog, body:has(.dark) .editorial-themed-dialog,
+body:has([data-theme="dark"]) .editorial-themed-dialog {
+  --ed-dialog-surface: #1b1930; --ed-dialog-card: #26233e;
+  --ed-dialog-border: #504a70; --ed-dialog-text: #f6f3ff; --ed-dialog-muted: #c7c1d9;
+  background: var(--ed-dialog-surface); color: var(--ed-dialog-text);
+}
+.editorial-themed-dialog :is(.editorial-task-details,.editorial-materials-panel,.editorial-discussion-panel) { min-width: 0; color: var(--ed-dialog-text); }
+.editorial-themed-dialog :is(.editorial-task-details,.editorial-materials-panel,.editorial-discussion-panel) :is(h3,h4,h5,h6) { color: var(--ed-dialog-text); }
+.editorial-themed-dialog :is(.editorial-task-details,.editorial-materials-panel,.editorial-discussion-panel) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),textarea,select) {
+  max-width: 100%; min-width: 0; border: 1px solid var(--ed-dialog-border);
+  border-radius: .75rem; background: var(--ed-dialog-card);
+  color: var(--ed-dialog-text); -webkit-text-fill-color: var(--ed-dialog-text);
+  font-size: 16px;
+}
+.editorial-themed-dialog :is(input,textarea)::placeholder { color: var(--ed-dialog-muted); opacity: .9; }
+.editorial-themed-dialog [role="tablist"] { flex-wrap: wrap; gap: .4rem; }
+.editorial-themed-dialog [role="tablist"] [role="tab"] { min-height: 44px; }
+.editorial-themed-dialog [role="tablist"] [role="tab"][aria-selected="false"] {
+  color: var(--ed-dialog-text); border: 1px solid var(--ed-dialog-border);
+  background: var(--ed-dialog-card);
+}
+.editorial-themed-dialog :is(.editorial-task-details,.editorial-materials-panel,.editorial-discussion-panel) :is(button,a):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
+.editorial-themed-dialog .editorial-discussion-panel :is(details,[class*="rounded-lg"][class*="border-current"]) {
+  border-color: var(--ed-dialog-border); border-radius: .85rem;
+}
+.editorial-themed-dialog .editorial-materials-panel progress { accent-color: #8b5cf6; }
+.editorial-themed-dialog .editorial-materials-panel .editorial-material-tile { border-radius: 1rem; overflow: hidden; }
+.editorial-themed-dialog .editorial-materials-panel .editorial-gallery-heading { border-radius: 1rem; }
+@media (max-width: 639px) {
+  .editorial-glass :is(.editorial-glass__projects,.editorial-review-inbox) { overflow-wrap: anywhere; }
+  .editorial-glass .editorial-review-inbox article a { width: 100%; }
+  .editorial-themed-dialog [role="tablist"] [role="tab"] { flex: 1 1 auto; }
+  .editorial-themed-dialog :is(.editorial-task-details,.editorial-materials-panel,.editorial-discussion-panel) :is(button,select,input,textarea) { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .editorial-glass .editorial-review-inbox article,
+  .editorial-glass .editorial-glass__projects aside > button { transition: none; transform: none !important; }
+}
