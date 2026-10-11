@@ -65,7 +65,7 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
         try {
             await api(event ? `/editorial/calendar/${event.id}` : '/editorial/calendar', {
                 token, method: event ? 'PATCH' : 'POST',
-                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay, scope: event?.seriesId && scope === 'series' ? 'series' : 'one', repeat: event?.seriesId && scope === 'one' ? 'NONE' : repeat, repeatUntil },
+                body: { title: title.trim(), description: description.trim(), startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), allDay, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', scope: event?.seriesId && scope === 'series' ? 'series' : 'one', repeat: event?.seriesId && scope === 'one' ? 'NONE' : repeat, repeatUntil },
             });
             onSaved();
         } catch (err) { setError(err.message || 'Не удалось сохранить событие'); }
@@ -90,7 +90,7 @@ function PersonalEventForm({ event, date, token, onSaved, onCancel }) {
                     <label className="block text-sm font-semibold">Повторение<select className="mt-1 block w-full rounded-xl border p-3" value={repeat} onChange={e => setRepeat(e.target.value)}>
                         <option value="NONE">Не повторять</option><option value="DAILY">Каждый день</option><option value="WEEKLY">Каждую неделю</option><option value="WEEKDAYS">По будням</option><option value="MONTHLY">Каждый месяц</option>
                     </select></label>
-                    {repeat !== 'NONE' && <label className="block text-sm font-semibold">Повторять до<input type="date" required value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /><span className="mt-1 block text-xs opacity-70">Не более года. Время повторений сохраняется по UTC; при переходе на летнее время местный час может измениться.</span></label>}
+                    {repeat !== 'NONE' && <label className="block text-sm font-semibold">Повторять до<input type="date" required value={repeatUntil} onChange={e => setRepeatUntil(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" /><span className="mt-1 block text-xs opacity-70">Не более года. Время повторений сохраняется по часовому поясу вашего устройства.</span></label>}
                 </div>}
                 <label className="block text-sm font-semibold">Заметки<textarea maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full rounded-xl border p-3" placeholder="Детали и планы" /></label>
         {error && <p role="alert" className="text-sm text-rose-500">{error}</p>}
