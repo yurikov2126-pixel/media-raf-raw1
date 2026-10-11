@@ -775,6 +775,7 @@ model EditorialTask {
   parentId String?
   title String
   description String @default("")
+  location String @default("")
   isOpen Boolean @default(false)
   status String @default("TODO")
   assigneeId String?
