@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { getIo } from '../lib/notify.js';
+import { awardApprovedEditorialTask } from '../lib/editorialXp.js';
 
 const router = Router();
 router.use(auth);
@@ -286,6 +287,7 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
         if (!Object.keys(data).length) return res.status(400).json({ error: 'Нет изменений' });
         const updated = await prisma.$transaction(async (tx) => {
             const result = await tx.editorialTask.update({ where: { id: task.id }, data });
+            if (editor && data.status && ['APPROVED', 'DONE'].includes(data.status)) await awardApprovedEditorialTask(tx, result);
             await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: 'UPDATED', details: JSON.stringify({ before: Object.fromEntries(Object.keys(data).map((key) => [key, task[key] instanceof Date ? task[key].toISOString() : task[key]])), after: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value])) }) } });
             if (data.assigneeId && data.assigneeId !== task.assigneeId) await notifyEditorial(tx, project, result, [data.assigneeId], 'assigned', req.user.id);
             if (data.status && data.status !== task.status) await notifyEditorial(tx, project, result, [task.assigneeId, task.createdById], 'status', req.user.id);
@@ -317,6 +319,7 @@ router.post('/projects/:projectId/tasks/:taskId/review', async (req, res, next) 
         const status = action === 'submit' ? 'IN_REVIEW' : action === 'approve' ? 'APPROVED' : 'REVISION';
         const updated = await prisma.$transaction(async (tx) => {
             const result = await tx.editorialTask.update({ where: { id: task.id }, data: { status } });
+            if (action === 'approve') await awardApprovedEditorialTask(tx, result);
             if (note) await tx.editorialTaskComment.create({ data: { taskId: task.id, authorId: req.user.id, body: note } });
             await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: action === 'submit' ? 'REVIEW_SUBMITTED' : action === 'approve' ? 'REVIEW_APPROVED' : 'REVIEW_REVISION', details: JSON.stringify({ note }) } });
             const recipients = action === 'submit'

@@ -75,6 +75,7 @@ model User {
   achievements UserAchievement[]
   xpLog        XpLog[]
   dailyQuests  DailyQuest[]
+  editorialXpAwards EditorialTaskXpAward[]
   seasonScores GamificationSeasonScore[]
 
   // Курсы: практики и ДЗ
@@ -797,6 +798,7 @@ model EditorialTask {
   applications EditorialTaskApplication[]
   events EditorialTaskEvent[]
   materialFiles EditorialMaterialFile[]
+  xpAward EditorialTaskXpAward?
   @@index([projectId, status])
   @@index([projectId, workDate])
   @@index([assigneeId, dueAt])
@@ -952,4 +954,15 @@ model GamificationSeasonScore {
 
   @@id([seasonId, userId])
   @@index([seasonId, xp])
+}
+
+model EditorialTaskXpAward {
+  taskId    String   @id
+  userId    String
+  amount    Int
+  awardedAt DateTime @default(now())
+  task      EditorialTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, awardedAt])
 }
