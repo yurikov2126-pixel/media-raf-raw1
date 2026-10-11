@@ -30,6 +30,7 @@ import editorialRouter from './routes/editorial.js';
 import editorialWorkflowRouter from './routes/editorialWorkflow.js';
 import editorialMaterialsRouter from './routes/editorialMaterials.js';
 import editorialCalendarRouter from './routes/editorialCalendar.js';
+import editorialContentPlanRouter from './routes/editorialContentPlan.js';
 import { prisma } from './lib/prisma.js';
 import { isModuleEnabled } from './lib/modules.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -166,6 +167,7 @@ app.use('/api/homework', requireModule('courses'), homeworkRouter);
 app.use('/api/editorial/workflow', requireModule('editorial'), editorialWorkflowRouter);
 app.use('/api/editorial/materials', requireModule('editorial'), editorialMaterialsRouter);
 app.use('/api/editorial/calendar', requireModule('editorial'), editorialCalendarRouter);
+app.use('/api/editorial/content-plan', requireModule('editorial'), editorialContentPlanRouter);
 app.use('/api/editorial', requireModule('editorial'), editorialRouter);
 
 /* ─────────── Swagger / OpenAPI ─────────── */
