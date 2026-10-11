@@ -19,15 +19,17 @@ function safeName(value) {
 }
 export function zipEntries(files) {
     const used = new Set();
+    const safeFolder = value => String(value || '').split(/[\\/]/).map(safeName).filter(Boolean).join('/');
     return files.map(file => {
         let name = safeName(file.name);
         const dot = name.lastIndexOf('.');
         const stem = dot > 0 ? name.slice(0, dot) : name;
         const ext = dot > 0 ? name.slice(dot) : '';
         let suffix = 2;
-        while (used.has(name.toLowerCase())) name = `${stem} (${suffix++})${ext}`;
-        used.add(name.toLowerCase());
-        return { ...file, zipName: name };
+        const folder = safeFolder(file.zipFolder);
+        while (used.has((folder + '/' + name).toLowerCase())) name = `${stem} (${suffix++})${ext}`;
+        used.add((folder + '/' + name).toLowerCase());
+        return { ...file, zipName: folder ? folder + '/' + name : name };
     });
 }
 export function streamZip(files) {
