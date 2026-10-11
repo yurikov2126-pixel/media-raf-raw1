@@ -45,6 +45,7 @@ export default function EditorialProjects() {
     const [wizardMembers, setWizardMembers] = useState([]);
     const [wizardTasks, setWizardTasks] = useState([]);
     const [wizardTaskTitle, setWizardTaskTitle] = useState('');
+    const [wizardTaskLocation, setWizardTaskLocation] = useState('');
     const [wizardTaskAssignee, setWizardTaskAssignee] = useState('');
     const [wizardTaskDue, setWizardTaskDue] = useState('');
     const [wizardBusy, setWizardBusy] = useState(false);
@@ -94,7 +95,7 @@ export default function EditorialProjects() {
     function startWizard() {
         setTitle(''); setDescription(''); setEventDate(''); setEventEndDate(''); setProjectDuration('single'); setWizardTaskDay(''); setVisibility('CLOSED');
         setWizardStep(1); setWizardProject(null); setWizardMembers([]); setWizardTasks([]);
-        setWizardTaskTitle(''); setWizardTaskAssignee(''); setWizardTaskDue('');
+        setWizardTaskTitle(''); setWizardTaskLocation(''); setWizardTaskAssignee(''); setWizardTaskDue('');
         setMemberId(''); setCrewPosition(''); setPersonQuery(''); setPeople([]); setError(''); setShowCreate(true);
     }
     function finishWizard() {
@@ -134,13 +135,13 @@ export default function EditorialProjects() {
         try {
             const result = await api(`/editorial/workflow/projects/${wizardProject.id}/tasks`, {
                 token, method: 'POST', body: {
-                    title: wizardTaskTitle.trim(), assigneeId: wizardTaskAssignee || null,
-                    parentId: null, isOpen: false, workDate: wizardTaskDay || eventDate || null,
+                    title: wizardTaskTitle.trim(), location: wizardTaskLocation.trim(), assigneeId: wizardTaskAssignee || null,
+                    parentId: null, isOpen: false, workDate: wizardTaskDay || wizardProject.eventDate?.slice(0, 10) || null,
                     dueAt: wizardDeadlineAllowed && wizardTaskDue ? new Date(wizardTaskDue).toISOString() : null,
                 },
             });
             setWizardTasks(current => [...current, { ...(result.task || { id: String(Date.now()), title: wizardTaskTitle.trim() }), assigneeId: result.task?.assigneeId ?? (wizardTaskAssignee || null) }]);
-            setWizardTaskTitle(''); setWizardTaskDue(''); setWizardTaskAssignee('');
+            setWizardTaskTitle(''); setWizardTaskLocation(''); setWizardTaskDue(''); setWizardTaskAssignee('');
         } catch (e) { setError(e.message); }
         finally { setWizardBusy(false); }
     }
@@ -272,7 +273,8 @@ export default function EditorialProjects() {
                             {wizardTasks.length > 0 && <div className="space-y-2"><h4 className="text-sm font-semibold">Созданные задания</h4>{wizardTasks.map((task,i) => <p key={task.id || i} className="editorial-project-wizard-step rounded-lg p-3 text-sm">✓ {task.title}{task.workDate ? ` · ${new Date(task.workDate).toLocaleDateString('ru-RU')}` : ''}{task.assigneeId ? ` · ${wizardMembers.find(m => m.userId === task.assigneeId)?.user?.fullName || wizardMembers.find(m => m.userId === task.assigneeId)?.user?.username || 'Исполнитель назначен'}` : ' · Без исполнителя'}</p>)}</div>}
                             <form onSubmit={addWizardTask} className="space-y-3">
                                 <label className="block text-sm">Название задания<input required maxLength={160} value={wizardTaskTitle} onChange={e => setWizardTaskTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
-                                <label className="block text-sm">День выполнения<input type="date" required min={eventDate} max={projectDuration === 'multi' ? eventEndDate : eventDate} value={wizardTaskDay || eventDate} onChange={e => setWizardTaskDay(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                                <label className="block text-sm">День выполнения<input type="date" required min={wizardProject?.eventDate?.slice(0, 10)} max={(wizardProject?.eventEndDate || wizardProject?.eventDate)?.slice(0, 10)} value={wizardTaskDay || wizardProject?.eventDate?.slice(0, 10) || ''} onChange={e => setWizardTaskDay(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                                <label className="block text-sm">Локация<input maxLength={300} value={wizardTaskLocation} onChange={e => setWizardTaskLocation(e.target.value)} placeholder="Например, актовый зал, корпус 1" className="mt-1 w-full rounded-xl border p-3" /></label>
                                 <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => { setWizardTaskAssignee(e.target.value); setWizardTaskDue(''); }} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</option>)}</select></label>
                                 {wizardDeadlineAllowed && <label className="block text-sm">Дедлайн<input type="datetime-local" value={wizardTaskDue} onChange={e => setWizardTaskDue(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>}
                                 {selectedWizardMember && !wizardDeadlineAllowed && <p className="text-xs opacity-70">Для этой роли дедлайн не требуется.</p>}
