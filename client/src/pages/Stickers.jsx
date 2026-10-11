@@ -4,7 +4,7 @@ import {useAuth} from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
 import {tradeNames} from '../lib/stickerLabels.js';
 export default function Stickers(){
- const {token,user}=useAuth(),[packs,setPacks]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true),[users,setUsers]=useState([]),[trades,setTrades]=useState([]),[receiver,setReceiver]=useState(''),[offered,setOffered]=useState(''),[requested,setRequested]=useState(''),[notice,setNotice]=useState(''),[revealed,setRevealed]=useState(null),[selected,setSelected]=useState(null);
+ const {token,user}=useAuth(),[packs,setPacks]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true),[users,setUsers]=useState([]),[trades,setTrades]=useState([]),[receiver,setReceiver]=useState(''),[offered,setOffered]=useState(''),[requested,setRequested]=useState(''),[notice,setNotice]=useState(''),[selected,setSelected]=useState(null);
  usePageMeta({title:'Коллекция стикеров',description:'Собирайте тематические стикеры медиацентра'});
  const refreshTrades=()=>api('/stickers/trades',{token}).then(r=>setTrades(r.offers||[]));
  useEffect(()=>{api('/stickers/participants',{token}).then(r=>setUsers(r.users||[])).catch(()=>{});refreshTrades().catch(()=>{});setLoading(true);api('/stickers/catalog',{token}).then(r=>setPacks(r.packs||[])).catch(e=>setError(e.message)).finally(()=>setLoading(false))},[token]);
