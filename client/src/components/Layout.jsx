@@ -17,7 +17,7 @@ const FALLBACK_LINKS = [
     { to: '/app/feed', label: 'Лента', icon: 'feed' },
     { to: '/app/chats', label: 'Чаты', icon: 'message' },
     { to: '/app/courses', label: 'Обучение', icon: 'book' },
-    { to: '/app/wiki', label: 'Wiki', icon: 'book' },
+    { to: '/app/wiki', label: 'Wiki', icon: 'library' },
 ];
 
 const MODULE_ORDER = ['feed', 'chats', 'courses', 'wiki'];
