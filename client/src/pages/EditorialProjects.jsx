@@ -11,6 +11,7 @@ export default function EditorialProjects() {
     const linkedProjectId = searchParams.get('project');
     const linkedTaskId = searchParams.get('task');
     const fromMyTasks = searchParams.get('from') === 'my-tasks';
+    const fromReviews = searchParams.get('from') === 'reviews';
     const returnStatus = searchParams.get('status');
     const linkedTab = ['details','materials','discussion'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'details';
     const [projects, setProjects] = useState([]);
@@ -88,6 +89,7 @@ export default function EditorialProjects() {
 
     return (
         <div className="editorial-glass__projects space-y-4">
+            {fromReviews && <Link to="/app/editorial/reviews" className="inline-flex min-h-11 items-center rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold text-violet-800 dark:text-violet-200">← Вернуться к проверке</Link>}
             {fromMyTasks && <Link to={"/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")} className="inline-flex min-h-11 items-center rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold text-violet-800 dark:text-violet-200">← Вернуться к моим заданиям</Link>}
             {!fromMyTasks && <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><h2 className="text-xl font-semibold">Проекты</h2><p className="text-xs opacity-60">{projects.length} доступно · управление редакционными задачами</p></div>
