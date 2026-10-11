@@ -32,7 +32,7 @@ function normalizeLinks(items) {
 
 export default function Layout() {
     const { user, logout } = useAuth();
-    const { brand, nav, commandPalette } = useSettings();
+    const { brand, nav, raw: siteSettings, commandPalette } = useSettings();
     const { modules, isEnabled } = useModules();
     const { enabled: gamifEnabled } = useGamification();
     const navigate = useNavigate();
@@ -47,9 +47,24 @@ export default function Layout() {
     const isMentor = user?.role === 'MENTOR' || user?.role === 'ADMIN';
 
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
-    const links = normalizeLinks(rawLinks).filter((l) => {
+    const legacyExtras = [
+        ...(isEnabled('editorial') && Object.prototype.hasOwnProperty.call(modules, 'editorial') ? [{ to: '/app/editorial', label: 'Редакция', icon: 'newspaper' }] : []),
+        ...(gamifEnabled ? [{ to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
+        ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
+        ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
+    ];
+    const configured = siteSettings.nav_desktop_customized === 'true';
+    const candidates = configured ? rawLinks : [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to))];
+    const links = normalizeLinks(candidates).filter(l => {
+        if (typeof l.to !== 'string' || !l.to.startsWith('/app') || l.to.startsWith('//')) return false;
+        if (l.to === '/app/admin' && !isAdmin) return false;
+        if (l.to === '/app/mentor' && !isMentor) return false;
+        if (l.roles && (!Array.isArray(l.roles) || !l.roles.includes(user?.role))) return false;
         const key = moduleKeyForPath(l.to);
-        return !key || isEnabled(key);
+        if (key && !isEnabled(key)) return false;
+        if (l.to === '/app/editorial' && (!isEnabled('editorial') || !Object.prototype.hasOwnProperty.call(modules, 'editorial'))) return false;
+        if (l.to === '/app/leaderboard' && !gamifEnabled) return false;
+        return true;
     });
     const SWIPE_ORDER = links.map((l) => l.to);
 
@@ -107,30 +122,6 @@ export default function Layout() {
                             <span className="ui-nav-item__label">{l.label}</span>
                         </NavLink>
                     ))}
-                    {isEnabled('editorial') && Object.prototype.hasOwnProperty.call(modules, 'editorial') && (
-                        <NavLink to="/app/editorial" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
-                            <span className="ui-nav-item__icon"><Icon name="newspaper" size={19} /></span>
-                            <span className="ui-nav-item__label">Редакция</span>
-                        </NavLink>
-                    )}
-                    {gamifEnabled && (
-                        <NavLink to="/app/leaderboard" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
-                            <span className="ui-nav-item__icon"><Icon name="trophy" size={19} /></span>
-                            <span className="ui-nav-item__label">Рейтинг</span>
-                        </NavLink>
-                    )}
-                    {isMentor && (
-                        <NavLink to="/app/mentor" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
-                            <span className="ui-nav-item__icon"><Icon name="users" size={19} /></span>
-                            <span className="ui-nav-item__label">Руководителю</span>
-                        </NavLink>
-                    )}
-                    {isAdmin && (
-                        <NavLink to="/app/admin" className={({ isActive }) => `ui-nav-item ${isActive ? 'active' : ''}`}>
-                            <span className="ui-nav-item__icon"><Icon name="settings" size={19} /></span>
-                            <span className="ui-nav-item__label">Админка</span>
-                        </NavLink>
-                    )}
                 </nav>
 
                 <div className="mt-auto">
