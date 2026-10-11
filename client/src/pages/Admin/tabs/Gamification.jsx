@@ -5,6 +5,7 @@ import Avatar from '../../../components/Avatar.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import SeasonsPanel from './SeasonsPanel.jsx';
 import SeasonsAdmin from './SeasonsAdmin.jsx';
+import SeasonReview from './SeasonReview.jsx';
 
 const XP_LABELS = {
     post_created: 'Публикация поста',
@@ -394,6 +395,7 @@ export default function Gamification({ token }) {
             </div>
 
             <SeasonsAdmin token={token} />
+            <SeasonReview token={token} />
             <SeasonsPanel token={token} />
             <section className="card p-4 flex flex-wrap gap-3 items-end"><label className="space-y-2 flex-1 min-w-48"><span className="font-semibold block">XP за принятое редакционное задание</span><input className="input" type="number" min="0" max="1000" step="1" value={editorialXp} onChange={e => setEditorialXp(e.target.value)} /></label><button type="button" className="btn-primary" disabled={busy} onClick={async () => { const n = Number(editorialXp); if (!Number.isInteger(n) || n < 0 || n > 1000) return toast.error('Укажите целое число от 0 до 1000'); setBusy(true); try { await api('/admin/settings', { method:'PUT', token, body: { gamification_editorial_approved_xp: String(n) } }); toast.success('Награда за задание сохранена'); } catch(e) { toast.error(e.message); } finally { setBusy(false); } }}>Сохранить награду</button><p className="text-xs text-white/60 w-full">Начисляется один раз при принятии задания. Ноль отключает награду. Ранее принятые задания автоматически не пересчитываются.</p></section>
 
