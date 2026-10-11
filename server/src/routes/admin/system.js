@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Router } from 'express';
 import { safe } from './_shared.js';
 import { getServerInfo, cleanupPm2Logs, cleanupOldBackups } from '../../lib/serverInfo.js';
@@ -64,6 +66,32 @@ router.post(
         res.json({ ok: true, message: 'VACUUM ANALYZE выполнен' });
     })
 );
+
+/* Новые файловые хранилища редакции: только диагностика, без удаления. */
+router.get('/maintenance/editorial-storage', safe(async (_req, res) => {
+    const roots = [
+        { key: 'library', label: 'Файлы редакции', root: path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial'), model: prisma.editorialLibraryFile },
+        { key: 'materials', label: 'Вложения заданий', root: path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials'), model: prisma.editorialMaterialFile },
+    ];
+    const results = [];
+    for (const source of roots) {
+        const rows = await source.model.findMany({ select: { id: true, name: true, storageName: true, size: true } });
+        const missing = [];
+        const mismatched = [];
+        for (const file of rows) {
+            let stat;
+            try { stat = fs.statSync(path.join(source.root, file.storageName)); } catch (e) {
+                if (e.code === 'ENOENT') { missing.push({ id: file.id, name: file.name }); continue; }
+                throw e;
+            }
+            if (!stat.isFile() || stat.size !== file.size) mismatched.push({ id: file.id, name: file.name, expected: file.size, actual: stat.size });
+        }
+        const readable = fs.existsSync(source.root);
+        results.push({ key: source.key, label: source.label, readable, total: rows.length, missingCount: missing.length, sizeMismatchCount: mismatched.length, missing: missing.slice(0, 50), sizeMismatches: mismatched.slice(0, 50) });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ checkedAt: new Date().toISOString(), checks: results });
+}));
 
 /* ─── Точечное удаление осиротевших файлов ─── */
 
