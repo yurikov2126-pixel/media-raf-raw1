@@ -1,4 +1,5 @@
 const PATHS = {
+  seasonOrbit: <><circle cx="12" cy="12" r="8" strokeDasharray="3 3"/><path d="M12 3.5 14 9l5.5 3-5.5 2.5L12 20l-2.5-5.5L4 12l5.5-3z"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></>,
   home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M9 20v-5h6v5"/></>,
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
   feed: <><path d="M4 5.5h16"/><path d="M4 10.5h10"/><path d="M4 15.5h16"/><path d="M4 20.5h10"/></>,
