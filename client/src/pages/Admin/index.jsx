@@ -133,24 +133,24 @@ export default function Admin() {
 
     return (
         <div className="flex min-h-screen bg-gradient-to-br from-transparent via-transparent to-violet/5">
-            <aside className="hidden xl:flex flex-col w-64 shrink-0 sticky top-0 h-screen py-7 px-4 overflow-y-auto border-r border-white/10 bg-white/[0.025]">
+            <aside className="hidden xl:flex flex-col w-64 shrink-0 sticky top-0 h-screen py-7 px-4 overflow-y-auto border-r border-slate-200 bg-white/70 dark:border-white/10 dark:bg-white/[0.025]">
                 <div className="mb-5">
                     <div className="font-bold text-xl">⚙️ Админка</div>
-                    <div className="text-xs text-white/40 mt-1">Управление платформой</div>
+                    <div className="text-xs text-slate-500 dark:text-white/40 mt-1">Управление платформой</div>
                 </div>
                 <AdminSidebar tab={tab} onSelect={setTab} badges={badges} />
             </aside>
 
             <div className="flex-1 min-w-0 py-4 md:py-8 px-4 md:px-8 xl:px-10">
                 <div className="hidden xl:flex items-center justify-between mb-6">
-                    <div><div className="text-xs uppercase tracking-widest text-violet mb-1">Управление платформой</div><h1 className="text-3xl font-bold">{currentMeta.icon} {currentMeta.label}</h1><p className="text-sm text-white/45 mt-1">Администрирование Media_РАФ_RAW</p></div>
+                    <div><div className="text-xs uppercase tracking-widest text-violet mb-1">Управление платформой</div><h1 className="text-3xl font-bold">{currentMeta.icon} {currentMeta.label}</h1><p className="text-sm text-slate-500 dark:text-white/45 mt-1">Администрирование Media_РАФ_RAW</p></div>
                     <button
                         type="button"
                         onClick={() => setPaletteOpen(true)}
                         className="btn-ghost !py-2 text-sm flex items-center gap-2"
                     >
                         🔍 Поиск
-                        <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-white/15 text-white/50">
+                        <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-slate-300 text-slate-600 dark:border-white/15 dark:text-white/50">
                             ⌘K
                         </kbd>
                     </button>
