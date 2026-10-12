@@ -67,6 +67,11 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             <button type="button" role="tab" aria-selected={tab === 'discussion'} onClick={() => setTab('discussion')} className={`rounded-lg px-3 py-2 text-sm ${tab === 'discussion' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-current/15'}`}>Обсуждение и заявки</button>
         </div>
         {task.status === 'IN_REVIEW' && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/50 dark:text-amber-100">⏳ На проверке — {canEdit ? 'ожидает вашего решения во вкладке «Материалы»' : 'ожидает решения редактора'}</div>}
+        {(task.workDate||task.startTime||task.durationMinutes)&&<div className="flex flex-wrap gap-2 rounded-xl border border-violet-300/50 bg-violet-50 p-3 text-sm font-semibold text-slate-900 dark:border-violet-500/40 dark:bg-slate-800 dark:text-slate-100" aria-label="Время и продолжительность задания">
+            {task.workDate&&<span>📅 {new Date(task.workDate.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU')}</span>}
+            {task.startTime&&<span>🕘 Начало: {task.startTime}</span>}
+            {task.durationMinutes&&<span>⏱ Продолжительность: {task.durationMinutes} мин.</span>}
+        </div>}
         <div hidden={tab !== 'details'} className="space-y-4">
         {task.assigneeId === user?.id && ['TODO', 'IN_PROGRESS', 'REVISION'].includes(task.status) && <div className="rounded-xl border border-violet-300 bg-violet-50 p-3 dark:border-violet-500 dark:bg-slate-800">
             <button type="button" onClick={() => setTab('materials')} className="min-h-11 w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700">Загрузить файлы на проверку</button>

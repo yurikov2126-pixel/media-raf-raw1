@@ -11,6 +11,7 @@ const router = Router();
 const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial');
 const materialRoot = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
 const materialKey = id => `material:${id}`;
+const MAX_SHARED_FILES = 5000;
 const fileView = file => ({ ...publicFile(file), id: materialKey(file.id), taskId: file.taskId, version: file.version, caption: file.caption, source: 'material' });
 const materialIds = ids => ids.filter(id => typeof id === 'string' && id.startsWith('material:')).map(id => id.slice(9));
 const libraryIds = ids => ids.filter(id => typeof id === 'string' && !id.startsWith('material:'));
@@ -164,7 +165,7 @@ router.post('/shares/quick', async (req, res, next) => {
             ids = [fileId]; title = file.name;
         }
         if (!ids.length) return res.status(400).json({ error: 'Нет файлов для передачи' });
-        if (ids.length > 200) return res.status(413).json({ error: 'Для одной ссылки доступно не более 200 файлов' });
+        if (ids.length > MAX_SHARED_FILES) return res.status(413).json({ error: `Для одной ссылки доступно не более ${MAX_SHARED_FILES} файлов` });
         const share = await prisma.editorialFileShare.create({ data: { token: randomBytes(24).toString('hex'), title, fileIds: ids, createdById: req.user.id, expiresAt: new Date(Date.now() + 30 * 86400000) } });
         res.status(201).json({ share });
     } catch (error) { next(error); }
@@ -211,7 +212,7 @@ router.post('/shares', async (req, res, next) => {
         const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
         const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
         const fileIds = req.body.fileIds;
-        if (!title || title.length > 160 || description.length > 2000 || !Array.isArray(fileIds) || !fileIds.length || fileIds.length > 200 || !fileIds.every(id => typeof id === 'string') || new Set(fileIds).size !== fileIds.length) return res.status(400).json({ error: 'Укажите название и выберите файлы' });
+        if (!title || title.length > 160 || description.length > 2000 || !Array.isArray(fileIds) || !fileIds.length || fileIds.length > MAX_SHARED_FILES || !fileIds.every(id => typeof id === 'string') || new Set(fileIds).size !== fileIds.length) return res.status(400).json({ error: 'Укажите название и выберите файлы' });
         const count = (await resolveFiles(fileIds)).length;
         if (count !== fileIds.length) return res.status(400).json({ error: 'Некоторые файлы не найдены' });
         const days = req.body.expiresInDays === null ? null : Number(req.body.expiresInDays ?? 30);
