@@ -130,7 +130,7 @@ router.post('/projects/:id/members', async (req, res, next) => {
             update: { role, ...(req.body.crewPosition !== undefined ? { crewPosition } : {}) },
         });
         res.json({ member });
-        if (userId !== req.user.id && (!previousMember || (req.body.crewPosition !== undefined && previousMember.crewPosition !== member.crewPosition))) {
+        if (userId !== req.user.id && (!previousMember || previousMember.role !== member.role || (req.body.crewPosition !== undefined && previousMember.crewPosition !== member.crewPosition))) {
             await createNotification(userId, 'editorial', {
                 event: 'project_joined', projectId: project.id, projectTitle: project.title,
                 crewPosition: member.crewPosition, crewRole: CREW_LABELS[member.crewPosition] || 'Участник команды',
