@@ -47,7 +47,7 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
     };
 
     return (
-        <div className="card p-5">
+        <div className="card p-5 mrr-admin-design">
             <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
                 <div>
                     <div className="font-bold text-lg">🎨 Дизайн сайта</div>
