@@ -45,6 +45,7 @@ export default function EditorialProjects() {
     const [wizardMembers, setWizardMembers] = useState([]);
     const [wizardTasks, setWizardTasks] = useState([]);
     const [wizardTaskTitle, setWizardTaskTitle] = useState('');
+    const [wizardTaskDescription,setWizardTaskDescription]=useState('');
     const [wizardTaskLocation, setWizardTaskLocation] = useState('');
     const [wizardTaskAssignee, setWizardTaskAssignee] = useState('');
     const [wizardTaskDue, setWizardTaskDue] = useState('');
@@ -66,6 +67,9 @@ export default function EditorialProjects() {
     const [editingTitle,setEditingTitle]=useState(false);
     const [titleDraft,setTitleDraft]=useState('');
     const [savingTitle,setSavingTitle]=useState(false);
+    const [editingBrief,setEditingBrief]=useState(false);
+    const [briefDraft,setBriefDraft]=useState('');
+    const [savingBrief,setSavingBrief]=useState(false);
     const [roleSavingId,setRoleSavingId]=useState(null);
     const [updatingCompletion, setUpdatingCompletion] = useState(false);
     const [deletingProject, setDeletingProject] = useState(false);
@@ -106,7 +110,7 @@ export default function EditorialProjects() {
     function startWizard() {
         setTitle(''); setDescription(''); setEventDate(''); setEventEndDate(''); setProjectDuration('single'); setWizardTaskDay(''); setVisibility('CLOSED');
         setWizardStep(1); setWizardProject(null); setWizardMembers([]); setWizardTasks([]);
-        setWizardTaskTitle(''); setWizardTaskLocation(''); setWizardTaskAssignee(''); setWizardTaskDue('');
+        setWizardTaskTitle(''); setWizardTaskDescription(''); setWizardTaskLocation(''); setWizardTaskAssignee(''); setWizardTaskDue('');
         setMemberId(''); setCrewPosition(''); setPersonQuery(''); setPeople([]); setError(''); setShowCreate(true);
     }
     function finishWizard() {
@@ -150,7 +154,7 @@ export default function EditorialProjects() {
         try {
             const result = await api(`/editorial/workflow/projects/${wizardProject.id}/tasks`, {
                 token, method: 'POST', body: {
-                    title: wizardTaskTitle.trim(), location: wizardTaskLocation.trim(), assigneeId: wizardTaskAssignee || null,
+                    title: wizardTaskTitle.trim(), description: wizardTaskDescription || wizardProject.description || '', location: wizardTaskLocation.trim(), assigneeId: wizardTaskAssignee || null,
                     parentId: null, isOpen: false, workDate: chosenDay,
                     dueAt: wizardDeadlineAllowed && wizardTaskDue ? new Date(wizardTaskDue).toISOString() : null,
                 },
@@ -179,6 +183,13 @@ export default function EditorialProjects() {
         setSavingTitle(true);setError('');
         try {await api(`/editorial/projects/${selected.id}`,{token,method:'PATCH',body:{title:nextTitle}});await reload();setEditingTitle(false)}
         catch(e){setError(e.message)}finally{setSavingTitle(false)}
+    }
+    async function saveProjectBrief(event) {
+        event.preventDefault();
+        if(!selected||savingBrief||briefDraft.length>5000)return;
+        setSavingBrief(true);setError('');
+        try{await api(`/editorial/projects/${selected.id}`,{token,method:'PATCH',body:{description:briefDraft}});await reload();setEditingBrief(false)}
+        catch(e){setError(e.message)}finally{setSavingBrief(false)}
     }
     async function changeMemberRole(member,role) {
         if(!selected||roleSavingId||member.role===role)return;
@@ -304,6 +315,7 @@ export default function EditorialProjects() {
                                 <label className="block text-sm">Название задания<input required maxLength={160} value={wizardTaskTitle} onChange={e => setWizardTaskTitle(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
                                 <p className="text-xs opacity-75">Задание можно назначить на любой день проекта: {wizardProject?.eventDate?.slice(0,10)} — {(wizardProject?.eventEndDate || wizardProject?.eventDate)?.slice(0,10)}</p>
                                 <label className="block text-sm">День выполнения<input type="date" required min={wizardProject?.eventDate?.slice(0, 10)} max={(wizardProject?.eventEndDate || wizardProject?.eventDate)?.slice(0, 10)} value={wizardTaskDay || wizardProject?.eventDate?.slice(0, 10) || ''} onChange={e => setWizardTaskDay(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
+                                <label className="block text-sm">Описание задания и требования к кадрам<textarea rows={4} maxLength={10000} value={wizardTaskDescription || wizardProject?.description || ''} onChange={e=>setWizardTaskDescription(e.target.value)} className="mt-1 w-full rounded-xl border p-3" placeholder="Требования к съёмке, планы, ракурсы…"/><span className="mt-1 block text-xs opacity-65">По умолчанию — описание проекта. Для этого задания его можно изменить.</span></label>
                                 <label className="block text-sm">Локация<input maxLength={300} value={wizardTaskLocation} onChange={e => setWizardTaskLocation(e.target.value)} placeholder="Например, актовый зал, корпус 1" className="mt-1 w-full rounded-xl border p-3" /></label>
                                 <label className="block text-sm">Исполнитель<select value={wizardTaskAssignee} onChange={e => { setWizardTaskAssignee(e.target.value); setWizardTaskDue(''); }} className="mt-1 w-full rounded-xl border p-3"><option value="">Не назначен</option>{wizardMembers.map(m => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.user?.username || m.userId} — {m.role === 'MANAGER' ? 'Руководитель' : crewName(m.crewPosition)}</option>)}</select></label>
                                 {wizardDeadlineAllowed && <label className="block text-sm">Дедлайн<input type="datetime-local" value={wizardTaskDue} onChange={e => setWizardTaskDue(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>}
@@ -332,7 +344,7 @@ export default function EditorialProjects() {
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
                         <section className="editorial-glass__surface min-w-0 space-y-4 rounded-2xl border border-violet-200/60 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{canManage&&<button type="button" onClick={()=>{setTitleDraft(selected.title);setEditingTitle(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingTitle?"Отмена":"✎ Изменить название"}</button>}</div>{canManage&&editingTitle&&<form onSubmit={saveProjectTitle} className="mt-3 flex flex-wrap gap-2"><input autoFocus aria-label="Новое название проекта" required maxLength={120} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2"/><button type="submit" disabled={savingTitle||!titleDraft.trim()} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingTitle?"Сохранение…":"Сохранить"}</button></form>}{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
+                                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{canManage&&<button type="button" onClick={()=>{setTitleDraft(selected.title);setEditingTitle(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingTitle?"Отмена":"✎ Изменить название"}</button>}</div>{canManage&&editingTitle&&<form onSubmit={saveProjectTitle} className="mt-3 flex flex-wrap gap-2"><input autoFocus aria-label="Новое название проекта" required maxLength={120} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2"/><button type="submit" disabled={savingTitle||!titleDraft.trim()} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingTitle?"Сохранение…":"Сохранить"}</button></form>}<div className="mt-3 space-y-2 rounded-xl border border-current/15 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Описание мероприятия и требования к съёмке</h4>{canManage&&<button type="button" onClick={()=>{setBriefDraft(selected.description||'');setEditingBrief(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingBrief?'Отмена':'✎ Редактировать описание'}</button>}</div>{canManage&&editingBrief?<form onSubmit={saveProjectBrief} className="space-y-2"><textarea autoFocus aria-label="Описание проекта и требования к съёмке" maxLength={5000} rows={6} value={briefDraft} onChange={e=>setBriefDraft(e.target.value)} placeholder="Что за мероприятие, формат съёмки, необходимые кадры, ракурсы, требования к материалам…" className="w-full rounded-lg border border-current/20 bg-transparent p-3 text-sm"/><button type="submit" disabled={savingBrief} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingBrief?'Сохранение…':'Сохранить описание'}</button></form>:<p className="whitespace-pre-wrap break-words text-sm opacity-80">{selected.description||'Описание пока не добавлено.'}</p>}</div></div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
                             {canManage&&<div className="rounded-xl border border-current/15 p-3 space-y-2">
