@@ -12,7 +12,7 @@ const STATUSES = [
 
 export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, initialTab, refresh, onError, onClose }) {
     const [title, setTitle] = useState(task.title);
-    const [description, setDescription] = useState(task.description || '');
+    const [description, setDescription] = useState(task.description || project.description || '');
     const [location, setLocation] = useState(task.location || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
     const [parentId, setParentId] = useState(task.parentId || '');
@@ -22,7 +22,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [saving, setSaving] = useState(false);
     const [tab, setTab] = useState(initialTab || (task.status === 'IN_REVIEW' ? 'materials' : 'details'));
     useEffect(() => {
-        setTitle(task.title); setDescription(task.description || ''); setLocation(task.location || '');
+        setTitle(task.title); setDescription(task.description || project.description || ''); setLocation(task.location || '');
         setAssigneeId(task.assigneeId || '');
         setParentId(task.parentId || '');
         setWorkDate(task.workDate ? task.workDate.slice(0, 10) : '');
@@ -77,8 +77,10 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
                 <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40 disabled:opacity-60" />
             </label>
             <label className="block text-sm md:col-span-2">Локация<input maxLength={300} disabled={!canEdit || saving} value={location} onChange={e => setLocation(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" placeholder="Где выполняется задание" /></label>
-            <label className="block text-sm md:col-span-2">Описание
+            <label className="block text-sm md:col-span-2">Описание задания и требования к съёмке
                 <textarea maxLength={10000} rows={3} disabled={!canEdit || saving} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60" />
+                <span className="mt-1 block text-xs opacity-65">Описание индивидуально для этого задания. Общие требования проекта можно скопировать заново.</span>
+                {canEdit&&project.description&&<button type="button" disabled={saving} onClick={()=>setDescription(project.description)} className="mt-2 rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">Скопировать описание проекта</button>}
             </label>
             <label className="block min-w-0 text-sm">Исполнитель
                 <select disabled={!canEdit || saving} value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setDueAt(''); }} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
