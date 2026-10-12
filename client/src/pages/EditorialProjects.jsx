@@ -66,6 +66,9 @@ export default function EditorialProjects() {
     const [editingTitle,setEditingTitle]=useState(false);
     const [titleDraft,setTitleDraft]=useState('');
     const [savingTitle,setSavingTitle]=useState(false);
+    const [editingBrief,setEditingBrief]=useState(false);
+    const [briefDraft,setBriefDraft]=useState('');
+    const [savingBrief,setSavingBrief]=useState(false);
     const [roleSavingId,setRoleSavingId]=useState(null);
     const [updatingCompletion, setUpdatingCompletion] = useState(false);
     const [deletingProject, setDeletingProject] = useState(false);
@@ -179,6 +182,13 @@ export default function EditorialProjects() {
         setSavingTitle(true);setError('');
         try {await api(`/editorial/projects/${selected.id}`,{token,method:'PATCH',body:{title:nextTitle}});await reload();setEditingTitle(false)}
         catch(e){setError(e.message)}finally{setSavingTitle(false)}
+    }
+    async function saveProjectBrief(event) {
+        event.preventDefault();
+        if(!selected||savingBrief||briefDraft.length>5000)return;
+        setSavingBrief(true);setError('');
+        try{await api(`/editorial/projects/${selected.id}`,{token,method:'PATCH',body:{description:briefDraft}});await reload();setEditingBrief(false)}
+        catch(e){setError(e.message)}finally{setSavingBrief(false)}
     }
     async function changeMemberRole(member,role) {
         if(!selected||roleSavingId||member.role===role)return;
@@ -332,7 +342,7 @@ export default function EditorialProjects() {
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
                         <section className="editorial-glass__surface min-w-0 space-y-4 rounded-2xl border border-violet-200/60 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{canManage&&<button type="button" onClick={()=>{setTitleDraft(selected.title);setEditingTitle(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingTitle?"Отмена":"✎ Изменить название"}</button>}</div>{canManage&&editingTitle&&<form onSubmit={saveProjectTitle} className="mt-3 flex flex-wrap gap-2"><input autoFocus aria-label="Новое название проекта" required maxLength={120} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2"/><button type="submit" disabled={savingTitle||!titleDraft.trim()} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingTitle?"Сохранение…":"Сохранить"}</button></form>}{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
+                                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{canManage&&<button type="button" onClick={()=>{setTitleDraft(selected.title);setEditingTitle(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingTitle?"Отмена":"✎ Изменить название"}</button>}</div>{canManage&&editingTitle&&<form onSubmit={saveProjectTitle} className="mt-3 flex flex-wrap gap-2"><input autoFocus aria-label="Новое название проекта" required maxLength={120} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2"/><button type="submit" disabled={savingTitle||!titleDraft.trim()} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingTitle?"Сохранение…":"Сохранить"}</button></form>}<div className="mt-3 space-y-2 rounded-xl border border-current/15 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Описание мероприятия и требования к съёмке</h4>{canManage&&<button type="button" onClick={()=>{setBriefDraft(selected.description||'');setEditingBrief(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingBrief?'Отмена':'✎ Редактировать описание'}</button>}</div>{canManage&&editingBrief?<form onSubmit={saveProjectBrief} className="space-y-2"><textarea autoFocus aria-label="Описание проекта и требования к съёмке" maxLength={5000} rows={6} value={briefDraft} onChange={e=>setBriefDraft(e.target.value)} placeholder="Что за мероприятие, формат съёмки, необходимые кадры, ракурсы, требования к материалам…" className="w-full rounded-lg border border-current/20 bg-transparent p-3 text-sm"/><button type="submit" disabled={savingBrief} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingBrief?'Сохранение…':'Сохранить описание'}</button></form>:<p className="whitespace-pre-wrap break-words text-sm opacity-80">{selected.description||'Описание пока не добавлено.'}</p>}</div></div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
                             {canManage&&<div className="rounded-xl border border-current/15 p-3 space-y-2">
