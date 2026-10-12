@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "mobile:build": "vite build --mode mobile",
+    "mobile:sync": "cap sync",
+    "mobile:android": "cap open android",
+    "mobile:ios": "cap open ios"
   },
   "dependencies": {
     "framer-motion": "^11.11.0",
@@ -20,7 +24,12 @@
     "react-easy-crop": "^6.2.3",
     "react-router-dom": "^6.26.2",
     "recharts": "^2.13.0",
-    "socket.io-client": "^4.8.0"
+    "socket.io-client": "^4.8.0",
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/keyboard": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
@@ -40,6 +49,9 @@
     "workbox-expiration": "^7.1.0",
     "workbox-precaching": "^7.1.0",
     "workbox-routing": "^7.1.0",
-    "workbox-strategies": "^7.1.0"
+    "workbox-strategies": "^7.1.0",
+    "@capacitor/cli": "^7.4.0",
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/ios": "^7.4.0"
   }
 }
