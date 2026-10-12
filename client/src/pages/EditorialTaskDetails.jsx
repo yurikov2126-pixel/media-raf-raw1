@@ -77,6 +77,12 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             <button type="button" onClick={() => setTab('materials')} className="min-h-11 w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700">Загрузить файлы на проверку</button>
             <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Выберите файлы во вкладке «Материалы», добавьте подписи и нажмите «Отправить на проверку».</p>
         </div>}
+        <div className="flex flex-wrap gap-2 rounded-xl border border-violet-300/50 bg-violet-50 p-3 text-sm text-slate-900 dark:border-violet-600/50 dark:bg-slate-800 dark:text-slate-100" aria-label="Расписание задания">
+            <span className="w-full text-xs font-semibold uppercase tracking-wide opacity-70">Время и продолжительность мероприятия</span>
+            {task.workDate&&<span className="rounded-lg border border-current/15 px-3 py-2">📅 {new Date(task.workDate.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU')}</span>}
+            <span className="rounded-lg border border-current/15 px-3 py-2">🕘 Начало: {task.startTime||'Не указано'}</span>
+            <span className="rounded-lg border border-current/15 px-3 py-2">⏱ Продолжительность: {task.durationMinutes?task.durationMinutes+' мин.':'Не указана'}</span>
+        </div>
         <form onSubmit={save} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <label className="block min-w-0 text-sm sm:col-span-2">Название
                 <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40 disabled:opacity-60" />
