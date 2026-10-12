@@ -62,6 +62,11 @@ export default function EditorialProjects() {
     const [crewPosition, setCrewPosition] = useState('');
     const [crewSavingId, setCrewSavingId] = useState(null);
     const [savingMember, setSavingMember] = useState(false);
+    const [memberRole,setMemberRole]=useState('PARTICIPANT');
+    const [editingTitle,setEditingTitle]=useState(false);
+    const [titleDraft,setTitleDraft]=useState('');
+    const [savingTitle,setSavingTitle]=useState(false);
+    const [roleSavingId,setRoleSavingId]=useState(null);
     const [updatingCompletion, setUpdatingCompletion] = useState(false);
     const [deletingProject, setDeletingProject] = useState(false);
     const [editingProjectDates,setEditingProjectDates] = useState(false);
@@ -167,13 +172,27 @@ export default function EditorialProjects() {
         finally { setCreating(false); }
     }
 
+    async function saveProjectTitle(event) {
+        event.preventDefault();
+        const nextTitle=titleDraft.trim();
+        if(!selected||savingTitle||!nextTitle||nextTitle.length>120)return;
+        setSavingTitle(true);setError('');
+        try {await api(`/editorial/projects/${selected.id}`,{token,method:'PATCH',body:{title:nextTitle}});await reload();setEditingTitle(false)}
+        catch(e){setError(e.message)}finally{setSavingTitle(false)}
+    }
+    async function changeMemberRole(member,role) {
+        if(!selected||roleSavingId||member.role===role)return;
+        setRoleSavingId(member.userId);setError('');
+        try{await api(`/editorial/projects/${selected.id}/members`,{token,method:'POST',body:{userId:member.userId,role,crewPosition:member.crewPosition||null}});await reload()}
+        catch(e){setError(e.message)}finally{setRoleSavingId(null)}
+    }
     async function addMember(event) {
         event.preventDefault();
         if (!selected || savingMember) return;
         setSavingMember(true); setError('');
         try {
-            await api(`/editorial/projects/${selected.id}/members`, { token, method: 'POST', body: { userId: memberId.trim(), role: 'PARTICIPANT', crewPosition: crewPosition || null } });
-            setMemberId(''); setPersonQuery(''); setPeople([]);
+            await api(`/editorial/projects/${selected.id}/members`, { token, method: 'POST', body: { userId: memberId.trim(), role: memberRole, crewPosition: crewPosition || null } });
+            setMemberId(''); setPersonQuery(''); setPeople([]); setMemberRole('PARTICIPANT');
             await reload();
         } catch (e) { setError(e.message); }
         finally { setSavingMember(false); }
@@ -313,7 +332,7 @@ export default function EditorialProjects() {
                     {!selected ? <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-current/20 p-6 text-center text-sm opacity-60">Выберите проект из списка, чтобы открыть рабочее пространство.</div> : (
                         <section className="editorial-glass__surface min-w-0 space-y-4 rounded-2xl border border-violet-200/60 p-3 sm:p-5" aria-label={`Проект ${selected.title}`}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
+                                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{canManage&&<button type="button" onClick={()=>{setTitleDraft(selected.title);setEditingTitle(v=>!v)}} className="rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">{editingTitle?"Отмена":"✎ Изменить название"}</button>}</div>{canManage&&editingTitle&&<form onSubmit={saveProjectTitle} className="mt-3 flex flex-wrap gap-2"><input autoFocus aria-label="Новое название проекта" required maxLength={120} value={titleDraft} onChange={e=>setTitleDraft(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2"/><button type="submit" disabled={savingTitle||!titleDraft.trim()} className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{savingTitle?"Сохранение…":"Сохранить"}</button></form>}{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
                             {canManage&&<div className="rounded-xl border border-current/15 p-3 space-y-2">
@@ -329,7 +348,7 @@ export default function EditorialProjects() {
                             </div>}
                             {projectTab === 'operations' ? <EditorialProjectOperations key={selected.id} project={selected} onOpenTasks={() => setProjectTab('tasks')} /> : projectTab === 'tasks' ? <EditorialWorkflow key={selected.id} project={selected} onError={setError} linkedTaskId={selected.id === linkedProjectId ? linkedTaskId : null} linkedTab={linkedTab} onTaskClose={fromMyTasks ? () => navigate("/app/editorial/my-tasks" + (returnStatus ? "?status=" + encodeURIComponent(returnStatus) : "")) : undefined} /> : <div className="space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Участники</h4>{canManage && <button type="button" onClick={() => setShowMemberForm((v) => !v)} className="rounded-lg border border-current/20 px-3 py-2 text-xs">{showMemberForm ? 'Скрыть форму' : '+ Участник'}</button>}</div>
-                                {selected.members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 py-2 text-sm"><span className="min-w-0 break-words">{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span><div className="flex flex-wrap items-center gap-2"><span className="text-xs opacity-60">{member.role === 'MANAGER' ? 'Руководитель' : crewName(member.crewPosition)}</span>{canManage && member.role !== 'MANAGER' && <select aria-label={`Роль: ${member.user?.fullName || member.userId}`} disabled={!!crewSavingId} value={member.crewPosition || ''} onChange={e => changeCrewPosition(member.userId, e.target.value)} className="min-h-10 rounded-lg border p-2 text-xs"><option value="">Без роли</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>}</div><span className="text-xs opacity-60">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span></div>)}
+                                {selected.members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-current/10 py-2 text-sm"><span className="min-w-0 break-words">{member.user?.fullName || member.userId} <span className="opacity-50">@{member.user?.username}</span></span><div className="flex flex-wrap items-center gap-2"><span className="text-xs opacity-60">{member.role === 'MANAGER' ? 'Руководитель' : crewName(member.crewPosition)}</span>{canManage && member.role !== 'MANAGER' && <select aria-label={`Роль: ${member.user?.fullName || member.userId}`} disabled={!!crewSavingId} value={member.crewPosition || ''} onChange={e => changeCrewPosition(member.userId, e.target.value)} className="min-h-10 rounded-lg border p-2 text-xs"><option value="">Без роли</option>{Object.entries(CREW_POSITIONS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>}</div>{canManage?<select aria-label={`Права участника ${member.user?.fullName||member.userId}`} disabled={!!roleSavingId||(member.userId===selected.createdById)} value={member.role} onChange={e=>changeMemberRole(member,e.target.value)} className="min-h-10 rounded-lg border border-current/20 bg-transparent p-2 text-xs"><option value="MANAGER">Руководитель</option><option value="EDITOR">Редактор</option><option value="PARTICIPANT">Участник</option><option value="OBSERVER">Наблюдатель</option></select>:<span className="text-xs opacity-60">{({ MANAGER: 'Руководитель', EDITOR: 'Редактор', PARTICIPANT: 'Участник', OBSERVER: 'Наблюдатель' })[member.role] || member.role}</span>}</div>)}
                                 {canManage && showMemberForm && <form onSubmit={addMember} className="space-y-3 rounded-xl border border-current/10 p-3">
                                     <label className="block text-sm">Найти участника<input value={personQuery} onChange={(e) => { setPersonQuery(e.target.value); setMemberId(''); }} placeholder="Имя или логин" autoComplete="off" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" /></label>
                                     {searching && <p className="text-xs opacity-60">Поиск…</p>}
