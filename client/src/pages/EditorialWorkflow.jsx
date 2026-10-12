@@ -28,11 +28,11 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const [taskDue, setTaskDue] = useState('');
     const [taskDay, setTaskDay] = useState('');
     const [taskStartTime,setTaskStartTime]=useState('');
-    useEffect(()=>{if(composer!=='task')return undefined;const previous=document.body.style.overflow;document.body.style.overflow='hidden';const keydown=e=>{if(e.key==='Escape'){e.preventDefault();setComposer(null)}};document.addEventListener('keydown',keydown);return()=>{document.body.style.overflow=previous;document.removeEventListener('keydown',keydown)}},[composer]);
     const [taskDuration,setTaskDuration]=useState('');
     const deadlineAllowed = canHaveDeadline(project.members, taskAssignee);
     const [busy, setBusy] = useState(false);
     const [composer, setComposer] = useState(null);
+    useEffect(()=>{if(composer!=='task')return undefined;const previous=document.body.style.overflow;document.body.style.overflow='hidden';const keydown=e=>{if(e.key==='Escape'){e.preventDefault();setComposer(null)}};document.addEventListener('keydown',keydown);return()=>{document.body.style.overflow=previous;document.removeEventListener('keydown',keydown)}},[composer]);
     const [view, setView] = useState('list');
     const [query, setQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
