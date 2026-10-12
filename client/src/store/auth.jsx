@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
+import { startAndroidPush, stopAndroidPush } from '../lib/androidPush.js';
 
 const Ctx = createContext(null);
 
@@ -43,6 +44,19 @@ export function AuthProvider({ children }) {
             })
             .finally(() => setLoading(false));
     }, [token]);
+
+    // Sync Android FCM only for an authenticated session. Browsers and iOS are unaffected.
+    useEffect(() => {
+        if (!token || !user) return;
+        startAndroidPush(token).catch((error) => {
+            console.warn('[android-push] Initialization failed:', error?.message);
+        });
+        return () => {
+            stopAndroidPush(token).catch((error) => {
+                console.warn('[android-push] Unregister failed:', error?.message);
+            });
+        };
+    }, [token, user?.id]);
 
     /* Сохранение токена и пользователя. */
     const applyAuth = (nextToken, nextUser) => {
