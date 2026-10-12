@@ -62,6 +62,7 @@ model User {
   notifications Notification[]
   wikiArticles  WikiArticle[]
   pushSubs      PushSubscription[]
+  mobilePushTokens MobilePushToken[]
 
   // Модерация
   reportsMade     Report[] @relation("ReporterReports")
@@ -1105,4 +1106,20 @@ model StickerAutoAward {
   createdAt DateTime @default(now())
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   @@unique([userId,ruleId])
+}
+
+
+// Android FCM registrations. Separate from browser Web Push subscriptions.
+model MobilePushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   @default("android")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastUsed  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

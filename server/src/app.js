@@ -18,6 +18,7 @@ import albumRoutes from './routes/albums.js';
 import portfolioRoutes from './routes/portfolio.js';
 import publicRoutes from './routes/public.js';
 import pushRoutes from './routes/push.js';
+import mobilePushRoutes from './routes/mobilePush.js';
 import wikiRoutes from './routes/wiki.js';
 import reportsRouter from './routes/reports.js';
 import modulesRouter from './routes/modules.js';
@@ -52,8 +53,15 @@ const CLIENT_ORIGINS = CLIENT_URL_RAW
     .map((s) => s.trim())
     .filter(Boolean);
 
+// Explicit opt-in for native Capacitor origins; never enabled implicitly in production.
+const MOBILE_ORIGINS = (process.env.MOBILE_CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+const ALLOWED_ORIGINS = [...new Set([...CLIENT_ORIGINS, ...MOBILE_ORIGINS])];
+
 export const corsOptions = {
-    origin: CLIENT_ORIGINS.length > 0 ? CLIENT_ORIGINS : true,
+    origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : true,
     credentials: true
 };
 
@@ -171,6 +179,7 @@ app.use('/api/albums', albumRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/mobile-push', mobilePushRoutes);
 app.use('/api/wiki', requireModule('wiki'), wikiRoutes);
 app.use('/api/modules', modulesRouter);
 app.use('/api/onboarding', onboardingRouter);
