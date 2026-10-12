@@ -1,0 +1,14 @@
+{
+  "appId": "ru.mediarafraw.mobile",
+  "appName": "MEDIA RAF RAW",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}
