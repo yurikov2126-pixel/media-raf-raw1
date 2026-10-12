@@ -64,6 +64,12 @@ export default function EditorialProjects() {
     const [savingMember, setSavingMember] = useState(false);
     const [updatingCompletion, setUpdatingCompletion] = useState(false);
     const [deletingProject, setDeletingProject] = useState(false);
+    const [editingProjectDates,setEditingProjectDates] = useState(false);
+    const [projectStartDraft,setProjectStartDraft] = useState('');
+    const [projectEndDraft,setProjectEndDraft] = useState('');
+    const [savingProjectDates,setSavingProjectDates] = useState(false);
+    const editProjectDates=()=>{setProjectStartDraft(selected.eventDate?.slice(0,10)||'');setProjectEndDraft(selected.eventEndDate?.slice(0,10)||'');setEditingProjectDates(true)};
+    const saveProjectDates=async(e)=>{e.preventDefault();if(!selected||!projectStartDraft||(projectEndDraft&&projectEndDraft<projectStartDraft))return;setSavingProjectDates(true);setError('');try{await api('/editorial/projects/'+selected.id,{method:'PATCH',token,body:{eventDate:projectStartDraft,eventEndDate:projectEndDraft||null}});await reload();setEditingProjectDates(false)}catch(err){setError(err.message)}finally{setSavingProjectDates(false)}};
     const canCreate = ['ADMIN', 'MENTOR'].includes(user?.role);
     useEffect(() => {
         let active = true;
@@ -310,6 +316,10 @@ export default function EditorialProjects() {
                                 <div className="min-w-0"><h3 className="break-words text-lg font-semibold">{selected.title}</h3>{selected.description && <p className="mt-1 line-clamp-2 break-words text-xs opacity-60">{selected.description}</p>}</div>{canManage && <button type="button" disabled={updatingCompletion} onClick={toggleProjectCompletion} className="min-h-11 shrink-0 rounded-xl border border-violet-400/60 px-3 py-2 text-sm font-semibold disabled:opacity-50">{updatingCompletion ? 'Сохранение…' : selected.completedAt ? '↻ Вернуть в работу' : '✓ Завершить проект'}</button>}
 
                             </div>
+                            {canManage&&<div className="rounded-xl border border-current/15 p-3 space-y-2">
+                               <div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="text-sm">Даты проекта</strong><p className="text-xs opacity-70">{selected.eventDate?new Date(selected.eventDate).toLocaleDateString('ru-RU'):'Не указана'}{selected.eventEndDate?' — '+new Date(selected.eventEndDate).toLocaleDateString('ru-RU'):' · однодневный проект'}</p></div><button type="button" onClick={()=>editingProjectDates?setEditingProjectDates(false):editProjectDates()} className="rounded-lg border border-violet-400/60 px-3 py-2 text-sm">{editingProjectDates?'Отмена':'Изменить даты'}</button></div>
+                               {editingProjectDates&&<form onSubmit={saveProjectDates} className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Дата начала<input type="date" required className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={projectStartDraft} max={projectEndDraft||undefined} onChange={e=>setProjectStartDraft(e.target.value)}/></label><label className="text-sm">Дата окончания (для многодневного проекта)<input type="date" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" min={projectStartDraft||undefined} value={projectEndDraft} onChange={e=>setProjectEndDraft(e.target.value)}/></label><p className="sm:col-span-2 text-xs opacity-70">После сохранения заданию можно назначить любой день между датами включительно. Уже созданные задания не изменятся.</p><button disabled={savingProjectDates||!projectStartDraft||(!!projectEndDraft&&projectEndDraft<projectStartDraft)} className="sm:col-span-2 rounded-xl bg-violet-600 text-white px-4 py-2 disabled:opacity-50">{savingProjectDates?'Сохранение…':'Сохранить даты проекта'}</button></form>}
+                             </div>}
                             {selected.completedAt && (user?.role === 'ADMIN' || selected.createdById === user?.id) && <button type="button" disabled={deletingProject} onClick={deleteCompletedProject} className="min-h-11 rounded-xl border border-rose-500/50 px-3 py-2 text-sm font-semibold text-rose-500 disabled:opacity-50">{deletingProject ? 'Удаление…' : 'Удалить завершённый проект'}</button>}
                             {selected.completedAt && <div role="status" className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-3 text-sm">✓ Проект завершён{selected.completedAt ? ` · ${new Date(selected.completedAt).toLocaleDateString('ru-RU')}` : ''}. Задания и материалы сохранены.</div>}
                             {!fromMyTasks && <div className="flex gap-2 border-b border-current/10 pb-2" role="tablist" aria-label="Раздел проекта">
