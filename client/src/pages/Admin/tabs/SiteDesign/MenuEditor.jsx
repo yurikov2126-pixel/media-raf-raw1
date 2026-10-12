@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import IconPicker from './IconPicker.jsx';
+import Icon from '../../../../components/Icon.jsx';
 import MenuPreview from './MenuPreview.jsx';
+import './visual-menu.css';
 
 const DEFAULT_DESKTOP = [
     { to: '/app', label: 'Главная', icon: 'dashboard', end: true },
@@ -35,25 +36,32 @@ const CONFIG = {
     mobile: { key: 'nav_mobile_items', extra: 'nav_mobile_more_items', label: 'Мобильный браузер' },
     pwa: { key: 'nav_pwa_items', extra: 'nav_pwa_more_items', label: 'PWA · установленное приложение' },
 };
-function ItemsEditor({ items, onChange, mobile = false, more = false }) {
-    const patch = (i, p) => onChange(items.map((x, j) => i === j ? { ...x, ...p } : x));
-    const move = (i, step) => { const j = i + step; if (j < 0 || j >= items.length) return; const a = [...items]; [a[i], a[j]] = [a[j], a[i]]; onChange(a); };
-    return <div className="space-y-2">
-        {items.map((item, i) => <div key={i} className="card p-3 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="text-xs text-white/60">Иконка<IconPicker value={item.icon} onChange={icon => patch(i, { icon })}/></div>
-                <label className="text-xs text-white/60">Название<input className="input mt-1" value={item.label || ''} onChange={e => patch(i, { label: e.target.value })} /></label>
-                <label className="text-xs text-white/60">Адрес<input className="input mt-1" value={item.action === 'more' ? 'Открыть «Ещё»' : item.to || ''} disabled={item.action === 'more'} onChange={e => patch(i, { to: e.target.value })} placeholder="/app/..." /></label>
-            </div>
-            <div className="flex gap-2 items-center flex-wrap">
-                <button type="button" className="btn-ghost !py-1 text-xs" disabled={!i} onClick={() => move(i, -1)}>↑ Выше</button>
-                <button type="button" className="btn-ghost !py-1 text-xs" disabled={i === items.length - 1} onClick={() => move(i, 1)}>↓ Ниже</button>
-                <button type="button" className="btn-ghost !py-1 text-xs text-pink" onClick={() => onChange(items.filter((_, j) => i !== j))}>Удалить</button>
-                {mobile && !more && <span className="text-xs text-white/40">В нижней панели рекомендуется не больше 5 пунктов</span>}
-            </div>
-        </div>)}
-        <button type="button" className="btn-ghost text-sm" onClick={() => onChange([...items, { to: '/app', label: 'Новый пункт', icon: 'dashboard' }])}>＋ Добавить пункт</button>
-    </div>;
+const CATALOG = [
+ ...DEFAULT_DESKTOP,...DEFAULT_MOBILE,...DEFAULT_EXTRA,
+ {to:'/app/seasons',label:'Сезоны',icon:'trophy'},
+ {to:'/app/stickers',label:'Стикеры',icon:'image'},
+].filter((item,index,array)=>array.findIndex(other=>(other.action||other.to)===(item.action||item.to))===index);
+const identity = item => item.action || item.to;
+function VisualItems({items,onChange,mobile=false,more=false,library=[]}){
+ const [dragged,setDragged]=useState(null);
+ const [over,setOver]=useState(null);
+ const move=(from,to)=>{if(from===to||from<0||to<0||to>=items.length)return;const next=[...items];const [item]=next.splice(from,1);next.splice(to,0,item);onChange(next)};
+ const add=item=>{if(mobile&&!more&&items.length>=5)return;if(items.some(x=>identity(x)===identity(item)))return;onChange([...items,{...item}])};
+ const drop=(index,event)=>{event.preventDefault();if(dragged!==null)move(dragged,index);setDragged(null);setOver(null)};
+ return <div className="mrr-menu-builder">
+  <div className="mrr-menu-builder__hint">Перетаскивайте карточки мышью, чтобы менять порядок. Нажмите ×, чтобы скрыть раздел, или добавьте его из библиотеки ниже.</div>
+  <div className={mobile&&!more?'mrr-menu-builder__bottom':'mrr-menu-builder__items'}>
+   {items.map((item,i)=><div key={identity(item)||i} className={'mrr-menu-builder__item '+(over===i?'is-over':'')} draggable onDragStart={event=>{setDragged(i);event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',String(i))}} onDragOver={event=>{event.preventDefault();setOver(i)}} onDrop={event=>drop(i,event)} onDragEnd={()=>{setDragged(null);setOver(null)}}>
+    <span className="mrr-menu-builder__handle" aria-hidden="true">⠿</span><Icon name={item.icon||'dashboard'} size={22}/><span className="mrr-menu-builder__name">{item.label}</span>
+    <button type="button" className="mrr-menu-builder__remove" aria-label={'Убрать '+item.label} title="Убрать из меню" onClick={()=>onChange(items.filter((_,j)=>i!==j))}>×</button>
+    <div className="mrr-menu-builder__arrows"><button type="button" aria-label={'Поднять '+item.label} disabled={i===0} onClick={()=>move(i,i-1)}>↑</button><button type="button" aria-label={'Опустить '+item.label} disabled={i===items.length-1} onClick={()=>move(i,i+1)}>↓</button></div>
+   </div>)}
+   {!items.length&&<div className="mrr-menu-builder__empty">Здесь пока нет разделов. Добавьте их из библиотеки.</div>}
+  </div>
+  <div className="mrr-menu-builder__library-title">Добавить раздел в меню</div>
+  <div className="mrr-menu-builder__library">{library.filter(item=>!items.some(x=>identity(x)===identity(item))).map(item=><button type="button" key={identity(item)} disabled={mobile&&!more&&items.length>=5} onClick={()=>add(item)}><Icon name={item.icon||'dashboard'} size={19}/><span>{item.label}</span><b>＋</b></button>)}</div>
+  {mobile&&!more&&<p className="mrr-menu-builder__hint">Нижняя панель: {items.length} из 5 мест. Остальные разделы размещайте в «Ещё».</p>}
+ </div>;
 }
 export default function MenuEditor({ settings, update }) {
     const [device, setDevice] = useState('desktop');
@@ -67,6 +75,7 @@ export default function MenuEditor({ settings, update }) {
         : saved;
     const previewPrimary = device === 'desktop' ? items : parse(settings[cfg.key], DEFAULT_MOBILE);
     const previewExtra = device === 'desktop' ? [] : parse(settings[cfg.extra], DEFAULT_EXTRA);
+    const library = area === 'extra' ? CATALOG.filter(x=>x.action!=='more') : CATALOG;
     const setItems = (value) => update({ [key]: JSON.stringify(value), ...(device === 'desktop' ? { nav_desktop_customized: 'true' } : {}) });
     return <div className="space-y-5">
         <div><h3 className="font-semibold">Настройка навигации для разных устройств</h3><p className="text-sm text-white/50">Каждый вариант сохраняется отдельно. Права доступа проверяются сайтом независимо от меню.</p></div>
@@ -74,7 +83,7 @@ export default function MenuEditor({ settings, update }) {
         {cfg.extra && <div className="flex gap-2"><button type="button" className={area === 'primary' ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => setArea('primary')}>Нижняя панель</button><button type="button" className={area === 'extra' ? 'chip bg-violet text-white' : 'chip bg-white/5'} onClick={() => setArea('extra')}>Меню «Ещё»</button></div>}
         <div className="rounded-xl border border-white/10 p-3 text-xs text-white/60">{device === 'desktop' ? 'Полный список пунктов реального бокового меню. Системные разделы также можно переставлять или скрывать; доступ по ролям остаётся защищённым.' : area === 'primary' ? 'Пункты нижней панели. Для открытия дополнительного меню оставьте пункт с действием «Ещё».' : 'Пункты, которые открываются в меню «Ещё».'}</div>
         <MenuPreview device={device} primary={previewPrimary} extra={previewExtra} settings={settings}/>
-        <ItemsEditor key={key} items={items} onChange={setItems} mobile={device !== 'desktop'} more={area === 'extra'}/>
+        <VisualItems key={key} items={items} onChange={setItems} mobile={device !== 'desktop'} more={area === 'extra'} library={library}/>
         <button type="button" className="btn-ghost text-xs" onClick={() => update({ [key]: JSON.stringify(fallback), ...(device === 'desktop' ? { nav_desktop_customized: 'true' } : {}) })}>Восстановить стандартные пункты</button>
     </div>;
 }
