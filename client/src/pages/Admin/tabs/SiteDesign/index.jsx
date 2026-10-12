@@ -37,7 +37,7 @@ export default function SiteDesign({ settings, setSettings, token, onSaved }) {
         try {
             await api('/admin/settings', { method: 'PUT', token, body: settings });
             setSaved(true);
-            onSaved?.();
+            await onSaved?.();
             setTimeout(() => setSaved(false), 2000);
         } catch (e) {
             setError(e.message);
