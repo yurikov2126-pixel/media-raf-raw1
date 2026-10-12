@@ -106,7 +106,7 @@ router.get('/my-tasks', async (req, res, next) => {
             where: { assigneeId: req.user.id, project: { members: { some: { userId: req.user.id } } } },
             select: {
                 id:true, projectId:true, title:true, description:true, status:true,
-                dueAt:true, updatedAt:true, createdAt:true, parentId:true,
+                dueAt:true, workDate:true, startTime:true, durationMinutes:true, updatedAt:true, createdAt:true, parentId:true,
                 project: { select: { id:true, title:true } },
             },
             orderBy: [{ dueAt:'asc' }, { updatedAt:'desc' }],
