@@ -46,3 +46,13 @@
 [data-theme="light"] .mrr-admin-design .mrr-menu-builder__item,[data-theme="light"] .mrr-admin-design .mrr-menu-builder__library button{background:#fff;color:#202338;border-color:#d8dbe6}
 [data-theme="light"] .mrr-admin-design .mrr-menu-builder__hint{color:#525a70}
 @media(max-width:520px){.mrr-menu-builder__bottom{gap:3px}.mrr-menu-builder__bottom .mrr-menu-builder__item{padding:6px 2px}.mrr-menu-builder__bottom .mrr-menu-builder__arrows button{padding:2px 4px}}
+
+/* Both mobile preview surfaces inherit the active site theme. */
+.mrr-menu-preview__extra{border:1px solid rgba(148,163,184,.24)}
+.mrr-menu-preview.is-light .mrr-menu-preview__extra{background:#fff;color:#202338;border-color:#d8dbe6}
+.mrr-menu-preview.is-dark .mrr-menu-preview__extra{background:#1b1a2b;color:#f5f3ff;border-color:rgba(255,255,255,.12)}
+.mrr-menu-preview.is-light .mrr-menu-preview__phone{border-color:#d8dbe6}
+.mrr-menu-preview.is-dark .mrr-menu-preview__phone{border-color:rgba(255,255,255,.15)}
+.mrr-menu-preview.is-light .mrr-menu-preview__phone nav{border-color:#e1e3eb}
+.mrr-menu-preview.is-light .mrr-menu-preview__text{color:#30374e;opacity:1}
+.mrr-menu-preview.is-light .mrr-menu-preview__phone .border-white\/10{border-color:#e1e3eb}
