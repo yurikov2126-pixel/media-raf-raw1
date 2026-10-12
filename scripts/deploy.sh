@@ -72,9 +72,33 @@ npx prisma migrate deploy
 # ─── 5. Перезапуск API ───
 log "=== 5. Перезапуск API ==="
 systemctl restart mediaraf-api
-sleep 3
-systemctl is-active mediaraf-api
-curl -fsS http://localhost:4000/api/health || { log "❌ API не отвечает"; exit 1; }
+# Resolve the same PORT configured for the service; do not assume port 4000.
+API_PORT=$(systemctl show mediaraf-api -p Environment --value | tr ' ' '\n' | sed -n 's/^PORT=//p' | tail -1)
+if [ -z "$API_PORT" ] && [ -f server/.env ]; then
+  API_PORT=$(sed -n 's/^PORT=//p' server/.env | tail -1 | tr -d '"\r')
+fi
+API_PORT=${API_PORT:-4000}
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]]; then
+  log "❌ Некорректный PORT для API: $API_PORT"
+  exit 1
+fi
+API_HEALTH="http://127.0.0.1:${API_PORT}/api/health"
+log "Ожидаем API: $API_HEALTH (до 60 секунд)"
+API_READY=false
+for attempt in $(seq 1 30); do
+  if curl --noproxy '*' --connect-timeout 1 --max-time 2 -fsS "$API_HEALTH" >/dev/null 2>&1; then
+    API_READY=true
+    log "✅ API готов (попытка $attempt)"
+    break
+  fi
+  sleep 2
+done
+if [ "$API_READY" != true ]; then
+  log "❌ API не отвечает после 60 секунд; диагностика:"
+  systemctl status mediaraf-api --no-pager -l 2>&1 | tee -a "$LOG_FILE" || true
+  journalctl -u mediaraf-api -n 100 --no-pager 2>&1 | tee -a "$LOG_FILE" || true
+  exit 1
+fi
 
 # ─── 6. Клиент ───
 log "=== 6. Client: зависимости и сборка ==="
@@ -92,7 +116,7 @@ log "OK: клиент опубликован"
 
 # ─── 8. Проверки ───
 log "=== 8. Финальная проверка ==="
-API_STATUS=$(curl -s http://localhost:4000/api/health)
+API_STATUS=$(curl -fsS "$API_HEALTH")
 log "API: $API_STATUS"
 
 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
