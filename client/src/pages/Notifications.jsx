@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../store/notifications.jsx';
 import ConfirmDialog from './Admin/components/ConfirmDialog.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
+import { localNotificationsPlugin, localNotificationPermission, enableLocalNotifications, sendLocalNotificationTest } from '../lib/nativeNotifications.js';
 
 const ICONS = {
     message: '💬',
@@ -97,6 +98,13 @@ export default function Notifications() {
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState(null);
     const [message, setMessage] = useState('');
+    const [nativePermission, setNativePermission] = useState(null);
+    const [nativeBusy, setNativeBusy] = useState(false);
+    const nativeAvailable = Boolean(localNotificationsPlugin());
+    useEffect(() => {
+        if (!nativeAvailable) return;
+        localNotificationPermission().then(setNativePermission).catch(() => {});
+    }, [nativeAvailable]);
     const nav = useNavigate();
     useEffect(() => {
         reload();
@@ -214,6 +222,49 @@ export default function Notifications() {
                     )}
                 </div>
             </div>
+
+            {nativeAvailable && (
+                <div className="card p-4 mb-5 flex flex-col gap-3">
+                    <div>
+                        <div className="font-semibold">Уведомления приложения</div>
+                        <p className="text-sm text-white/60 mt-1">
+                            Локальные уведомления iOS. Удалённые push при закрытом приложении
+                            потребуют отдельного подключения APNs.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" className="btn-ghost !py-2 text-sm"
+                            disabled={nativeBusy || nativePermission?.display === 'granted'}
+                            onClick={async () => {
+                                setNativeBusy(true);
+                                const result = await enableLocalNotifications();
+                                if (!result.ok) flash(result.error);
+                                try { setNativePermission(await localNotificationPermission()); } catch {}
+                                setNativeBusy(false);
+                            }}>
+                            {nativePermission?.display === 'granted' ? '✓ Разрешены в iOS' : '🔔 Включить уведомления'}
+                        </button>
+                        {nativePermission?.display === 'granted' && (
+                            <button type="button" className="btn-ghost !py-2 text-sm"
+                                disabled={nativeBusy}
+                                onClick={async () => {
+                                    setNativeBusy(true);
+                                    try {
+                                        await sendLocalNotificationTest();
+                                        flash('Тестовое уведомление запланировано через 5 секунд');
+                                    } catch (error) {
+                                        flash(error?.message || 'Ошибка тестового уведомления');
+                                    } finally { setNativeBusy(false); }
+                                }}>
+                                Проверить уведомление
+                            </button>
+                        )}
+                    </div>
+                    {nativePermission?.display === 'denied' && (
+                        <p className="text-xs text-white/50">Разрешите уведомления в настройках iOS для MEDIA RAF RAW.</p>
+                    )}
+                </div>
+            )}
 
             {message && (
                 <div className="mb-5 text-sm bg-lime/10 border border-lime/30 text-lime rounded-xl p-3">
