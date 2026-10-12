@@ -1,0 +1,48 @@
+
+/* Visual navigation builder: theme-aware, no text fields */
+.mrr-menu-builder{display:grid;gap:14px;color:var(--text-primary,#f5f3ff)}
+.mrr-menu-builder__hint{font-size:12px;opacity:.75;line-height:1.6}
+.mrr-menu-builder__items{display:grid;gap:8px;max-width:650px}
+.mrr-menu-builder__bottom{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
+.mrr-menu-builder__item{position:relative;display:flex;align-items:center;gap:11px;min-width:0;min-height:62px;padding:12px;border:1px solid var(--ui-border-strong);background:var(--ui-surface-solid);border-radius:14px;cursor:grab;user-select:none}
+.mrr-menu-builder__item:active{cursor:grabbing}
+.mrr-menu-builder__item.is-over{outline:2px dashed #8b5cf6;outline-offset:2px}
+.mrr-menu-builder__handle{font-size:24px;opacity:.55}
+.mrr-menu-builder__name{flex:1;font-size:14px;font-weight:650;overflow:hidden;text-overflow:ellipsis}
+.mrr-menu-builder__remove{font-size:23px;line-height:1;opacity:.7;padding:3px 6px}
+.mrr-menu-builder__remove:hover{color:#e11d48;opacity:1}
+.mrr-menu-builder__arrows{display:flex;gap:4px}
+.mrr-menu-builder__arrows button{padding:3px 6px;border:1px solid var(--ui-border-strong);border-radius:7px}
+.mrr-menu-builder__arrows button:disabled{opacity:.25}
+.mrr-menu-builder__bottom .mrr-menu-builder__item{flex-direction:column;justify-content:center;gap:5px;text-align:center;padding:8px 3px;min-height:116px}
+.mrr-menu-builder__bottom .mrr-menu-builder__handle{font-size:16px}
+.mrr-menu-builder__bottom .mrr-menu-builder__name{flex:0;font-size:11px;max-width:100%}
+.mrr-menu-builder__bottom .mrr-menu-builder__remove{position:absolute;top:0;right:0;font-size:18px}
+.mrr-menu-builder__bottom .mrr-menu-builder__arrows{margin-top:auto}
+.mrr-menu-builder__library-title{font-weight:700;margin-top:7px}
+.mrr-menu-builder__library{display:flex;flex-wrap:wrap;gap:8px}
+.mrr-menu-builder__library button{display:flex;align-items:center;gap:8px;padding:10px 13px;border:1px solid var(--ui-border-strong);border-radius:12px;background:var(--ui-surface-solid);font-size:13px}
+.mrr-menu-builder__library button:hover:not(:disabled){border-color:#8b5cf6}
+.mrr-menu-builder__library button:disabled{opacity:.3;cursor:not-allowed}
+.mrr-menu-builder__library b{color:#8b5cf6}
+.mrr-menu-builder__empty{padding:20px;border:1px dashed var(--ui-border-strong);border-radius:12px;opacity:.65}
+.mrr-menu-preview.is-dark{background:#10101d;color:#f5f3ff}
+.mrr-menu-preview.is-light{background:#f2f3f9;color:#202338}
+.mrr-menu-preview.is-dark .mrr-menu-preview__sidebar{background:#1b1a2b}
+.mrr-menu-preview.is-light .mrr-menu-preview__sidebar{background:#fff;color:#202338}
+.mrr-menu-preview.is-dark .mrr-menu-preview__phone{background:#171725}
+.mrr-menu-preview.is-light .mrr-menu-preview__phone{background:#fff;color:#202338}
+.mrr-menu-preview__active{background:rgba(124,58,237,.2);color:inherit}
+.mrr-menu-preview__text{color:inherit;opacity:.8}
+.mrr-menu-preview__placeholder{background:rgba(130,130,155,.12)}
+.mrr-menu-preview.is-light .text-white\/50,.mrr-menu-preview.is-light .text-white\/60{color:#50546b}
+[data-theme="light"] .mrr-admin-design{color:#1f2434}
+[data-theme="light"] .mrr-admin-design .text-white\/40{color:#62677a}
+[data-theme="light"] .mrr-admin-design .text-white\/50{color:#575d70}
+[data-theme="light"] .mrr-admin-design .text-white\/60{color:#4b5267}
+[data-theme="light"] .mrr-admin-design .border-white\/10{border-color:rgba(39,43,63,.16)}
+[data-theme="light"] .mrr-admin-design .bg-white\/5{background:rgba(36,40,61,.06)}
+[data-theme="light"] .mrr-admin-design .chip:not(.bg-violet){color:#34394e}
+[data-theme="light"] .mrr-admin-design .mrr-menu-builder__item,[data-theme="light"] .mrr-admin-design .mrr-menu-builder__library button{background:#fff;color:#202338;border-color:#d8dbe6}
+[data-theme="light"] .mrr-admin-design .mrr-menu-builder__hint{color:#525a70}
+@media(max-width:520px){.mrr-menu-builder__bottom{gap:3px}.mrr-menu-builder__bottom .mrr-menu-builder__item{padding:6px 2px}.mrr-menu-builder__bottom .mrr-menu-builder__arrows button{padding:2px 4px}}
