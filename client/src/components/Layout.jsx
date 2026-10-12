@@ -49,7 +49,7 @@ export default function Layout() {
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
     const legacyExtras = [
         ...(isEnabled('editorial') && Object.prototype.hasOwnProperty.call(modules, 'editorial') ? [{ to: '/app/editorial', label: 'Редакция', icon: 'newspaper' }] : []),
-        ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'trophy' }, { to: '/app/stickers', label: 'Стикеры', icon: 'image' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
+        ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'seasonOrbit' }, { to: '/app/stickers', label: 'Стикеры', icon: 'image' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
         ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
         ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
     ];
