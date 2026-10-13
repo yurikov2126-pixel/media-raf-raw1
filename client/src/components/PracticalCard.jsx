@@ -1,3 +1,4 @@
+import { LearningDiscussion, LearningRubric } from './LearningWorkTools.jsx';
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -13,7 +14,7 @@ function StatusBadge({ status }) {
 }
 
 export default function PracticalCard({ practical, onRefresh }) {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const submission = practical.submissions?.[0] || null;
     const status = submission?.status;
 
@@ -81,6 +82,9 @@ export default function PracticalCard({ practical, onRefresh }) {
                     {submission.feedback}
                 </div>
             )}
+
+            <LearningRubric kind="practical" workId={practical.id} rubric={practical.rubric} />
+            <LearningDiscussion kind="practical" workId={practical.id} studentId={user?.id} />
 
             {canSubmit && (
                 <div className="mt-3 pt-3 border-t border-white/10">
