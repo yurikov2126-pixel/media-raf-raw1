@@ -7,6 +7,7 @@ import usePageMeta from '../hooks/usePageMeta.js';
 const destination = (slug, order, mode = 'lesson') =>
     `/app/courses/${encodeURIComponent(slug)}${order ? `?lesson=${order}&mode=${mode}` : ''}`;
 const labels = {
+    NOT_SUBMITTED: ['Не сдано', 'bg-white/10 text-white/75'],
     PENDING: ['На проверке', 'bg-amber-500/15 text-amber-200'],
     REJECTED: ['Нужна доработка', 'bg-red-500/15 text-red-200'],
     APPROVED: ['Принято', 'bg-emerald-500/15 text-emerald-200'],
@@ -48,7 +49,7 @@ export default function AcademyDashboard() {
             <p className="text-white/65 text-sm mt-2">Продолжайте учиться, отслеживайте задания и сохраняйте результаты.</p>
         </header>
         <div className="grid grid-cols-3 gap-2 md:gap-4">
-            {[[courses.length, 'Курсов'], [average + '%', 'Прогресс'], [assignments.filter((a) => a.status === 'REJECTED').length, 'Доработать']].map(([value, label]) =>
+            {[[courses.length, 'Курсов'], [average + '%', 'Прогресс'], [assignments.filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').length, 'Требует внимания']].map(([value, label]) =>
                 <div key={label} className="card p-3 md:p-5 text-center"><div className="font-bold text-2xl">{value}</div><div className="text-xs text-white/65">{label}</div></div>)}
         </div>
         {current && <section className="card p-4 md:p-6 border border-violet-soft/30">
@@ -58,12 +59,12 @@ export default function AcademyDashboard() {
             <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4"><div className="bg-violet-soft h-full" style={{ width: (current.progress || 0) + '%' }} /></div>
             <Link className="btn-primary inline-flex min-h-11 items-center justify-center" to={destination(current.slug, current.resumeLessonOrder)}>▶ Продолжить</Link>
         </section>}
-        {assignments.some((a) => a.status === 'REJECTED') && <section className="card p-4 border border-amber-500/20">
+        {assignments.some((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED') && <section className="card p-4 border border-amber-500/20">
             <h2 className="font-bold mb-3">Требует внимания</h2>
-            {assignments.filter((a) => a.status === 'REJECTED').slice(0, 3).map((a) =>
+            {assignments.filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').slice(0, 3).map((a) =>
                 <Link className="block p-3 rounded-xl bg-white/5 hover:bg-white/10 mb-2" key={a.id} to={destination(a.slug, a.lessonOrder)}>
                     <div className="font-medium text-sm">{a.title}</div>
-                    <div className="text-xs text-amber-200 mt-1">Нужно исправить работу →</div>
+                    <div className="text-xs text-amber-200 mt-1">{a.status === 'REJECTED' ? 'Нужно исправить работу →' : 'Задание ещё не сдано →'}</div>
                 </Link>)}
         </section>}
         <nav className="flex gap-2 overflow-x-auto pb-2" aria-label="Разделы личного кабинета">
@@ -83,10 +84,10 @@ export default function AcademyDashboard() {
         {section === 'assignments' && <section className="space-y-3">
             {assignments.map((a) => <Link key={a.id} to={destination(a.slug, a.lessonOrder)} className="card p-4 block hover:border-violet-soft/40">
                 <div className="flex items-center justify-between gap-2 mb-2"><span className="font-medium">{a.title}</span><span className={`shrink-0 text-xs px-2 py-1 rounded-full ${labels[a.status]?.[1] || 'bg-white/10'}`}>{labels[a.status]?.[0] || a.status}</span></div>
-                <div className="text-xs text-white/60">{a.courseTitle} · {new Date(a.updatedAt).toLocaleDateString('ru-RU')}</div>
+                <div className="text-xs text-white/60">{a.courseTitle}{a.updatedAt ? ' · ' + new Date(a.updatedAt).toLocaleDateString('ru-RU') : ''}</div>
                 {a.feedback && <p className="text-sm text-white/75 mt-2">{a.feedback}</p>}
             </Link>)}
-            {!assignments.length && <p className="card p-6 text-white/65">Отправленных домашних заданий пока нет.</p>}
+            {!assignments.length && <p className="card p-6 text-white/65">Домашних заданий пока нет.</p>}
         </section>}
         {section === 'results' && <section className="space-y-3">
             {results.map((a) => <Link key={a.id} to={destination(a.slug, a.lessonOrder)} className="card block p-4 hover:border-violet-soft/40">
