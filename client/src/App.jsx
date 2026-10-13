@@ -19,6 +19,7 @@ const EditorialOverview = lazy(() => import('./pages/EditorialOverview.jsx'));
 const EditorialCalendar = lazy(() => import('./pages/EditorialCalendar.jsx'));
 const EditorialContentPlan = lazy(() => import('./pages/EditorialContentPlan.jsx'));
 const EditorialProjects = lazy(() => import('./pages/EditorialProjects.jsx'));
+const EditorialProductionBoard = lazy(() => import('./pages/EditorialProductionBoard.jsx'));
 const EditorialFiles = lazy(() => import('./pages/EditorialFiles.jsx'));
 const EditorialShares = lazy(() => import('./pages/EditorialShares.jsx'));
 const EditorialShareLanding = lazy(() => import('./pages/EditorialShareLanding.jsx'));
@@ -112,6 +113,7 @@ export default function App() {
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
                         <Route index element={<LazyPage><EditorialOverview /></LazyPage>} />
                         <Route path="projects" element={<LazyPage><EditorialProjects /></LazyPage>} />
+                        <Route path="production" element={<LazyPage><EditorialProductionBoard /></LazyPage>} />
                         <Route path="my-tasks" element={<LazyPage><EditorialMyTasks /></LazyPage>} />
                         <Route path="reviews" element={<LazyPage><EditorialReviewInbox /></LazyPage>} />
                         <Route path="calendar" element={<LazyPage><EditorialCalendar /></LazyPage>} />

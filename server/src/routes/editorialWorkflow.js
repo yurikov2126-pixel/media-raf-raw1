@@ -90,6 +90,82 @@ router.get('/navigation', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// Single production board, covering all projects visible to the current member.
+router.get('/production-board', async (req, res, next) => {
+    try {
+        const admin = isAdmin(req.user);
+        const projects = await prisma.editorialProject.findMany({
+            where: admin ? {} : { members: { some: { userId: req.user.id } } },
+            select: { id: true, title: true,
+                members: { where: { userId: req.user.id }, select: { role: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+        });
+        const projectIds = projects.map(project => project.id);
+        const tasks = await prisma.editorialTask.findMany({
+            where: { projectId: { in: projectIds } },
+            select: {
+                id: true, projectId: true, title: true, description: true, status: true,
+                dueAt: true, workDate: true, startTime: true, durationMinutes: true,
+                stageId: true, updatedAt: true, createdAt: true, assigneeId: true,
+                assignee: { select: { id: true, fullName: true, username: true, avatar: true } },
+                _count: { select: { materialFiles: true, comments: true } },
+            },
+            orderBy: [{ dueAt: 'asc' }, { createdAt: 'desc' }],
+            take: 1000,
+        });
+        res.json({
+            projects: projects.map(project => ({
+                id: project.id, title: project.title,
+                canEdit: admin || project.members.some(member => ['MANAGER', 'EDITOR'].includes(member.role)),
+            })),
+            tasks,
+        });
+    } catch (error) { next(error); }
+});
+
+// Explicit board transitions; submitting and approving materials remain review actions.
+router.patch('/production-board/tasks/:taskId/move', async (req, res, next) => {
+    try {
+        const task = await prisma.editorialTask.findUnique({
+            where: { id: req.params.taskId },
+            select: { id: true, projectId: true, status: true, assigneeId: true },
+        });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        const project = await getProject(task.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const editor = canEdit(project, req.user);
+        if (!editor && task.assigneeId !== req.user.id)
+            return res.status(403).json({ error: 'Нет прав на перемещение' });
+        const nextStatus = req.body?.status;
+        const transitions = {
+            TODO: ['IN_PROGRESS'],
+            IN_PROGRESS: ['TODO'],
+            REVISION: ['IN_PROGRESS'],
+            APPROVED: ['DONE'],
+            DONE: ['IN_PROGRESS'],
+        };
+        if (!transitions[task.status]?.includes(nextStatus))
+            return res.status(409).json({ error: 'Этот переход требует отправки материалов или решения проверяющего. Откройте карточку задания.' });
+        if (!editor && nextStatus !== 'IN_PROGRESS')
+            return res.status(403).json({ error: 'Исполнитель может только начать работу' });
+        const updated = await prisma.$transaction(async tx => {
+            const changed = await tx.editorialTask.updateMany({
+                where: { id: task.id, status: task.status },
+                data: { status: nextStatus },
+            });
+            if (!changed.count) return null;
+            await tx.editorialTaskEvent.create({
+                data: { taskId: task.id, actorId: req.user.id,
+                    action: 'BOARD_MOVED', details: JSON.stringify({ before: task.status, after: nextStatus }) },
+            });
+            return tx.editorialTask.findUnique({ where: { id: task.id }, select: { id: true, status: true, updatedAt: true } });
+        });
+        if (!updated) return res.status(409).json({ error: 'Статус изменился. Обновите доску.' });
+        res.json({ task: updated });
+    } catch (error) { next(error); }
+});
+
 // Cross-project review inbox. Scope every row to projects this user can edit.
 router.get('/review-inbox', async (req, res, next) => {
     try {
