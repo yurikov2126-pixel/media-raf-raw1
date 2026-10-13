@@ -100,6 +100,7 @@ export default function Dashboard() {
     return () => { alive = false; };
   }, [token, needsCourses, needsFeed]);
 
+  const resumeUrl = (course) => course ? `/app/courses/${course.slug}${course.resumeLessonOrder ? `?lesson=${course.resumeLessonOrder}` : ''}` : '/app/academy/me';
   const enrolledCourse = useMemo(
     () =>
       courses
@@ -137,7 +138,7 @@ export default function Dashboard() {
       label: 'Продолжить обучение',
       sub: enrolledCourse ? enrolledCourse.title : 'Выбрать курс',
       icon: 'book',
-      to: enrolledCourse ? `/app/courses/${enrolledCourse.slug}` : '/app/courses',
+      to: resumeUrl(enrolledCourse),
     }] : []),
     {
       label: 'Уведомления',
@@ -237,7 +238,7 @@ export default function Dashboard() {
                   {enrolledCourse ? 'Последний активный курс' : 'Ты ещё не записан ни на один курс'}
                 </div>
               </div>
-              <Link className="ui-section-link" to="/app/courses">
+              <Link className="ui-section-link" to="/app/academy/me">
                 Все курсы <Icon name="chevronRight" size={15} />
               </Link>
             </div>
@@ -245,7 +246,7 @@ export default function Dashboard() {
             {loading ? (
               <div className="text-sm text-white/35 py-7">Загрузка курса…</div>
             ) : enrolledCourse ? (
-              <Link to={`/app/courses/${enrolledCourse.slug}`} className="block">
+              <Link to={resumeUrl(enrolledCourse)} className="block">
                 <div className="flex items-center gap-3">
                   {enrolledCourse.cover ? (
                     <img src={enrolledCourse.cover} alt="" className="w-14 h-14 rounded-2xl object-cover border border-white/10" />
