@@ -1,3 +1,4 @@
+import { calculateRubricGrade } from '../lib/rubricGrades.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
@@ -162,7 +163,7 @@ router.post('/submissions/:id/review', async (req, res) => {
     if (!(await hasPermission(req.user, 'learning.homework.review'))) {
         return res.status(403).json({ error: 'Нет прав' });
     }
-    const { status, feedback, grade } = req.body || {};
+    const { status, feedback, grade, criteriaScores } = req.body || {};
     if (!['APPROVED', 'REJECTED'].includes(status)) {
         return res.status(400).json({ error: 'status должен быть APPROVED или REJECTED' });
     }
@@ -174,9 +175,13 @@ router.post('/submissions/:id/review', async (req, res) => {
     if (!submission) return res.status(404).json({ error: 'Заявка не найдена' });
     if (submission.status !== 'PENDING') return res.status(409).json({ error: 'Работа уже проверена или ожидает повторной сдачи' });
 
+    let rubricAssessment;
+    try { rubricAssessment = calculateRubricGrade(submission.homework.rubric, criteriaScores, status); }
+    catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+
     // Итоговая оценка = grade − latePenalty, не ниже 1
     let finalGrade = null;
-    const rawGrade = grade != null ? Number(grade) : null;
+    const rawGrade = rubricAssessment ? rubricAssessment.grade : grade != null && grade !== '' ? Number(grade) : null;
     if (status === 'APPROVED' && rawGrade != null) {
         const penalty = submission.latePenalty || 0;
         finalGrade = Math.max(1, Math.round((rawGrade - penalty) * 10) / 10);
@@ -200,6 +205,10 @@ router.post('/submissions/:id/review', async (req, res) => {
             data: { status, feedback: feedback || null, grade: rawGrade, finalGrade,
                 reviewedBy: req.user.id, reviewedAt: updatedSubmission.reviewedAt },
         });
+        if (rubricAssessment) {
+            await tx.learningRubricGrade.create({ data: { kind: 'homework', submissionId: submission.id,
+                criteria: JSON.stringify(rubricAssessment.lines), reviewedBy: req.user.id } });
+        }
         return updatedSubmission;
     });
 

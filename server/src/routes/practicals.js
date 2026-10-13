@@ -1,3 +1,4 @@
+import { calculateRubricGrade } from '../lib/rubricGrades.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
@@ -124,7 +125,7 @@ router.post('/submissions/:id/review', async (req, res) => {
         return res.status(403).json({ error: 'Нет прав' });
     }
 
-    const { status, feedback, grade } = req.body || {};
+    const { status, feedback, grade, criteriaScores } = req.body || {};
     if (!['APPROVED', 'REJECTED'].includes(status)) {
         return res.status(400).json({ error: 'status должен быть APPROVED или REJECTED' });
     }
@@ -147,22 +148,29 @@ router.post('/submissions/:id/review', async (req, res) => {
         return res.status(403).json({ error: 'Вы не руководитель этой практики' });
     }
 
+    let rubricAssessment;
+    try { rubricAssessment = calculateRubricGrade(submission.practical.rubric, criteriaScores, status); }
+    catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+    const finalGrade = rubricAssessment ? rubricAssessment.grade : grade != null && grade !== '' ? Number(grade) : null;
     const updated = await prisma.practicalSubmission.update({
         where: { id: submission.id },
         data: {
             status,
             feedback: feedback || null,
-            grade: grade != null ? Number(grade) : null,
+            grade: finalGrade,
             reviewedBy: req.user.id,
             reviewedAt: new Date(),
         },
     });
 
+    if (rubricAssessment) await prisma.learningRubricGrade.create({ data: { kind: 'practical', submissionId: submission.id,
+        criteria: JSON.stringify(rubricAssessment.lines), reviewedBy: req.user.id } });
+
     await createNotification(submission.userId, 'system', {
         title: status === 'APPROVED' ? 'Практика принята' : 'Практика отклонена',
         message:
             status === 'APPROVED'
-                ? `Практика «${submission.practical.topic}» принята${grade ? ` (оценка ${grade})` : ''}`
+                ? `Практика «${submission.practical.topic}» принята${finalGrade != null ? ` (оценка ${finalGrade})` : ''}`
                 : `Практика «${submission.practical.topic}» отклонена${feedback ? `: ${feedback}` : ''}`,
         practicalId: submission.practical.id,
         courseSlug: submission.practical.course.slug,

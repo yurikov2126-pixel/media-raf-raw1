@@ -1,3 +1,4 @@
+import { LearningDiscussion, LearningRubric } from '../components/LearningWorkTools.jsx';
 import HomeworkHistory from '../components/HomeworkHistory.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { api, resolveUrl } from '../api/client.js';
@@ -71,6 +72,7 @@ export default function MentorReviews() {
                     _practical: {
                         id: p.id,
                         topic: p.topic,
+                        rubric: p.rubric,
                         description: p.description,
                         scheduledAt: p.scheduledAt,
                     },
@@ -156,7 +158,7 @@ export default function MentorReviews() {
         );
     }
 
-    const reviewSubmission = async (kind, submissionId, status, feedback, grade) => {
+    const reviewSubmission = async (kind, submissionId, status, feedback, grade, criteriaScores) => {
         setBusyId(submissionId);
         try {
             const url =
@@ -166,7 +168,7 @@ export default function MentorReviews() {
             await api(url, {
                 token,
                 method: 'POST',
-                body: { status, feedback, grade },
+                body: { status, feedback, grade, criteriaScores },
             });
             await load();
         } catch (e) {
@@ -254,7 +256,31 @@ export default function MentorReviews() {
                         <div>Завершили: <b className="text-white">{course.completed}</b></div>
                         <div>ДЗ на проверке: <b className="text-white">{course.pendingHomework}</b></div>
                         <div>Практик: <b className="text-white">{course.pendingPracticals}</b></div>
+                        <div>Средний балл тестов: <b className="text-white">{course.averageTestScore == null ? '—' : course.averageTestScore + '%'}</b></div>
+                        <div>Неуспешных попыток: <b className="text-white">{course.failedTestPercent == null ? '—' : course.failedTestPercent + '%'}</b></div>
+                        <div className="col-span-2">Среднее время проверки: <b className="text-white">{course.averageReviewHours == null ? '—' : course.averageReviewHours + ' ч'}</b></div>
                     </div>
+                    {!!course.testStats?.length && <div className="mt-5 border-t border-white/10 pt-4">
+                        <h3 className="font-semibold text-sm mb-3">Тесты, вызывающие затруднения</h3>
+                        <div className="space-y-2">{course.testStats.map(t=><div key={t.id}>
+                            <div className="flex justify-between gap-2 text-xs text-white/75 mb-1">
+                                <span className="min-w-0 break-words">Урок {t.lessonOrder}: {t.title}</span>
+                                <span className="shrink-0">{t.failedPercent}% неудач · {t.count} попыток</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                <div className="h-full bg-amber-400/75" style={{width:t.failedPercent+'%'}} />
+                            </div>
+                        </div>)}</div>
+                    </div>}
+                    {!!course.scoreTimeline?.length && <div className="mt-4 border-t border-white/10 pt-4">
+                        <h3 className="font-semibold text-sm mb-2">Последние результаты тестов</h3>
+                        <div className="flex gap-1 items-end h-14" role="img" aria-label="Последние баллы тестов в хронологическом порядке">
+                            {course.scoreTimeline.map((t,i)=><div key={i} title={new Date(t.date).toLocaleDateString('ru-RU') + ': ' + t.score + '%'}
+                                className={`flex-1 rounded-t-sm min-w-0 ${t.passed ? 'bg-emerald-400/80' : 'bg-amber-400/80'}`}
+                                style={{height:Math.max(5,t.score)+'%'}} />)}
+                        </div>
+                        <p className="text-xs text-white/60 mt-1">Динамика результатов попыток, не история изменения процента прохождения курса</p>
+                    </div>}
                 </div>)}
                 {overview && !overview.courses.length && <p className="card p-6 text-white/60">Доступных для анализа курсов пока нет.</p>}
             </section>}
@@ -371,8 +397,8 @@ export default function MentorReviews() {
                                 key={s.id}
                                 submission={s}
                                 busy={busyId === s.id}
-                                onReview={(status, feedback, grade) =>
-                                    reviewSubmission('practical', s.id, status, feedback, grade)
+                                onReview={(status, feedback, grade, criteriaScores) =>
+                                    reviewSubmission('practical', s.id, status, feedback, grade, criteriaScores)
                                 }
                             />
                         ) : (
@@ -380,8 +406,8 @@ export default function MentorReviews() {
                                 key={s.id}
                                 submission={s}
                                 busy={busyId === s.id}
-                                onReview={(status, feedback, grade) =>
-                                    reviewSubmission('homework', s.id, status, feedback, grade)
+                                onReview={(status, feedback, grade, criteriaScores) =>
+                                    reviewSubmission('homework', s.id, status, feedback, grade, criteriaScores)
                                 }
                             />
                         )
@@ -398,6 +424,8 @@ function PracticalReviewCard({ submission, busy, onReview }) {
     const [open, setOpen] = useState(submission.status === 'PENDING');
     const [feedback, setFeedback] = useState('');
     const [grade, setGrade] = useState('');
+    const [rubric, setRubric] = useState(submission._practical?.rubric || '[]');
+    const [criteriaScores, setCriteriaScores] = useState([]);
 
     const p = submission._practical || {};
     const course = submission._course;
@@ -474,6 +502,10 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                         </div>
                     )}
 
+                    <LearningRubric kind="practical" workId={p.id} rubric={rubric} studentId={submission.user?.id}
+                        editable onChange={setRubric} onScoresChange={submission.status === 'PENDING' ? setCriteriaScores : undefined} />
+                    <LearningDiscussion kind="practical" workId={p.id} studentId={submission.user?.id} />
+
                     {/* Форма проверки */}
                     {submission.status === 'PENDING' && (
                         <ReviewForm
@@ -483,7 +515,7 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                             grade={grade}
                             setGrade={setGrade}
                             onSubmit={(status) =>
-                                onReview(status, feedback, grade ? Number(grade) : null)
+                                onReview(status, feedback, grade ? Number(grade) : null, criteriaScores)
                             }
                         />
                     )}
@@ -498,7 +530,8 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
     const [open, setOpen] = useState(submission.status === 'PENDING');
     const [feedback, setFeedback] = useState('');
     const [grade, setGrade] = useState('');
-    const [applyPenalty, setApplyPenalty] = useState(true);
+    const [rubric, setRubric] = useState(submission.homework?.rubric || '[]');
+    const [criteriaScores, setCriteriaScores] = useState([]);
 
     const hw = submission.homework || {};
     const lesson = hw.lesson || {};
@@ -513,9 +546,9 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
     const lateDays = submission.lateDays || 0;
     const rawGrade = grade !== '' ? Number(grade) : null;
     const recommended =
-        applyPenalty && rawGrade != null
+        rawGrade != null
             ? Math.max(1, Math.round((rawGrade - latePenalty) * 10) / 10)
-            : rawGrade;
+            : null;
 
     return (
         <div className="card p-5">
@@ -632,6 +665,9 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                     )}
 
                     <HomeworkHistory submissionId={submission.id} />
+                    <LearningRubric kind="homework" workId={hw.id} rubric={rubric} studentId={submission.user?.id}
+                        editable onChange={setRubric} onScoresChange={submission.status === 'PENDING' ? setCriteriaScores : undefined} />
+                    <LearningDiscussion kind="homework" workId={hw.id} studentId={submission.user?.id} />
 
                     {submission.status === 'PENDING' && (
                         <div className="pt-3 border-t border-white/10 space-y-3">
@@ -656,17 +692,10 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                                 />
 
                                 {latePenalty > 0 && (
-                                    <label className="flex items-center gap-2 text-xs text-white/70">
-                                        <input
-                                            type="checkbox"
-                                            checked={applyPenalty}
-                                            onChange={(e) => setApplyPenalty(e.target.checked)}
-                                        />
-                                        Применить штраф −{latePenalty}
-                                    </label>
+                                    <span className="text-xs text-white/70">Штраф −{latePenalty} применяется сервером автоматически</span>
                                 )}
 
-                                {recommended != null && latePenalty > 0 && applyPenalty && (
+                                {recommended != null && latePenalty > 0 && (
                                     <span className="text-xs text-white/60">
                                         Итог: <b className="text-white">{recommended}/5</b>
                                     </span>
@@ -676,14 +705,14 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                             <div className="flex gap-2 flex-wrap">
                                 <button
                                     disabled={busy}
-                                    onClick={() => onReview('APPROVED', feedback, recommended)}
+                                    onClick={() => onReview('APPROVED', feedback, rawGrade, criteriaScores)}
                                     className="btn-primary text-sm disabled:opacity-40"
                                 >
                                     ✓ Принять
                                 </button>
                                 <button
                                     disabled={busy}
-                                    onClick={() => onReview('REJECTED', feedback, null)}
+                                    onClick={() => onReview('REJECTED', feedback, null, criteriaScores)}
                                     className="btn-ghost text-sm disabled:opacity-40"
                                 >
                                     ↺ На доработку

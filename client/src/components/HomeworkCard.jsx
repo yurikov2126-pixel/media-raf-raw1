@@ -1,3 +1,4 @@
+import { LearningDiscussion, LearningRubric } from './LearningWorkTools.jsx';
 import HomeworkHistory from './HomeworkHistory.jsx';
 import { useState } from 'react';
 import { api } from '../api/client.js';
@@ -63,7 +64,7 @@ function DeadlineInfo({ deadline, submission }) {
 }
 
 export default function HomeworkCard({ homework, onRefresh }) {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const submission = homework.submissions?.[0] || null;
     const status = submission?.status;
 
@@ -203,6 +204,9 @@ export default function HomeworkCard({ homework, onRefresh }) {
             )}
 
             {submission && <HomeworkHistory submissionId={submission.id} />}
+
+            <LearningRubric kind="homework" workId={homework.id} rubric={homework.rubric} studentId={user?.id} />
+            <LearningDiscussion kind="homework" workId={homework.id} studentId={user?.id} />
 
             {/* Форма сдачи */}
             {editable && (

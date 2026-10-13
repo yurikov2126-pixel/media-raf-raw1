@@ -20,7 +20,7 @@ router.get('/overview', async (req, res) => {
         const courseIds = assigned ? [...new Set(assigned.map((p) => p.courseId))] : null;
         const where = courseIds === null ? {} : { courseId: { in: courseIds } };
 
-        const [enrollments, homework, practicals, courses] = await Promise.all([
+        const [enrollments, homework, practicals, courses, attempts] = await Promise.all([
             prisma.enrollment.findMany({
                 where,
                 select: {
@@ -30,18 +30,49 @@ router.get('/overview', async (req, res) => {
                 },
                 orderBy: { createdAt: 'desc' },
             }),
-            canHomework ? prisma.homeworkSubmission.findMany({ where: { homework: { lesson: where } }, select: { status: true, homework: { select: { lesson: { select: { courseId: true } } } } } }) : [],
-            canPractical ? prisma.practicalSubmission.findMany({ where: { practical: where }, select: { status: true, practical: { select: { courseId: true } } } }) : [],
+            canHomework ? prisma.homeworkSubmission.findMany({ where: { homework: { lesson: where } }, select: { status: true, createdAt: true, reviewedAt: true, homework: { select: { lesson: { select: { courseId: true } } } } } }) : [],
+            canPractical ? prisma.practicalSubmission.findMany({ where: { practical: where }, select: { status: true, createdAt: true, reviewedAt: true, practical: { select: { courseId: true } } } }) : [],
             prisma.course.findMany({ where: courseIds === null ? {} : { id: { in: courseIds } }, select: { id: true, slug: true, title: true } }),
+            prisma.testAttempt.findMany({
+                where: { test: { lesson: where } },
+                orderBy: { createdAt: 'desc' }, take: 1500,
+                select: { score: true, passed: true, createdAt: true, userId: true,
+                    test: { select: { id: true, title: true, lesson: { select: { courseId: true, order: true } } } } },
+            }),
         ]);
         const summary = courses.map((course) => {
             const members = enrollments.filter((e) => e.courseId === course.id);
+            const courseAttempts = attempts.filter((a) => a.test.lesson.courseId === course.id);
+            const submitted = [
+                ...homework.filter((x) => x.homework.lesson.courseId === course.id),
+                ...practicals.filter((x) => x.practical.courseId === course.id),
+            ];
+            const reviewed = submitted.filter((x) => x.reviewedAt);
+            const avgReviewHours = reviewed.length ? Math.round(10 * reviewed.reduce((n, x) =>
+                n + Math.max(0, new Date(x.reviewedAt) - new Date(x.createdAt)) / 3600000, 0) / reviewed.length) / 10 : null;
+            const tests = new Map();
+            for (const a of courseAttempts) {
+                const id = a.test.id;
+                if (!tests.has(id)) tests.set(id, { id, title: a.test.title, lessonOrder: a.test.lesson.order, count: 0, failed: 0, totalScore: 0 });
+                const t = tests.get(id); t.count++; t.failed += a.passed ? 0 : 1; t.totalScore += a.score;
+            }
+            const testStats = [...tests.values()].map(({ totalScore, ...t }) => ({
+                ...t, failedPercent: Math.round(t.failed / t.count * 100),
+                averageScore: Math.round(totalScore / t.count),
+            })).sort((a,b) => b.failedPercent - a.failedPercent);
             return {
                 ...course, students: members.length,
                 completed: members.filter((e) => e.completed).length,
                 averageProgress: members.length ? Math.round(members.reduce((sum, e) => sum + e.progress, 0) / members.length) : 0,
                 pendingHomework: homework.filter((s) => s.homework.lesson.courseId === course.id && s.status === 'PENDING').length,
                 pendingPracticals: practicals.filter((s) => s.practical.courseId === course.id && s.status === 'PENDING').length,
+                averageTestScore: courseAttempts.length ? Math.round(courseAttempts.reduce((sum,a)=>sum+a.score,0)/courseAttempts.length) : null,
+                failedTestPercent: courseAttempts.length ? Math.round(courseAttempts.filter(a=>!a.passed).length/courseAttempts.length*100) : null,
+                averageReviewHours: avgReviewHours,
+                testStats: testStats.slice(0, 8),
+                scoreTimeline: courseAttempts.slice(0, 20).reverse().map(a => ({
+                    score: a.score, passed: a.passed, date: a.createdAt,
+                })),
             };
         });
         res.json({

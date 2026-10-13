@@ -565,6 +565,7 @@ model Achievement {
  */
 
 model PracticalWork {
+  rubric String @default("[]")
   id           String    @id @default(cuid())
   lessonId     String    @unique
   courseId     String
@@ -615,6 +616,7 @@ model PracticalSubmission {
  */
 
 model Homework {
+  rubric String @default("[]")
   id                String    @id @default(cuid())
   lessonId          String    @unique
   title             String
@@ -681,6 +683,32 @@ model HomeworkSubmissionVersion {
 
   @@unique([submissionId, version])
   @@index([submissionId, submittedAt])
+}
+
+model LearningDiscussionMessage {
+  id           String   @id @default(cuid())
+  kind         String
+  workId       String
+  studentId    String
+  authorId     String
+  text         String
+  files        String   @default("[]")
+  version      Int?
+  createdAt    DateTime @default(now())
+
+  @@index([kind, workId, studentId, createdAt])
+  @@index([authorId])
+}
+
+model LearningRubricGrade {
+  id           String   @id @default(cuid())
+  kind         String
+  submissionId String
+  criteria     String
+  reviewedBy   String
+  createdAt    DateTime @default(now())
+
+  @@index([kind, submissionId])
 }
 
 model PendingDeletion {
