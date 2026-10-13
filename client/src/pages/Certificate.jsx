@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -40,6 +40,7 @@ const TEMPLATES = {
 
 export default function Certificate() {
     const { id } = useParams();
+    const location = useLocation();
     const { token } = useAuth();
     const [cert, setCert] = useState(null);
     const [settings, setSettings] = useState({});
@@ -51,6 +52,11 @@ export default function Certificate() {
         api(`/courses/certificates/${id}`, { token }).then(setCert).catch((e) => setError(e.message));
         api('/settings/public').then(setSettings).catch(() => {});
     }, [id, token]);
+
+    useEffect(() => {
+        if (!cert?.id || cert.id !== id || location.state?.skipCelebration) return;
+        window.dispatchEvent(new CustomEvent('mrr:certificate-replay', { detail: { certificateId: cert.id } }));
+    }, [cert?.id, id, location.state?.skipCelebration]);
 
     const design = useMemo(() => {
         const tpl = TEMPLATES[settings.certificate_template] || TEMPLATES.gradient;
