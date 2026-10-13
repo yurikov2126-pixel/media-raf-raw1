@@ -13,6 +13,16 @@ export default function Roles({ token }) {
   const groups = useMemo(() => Object.groupBy ? Object.groupBy(data.permissions, p => p.group) :
     data.permissions.reduce((a, p) => ((a[p.group] ||= []).push(p), a), {}), [data.permissions]);
   const edit = role => { setError(''); setNotice(''); setDraft(role ? { ...role, permissions: [...role.permissions] } : { ...empty }); };
+  const toggleGroup = (items) => {
+    const keys = items.map(p => p.id);
+    setDraft(prev => {
+      const selected = new Set(prev.permissions);
+      const allSelected = keys.every(key => selected.has(key));
+      keys.forEach(key => allSelected ? selected.delete(key) : selected.add(key));
+      return { ...prev, permissions: [...selected] };
+    });
+  };
+  const isEditing = Boolean(draft && data.roles.some(r => r.code === draft.code));
   const save = async () => {
     setBusy(true); setError('');
     try {
@@ -49,18 +59,25 @@ export default function Roles({ token }) {
         {!r.builtin && <div className="mt-4 flex gap-2"><button className="btn-ghost" onClick={() => edit(r)}>Изменить</button><button className="btn-ghost" disabled={busy || r.count > 0} onClick={() => remove(r)}>Удалить</button></div>}
       </article>)}
     </div>
-    {draft && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setDraft(null); }}>
-      <div role="dialog" aria-modal="true" aria-label="Редактирование роли" className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-white">
-        <h3 className="mb-4 text-xl font-bold">{data.roles.some(r => r.code === draft.code) ? 'Редактировать роль' : 'Новая роль'}</h3>
-        <label className="block mb-3 text-sm">Код роли<input className="input mt-1 w-full" disabled={data.roles.some(r => r.code === draft.code)} maxLength={32} value={draft.code} onChange={e => setDraft({ ...draft, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })} placeholder="PHOTO_EDITOR" /></label>
-        <label className="block mb-3 text-sm">Название<input className="input mt-1 w-full" maxLength={60} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
-        <label className="block mb-3 text-sm">Описание<textarea className="input mt-1 w-full" maxLength={240} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} /></label>
-        <h4 className="font-semibold mb-2">Разрешённые действия</h4>
-        {Object.entries(groups).map(([group, permissions]) => <fieldset key={group} className="mb-3 rounded-lg border border-slate-300 p-3 dark:border-white/20"><legend className="px-1 font-medium">{group}</legend>
-          {permissions.map(p => <label key={p.id} className="flex items-center gap-2 py-2 text-sm"><input type="checkbox" checked={draft.permissions.includes(p.id)} onChange={e => setDraft(prev => ({ ...prev, permissions: e.target.checked ? [...prev.permissions, p.id] : prev.permissions.filter(x => x !== p.id) }))} />{p.label}</label>)}
+    {draft && <div className="mrr-role-modal fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-3 sm:p-6" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setDraft(null); }}>
+      <div role="dialog" aria-modal="true" aria-label="Редактирование роли" className="mrr-role-dialog flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl">
+        <div className="mrr-role-dialog__heading flex items-start justify-between gap-3 px-5 py-4">
+          <div><h3 className="text-xl font-bold">{isEditing ? 'Редактировать роль' : 'Новая роль'}</h3><p className="mt-1 text-sm opacity-75">Настройте роль и выберите доступные действия</p></div>
+          <button type="button" className="mrr-role-close shrink-0" aria-label="Закрыть" onClick={() => setDraft(null)}>✕</button>
+        </div>
+        <div className="mrr-role-dialog__content space-y-4 overflow-y-auto px-5 py-4">
+        <label className="block text-sm font-semibold">Код роли<input className="mrr-role-field mt-1 block w-full rounded-xl border px-3 py-3 text-base" disabled={data.roles.some(r => r.code === draft.code)} maxLength={32} value={draft.code} onChange={e => setDraft({ ...draft, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })} placeholder="PHOTO_EDITOR" /></label>
+        <label className="block text-sm font-semibold">Название<input className="mrr-role-field mt-1 block w-full rounded-xl border px-3 py-3 text-base" maxLength={60} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
+        <label className="block text-sm font-semibold">Описание<textarea className="mrr-role-field mt-1 block w-full rounded-xl border px-3 py-3 text-base" maxLength={240} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} /></label>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Разрешённые действия</h4><span className="mrr-role-count rounded-full px-3 py-1 text-xs font-semibold">{draft.permissions.length} выбрано</span></div>
+        {Object.entries(groups).map(([group, permissions]) => <fieldset key={group} className="mrr-role-group rounded-xl border p-3">
+          <legend className="px-2 font-semibold">{group}</legend>
+          <div className="mb-2 flex justify-end"><button type="button" className="mrr-role-group-toggle rounded-lg px-2 py-1 text-xs font-semibold" onClick={() => toggleGroup(permissions)}>{permissions.every(p => draft.permissions.includes(p.id)) ? 'Снять все' : 'Выбрать все'}</button></div>
+          {permissions.map(p => <label key={p.id} className="mrr-role-option flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm"><input className="mrr-role-checkbox h-5 w-5 shrink-0" type="checkbox" checked={draft.permissions.includes(p.id)} onChange={e => setDraft(prev => ({ ...prev, permissions: e.target.checked ? [...prev.permissions, p.id] : prev.permissions.filter(x => x !== p.id) }))} /><span>{p.label}</span></label>)}
         </fieldset>)}
         {error && <p role="alert" className="mb-3 text-red-600 dark:text-red-300">{error}</p>}
-        <div className="flex justify-end gap-3"><button className="btn-ghost" onClick={() => setDraft(null)}>Отмена</button><button className="btn-primary" disabled={busy || !draft.name.trim() || !draft.code.trim()} onClick={save}>{busy ? 'Сохраняем…' : 'Сохранить'}</button></div>
+        </div>
+        <div className="mrr-role-dialog__footer flex flex-wrap justify-end gap-3 px-5 py-4"><button className="mrr-role-cancel rounded-xl px-5 py-3 font-semibold" onClick={() => setDraft(null)}>Отмена</button><button className="btn-primary" disabled={busy || !draft.name.trim() || !draft.code.trim()} onClick={save}>{busy ? 'Сохраняем…' : 'Сохранить'}</button></div>
       </div>
     </div>}
   </section>;
