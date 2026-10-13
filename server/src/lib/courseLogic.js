@@ -36,6 +36,16 @@ export async function getLessonStatuses(userId, courseId) {
         },
     });
 
+    const attempts = await prisma.testAttempt.findMany({
+        where: { userId, testId: { in: lessons.map((lesson) => lesson.test?.id).filter(Boolean) } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { testId: true, passed: true, score: true, createdAt: true },
+    });
+    const latestAttempt = new Map();
+    for (const attempt of attempts) {
+        if (!latestAttempt.has(attempt.testId)) latestAttempt.set(attempt.testId, attempt);
+    }
+
     const progress = await prisma.lessonProgress.findMany({
         where: { userId, lessonId: { in: lessons.map((l) => l.id) } },
         select: { lessonId: true, completed: true },
@@ -44,6 +54,7 @@ export async function getLessonStatuses(userId, courseId) {
 
     return lessons.map((l) => {
         const theoryPassed = progressMap.get(l.id) === true;
+        const testAttempt = l.test ? latestAttempt.get(l.test.id) : null;
         const practicalStatus = l.practical?.submissions?.[0]?.status || null;
         const homeworkStatus = l.homework?.submissions?.[0]?.status || null;
 
@@ -53,6 +64,7 @@ export async function getLessonStatuses(userId, courseId) {
         return {
             lesson: l,
             theoryPassed,
+            testAttempt: testAttempt ? { passed: testAttempt.passed, score: testAttempt.score, createdAt: testAttempt.createdAt } : null,
             practicalPassed,
             homeworkPassed,
             practicalStatus,
