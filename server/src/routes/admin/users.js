@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { getRoles } from '../../lib/roles.js';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
 import { scheduleDeletion } from '../../lib/pendingDeletion.js';
@@ -19,10 +20,16 @@ router.patch(
     '/users/:id',
     safe(async (req, res) => {
         const { role, isBanned, direction } = req.body;
-        const allowed = ['STUDENT', 'MENTOR', 'ADMIN'];
+        const allowed = Object.keys(await getRoles());
         if (role && !allowed.includes(role))
             return res.status(400).json({ error: 'Недопустимая роль' });
 
+        const current = await prisma.user.findUnique({ where: { id: req.params.id } });
+        if (!current) return res.status(404).json({ error: 'Пользователь не найден' });
+        if (current.role === 'ADMIN' && role && role !== 'ADMIN') {
+            const adminCount = await prisma.user.count({ where: { role: 'ADMIN', isBanned: false } });
+            if (adminCount <= 1) return res.status(409).json({ error: 'Нельзя понизить последнего активного администратора' });
+        }
         const user = await prisma.user.update({
             where: { id: req.params.id },
             data: {
