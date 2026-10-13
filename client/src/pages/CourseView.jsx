@@ -57,6 +57,16 @@ export default function CourseView() {
         };
     }, [course, lessonParam, isEnrolled]);
 
+    // Если доступ к сохранённому уроку изменился, возвращаемся к доступному.
+    useEffect(() => {
+        if (!isEnrolled || !activeLesson || activeLesson.unlocked || !course?.resumeLessonOrder) return;
+        if (activeLesson.order === course.resumeLessonOrder) return;
+        const next = new URLSearchParams(searchParams);
+        next.set('lesson', String(course.resumeLessonOrder));
+        next.set('mode', 'lesson');
+        setSearchParams(next, { replace: true });
+    }, [isEnrolled, activeLesson?.id, activeLesson?.unlocked, activeLesson?.order, course?.resumeLessonOrder, searchParams, setSearchParams]);
+
     // На мобильном список уроков расположен над содержимым.
     // Прокручиваем к самому уроку только после выбора или открытия прямой ссылки.
     useEffect(() => {
