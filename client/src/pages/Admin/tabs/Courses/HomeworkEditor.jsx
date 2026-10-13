@@ -29,6 +29,7 @@ export default function HomeworkEditor({
     });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [showTips, setShowTips] = useState(false);
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -90,8 +91,17 @@ export default function HomeworkEditor({
 
     return (
         <div className="space-y-3">
-            <div className="text-sm font-bold mb-1">
-                📋 Домашнее задание {homework ? '(создано)' : '(нет)'}
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="font-bold text-base mb-1">📋 Домашнее задание {homework ? '· редактирование' : '· создание'}</div>
+                <p className="text-sm text-white/65">Опишите ожидаемый результат, допустимые материалы и критерии проверки. Студенты увидят инструкцию прямо в уроке.</p>
+                <button type="button" onClick={() => setShowTips((value) => !value)} className="mt-2 text-sm text-violet-soft min-h-10">
+                    {showTips ? 'Скрыть подсказки ↑' : 'Рекомендации по заданию ↓'}
+                </button>
+                {showTips && <div className="text-sm text-white/75 space-y-1 pt-2 border-t border-white/10">
+                    <p>• Укажите, что именно нужно снять, смонтировать или подготовить.</p>
+                    <p>• Опишите формат результата, количество файлов и критерии приёмки.</p>
+                    <p>• Дайте понятные сроки и объясните правила повторной сдачи.</p>
+                </div>}
             </div>
             {error && (
                 <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
@@ -115,7 +125,7 @@ export default function HomeworkEditor({
                 </label>
                 <textarea
                     rows={6}
-                    className="input resize-none text-sm"
+                    className="input resize-y min-h-40 text-sm leading-relaxed"
                     value={form.description}
                     onChange={set('description')}
                     placeholder="Описание задания"
