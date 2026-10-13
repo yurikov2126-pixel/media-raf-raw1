@@ -9,14 +9,22 @@ export const readRubric = (raw) => {
     catch { return []; }
 };
 
-export function LearningRubric({ kind, workId, rubric, editable = false, onChange, onScoresChange }) {
+export function LearningRubric({ kind, workId, rubric, studentId, editable = false, onChange, onScoresChange }) {
     const { token } = useAuth();
     const [criteria, setCriteria] = useState(() => readRubric(rubric));
     const [scores, setScores] = useState([]);
+    const [history, setHistory] = useState([]);
     const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     useEffect(() => { setCriteria(readRubric(rubric)); setScores([]); }, [rubric, workId]);
+    useEffect(() => {
+        if (!studentId) return;
+        let live = true;
+        api(`/learning-collaboration/${kind}/${encodeURIComponent(workId)}/${encodeURIComponent(studentId)}/grades`, { token })
+            .then(data => { if (live) setHistory(data); }).catch(() => {});
+        return () => { live = false; };
+    }, [studentId, kind, workId, token]);
     const changeScore = (index, score) => {
         const next = [...scores];
         next[index] = { score: score === '' ? '' : Number(score) };
@@ -66,6 +74,16 @@ export function LearningRubric({ kind, workId, rubric, editable = false, onChang
         {editable && !!criteria.length && onScoresChange && <div className="text-xs text-white/70">
             Набрано {gained}/{max} баллов · Итоговая оценка: {Math.max(1,Math.round(5*gained/Math.max(1,max)))}/5. Заполните каждый критерий перед принятием.
         </div>}
+        {!!history.length && <details className="text-sm text-white/80 border-t border-white/10 pt-2">
+            <summary className="cursor-pointer">Предыдущие оценки по критериям ({history.length})</summary>
+            {history.map(result => <div key={result.id} className="mt-2 rounded-lg bg-white/5 p-3">
+                <div className="text-xs text-white/60 mb-2">{new Date(result.createdAt).toLocaleString('ru-RU')}</div>
+                {result.criteria.map((criterion,index) => <div key={index} className="flex justify-between gap-2 py-1">
+                    <span className="break-words">{criterion.title}</span>
+                    <span className="shrink-0">{criterion.score}/{criterion.max}</span>
+                </div>)}
+            </div>)}
+        </details>}
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
     </section>;
 }
