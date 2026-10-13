@@ -34,6 +34,7 @@ model User {
   onboardingVersion Int       @default(0)
   passwordChangedAt DateTime?
 
+  editorialTeamMembership EditorialTeamMember?
   editorialProjectsCreated EditorialProject[] @relation("EditorialProjectCreator")
   editorialProjectMemberships EditorialProjectMember[]
   editorialTasksAssigned EditorialTask[] @relation("EditorialTaskAssignee")
@@ -1120,4 +1121,20 @@ model MobilePushToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/**
+ * Принадлежность к редакции — отдельно от глобальной роли User.role
+ * и проектных EditorialProjectMember.role.
+ */
+model EditorialTeamMember {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  memberType   String   // STUDENT | MENTOR
+  position     String   // PHOTO_EDITOR | VIDEO_EDITOR | ... (организационная роль)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([memberType, position])
 }
