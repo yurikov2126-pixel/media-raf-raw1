@@ -4,7 +4,7 @@ import { useAuth } from '../store/auth.jsx';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 const SECTIONS = [
-    ['','Обзор'], ['my-tasks','Мои задания'], ['projects','Проекты'], ['calendar','Календарь'],
+    ['','Обзор'], ['my-tasks','Мои задания'], ['projects','Проекты'], ['production','Производство'], ['calendar','Календарь'],
     ['files','Файлы'], ['shares','Общий доступ'], ['reviews','На проверке'],
     ['ideas','Идеи'], ['content','Контент-план'],
 ];
@@ -22,11 +22,11 @@ export default function Editorial() {
             .catch(() => { if (active) setCanManageProjects(false); });
         return () => { active = false; };
     }, [token]);
-    const sections = SECTIONS.filter(([path]) => path !== 'projects' || canManageProjects);
+    const sections = SECTIONS.filter(([path]) => !['projects','production'].includes(path) || canManageProjects);
     const currentPath = sections.find(([path]) => path
         ? location.pathname.startsWith(`/app/editorial/${path}`)
         : location.pathname === '/app/editorial')?.[0] ?? '';
-    const primaryPaths = ['my-tasks', 'projects', 'reviews'];
+    const primaryPaths = ['my-tasks', 'projects', 'production', 'reviews'];
     const primarySections = sections.filter(([path]) => primaryPaths.includes(path));
     const secondarySections = sections.filter(([path]) => !primaryPaths.includes(path));
     const isSecondaryActive = secondarySections.some(([path]) => path === currentPath);
