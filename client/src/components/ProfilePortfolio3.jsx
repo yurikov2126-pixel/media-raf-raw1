@@ -10,16 +10,33 @@ export default function ProfilePortfolio3({ username, posts = [], isMe }) {
     const { token } = useAuth();
     const [data, setData] = useState({ portfolio: blank, projects: [] });
     const [editing, setEditing] = useState(false);
+    const [academyWorks, setAcademyWorks] = useState([]);
+    const [eligibleWorks, setEligibleWorks] = useState([]);
     const [draft, setDraft] = useState(blank);
     const [projectEdit, setProjectEdit] = useState(null);
     const [projectDraft, setProjectDraft] = useState(emptyProject);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const load = () => api(`/portfolio/user/${encodeURIComponent(username)}`, { token }).then(setData).catch((e) => setError(e.message));
-    useEffect(() => { setEditing(false); setProjectEdit(null); load(); }, [username, token]);
+    useEffect(() => { setEditing(false); setProjectEdit(null); load();
+        api('/academy-portfolio/user/' + encodeURIComponent(username), { token }).then(setAcademyWorks).catch(() => setAcademyWorks([]));
+        if (isMe) api('/academy-portfolio/mine', { token }).then(setEligibleWorks).catch(() => setEligibleWorks([]));
+    }, [username, token, isMe]);
     const p = data.portfolio || blank;
     const accent = colors[p.accent] || colors.violet;
     const featured = (p.featuredPostIds || []).map((id) => posts.find((post) => post.id === id)).filter(Boolean);
+    const toggleAcademyWork = async (work) => {
+        setBusy(true); setError('');
+        try {
+            await api('/academy-portfolio/' + encodeURIComponent(work.id), {method:'PATCH',token,body:{published:!work.published}});
+            const [mine, visible] = await Promise.all([
+                api('/academy-portfolio/mine',{token}),
+                api('/academy-portfolio/user/'+encodeURIComponent(username),{token}),
+            ]);
+            setEligibleWorks(mine); setAcademyWorks(visible);
+        } catch(e) { setError(e.message || 'Не удалось изменить публикацию'); }
+        finally { setBusy(false); }
+    };
     const save = async () => {
         setBusy(true); setError('');
         try { const updated = await api('/portfolio/me', { method: 'PUT', token, body: draft }); setData((d) => ({ ...d, portfolio: updated })); setEditing(false); }
@@ -54,6 +71,37 @@ export default function ProfilePortfolio3({ username, posts = [], isMe }) {
                 {p.skills?.length > 0 && <span><strong className="text-white text-xl mr-2">{p.skills.length}</strong><span className="text-white/50">навыков</span></span>}
             </div>
         </header>
+        <section className="rounded-2xl border border-violet-400/25 bg-violet-400/5 p-4 sm:p-6 space-y-4" aria-label="Работы Академии">
+            <header>
+                <h3 className="font-bold text-xl">🎓 Творческие работы Академии</h3>
+                <p className="mt-1 text-sm text-white/65">Здесь только принятые наставником работы, которые студент сам решил показать в портфолио.</p>
+            </header>
+            {isMe && eligibleWorks.length > 0 && <div className="space-y-2 rounded-xl bg-white/5 p-3">
+                <h4 className="font-semibold text-sm">Управление публикацией учебных работ</h4>
+                {eligibleWorks.map(w=><div key={w.id} className="flex flex-wrap gap-2 items-center justify-between rounded-lg border border-white/10 p-3">
+                    <div className="min-w-0"><p className="text-sm font-medium break-words">{w.title}</p><p className="text-xs opacity-65">{w.courseTitle}</p></div>
+                    <button type="button" disabled={busy} className="btn-ghost text-sm min-h-10"
+                        onClick={()=>toggleAcademyWork(w)}>{w.published?'Убрать из портфолио':'Опубликовать в портфолио'}</button>
+                </div>)}
+            </div>}
+            {!!academyWorks.length && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {academyWorks.map(w=><article key={w.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 min-w-0">
+                    {w.files?.find(f=>f.type?.startsWith('image/')) && <img alt={'Работа: '+w.title} loading="lazy" className="w-full h-40 object-cover"
+                        src={resolveUrl(w.files.find(f=>f.type?.startsWith('image/')).url)} />}
+                    <div className="p-3 space-y-2">
+                        <div className="font-semibold break-words">{w.title}</div>
+                        <div className="text-xs opacity-65">{w.courseTitle}</div>
+                        {w.description&&<p className="text-sm opacity-80 break-words whitespace-pre-wrap line-clamp-4">{w.description}</p>}
+                        <div className="flex flex-wrap gap-2 text-sm">
+                            {w.files?.map((f,i)=><a key={i} className="text-violet-300 underline break-all" href={resolveUrl(f.url)} target="_blank" rel="noreferrer">📎 {f.name}</a>)}
+                            {w.link&&<a className="text-violet-300 underline" href={w.link} target="_blank" rel="noreferrer">Материал ↗</a>}
+                        </div>
+                        <span className="text-xs text-emerald-300">✓ Принято наставником</span>
+                    </div>
+                </article>)}
+            </div>}
+            {!academyWorks.length && <p className="text-sm text-white/55">Пока нет опубликованных учебных работ.</p>}
+        </section>
         {error && <p role="alert" className="text-pink text-sm">{error}</p>}
         {editing && <div className="card p-4 space-y-4">
             <h3 className="font-bold">Редактор портфолио</h3>
