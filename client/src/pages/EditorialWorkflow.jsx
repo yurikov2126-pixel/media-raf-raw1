@@ -22,6 +22,9 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const [tasks, setTasks] = useState([]);
     const [taskTitle, setTaskTitle] = useState('');
     const [taskDescription,setTaskDescription]=useState('');
+    const [competencies,setCompetencies]=useState([]);
+    const [requiredCompetencyIds,setRequiredCompetencyIds]=useState([]);
+    useEffect(()=>{api('/competencies',{token}).then(setCompetencies).catch(()=>{});},[token]);
     const [taskLocation, setTaskLocation] = useState('');
     const [taskAssignee, setTaskAssignee] = useState('');
     const [taskParent, setTaskParent] = useState('');
@@ -138,8 +141,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     async function submit(event) {
         event.preventDefault(); setBusy(true); onError('');
         try {
-                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, description: taskDescription, location: taskLocation.trim(), assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: deadlineAllowed && taskDue ? new Date(taskDue).toISOString() : null, workDate: taskDay || (project.eventDate ? project.eventDate.slice(0, 10) : null), startTime: taskStartTime || null, durationMinutes: taskDuration ? Number(taskDuration) : null } });
-                setTaskTitle(''); setTaskDescription(''); setTaskLocation(''); setTaskDay(''); setTaskStartTime(''); setTaskDuration(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false); setComposer(null);
+                await api(`/editorial/workflow/projects/${project.id}/tasks`, { method: 'POST', token, body: { title: taskTitle, description: taskDescription, location: taskLocation.trim(), assigneeId: taskAssignee || null, parentId: taskParent || null, isOpen: taskOpen, dueAt: deadlineAllowed && taskDue ? new Date(taskDue).toISOString() : null, workDate: taskDay || (project.eventDate ? project.eventDate.slice(0, 10) : null), startTime: taskStartTime || null, durationMinutes: taskDuration ? Number(taskDuration) : null, requiredCompetencyIds } });
+                setTaskTitle(''); setTaskDescription(''); setTaskLocation(''); setTaskDay(''); setTaskStartTime(''); setTaskDuration(''); setTaskDue(''); setTaskParent(''); setTaskOpen(false); setRequiredCompetencyIds([]); setComposer(null);
             await refresh();
         } catch (e) { onError(e.message); }
         finally { setBusy(false); }
@@ -221,6 +224,13 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             {composer === 'task' && <form onSubmit={submit} className="editorial-workflow-composer-form space-y-3">
                 <label className="block text-sm">Описание задания и требования к кадрам<textarea rows={5} maxLength={10000} value={taskDescription} onChange={e=>setTaskDescription(e.target.value)} placeholder="Что нужно снять, формат, планы, ракурсы…" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-3 whitespace-pre-wrap"/><span className="mt-1 block text-xs opacity-65">Подставлено из описания проекта. Изменения здесь относятся только к этому заданию.</span></label>
                 <label className="block text-sm">Новая задача<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" maxLength={160} required value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} /></label>
+                <section className="rounded-xl border border-violet-400/30 p-3 space-y-2">
+                    <h3 className="text-sm font-semibold">🎓 Необходимые компетенции</h3>
+                    <p className="text-xs opacity-65">Выбор не ограничивает назначение исполнителя.</p>
+                    <div className="flex flex-wrap gap-2">{competencies.filter(c=>c.active).map(c=><label key={c.id} className="flex gap-2 items-center px-3 py-2 rounded-lg border border-current/20 text-sm">
+                        <input type="checkbox" checked={requiredCompetencyIds.includes(c.id)} onChange={e=>setRequiredCompetencyIds(v=>e.target.checked?[...v,c.id]:v.filter(id=>id!==c.id))}/>{c.name}
+                    </label>)}</div>
+                </section>
                 <label className="block text-sm">Исполнитель<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" value={taskAssignee} onChange={(e) => { setTaskAssignee(e.target.value); setTaskDue(''); }}><option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}</select></label>
                 {project.eventDate && <label className="block text-sm">День выполнения<input type="date" required min={project.eventDate.slice(0, 10)} max={(project.eventEndDate || project.eventDate).slice(0, 10)} value={taskDay || project.eventDate.slice(0, 10)} onChange={e => setTaskDay(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" /></label>}
                 <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm">Время начала<input type="time" value={taskStartTime} onChange={e=>setTaskStartTime(e.target.value)} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" /></label><label className="block text-sm">Продолжительность (минут)<input type="number" min="1" max="10080" step="1" value={taskDuration} onChange={e=>setTaskDuration(e.target.value)} placeholder="Например, 90" className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2" /></label></div>
