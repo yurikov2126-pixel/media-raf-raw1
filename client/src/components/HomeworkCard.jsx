@@ -1,3 +1,4 @@
+import HomeworkHistory from './HomeworkHistory.jsx';
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -200,6 +201,8 @@ export default function HomeworkCard({ homework, onRefresh }) {
                     )}
                 </div>
             )}
+
+            {submission && <HomeworkHistory submissionId={submission.id} />}
 
             {/* Форма сдачи */}
             {editable && (
