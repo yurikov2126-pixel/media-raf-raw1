@@ -57,6 +57,7 @@ router.post('/editorial-positions', async (req, res, next) => {
     if (positions.some(p => p.code === code)) return res.status(409).json({ error: 'Код уже существует' });
     const updated = [...positions, { code, label }];
     await saveEditorialPositions(updated);
+    await prisma.adminAction.create({ data: { adminId: req.user.id, action: 'editorial_position_create', payload: JSON.stringify({ code, label }), affected: 1 } });
     res.status(201).json({ positions: updated });
   } catch(e) { next(e); }
 });
@@ -68,6 +69,7 @@ router.patch('/editorial-positions/:code', async (req, res, next) => {
     if (!positions.some(p => p.code === req.params.code)) return res.status(404).json({ error: 'Должность не найдена' });
     const updated = positions.map(p => p.code === req.params.code ? { ...p, label } : p);
     await saveEditorialPositions(updated);
+    await prisma.adminAction.create({ data: { adminId: req.user.id, action: 'editorial_position_rename', payload: JSON.stringify({ code: req.params.code, label }), affected: 1 } });
     res.json({ positions: updated });
   } catch(e) { next(e); }
 });
@@ -83,6 +85,7 @@ router.delete('/editorial-positions/:code', async (req, res, next) => {
     if (teamCount || projectCount) return res.status(409).json({ error: 'Должность используется. Сначала переназначьте сотрудников и участников проектов.' });
     const updated = positions.filter(p => p.code !== code);
     await saveEditorialPositions(updated);
+    await prisma.adminAction.create({ data: { adminId: req.user.id, action: 'editorial_position_delete', payload: JSON.stringify({ code }), affected: 1 } });
     res.json({ positions: updated });
   } catch(e) { next(e); }
 });
