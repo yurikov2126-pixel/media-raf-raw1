@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
+import { hasPermission } from '../lib/roles.js';
 import { createNotification } from '../lib/notify.js';
 import { computeHomeworkDeadline, computeLatePenalty } from '../lib/deadlineCron.js';
 
@@ -99,7 +100,7 @@ router.get('/my', async (req, res) => {
 
 /* ─────────── Руководитель: список ДЗ ─────────── */
 router.get('/review', async (req, res) => {
-    if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
+    if (!(await hasPermission(req.user, 'learning.homework.review'))) {
         return res.status(403).json({ error: 'Нет прав' });
     }
 
@@ -131,7 +132,7 @@ router.get('/review', async (req, res) => {
 
 /* ─────────── Руководитель: проверить ─────────── */
 router.post('/submissions/:id/review', async (req, res) => {
-    if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
+    if (!(await hasPermission(req.user, 'learning.homework.review'))) {
         return res.status(403).json({ error: 'Нет прав' });
     }
     const { status, feedback, grade } = req.body || {};
