@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { getEditorialPositions } from '../lib/editorialPositions.js';
 import { auth } from '../middleware/auth.js';
 
 const router = Router();
@@ -165,7 +166,9 @@ router.get('/:username', auth, async (req, res) => {
         },
     });
     if (!user) return res.status(404).json({ error: 'Не найден' });
-    res.json(hide(user));
+    const positions = await getEditorialPositions();
+    const editorialPosition = user.editorialTeamMembership?.position || null;
+    res.json({ ...hide(user), editorialPosition, editorialPositionLabel: positions.find(p => p.code === editorialPosition)?.label || editorialPosition });
 });
 
 // ─── Обновление профиля ─────────────────────────────────────
