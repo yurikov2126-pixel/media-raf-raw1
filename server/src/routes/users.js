@@ -158,6 +158,7 @@ router.get('/:username', auth, async (req, res) => {
     const user = await prisma.user.findUnique({
         where: { username: req.params.username },
         include: {
+            editorialTeamMembership: true,
             posts: { orderBy: [{ pinnedAt: 'desc' }, { createdAt: 'desc' }], take: 30 },
             enrollments: { include: { course: true } },
             certificates: { include: { course: true } },
