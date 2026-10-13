@@ -13,6 +13,8 @@ export default function Courses() {
 
     useEffect(() => { api('/courses', { token }).then(setCourses); }, [token]);
 
+    const enrolled = courses.filter((c) => c.enrolled);
+    const continueCourse = enrolled.find((c) => (c.progress ?? 0) < 100) || enrolled[0];
     const shown = filter === 'all' ? courses : courses.filter((c) => c.category === filter);
 
     usePageMeta({
@@ -21,18 +23,32 @@ export default function Courses() {
     });
 
     return (
-        <div className="p-5 md:p-10 max-w-6xl mx-auto">
-            <h1 className="text-3xl md:text-5xl font-bold mb-2">Академия</h1>
+        <div className="p-4 sm:p-5 md:p-10 max-w-6xl mx-auto">
+            <h1 className="text-3xl md:text-5xl font-bold mb-2">🎓 Академия</h1>
             <p className="text-white/50 mb-6">Выбирай направление, изучай уроки и развивай навыки в медиа</p>
 
-            <div className="flex gap-2 mb-6 flex-wrap">
+            {continueCourse && (
+                <section className="card p-4 sm:p-6 mb-6 border border-violet-soft/25" aria-label="Продолжить обучение">
+                    <p className="text-xs font-bold tracking-wide uppercase text-violet-soft mb-2">Ваше обучение</p>
+                    <h2 className="text-xl font-bold mb-3">{continueCourse.title}</h2>
+                    <div className="flex justify-between text-xs text-white/70 mb-2"><span>Прогресс курса</span><strong className="text-white">{continueCourse.progress ?? 0}%</strong></div>
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-4">
+                        <div className="h-full bg-violet-soft" style={{ width: (continueCourse.progress ?? 0) + '%' }} />
+                    </div>
+                    <Link to={`/app/courses/${continueCourse.slug}`} className="btn-primary inline-flex min-h-11 items-center justify-center">
+                        {continueCourse.progress === 100 ? 'Повторить курс →' : 'Продолжить обучение →'}
+                    </Link>
+                </section>
+            )}
+            <h2 className="font-bold text-xl mb-3">Направления обучения</h2>
+            <div className="flex gap-2 mb-6 overflow-x-auto pb-2 sm:flex-wrap" role="group" aria-label="Направление обучения">
                 {[['all', 'Все'], ...Object.entries(CATEGORY_LABEL)].map(([k, l]) => (
                     <button key={k} onClick={() => setFilter(k)}
-                            className={`chip ${filter === k ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}>{l}</button>
+                            aria-pressed={filter === k} className={`chip shrink-0 min-h-10 px-3 ${filter === k ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}>{l}</button>
                 ))}
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
                 {shown.map((c) => {
                     const lessonsCount = c.lessons?.length || 0;
                     const practicalsCount = c.lessons?.filter((l) => l.practical).length || 0;
@@ -44,7 +60,7 @@ export default function Courses() {
                         <Link
                             key={c.id}
                             to={`/app/courses/${c.slug}`}
-                            className="card overflow-hidden hover:-translate-y-1 transition flex flex-col"
+                            className="card overflow-hidden hover:-translate-y-1 transition flex flex-col focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-soft"
                         >
                             <div className="relative h-40 grid place-items-center text-5xl overflow-hidden"
                                  style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #EC4899 100%)' }}>
@@ -72,6 +88,7 @@ export default function Courses() {
                                 </div>
 
                                 <div className="font-bold text-lg mb-2">{c.title}</div>
+                                {c.enrolled && <div className="text-xs text-violet-soft font-semibold mb-2">✓ Вы уже учитесь</div>}
 
                                 <div className="text-sm text-white/60 line-clamp-4 leading-relaxed mb-4 flex-1">
                                     {c.description}
@@ -99,6 +116,11 @@ export default function Courses() {
                     );
                 })}
             </div>
+            {shown.length === 0 && (
+                <div className="card p-8 text-center text-white/70" role="status">
+                    В этом направлении пока нет курсов. Попробуйте другое направление.
+                </div>
+            )}
         </div>
     );
 }
