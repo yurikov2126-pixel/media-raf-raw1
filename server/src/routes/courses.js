@@ -204,7 +204,7 @@ router.get('/', auth, async (req, res) => {
 /* ─────────── Учебный кабинет текущего студента ─────────── */
 router.get('/my-learning', auth, async (req, res) => {
     try {
-        const [enrollments, submissions, attempts, certificates] = await Promise.all([
+        const [enrollments, submissions, attempts, certificates, practicalWorks] = await Promise.all([
             prisma.enrollment.findMany({
                 where: { userId: req.user.id },
                 include: { course: { select: { id: true, slug: true, title: true, cover: true, lessons: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true } } } } },
@@ -227,6 +227,16 @@ router.get('/my-learning', auth, async (req, res) => {
                 where: { userId: req.user.id },
                 orderBy: { issuedAt: 'desc' },
             }),
+            prisma.practicalWork.findMany({
+                where: { course: { enrollments: { some: { userId: req.user.id } } } },
+                orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'asc' }],
+                select: {
+                    id: true, topic: true, description: true, scheduledAt: true, location: true,
+                    course: { select: { slug: true, title: true } },
+                    lesson: { select: { order: true } },
+                    submissions: { where: { userId: req.user.id }, select: { status: true, feedback: true, grade: true, updatedAt: true }, take: 1 },
+                },
+            }),
         ]);
         res.json({
             courses: enrollments.map(({ course, progress, completed, lastLessonId }) => {
@@ -244,6 +254,17 @@ router.get('/my-learning', auth, async (req, res) => {
                     grade: s?.finalGrade ?? s?.grade ?? null, updatedAt: s?.updatedAt ?? null,
                     title: hw.title, courseTitle: hw.lesson.course.title, slug: hw.lesson.course.slug,
                     lessonOrder: hw.lesson.order,
+                };
+            }),
+            practicals: practicalWorks.map((work) => {
+                const attempt = work.submissions[0];
+                return {
+                    id: work.id, title: work.topic, description: work.description,
+                    status: attempt?.status || 'NOT_SUBMITTED',
+                    feedback: attempt?.feedback ?? null, grade: attempt?.grade ?? null,
+                    updatedAt: attempt?.updatedAt ?? null, scheduledAt: work.scheduledAt,
+                    location: work.location, courseTitle: work.course.title,
+                    slug: work.course.slug, lessonOrder: work.lesson.order,
                 };
             }),
             results: attempts.map((a) => ({
