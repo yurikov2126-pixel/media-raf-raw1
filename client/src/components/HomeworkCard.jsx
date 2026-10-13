@@ -205,7 +205,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
 
             {submission && <HomeworkHistory submissionId={submission.id} />}
 
-            <LearningRubric kind="homework" workId={homework.id} rubric={homework.rubric} />
+            <LearningRubric kind="homework" workId={homework.id} rubric={homework.rubric} studentId={user?.id} />
             <LearningDiscussion kind="homework" workId={homework.id} studentId={user?.id} />
 
             {/* Форма сдачи */}
