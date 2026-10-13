@@ -88,6 +88,13 @@ export default function CourseView() {
         setCurriculumOpen(false);
     };
 
+    // Сохраняем посещённый доступный урок на сервере для продолжения с другого устройства.
+    useEffect(() => {
+        if (!isEnrolled || !activeLesson?.unlocked || mode !== 'lesson') return;
+        api(`/courses/${slug}/resume`, { method: 'POST', token, body: { order: activeLesson.order } })
+            .catch((error) => console.warn('[academy] resume was not saved:', error));
+    }, [slug, token, isEnrolled, activeLesson?.id, activeLesson?.unlocked, mode]);
+
     const goTest = () => {
         if (!isEnrolled || !activeLesson) return;
         const next = new URLSearchParams(searchParams);
@@ -154,7 +161,7 @@ export default function CourseView() {
     const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
     const progress = course.enrolled?.progress ?? course.progress ?? 0;
     const completedLessons = course.lessons?.filter((l) => l.fullyCompleted).length || 0;
-    const resumeLesson = course.lessons?.find((l) => l.unlocked && !l.fullyCompleted) || course.lessons?.find((l) => l.unlocked);
+    const resumeLesson = course.lessons?.find((l) => l.order === course.resumeLessonOrder && l.unlocked) || course.lessons?.find((l) => l.unlocked && !l.fullyCompleted) || course.lessons?.find((l) => l.unlocked);
 
     return (
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
