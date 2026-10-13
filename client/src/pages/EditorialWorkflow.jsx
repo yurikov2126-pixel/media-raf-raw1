@@ -256,9 +256,37 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             <label className="block"><span className="sr-only">Сортировка заданий</span><select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"><option value="recent">Сначала новые</option><option value="due">По сроку</option><option value="title">По названию</option></select></label>
         </div>
         <div className="flex items-center justify-between gap-2"><p className="text-xs opacity-60">Показано {visibleTasks.length} из {tasks.length}</p><button type="button" onClick={() => { setQuery(''); setStatusFilter('ALL'); setAssigneeFilter('ALL'); setDeadlineFilter('ALL'); setSortBy('recent'); }} className="text-xs font-medium text-violet-700 underline dark:text-violet-200">Сбросить всё</button></div>
-        <div className="flex gap-2 text-xs"><button type="button" onClick={() => setView('board')} aria-pressed={view === 'board'} className={`rounded-lg px-3 py-1.5 ${view === "board" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>По статусам</button><button type="button" onClick={() => setView('list')} aria-pressed={view === 'list'} className={`rounded-lg px-3 py-1.5 ${view === "list" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>Список</button></div>
+        <div className="flex flex-wrap gap-2 text-xs"><button type="button" onClick={() => setView('calendar')} aria-pressed={view === 'calendar'} className={`rounded-lg px-3 py-1.5 ${view === 'calendar' ? 'bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950' : 'border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100'}`}>📅 План производства</button><button type="button" onClick={() => setView('board')} aria-pressed={view === 'board'} className={`rounded-lg px-3 py-1.5 ${view === "board" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>По статусам</button><button type="button" onClick={() => setView('list')} aria-pressed={view === 'list'} className={`rounded-lg px-3 py-1.5 ${view === "list" ? "bg-violet-600 text-white dark:bg-violet-200 dark:text-slate-950" : "border border-violet-300 text-violet-700 dark:border-slate-500 dark:text-slate-100"}`}>Список</button></div>
         </div>}
-        {loading ? <p role="status">Загружаем задачи…</p> : visibleTasks.length === 0 ? <p className="editorial-workflow-empty rounded-xl border p-4 text-sm">{tasks.length === 0 ? 'Пока нет заданий.' : 'Нет заданий по выбранным фильтрам.'}</p> : (
+        {view === 'calendar' && !loading && <section className="rounded-2xl border border-violet-300/30 bg-violet-400/5 p-3 sm:p-5 space-y-4" aria-label="Производственный календарь">
+            <h4 className="font-bold">Производственный план · задания по датам</h4>
+            <p className="text-xs opacity-65">Съёмки и мероприятия сгруппированы по дате выполнения. Задачи без даты показаны отдельно. Сроки и статусы обновляются из Редакции.</p>
+            {(() => {
+                const grouped = new Map();
+                for (const task of visibleTasks) {
+                    const date = task.workDate ? task.workDate.slice(0, 10) : task.dueAt ? task.dueAt.slice(0, 10) : 'later';
+                    if (!grouped.has(date)) grouped.set(date, []);
+                    grouped.get(date).push(task);
+                }
+                return [...grouped].sort(([a],[b])=>a==='later'?1:b==='later'?-1:a.localeCompare(b)).map(([date, group])=><article key={date} className="rounded-xl border border-current/10 bg-white/40 p-3 dark:bg-slate-900/40">
+                    <div className="flex justify-between items-center gap-2 mb-3">
+                        <h5 className="font-semibold text-sm">{date==='later' ? 'Без назначенной даты' : new Date(date+'T12:00:00').toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'})}</h5>
+                        <span className="text-xs opacity-60">{group.length} заданий</span>
+                    </div>
+                    <div className="space-y-2">{group.sort((x,y)=>(x.startTime||'99:99').localeCompare(y.startTime||'99:99')).map(task=><button key={task.id}
+                        type="button" onClick={()=>setSelectedTaskId(task.id)} className="flex flex-wrap sm:flex-nowrap gap-3 items-center text-left w-full p-3 rounded-lg border border-current/10 bg-white/40 hover:border-violet-400 dark:bg-slate-800/50">
+                        <span className="text-xs font-semibold shrink-0 w-14">{task.startTime||'—:—'}</span>
+                        <span className="flex-1 min-w-0"><span className="font-medium text-sm block break-words">{task.title}</span>
+                            <span className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.location?' · '+task.location:''}{task.durationMinutes?' · '+task.durationMinutes+' мин.':''}</span>
+                        </span>
+                        <span className={`shrink-0 px-2 py-1 rounded-lg border text-xs ${STATUS_COLORS[task.status]||''}`}>{LABELS[task.status]||task.status}</span>
+                        {isOverdue(task)&&<span className="text-xs text-rose-700 dark:text-rose-300">Просрочено</span>}
+                    </button>)}</div>
+                </article>);
+            })()}
+            {!visibleTasks.length&&<p className="text-sm opacity-65">Нет заданий по выбранным фильтрам.</p>}
+        </section>}
+        {view !== 'calendar' && (loading ? <p role="status">Загружаем задачи…</p> : visibleTasks.length === 0 ? <p className="editorial-workflow-empty rounded-xl border p-4 text-sm">{tasks.length === 0 ? 'Пока нет заданий.' : 'Нет заданий по выбранным фильтрам.'}</p> : (
             <div className={view === 'board' ? "grid min-w-0 gap-3 xl:grid-cols-2" : "space-y-2"}>{(view === 'board' ? Object.entries(LABELS).map(([id, title]) => ({ id, title })) : [{ id: 'all', title: 'Все задания' }]).map((stage) => {
                 const list = stage.id === 'all' ? visibleTasks : visibleTasks.filter((task) => task.status === stage.id);
                 if (!list.length) return null;
@@ -278,7 +306,7 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                     })}
                 </div>;
             })}</div>
-        )}
+        ))}
         {selectedTaskId && tasks.some((task) => task.id === selectedTaskId) && createPortal(<div className="fixed inset-0 z-[9999] flex min-h-0 items-stretch justify-center bg-slate-950/65 sm:items-center sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTask(); }}>
             <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editorial-task-dialog-title" className="editorial-glass__dialog editorial-task-dialog editorial-themed-dialog relative flex h-[100dvh] max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:h-auto sm:max-h-[min(88dvh,850px)] sm:max-w-3xl sm:rounded-2xl">
                 <div className="editorial-task-modal-header sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b border-slate-700 bg-slate-950 px-4 py-3 pt-[max(12px,env(safe-area-inset-top))] text-slate-50 sm:gap-3 sm:px-5">
