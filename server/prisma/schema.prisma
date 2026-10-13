@@ -90,6 +90,7 @@ model User {
   practicalReviews     PracticalSubmission[] @relation("PracticalReviewer")
   homeworkSubmissions  HomeworkSubmission[]  @relation("HomeworkSubmitter")
   homeworkReviews      HomeworkSubmission[]  @relation("HomeworkReviewer")
+  mobilePushTokens MobilePushToken[]
 }
 
 model Post {
@@ -1105,4 +1106,18 @@ model StickerAutoAward {
   createdAt DateTime @default(now())
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   @@unique([userId,ruleId])
+}
+
+model MobilePushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   @default("android")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastUsed  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
