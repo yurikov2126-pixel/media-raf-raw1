@@ -14,6 +14,9 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [title, setTitle] = useState(task.title);
     const [description, setDescription] = useState(task.description || project.description || '');
     const [location, setLocation] = useState(task.location || '');
+    const readChecklist = raw => {try {const value=JSON.parse(raw||'[]');return Array.isArray(value)?value:[];}catch{return [];}};
+    const [checklist, setChecklist] = useState(()=>readChecklist(task.productionChecklist));
+    const [checklistBusy, setChecklistBusy] = useState(false);
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
     const [competencies, setCompetencies] = useState([]);
     const [requiredCompetencyIds, setRequiredCompetencyIds] = useState(() => { try { return JSON.parse(task.requiredCompetencyIds || '[]'); } catch { return []; } });
@@ -26,6 +29,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [tab, setTab] = useState(initialTab || (task.status === 'IN_REVIEW' ? 'materials' : 'details'));
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || project.description || ''); setLocation(task.location || '');
+        setChecklist(readChecklist(task.productionChecklist));
         setAssigneeId(task.assigneeId || '');
         try { setRequiredCompetencyIds(JSON.parse(task.requiredCompetencyIds || '[]')); } catch { setRequiredCompetencyIds([]); }
         setParentId(task.parentId || '');
@@ -57,10 +61,17 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         catch (e) { onError(e.message); }
         finally { setSaving(false); }
     }
+    async function toggleChecklist(index, done) {
+        if (checklistBusy) return;
+        setChecklistBusy(true);onError('');
+        try {await api(base+'/checklist',{method:'PATCH',token,body:{index,done}});await refresh();}
+        catch(e){onError(e.message);}finally{setChecklistBusy(false);}
+    }
     function save(event) {
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
             title: title.trim(), description, location: location.trim(), assigneeId: assigneeId || null,
+            productionChecklist: checklist,
             requiredCompetencyIds,
             parentId: parentId || null, workDate: workDate || null, dueAt: deadlineAllowed && dueAt ? new Date(dueAt).toISOString() : null,
         } }));
@@ -88,6 +99,32 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             <span className="rounded-lg border border-current/15 px-3 py-2">🕘 Начало: {task.startTime||'Не указано'}</span>
             <span className="rounded-lg border border-current/15 px-3 py-2">⏱ Продолжительность: {task.durationMinutes?task.durationMinutes+' мин.':'Не указана'}</span>
         </div>
+        <section className="rounded-xl border border-violet-400/30 p-4 space-y-3">
+            <div className="flex justify-between items-center gap-2">
+                <h3 className="font-semibold">✅ Контроль готовности материалов</h3>
+                <span className="text-xs opacity-65">{checklist.filter(item=>item.done).length}/{checklist.length} выполнено</span>
+            </div>
+            <div className="h-2 rounded-full bg-current/10 overflow-hidden">
+                <div className="h-full bg-emerald-500 transition-all" style={{width:(checklist.length?100*checklist.filter(item=>item.done).length/checklist.length:0)+'%'}}/>
+            </div>
+            {!checklist.length&&<p className="text-sm opacity-65">Контрольный список ещё не настроен.</p>}
+            {checklist.map((item,index)=><div key={index} className="flex gap-3 items-start">
+                <input type="checkbox" className="mt-1" disabled={checklistBusy||(!canEdit&&task.assigneeId!==user?.id)}
+                    checked={Boolean(item.done)} onChange={e=>toggleChecklist(index,e.target.checked)}/>
+                <span className={`text-sm flex-1 break-words ${item.done?'line-through opacity-55':''}`}>{item.label}</span>
+                {canEdit&&<button type="button" className="text-xs opacity-70 hover:text-rose-500"
+                    onClick={()=>setChecklist(v=>v.filter((_,i)=>i!==index))}>Удалить</button>}
+            </div>)}
+            {canEdit&&<div className="flex flex-wrap gap-2">
+                <input aria-label="Новое требование к материалам" id="new-production-item" maxLength={180}
+                    className="input min-w-0 flex-1 text-sm" placeholder="Например, проверить звук и титры"/>
+                <button type="button" className="btn-ghost text-xs min-h-10" onClick={()=>{
+                    const el=document.getElementById('new-production-item');
+                    const label=el?.value.trim();if(label&&checklist.length<20){setChecklist(v=>[...v,{label,done:false}]);el.value='';}
+                }}>+ Требование</button>
+                <p className="w-full text-xs opacity-65">Новые пункты и удаления вступают в силу после «Сохранить изменения» ниже.</p>
+            </div>}
+        </section>
         <form onSubmit={save} className="grid min-w-0 gap-3 sm:grid-cols-2">
             <label className="block min-w-0 text-sm sm:col-span-2">Название
                 <input required maxLength={160} disabled={!canEdit || saving} value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-current/20 bg-white/40 p-2 text-sm dark:bg-slate-800/40 disabled:opacity-60" />
