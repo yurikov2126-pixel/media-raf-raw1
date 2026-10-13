@@ -83,7 +83,7 @@ export default function PracticalCard({ practical, onRefresh }) {
                 </div>
             )}
 
-            <LearningRubric kind="practical" workId={practical.id} rubric={practical.rubric} />
+            <LearningRubric kind="practical" workId={practical.id} rubric={practical.rubric} studentId={user?.id} />
             <LearningDiscussion kind="practical" workId={practical.id} studentId={user?.id} />
 
             {canSubmit && (
