@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { hasPermission } from '../lib/roles.js';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { createNotification } from '../lib/notify.js';
@@ -39,7 +40,7 @@ router.get('/projects', async (req, res, next) => {
 
 router.post('/projects', async (req, res, next) => {
     try {
-        if (!['ADMIN', 'MENTOR'].includes(req.user.role)) return res.status(403).json({ error: 'Создавать проекты могут руководители' });
+        if (!(await hasPermission(req.user, 'editorial.create'))) return res.status(403).json({ error: 'Нет права создавать проекты' });
         const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
         const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
         const visibility = req.body.visibility === 'TEAM' ? 'TEAM' : 'CLOSED';

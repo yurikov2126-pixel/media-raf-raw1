@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { auth, requireRole } from '../../middleware/auth.js';
 
+import rolesRouter from './roles.js';
 import statsRouter from './stats.js';
 import systemRouter from './system.js';
 import actionsRouter from './actions.js';           // ← добавлено
@@ -29,6 +30,7 @@ const router = Router();
 
 router.use(auth, requireRole('ADMIN'));
 
+router.use(rolesRouter);
 router.use(statsRouter);
 router.use(systemRouter);
 router.use(actionsRouter);
