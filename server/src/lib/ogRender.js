@@ -47,14 +47,13 @@ export function renderMetaPage({
     <meta name="twitter:description" content="${safeDesc}" />
     ${safeImage ? `<meta name="twitter:image" content="${safeImage}" />` : ''}
 
-    <meta http-equiv="refresh" content="0; url=${safeUrl}" />
 </head>
 <body>
-    <p style="font-family: system-ui; padding: 20px; color: #333;">
-        Перенаправляем на <a href="${safeUrl}">${safeTitle}</a>…
-    </p>
-    <script>window.location.replace(${JSON.stringify(url)});</script>
-</body>
+    <main>
+        <h1>${safeTitle}</h1>
+        <p>${safeDesc}</p>
+        <p><a href="${safeUrl}">Открыть страницу MEDIA·RAF·RAW</a></p>
+    </main>
 </html>`;
 }
 
