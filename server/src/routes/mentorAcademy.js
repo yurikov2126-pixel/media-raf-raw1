@@ -13,9 +13,6 @@ router.get('/overview', async (req, res) => {
         const canPractical = await hasPermission(req.user, 'learning.practicals.review');
         if (!canHomework && !canPractical) return res.status(403).json({ error: 'Нет прав на просмотр обучения' });
 
-        const courseScope = req.user.role === 'ADMIN' ? {} : {
-            practicalWorks: { some: { supervisorId: req.user.id } },
-        };
         // Use an explicit list of course IDs so access cannot leak other courses.
         const assigned = req.user.role === 'ADMIN' ? null : await prisma.practicalWork.findMany({
             where: { supervisorId: req.user.id }, select: { courseId: true },
@@ -33,7 +30,7 @@ router.get('/overview', async (req, res) => {
                 },
                 orderBy: { createdAt: 'desc' },
             }),
-            canHomework ? prisma.homeworkSubmission.findMany({ where: { homework: { lesson: { course: where } } }, select: { status: true, homework: { select: { lesson: { select: { courseId: true } } } } } }) : [],
+            canHomework ? prisma.homeworkSubmission.findMany({ where: { homework: { lesson: where } }, select: { status: true, homework: { select: { lesson: { select: { courseId: true } } } } } }) : [],
             canPractical ? prisma.practicalSubmission.findMany({ where: { practical: where }, select: { status: true, practical: { select: { courseId: true } } } }) : [],
             prisma.course.findMany({ where: courseIds === null ? {} : { id: { in: courseIds } }, select: { id: true, slug: true, title: true } }),
         ]);
