@@ -227,6 +227,10 @@ export default function Profile() {
                             {DIR[profile.direction] || profile.direction}
                         </span>
                     )}
+                    {profile.editorialTeamMembership?.position && <span className="chip bg-violet-500/15 text-violet-900 dark:text-violet-100">🎬 Должность в редакции: {({
+      EDITOR_IN_CHIEF: 'Главный редактор', PHOTO_EDITOR: 'Фоторедактор', VIDEO_EDITOR: 'Видеоредактор', REPORTER: 'Корреспондент', DESIGNER: 'Дизайнер', PRODUCER: 'Продюсер', CURATOR: 'Куратор редакции',
+      LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф', LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора', ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр', INTERVIEWER: 'Интервьюер'
+    })[profile.editorialTeamMembership.position] || profile.editorialTeamMembership.position}</span>}
                     {profile.group && <span className="chip bg-white/5">🎓 {profile.group}</span>}
                     {profile.city && <span className="chip bg-white/5">📍 {profile.city}</span>}
                     {profile.birthDate && (
