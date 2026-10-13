@@ -1,3 +1,4 @@
+import HomeworkHistory from '../components/HomeworkHistory.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { api, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -629,6 +630,8 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                             )}
                         </div>
                     )}
+
+                    <HomeworkHistory submissionId={submission.id} />
 
                     {submission.status === 'PENDING' && (
                         <div className="pt-3 border-t border-white/10 space-y-3">
