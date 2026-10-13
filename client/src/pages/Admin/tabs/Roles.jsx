@@ -67,8 +67,8 @@ export default function Roles({ token }) {
         </div>
         <div className="mrr-role-dialog__content space-y-4 overflow-y-auto px-5 py-4">
         <label className="block text-sm font-semibold">Код роли<input className="mrr-role-field mt-1 block w-full rounded-xl border px-3 py-3 text-base" disabled={data.roles.some(r => r.code === draft.code)} maxLength={32} value={draft.code} onChange={e => setDraft({ ...draft, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })} placeholder="PHOTO_EDITOR" /></label>
-        <label className="block mb-3 text-sm">Название<input className="input mt-1 w-full" maxLength={60} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
-        <label className="block mb-3 text-sm">Описание<textarea className="input mt-1 w-full" maxLength={240} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} /></label>
+        <label className="block text-sm font-semibold">Название<input className="mrr-role-field mt-1 block w-full rounded-xl border px-3 py-3 text-base" maxLength={60} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
+        <label className="block text-sm font-semibold">Описание<textarea className="mrr-role-field mt-1 block w-full rounded-xl border px-3 py-3 text-base" maxLength={240} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} /></label>
         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Разрешённые действия</h4><span className="mrr-role-count rounded-full px-3 py-1 text-xs font-semibold">{draft.permissions.length} выбрано</span></div>
         {Object.entries(groups).map(([group, permissions]) => <fieldset key={group} className="mrr-role-group rounded-xl border p-3">
           <legend className="px-2 font-semibold">{group}</legend>
