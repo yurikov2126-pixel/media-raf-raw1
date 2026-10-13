@@ -14,6 +14,7 @@ export const TAB_GROUPS = [
             ['moderation', 'Модерация', '🛡️'],
             ['users', 'Пользователи', '👥'],
             ['roles', 'Роли и права', '🔐'],
+            ['editorial-team', 'Команда редакции', '🎬'],
             ['password-resets', 'Восстановление', '🔑'],
         ],
     },
