@@ -170,6 +170,8 @@ router.get('/', auth, async (req, res) => {
     const myEnrollments = await prisma.enrollment.findMany({
         where: { userId: req.user.id },
     });
+    const certificates = await prisma.certificate.findMany({ where: { userId: req.user.id }, select: { courseId: true } });
+    const certifiedIds = new Set(certificates.map(c => c.courseId));
     const enrollmentByCourse = new Map(myEnrollments.map((entry) => [entry.courseId, entry]));
     const progress = await prisma.lessonProgress.findMany({
         where: { userId: req.user.id, lesson: { courseId: { in: myEnrollments.map((entry) => entry.courseId) } } },
@@ -194,6 +196,8 @@ router.get('/', auth, async (req, res) => {
         return {
             ...c,
             enrolled: !!enrollment,
+            completed: Boolean(enrollment?.completed || certifiedIds.has(c.id)),
+            certified: certifiedIds.has(c.id),
             progress: enrollment?.progress ?? null,
             resumeLessonOrder: saved?.order ?? suggested?.order ?? null,
             completedLessons: lessons.filter((lesson) => completedIds.has(lesson.id)).length,
