@@ -3,6 +3,7 @@ import { api, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import Avatar from '../components/Avatar.jsx';
 import { Link } from 'react-router-dom';
+import StudentLearningRecord from '../components/StudentLearningRecord.jsx';
 
 const TABS = {
     practicals: { key: 'practicals', label: '🎯 Практики' },
@@ -22,6 +23,7 @@ export default function MentorReviews() {
     const [overview, setOverview] = useState(null);
     const [overviewError, setOverviewError] = useState('');
     const [studentQuery, setStudentQuery] = useState('');
+    const [selectedStudent, setSelectedStudent] = useState(null);
     const [statusTab, setStatusTab] = useState('pending');
     const [courseFilter, setCourseFilter] = useState('');
     const [search, setSearch] = useState('');
@@ -211,6 +213,8 @@ export default function MentorReviews() {
                     <div key={label} className="card p-3 md:p-4"><div className="text-2xl font-bold">{value}</div><div className="text-xs text-white/65">{label}</div></div>)}
             </div>}
             {workspace === 'students' && <section className="space-y-4">
+                {selectedStudent && <StudentLearningRecord key={selectedStudent.id} userId={selectedStudent.student.id}
+                    courseId={selectedStudent.courseId} onClose={() => setSelectedStudent(null)} />}
                 <div className="card p-4">
                     <label className="block text-sm text-white/70 mb-2">Поиск по студентам и курсам</label>
                     <input className="input w-full" value={studentQuery} onChange={e => setStudentQuery(e.target.value)}
@@ -228,7 +232,10 @@ export default function MentorReviews() {
                                 <div className="bg-violet-soft h-full" style={{width: item.progress + '%'}} />
                             </div>
                             <div className="text-xs text-white/60">{item.progress}% обучения</div>
-                            <Link to={`/app/u/${item.student.username}`} className="inline-block text-violet-soft text-sm mt-2">Открыть профиль →</Link>
+                            <div className="flex flex-wrap gap-3 items-center mt-3">
+                                <button type="button" className="btn-primary text-sm min-h-10" onClick={() => setSelectedStudent(item)}>Учебная карточка</button>
+                                <Link to={`/app/u/${item.student.username}`} className="text-violet-soft text-sm">Профиль →</Link>
+                            </div>
                         </div>
                     </div>)}
                 {overview && !overview.students.length && <p className="card p-6 text-white/60">Студентов на доступных вам курсах пока нет.</p>}
