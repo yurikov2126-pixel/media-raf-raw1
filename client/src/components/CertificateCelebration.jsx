@@ -19,6 +19,7 @@ export default function CertificateCelebration() {
 
     const display = useCallback(async (id, replay = false) => {
         if (!id || !token || !user?.id) return;
+        if (shown.current && queue.current.some((cert) => cert.id === id)) return;
         const key = storageKey(user.id, id);
         if (!replay && (handled.current.has(id) || localStorage.getItem(key))) return;
         handled.current.add(id);
@@ -66,11 +67,12 @@ export default function CertificateCelebration() {
 
     const close = () => {
         setReady(false);
-        shown.current = false;
-        setAward(null);
         if (queue.current.length) {
             shown.current = true;
             setAward(queue.current.shift());
+        } else {
+            shown.current = false;
+            setAward(null);
         }
     };
     if (!award) return null;
