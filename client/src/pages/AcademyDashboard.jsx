@@ -14,7 +14,8 @@ const labels = {
 };
 const sections = [
     ['courses', 'Мои курсы'],
-    ['assignments', 'Мои задания'],
+    ['assignments', 'Домашние задания'],
+    ['practicals', 'Практики'],
     ['results', 'Результаты'],
     ['certificates', 'Достижения'],
 ];
@@ -38,6 +39,7 @@ export default function AcademyDashboard() {
     if (error) return <div className="p-6"><p role="alert" className="text-red-300">{error}</p><Link className="btn-ghost inline-flex mt-4" to="/app/courses">Открыть каталог</Link></div>;
     const courses = data?.courses || [];
     const assignments = data?.assignments || [];
+    const practicals = data?.practicals || [];
     const results = data?.results || [];
     const certificates = data?.certificates || [];
     const current = courses.find((course) => !course.completed) || courses[0];
@@ -49,7 +51,7 @@ export default function AcademyDashboard() {
             <p className="text-white/65 text-sm mt-2">Продолжайте учиться, отслеживайте задания и сохраняйте результаты.</p>
         </header>
         <div className="grid grid-cols-3 gap-2 md:gap-4">
-            {[[courses.length, 'Курсов'], [average + '%', 'Прогресс'], [assignments.filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').length, 'Требует внимания']].map(([value, label]) =>
+            {[[courses.length, 'Курсов'], [average + '%', 'Прогресс'], [[...assignments, ...practicals].filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').length, 'Требует внимания']].map(([value, label]) =>
                 <div key={label} className="card p-3 md:p-5 text-center"><div className="font-bold text-2xl">{value}</div><div className="text-xs text-white/65">{label}</div></div>)}
         </div>
         {current && <section className="card p-4 md:p-6 border border-violet-soft/30">
@@ -59,11 +61,11 @@ export default function AcademyDashboard() {
             <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4"><div className="bg-violet-soft h-full" style={{ width: (current.progress || 0) + '%' }} /></div>
             <Link className="btn-primary inline-flex min-h-11 items-center justify-center" to={destination(current.slug, current.resumeLessonOrder)}>▶ Продолжить</Link>
         </section>}
-        {assignments.some((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED') && <section className="card p-4 border border-amber-500/20">
+        {[...assignments, ...practicals].some((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED') && <section className="card p-4 border border-amber-500/20">
             <h2 className="font-bold mb-3">Требует внимания</h2>
-            {assignments.filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').slice(0, 3).map((a) =>
-                <Link className="block p-3 rounded-xl bg-white/5 hover:bg-white/10 mb-2" key={a.id} to={destination(a.slug, a.lessonOrder)}>
-                    <div className="font-medium text-sm">{a.title}</div>
+            {[...assignments.map(a => ({...a, kind: 'homework'})), ...practicals.map(a => ({...a, kind: 'practical'}))].filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').slice(0, 3).map((a) =>
+                <Link className="block p-3 rounded-xl bg-white/5 hover:bg-white/10 mb-2" key={a.id} to={`${destination(a.slug, a.lessonOrder)}&focus=${a.kind}`}>
+                    <div className="font-medium text-sm">{a.kind === 'practical' ? '🎯 ' : '📋 '}{a.title}</div>
                     <div className="text-xs text-amber-200 mt-1">{a.status === 'REJECTED' ? 'Нужно исправить работу →' : 'Задание ещё не сдано →'}</div>
                 </Link>)}
         </section>}
@@ -88,6 +90,23 @@ export default function AcademyDashboard() {
                 {a.feedback && <p className="text-sm text-white/75 mt-2">{a.feedback}</p>}
             </Link>)}
             {!assignments.length && <p className="card p-6 text-white/65">Домашних заданий пока нет.</p>}
+        </section>}
+        {section === 'practicals' && <section className="space-y-3" aria-label="Мои практические работы">
+            {practicals.map((p) => <Link key={p.id} to={`${destination(p.slug, p.lessonOrder)}&focus=practical`}
+                className="card p-4 block hover:border-violet-soft/40">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                    <span className="font-semibold break-words">🎯 {p.title}</span>
+                    <span className={`shrink-0 text-xs px-2 py-1 rounded-full ${labels[p.status]?.[1] || 'bg-white/10'}`}>{labels[p.status]?.[0] || p.status}</span>
+                </div>
+                <div className="text-xs text-white/65">{p.courseTitle} · Урок {p.lessonOrder}</div>
+                {p.scheduledAt && <div className="text-xs text-white/65 mt-2">Дата практики: {new Date(p.scheduledAt).toLocaleString('ru-RU')}</div>}
+                {p.location && <div className="text-xs text-white/65 mt-1">Место: {p.location}</div>}
+                {p.description && <p className="text-sm text-white/75 mt-2 line-clamp-3">{p.description}</p>}
+                {p.feedback && <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white/85 whitespace-pre-wrap">Комментарий наставника: {p.feedback}</div>}
+                {p.grade != null && <div className="text-sm text-violet-soft mt-2">Оценка: {p.grade}/5</div>}
+                <div className="text-sm text-violet-soft mt-3">Открыть практику →</div>
+            </Link>)}
+            {!practicals.length && <p className="card p-6 text-white/65">Практических работ пока нет.</p>}
         </section>}
         {section === 'results' && <section className="space-y-3">
             {results.map((a) => <Link key={a.id} to={destination(a.slug, a.lessonOrder)} className="card block p-4 hover:border-violet-soft/40">
