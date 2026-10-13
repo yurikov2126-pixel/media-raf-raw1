@@ -98,6 +98,7 @@ router.post('/:kind/:workId/:studentId/messages', async (req, res) => {
                 message: text.slice(0, 160) || 'Прикреплены файлы',
                 courseSlug: a.data.slug, lessonOrder: a.data.lessonOrder,
                 mentorReview: a.isStudent,
+                studentId,
                 ...(kind === 'homework' ? { homeworkId: workId } : { practicalId: workId }),
             }).catch(() => {});
         }
@@ -146,7 +147,7 @@ router.put('/:kind/:workId/rubric', async (req, res) => {
         }
         const items = req.body?.criteria;
         if (!Array.isArray(items) || items.length > 10 || items.some((x) =>
-            typeof x.title !== 'string' || !x.title.trim() || x.title.length > 120 ||
+            !x || typeof x.title !== 'string' || !x.title.trim() || x.title.length > 120 ||
             !Number.isInteger(x.max) || x.max < 1 || x.max > 5)) {
             return res.status(400).json({ error: 'Некорректные критерии оценивания' });
         }
