@@ -28,6 +28,12 @@ const EditorialReviewInbox = lazy(() => import('./pages/EditorialReviewInbox.jsx
 import Login from './pages/Login.jsx';
 const Feed = lazy(() => import('./pages/Feed.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Dashboard2 = lazy(() => import('./pages/Dashboard2.jsx'));
+function DashboardMode() {
+    const { modules, loading } = useModules();
+    if (loading) return null;
+    return modules.dashboard2 === true ? <Dashboard2 /> : <Dashboard />;
+}
 const Profile = lazy(() => import('./pages/Profile.jsx'));
 const Messenger = lazy(() => import('./pages/Messenger.jsx'));
 const Notifications = lazy(() => import('./pages/Notifications.jsx'));
@@ -108,7 +114,7 @@ export default function App() {
                         </Private>
                     }
                 >
-                    <Route index element={<LazyPage><Dashboard /></LazyPage>} />
+                    <Route index element={<LazyPage><DashboardMode /></LazyPage>} />
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
                         <Route index element={<LazyPage><EditorialOverview /></LazyPage>} />
