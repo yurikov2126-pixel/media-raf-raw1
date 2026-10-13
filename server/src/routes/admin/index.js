@@ -37,12 +37,14 @@ router.get('/access', async (req, res, next) => {
         res.json({ analytics: await hasPermission(req.user, 'admin.analytics.view'), admin: req.user.role === 'ADMIN' });
     } catch (error) { next(error); }
 });
-router.use('/analytics', async (req, res, next) => {
+router.use(async (req, res, next) => {
+    if (!/^\/analytics(?:\/|$)/.test(req.path)) return next();
     try {
         if (await hasPermission(req.user, 'admin.analytics.view')) return next();
         return res.status(403).json({ error: 'Нет права просмотра аналитики' });
     } catch (error) { next(error); }
-}, analyticsRouter);
+});
+router.use(analyticsRouter);
 router.use(requireRole('ADMIN'));
 
 router.use(rolesRouter);
