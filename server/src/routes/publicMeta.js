@@ -18,6 +18,7 @@ function isBot(req) {
 const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX = 500;
+const DEFAULT_OG_IMAGE_PATH = '/icon-512.png'; // Replace with /og/mediarafraw-cover-1200x630.jpg only after uploading the JPG
 
 function getCached(key) {
     const item = cache.get(key);
@@ -269,7 +270,7 @@ router.get('/share/editorial/:token', async (req, res, next) => {
             url: `${base}/share/editorial/${token}`,
             title: `${share.title || 'Материалы редакции'} · MEDIA·RAF·RAW`,
             description: share.description?.trim() || `Материалы редакции: ${count} файлов в общей подборке MEDIA·RAF·RAW.`,
-            image: `${base}/icon-512.png`,
+            image: `${base}${DEFAULT_OG_IMAGE_PATH}`,
         });
         res.set('Cache-Control', 'public, max-age=60');
         res.type('html').send(html);
@@ -299,7 +300,7 @@ router.get(['/', '/login', '/app', '/app/feed', '/app/courses', '/app/wiki', '/a
         url: `${base}${req.path}`,
         title: meta[0],
         description: meta[1],
-        image: `${base}/icon-512.png`,
+        image: `${base}${DEFAULT_OG_IMAGE_PATH}`,
     }));
 });
 
