@@ -42,7 +42,10 @@ router.post('/:homeworkId/submit', async (req, res) => {
             max: hw.latePenaltyMax,
         });
 
-        const submission = await prisma.homeworkSubmission.upsert({
+        const submission = await prisma.$transaction(async (tx) => {
+            const previous = await tx.homeworkSubmission.findUnique({ where: { homeworkId_userId: { homeworkId: hw.id, userId: req.user.id } } });
+            if (previous && previous.status !== 'REJECTED') throw Object.assign(new Error('Повторная сдача доступна только после возврата на доработку'), { status: 409 });
+            const next = await tx.homeworkSubmission.upsert({
             where: { homeworkId_userId: { homeworkId: hw.id, userId: req.user.id } },
             update: {
                 text: text || null,
@@ -68,6 +71,14 @@ router.post('/:homeworkId/submit', async (req, res) => {
             },
         });
 
+            const count = await tx.homeworkSubmissionVersion.count({ where: { submissionId: next.id } });
+            await tx.homeworkSubmissionVersion.create({ data: {
+                submissionId: next.id, version: count + 1, text: next.text, link: next.link, files: next.files,
+                status: next.status, lateDays: next.lateDays, latePenalty: next.latePenalty, submittedAt: new Date(),
+            } });
+            return next;
+        });
+
         res.json({
             ...submission,
             deadline,
@@ -76,8 +87,24 @@ router.post('/:homeworkId/submit', async (req, res) => {
         });
     } catch (e) {
         console.error('[homework] submit error:', e);
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
+});
+
+/* Version history: the submitter or authorized reviewer can view past attempts. */
+router.get('/submissions/:id/history', async (req, res) => {
+    const record = await prisma.homeworkSubmission.findUnique({
+        where: { id: req.params.id },
+        select: { id: true, userId: true },
+    });
+    if (!record) return res.status(404).json({ error: 'Работа не найдена' });
+    if (record.userId !== req.user.id && !(await hasPermission(req.user, 'learning.homework.review'))) {
+        return res.status(403).json({ error: 'Нет прав' });
+    }
+    const versions = await prisma.homeworkSubmissionVersion.findMany({
+        where: { submissionId: record.id }, orderBy: { version: 'desc' },
+    });
+    res.json(versions);
 });
 
 /* ─────────── Студент: мои ДЗ ─────────── */
@@ -154,7 +181,8 @@ router.post('/submissions/:id/review', async (req, res) => {
         finalGrade = Math.max(1, Math.round((rawGrade - penalty) * 10) / 10);
     }
 
-    const updated = await prisma.homeworkSubmission.update({
+    const updated = await prisma.$transaction(async (tx) => {
+        const updatedSubmission = await tx.homeworkSubmission.update({
         where: { id: submission.id },
         data: {
             status,
@@ -164,6 +192,14 @@ router.post('/submissions/:id/review', async (req, res) => {
             reviewedBy: req.user.id,
             reviewedAt: new Date(),
         },
+    });
+
+        await tx.homeworkSubmissionVersion.updateMany({
+            where: { submissionId: submission.id, status: 'PENDING' },
+            data: { status, feedback: feedback || null, grade: rawGrade, finalGrade,
+                reviewedBy: req.user.id, reviewedAt: updatedSubmission.reviewedAt },
+        });
+        return updatedSubmission;
     });
 
     const parts = [];
