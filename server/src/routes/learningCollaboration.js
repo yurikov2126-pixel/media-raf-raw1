@@ -88,7 +88,10 @@ router.post('/:kind/:workId/:studentId/messages', async (req, res) => {
             data: { kind, workId, studentId, authorId: req.user.id, text,
                 files: JSON.stringify(files.map((f) => ({ name: f.name.slice(0, 200), url: f.url }))), version: version?.version ?? null },
         });
-        const recipient = a.isStudent ? a.data.work.supervisorId : studentId;
+        const supervisor = a.isStudent && kind === 'homework'
+            ? await prisma.practicalWork.findFirst({ where: { courseId: a.data.courseId, supervisorId: { not: null } }, select: { supervisorId: true } })
+            : null;
+        const recipient = a.isStudent ? (kind === 'practical' ? a.data.work.supervisorId : supervisor?.supervisorId) : studentId;
         if (recipient && recipient !== req.user.id) {
             await createNotification(recipient, 'system', {
                 title: 'Новое сообщение по учебной работе',
@@ -103,6 +106,23 @@ router.post('/:kind/:workId/:studentId/messages', async (req, res) => {
     } catch (err) {
         console.error('[learning discussion send]', err);
         res.status(500).json({ error: 'Не удалось отправить сообщение' });
+    }
+});
+
+router.get('/:kind/:workId/:studentId/grades', async (req, res) => {
+    try {
+        const { kind, workId, studentId } = req.params;
+        const a = await access(req, kind, workId, studentId);
+        if (!a.data) return res.status(a.status).json({ error: 'Нет доступа' });
+        if (!a.data.submission) return res.json([]);
+        const grades = await prisma.learningRubricGrade.findMany({
+            where: { kind, submissionId: a.data.submission.id },
+            orderBy: { createdAt: 'desc' }, take: 20,
+        });
+        res.json(grades.map((g) => ({ ...g, criteria: parse(g.criteria) })));
+    } catch (err) {
+        console.error('[learning rubric grades]', err);
+        res.status(500).json({ error: 'Не удалось загрузить оценивание' });
     }
 });
 
