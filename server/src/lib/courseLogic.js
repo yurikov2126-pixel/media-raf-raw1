@@ -94,6 +94,7 @@ function checkPreviousPassed(statuses, index) {
  * Режимы:
  *   null / '' / undefined — все уроки открыты сразу
  *   'test'                — следующий урок после сдачи теста/практики предыдущего
+ *   'test_homework'       — после теста и одобрения домашнего задания (и практики, если есть)
  *   'test_weekly'         — то же + лимит открытых уроков в неделю
  *                           (weeklyLessonLimit штук каждые 7 дней)
  *   'schedule'            — по времени: N × dripInterval дней от даты записи
@@ -121,7 +122,31 @@ export function computeAccess({ statuses, index, course, enrollment, unlockOverr
         return { unlocked: true, reason: null, unlockAt: null };
     }
 
-    // 4. После теста + лимит в неделю
+    // 4. После теста и проверенного домашнего задания.
+    // Если в уроке нет теста/ДЗ, соответствующий этап не блокирует доступ.
+    if (course.dripMode === 'test_homework') {
+        if (index === 0) return { unlocked: true, reason: null, unlockAt: null };
+        for (let i = 0; i < index; i++) {
+            const previous = statuses[i];
+            if (previous.lesson.test && !previous.theoryPassed) {
+                return { unlocked: false, reason: 'Сдайте тест предыдущего урока', unlockAt: null };
+            }
+            if (previous.lesson.homework && !previous.homeworkPassed) {
+                const reason = previous.homeworkStatus === 'PENDING'
+                    ? 'Дождитесь проверки домашнего задания предыдущего урока'
+                    : previous.homeworkStatus === 'REJECTED'
+                        ? 'Исправьте и повторно сдайте домашнее задание предыдущего урока'
+                        : 'Сдайте домашнее задание предыдущего урока';
+                return { unlocked: false, reason, unlockAt: null };
+            }
+            if (previous.lesson.practical && !previous.practicalPassed) {
+                return { unlocked: false, reason: 'Сдайте практику предыдущего урока', unlockAt: null };
+            }
+        }
+        return { unlocked: true, reason: null, unlockAt: null };
+    }
+
+    // 5. После теста + лимит в неделю
     if (course.dripMode === 'test_weekly') {
         if (index === 0) return { unlocked: true, reason: null, unlockAt: null };
 
