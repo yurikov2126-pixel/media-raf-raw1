@@ -1,3 +1,5 @@
+import { useAuth } from '../store/auth.jsx';
+import { learningNotificationPath } from '../lib/learningNotificationPath.js';
 import SwipeDismissRow from './SwipeDismissRow.jsx';
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -67,6 +69,7 @@ export default function NotificationBell({ align = 'right' }) {
     const btnRef = useRef(null);
     const panelRef = useRef(null);
     const nav = useNavigate();
+    const { token } = useAuth();
 
     useEffect(() => {
         if (!open) return;
@@ -155,9 +158,16 @@ export default function NotificationBell({ align = 'right' }) {
     };
 
     const handleClick = async (n) => {
+        const learning = n.payload?.homeworkId || n.payload?.practicalId;
+
         if (!n.readAt) await markRead(n.id);
         setOpen(false);
         const p = n.payload || {};
+        if (learning) {
+            try { const url = await learningNotificationPath(n, token); if (url) nav(url); }
+            catch (error) { console.error('[notification] failed to locate learning work', error); nav('/app/academy/me'); }
+            return;
+        }
         if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
         else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);
         else if (n.type === 'mention') nav('/app/notifications');

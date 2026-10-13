@@ -169,7 +169,7 @@ router.post('/submissions/:id/review', async (req, res) => {
 
     const submission = await prisma.homeworkSubmission.findUnique({
         where: { id: req.params.id },
-        include: { homework: true },
+        include: { homework: { include: { lesson: { include: { course: { select: { slug: true } } } } } } },
     });
     if (!submission) return res.status(404).json({ error: 'Заявка не найдена' });
     if (submission.status !== 'PENDING') return res.status(409).json({ error: 'Работа уже проверена или ожидает повторной сдачи' });
@@ -218,6 +218,8 @@ router.post('/submissions/:id/review', async (req, res) => {
         title: status === 'APPROVED' ? 'ДЗ принято' : 'ДЗ требует доработки',
         message: parts.join(' · '),
         homeworkId: submission.homework.id,
+        courseSlug: submission.homework.lesson.course.slug,
+        lessonOrder: submission.homework.lesson.order,
         status,
         finalGrade,
     }).catch(() => {});

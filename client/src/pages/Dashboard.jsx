@@ -1,3 +1,4 @@
+import { learningNotificationPath } from '../lib/learningNotificationPath.js';
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
@@ -320,8 +321,18 @@ export default function Dashboard() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       const p = item.payload || {};
+                      if (p.homeworkId || p.practicalId) {
+                        try {
+                          const target = await learningNotificationPath(item, token);
+                          if (target) navigate(target);
+                        } catch (error) {
+                          console.error('[dashboard] learning notification target', error);
+                          navigate('/app/academy/me');
+                        }
+                        return;
+                      }
                       if (item.type === 'mention' && p.postId) navigate(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
                       else if ((item.type === 'message' || item.type === 'mention') && p.chatId) navigate(`/app/chats/${encodeURIComponent(p.chatId)}`);
                       else if (item.type === 'post' && p.postId) navigate(`/app/feed?post=${encodeURIComponent(p.postId)}`);

@@ -134,7 +134,8 @@ router.post('/submissions/:id/review', async (req, res) => {
         include: {
             practical: {
                 include: {
-                    course: { select: { id: true, title: true } },
+                    course: { select: { id: true, title: true, slug: true } },
+                    lesson: { select: { order: true } },
                 },
             },
             user: { select: { id: true, fullName: true } },
@@ -164,6 +165,8 @@ router.post('/submissions/:id/review', async (req, res) => {
                 ? `Практика «${submission.practical.topic}» принята${grade ? ` (оценка ${grade})` : ''}`
                 : `Практика «${submission.practical.topic}» отклонена${feedback ? `: ${feedback}` : ''}`,
         practicalId: submission.practical.id,
+        courseSlug: submission.practical.course.slug,
+        lessonOrder: submission.practical.lesson?.order,
         status,
     }).catch(() => {});
 
