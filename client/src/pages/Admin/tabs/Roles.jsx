@@ -37,7 +37,7 @@ export default function Roles({ token }) {
       <button className="btn-primary" onClick={() => edit(null)}>+ Создать роль</button>
     </header>
     <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-100">
-      Важно: переход на единые права выполняется поэтапно. Пока здесь редактируются только перечисленные ниже действия, а остальные ограничения STUDENT / MENTOR / ADMIN продолжают действовать в API. Роль ADMIN всегда имеет полный доступ.
+      Важно: переход на единые права выполняется поэтапно. Теперь права на создание проектов, библиотеку редакции, проверку практик и домашних заданий, а также разблокировку уроков проверяются сервером. Для практик сохраняется ограничение на назначенного руководителя. Остальные проверки ролей ещё работают по старой модели. Роль ADMIN всегда имеет полный доступ.
     </div>
     {error && <p role="alert" className="text-red-600 dark:text-red-300">{error}</p>}
     {notice && <p role="status" className="text-green-700 dark:text-green-300">{notice}</p>}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
+import { hasPermission } from '../lib/roles.js';
 import { createNotification } from '../lib/notify.js';
 
 const router = Router();
@@ -88,7 +89,7 @@ router.get('/my', async (req, res) => {
      courseId — только по конкретному курсу
    Возвращает массив практик с массивом submissions внутри. */
 router.get('/review', async (req, res) => {
-    if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
+    if (!(await hasPermission(req.user, 'learning.practicals.review'))) {
         return res.status(403).json({ error: 'Нет прав' });
     }
 
@@ -119,7 +120,7 @@ router.get('/review', async (req, res) => {
 
 /* ─────────── Руководитель: одобрить / отклонить ─────────── */
 router.post('/submissions/:id/review', async (req, res) => {
-    if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
+    if (!(await hasPermission(req.user, 'learning.practicals.review'))) {
         return res.status(403).json({ error: 'Нет прав' });
     }
 
@@ -141,7 +142,7 @@ router.post('/submissions/:id/review', async (req, res) => {
     });
     if (!submission) return res.status(404).json({ error: 'Заявка не найдена' });
 
-    if (req.user.role === 'MENTOR' && submission.practical.supervisorId !== req.user.id) {
+    if (req.user.role !== 'ADMIN' && submission.practical.supervisorId !== req.user.id) {
         return res.status(403).json({ error: 'Вы не руководитель этой практики' });
     }
 
@@ -171,7 +172,7 @@ router.post('/submissions/:id/review', async (req, res) => {
 
 /* ─────────── Админ / руководитель: принудительно разблокировать ─────────── */
 router.post('/unlock/:lessonId', async (req, res) => {
-    if (req.user.role !== 'MENTOR' && req.user.role !== 'ADMIN') {
+    if (!(await hasPermission(req.user, 'learning.practicals.unlock'))) {
         return res.status(403).json({ error: 'Нет прав' });
     }
     const { userId } = req.body || {};
