@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { getIo } from '../lib/notify.js';
@@ -215,6 +217,23 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
         const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, location: location.trim(), stageId, parentId, assigneeId, dueAt: due, workDate: day, startTime, durationMinutes, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
         if (task.assigneeId) await notifyEditorial(prisma, project, task, [task.assigneeId], 'assigned', req.user.id);
         res.status(201).json({ task });
+    } catch (error) { next(error); }
+});
+
+router.delete('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
+    try {
+        const project = await getProject(req.params.projectId);
+        if (!project || !canEdit(project, req.user)) return notFound(res);
+        const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id }, select: { id: true } });
+        if (!task) return res.status(404).json({ error: 'Задание не найдено' });
+        const files = await prisma.editorialMaterialFile.findMany({ where: { taskId: task.id }, select: { storageName: true } });
+        await prisma.editorialTask.delete({ where: { id: task.id } });
+        const storageRoot = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
+        await Promise.all(files.map(async ({ storageName }) => {
+            try { await fs.unlink(path.join(storageRoot, storageName)); }
+            catch (error) { if (error.code !== 'ENOENT') console.error('[editorial] failed to remove task material:', storageName, error); }
+        }));
+        res.json({ ok: true, deletedTaskId: task.id });
     } catch (error) { next(error); }
 });
 

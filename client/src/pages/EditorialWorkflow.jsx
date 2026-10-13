@@ -42,6 +42,8 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
     const [deadlineFilter, setDeadlineFilter] = useState('ALL');
     const [showFilters, setShowFilters] = useState(false);
     const [selectedTaskId, setSelectedTaskId] = useState(null);
+    const [taskDeleteTarget, setTaskDeleteTarget] = useState(null);
+    const [deletingTask, setDeletingTask] = useState(false);
     const closeTask = () => { setSelectedTaskId(null); onTaskClose?.(); };
     const closeButtonRef = useRef(null);
     const openedLinkRef = useRef(null);
@@ -141,6 +143,12 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
             await refresh();
         } catch (e) { onError(e.message); }
         finally { setBusy(false); }
+    }
+    async function deleteTask() {
+        if (!taskDeleteTarget || deletingTask) return;
+        setDeletingTask(true); onError('');
+        try { await api(`/editorial/workflow/projects/${project.id}/tasks/${taskDeleteTarget.id}`, { method: 'DELETE', token }); if (selectedTaskId === taskDeleteTarget.id) setSelectedTaskId(null); setTaskDeleteTarget(null); await refresh(); }
+        catch (e) { onError(e.message); } finally { setDeletingTask(false); }
     }
     async function setStatus(task, status) {
         onError('');
@@ -250,9 +258,12 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                         const canChange = canEdit || task.assigneeId === user?.id;
                         return <div key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-current/10 bg-white/35 px-3 py-3 dark:bg-slate-800/35">
                             <div className="min-w-0 flex-1"><button type="button" onClick={() => setSelectedTaskId(task.id)} className="text-left text-sm font-medium underline-offset-2 hover:underline break-words">{task.title}</button><div className="text-xs opacity-60">{task.assignee?.fullName || 'Не назначен'}{task.location ? ' · ' + task.location : ''}{task.workDate ? ' · День: ' + new Date(task.workDate).toLocaleDateString('ru-RU') : ''}{task.startTime ? ' · Начало: '+task.startTime : ''}{task.durationMinutes ? ' · '+task.durationMinutes+' мин.' : ''}{task.dueAt ? ' · ' + new Date(task.dueAt).toLocaleString('ru-RU') : ''}{isOverdue(task) ? ' · Просрочено' : isDueSoon(task) ? ' · Скоро срок' : ''}</div></div>
-                            {canChange ? <select aria-label={`Статус задачи: ${task.title}`} value={task.status} onChange={(e) => setStatus(task, e.target.value)} className={`rounded-lg border p-2 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>
-                                {Object.entries(LABELS).filter(([key]) => canEdit || key === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                            </select> : <span className={`rounded-lg border px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>{LABELS[task.status] || task.status}</span>}
+                            <div className="flex shrink-0 flex-wrap items-center gap-2">
+                                {canChange ? <select aria-label={`Статус задачи: ${task.title}`} value={task.status} onChange={(e) => setStatus(task, e.target.value)} className={`rounded-lg border p-2 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>
+                                    {Object.entries(LABELS).filter(([key]) => canEdit || key === task.status || ['IN_PROGRESS', 'IN_REVIEW', 'REVISION'].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                                </select> : <span className={`rounded-lg border px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || ""}`}>{LABELS[task.status] || task.status}</span>}
+                                {canEdit && <button type="button" onClick={() => setTaskDeleteTarget(task)} aria-label={`Удалить задание: ${task.title}`} className="rounded-lg border border-rose-400/50 px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-300">Удалить</button>}
+                            </div>
                         </div>;
                     })}
                 </div>;
@@ -271,6 +282,14 @@ export default function EditorialWorkflow({ project, onError, linkedTaskId = nul
                 </div>
                 <div className="editorial-task-modal-footer sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:hidden"><button type="button" onClick={() => setSelectedTaskId(null)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700">Закрыть задание</button></div>
             </div>
+        </div>, document.body)}
+        {taskDeleteTarget && createPortal(<div className="fixed inset-0 z-[11000] flex items-center justify-center bg-slate-950/75 p-4" onMouseDown={event => { if (event.target === event.currentTarget && !deletingTask) setTaskDeleteTarget(null); }}>
+            <section role="alertdialog" aria-modal="true" aria-labelledby="editorial-delete-task-title" aria-describedby="editorial-delete-task-description" className="w-full max-w-md rounded-2xl border border-rose-400/30 bg-white p-5 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100 sm:p-6">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-rose-500/10 text-xl text-rose-600 dark:text-rose-300" aria-hidden="true">!</div>
+                <h3 id="editorial-delete-task-title" className="text-lg font-bold">Удалить задание?</h3><p className="mt-2 break-words text-sm font-semibold">{taskDeleteTarget.title}</p>
+                <p id="editorial-delete-task-description" className="mt-2 text-sm opacity-75">Задание и связанные с ним материалы, комментарии, заявки и история будут удалены. Подзадачи сохранятся в проекте как отдельные задания. Это действие нельзя отменить.</p>
+                <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" disabled={deletingTask} onClick={() => setTaskDeleteTarget(null)} className="rounded-xl border border-current/20 px-4 py-2.5 text-sm font-semibold">Отмена</button><button type="button" disabled={deletingTask} onClick={deleteTask} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">{deletingTask ? 'Удаление…' : 'Удалить задание'}</button></div>
+            </section>
         </div>, document.body)}
     </section>;
 }
