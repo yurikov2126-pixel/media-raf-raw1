@@ -22,7 +22,7 @@ export default function Editorial() {
             .catch(() => { if (active) setCanManageProjects(false); });
         return () => { active = false; };
     }, [token]);
-    const sections = SECTIONS.filter(([path]) => !['projects','production'].includes(path) || canManageProjects);
+    const sections = SECTIONS.filter(([path]) => path !== 'projects' || canManageProjects);
     const currentPath = sections.find(([path]) => path
         ? location.pathname.startsWith(`/app/editorial/${path}`)
         : location.pathname === '/app/editorial')?.[0] ?? '';
