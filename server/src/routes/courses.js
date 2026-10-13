@@ -201,6 +201,60 @@ router.get('/', auth, async (req, res) => {
     }));
 });
 
+/* ─────────── Учебный кабинет текущего студента ─────────── */
+router.get('/my-learning', auth, async (req, res) => {
+    try {
+        const [enrollments, submissions, attempts, certificates] = await Promise.all([
+            prisma.enrollment.findMany({
+                where: { userId: req.user.id },
+                include: { course: { select: { id: true, slug: true, title: true, cover: true, lessons: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true } } } } },
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.homeworkSubmission.findMany({
+                where: { userId: req.user.id },
+                orderBy: { updatedAt: 'desc' },
+                include: { homework: { include: { lesson: { select: { order: true, course: { select: { slug: true, title: true } } } } } } },
+            }),
+            prisma.testAttempt.findMany({
+                where: { userId: req.user.id },
+                orderBy: { createdAt: 'desc' },
+                take: 30,
+                include: { test: { select: { title: true, lesson: { select: { order: true, course: { select: { slug: true, title: true } } } } } } },
+            }),
+            prisma.certificate.findMany({
+                where: { userId: req.user.id },
+                orderBy: { issuedAt: 'desc' },
+            }),
+        ]);
+        res.json({
+            courses: enrollments.map(({ course, progress, completed, lastLessonId }) => {
+                const lessons = course.lessons;
+                return {
+                    id: course.id, slug: course.slug, title: course.title, cover: course.cover,
+                    progress, completed, totalLessons: lessons.length,
+                    resumeLessonOrder: lessons.find((l) => l.id === lastLessonId)?.order ?? lessons[0]?.order ?? null,
+                };
+            }),
+            assignments: submissions.map((s) => ({
+                id: s.id, status: s.status, feedback: s.feedback, grade: s.finalGrade ?? s.grade,
+                updatedAt: s.updatedAt, title: s.homework.title, courseTitle: s.homework.lesson.course.title,
+                slug: s.homework.lesson.course.slug, lessonOrder: s.homework.lesson.order,
+            })),
+            results: attempts.map((a) => ({
+                id: a.id, score: a.score, passed: a.passed, createdAt: a.createdAt,
+                title: a.test.title, slug: a.test.lesson.course.slug, courseTitle: a.test.lesson.course.title,
+                lessonOrder: a.test.lesson.order,
+            })),
+            certificates: certificates.map((c) => ({
+                id: c.id, title: c.title, issuedAt: c.issuedAt,
+            })),
+        });
+    } catch (error) {
+        console.error('[academy] dashboard failed', error);
+        res.status(500).json({ error: 'Не удалось загрузить учебный кабинет' });
+    }
+});
+
 /* ─────────── Конкретный курс ─────────── */
 router.get('/:slug', auth, async (req, res) => {
     const course = await prisma.course.findUnique({
