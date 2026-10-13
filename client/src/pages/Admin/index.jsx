@@ -12,6 +12,7 @@ import AdminCommandPalette from './components/AdminCommandPalette.jsx';
 
 import Dashboard from './tabs/Dashboard.jsx';
 
+const EditorialTeam = lazy(() => import('./tabs/EditorialTeam.jsx'));
 const Roles = lazy(() => import('./tabs/Roles.jsx'));
 const Analytics = lazy(() => import('./tabs/Analytics.jsx'));
 const Users = lazy(() => import('./tabs/Users.jsx'));
@@ -195,6 +196,7 @@ export default function Admin() {
                             <Dashboard stats={stats} token={token} onReload={reloadAll} />
                         )}
                         {tab === 'roles' && <Roles token={token} />}
+                        {tab === 'editorial-team' && <EditorialTeam token={token} />}
                         {tab === 'analytics' && <Analytics token={token} />}
                         {tab === 'moderation' && (
                             <Moderation token={token} onChanged={reloadAll} />

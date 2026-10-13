@@ -8,6 +8,7 @@ export default function Roles({ token }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [matrixOpen, setMatrixOpen] = useState(true);
   const reload = async () => { const next = await api('/admin/roles', { token }); setData(next); };
   useEffect(() => { reload().catch(e => setError(e.message)); }, [token]);
   const groups = useMemo(() => Object.groupBy ? Object.groupBy(data.permissions, p => p.group) :
@@ -59,6 +60,25 @@ export default function Roles({ token }) {
         {!r.builtin && <div className="mt-4 flex gap-2"><button className="btn-ghost" onClick={() => edit(r)}>Изменить</button><button className="btn-ghost" disabled={busy || r.count > 0} onClick={() => remove(r)}>Удалить</button></div>}
       </article>)}
     </div>
+    <section className="rounded-2xl border border-slate-300 bg-white p-4 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div><h3 className="text-lg font-bold">Матрица прав</h3><p className="text-sm opacity-75">Сравнение действующих разрешений всех ролей</p></div>
+        <button className="btn-ghost" type="button" aria-expanded={matrixOpen} onClick={() => setMatrixOpen(v => !v)}>{matrixOpen ? 'Скрыть' : 'Показать'}</button>
+      </div>
+      {matrixOpen && <div className="overflow-x-auto rounded-xl border border-slate-300 dark:border-slate-600" role="region" aria-label="Матрица разрешений" tabIndex={0}>
+        <table className="w-full min-w-[680px] border-collapse text-left text-sm">
+          <thead><tr className="bg-slate-100 dark:bg-slate-900"><th scope="col" className="sticky left-0 z-10 min-w-[220px] bg-slate-100 p-3 dark:bg-slate-900">Разрешение</th>
+          {data.roles.map(role => <th scope="col" key={role.code} className="min-w-[110px] p-3 text-center"><span className="block">{role.name}</span><span className="text-xs font-normal opacity-70">{role.code}</span></th>)}</tr></thead>
+          <tbody>{data.permissions.map(p => <tr key={p.id} className="border-t border-slate-200 dark:border-slate-700">
+            <th scope="row" className="sticky left-0 bg-white p-3 font-medium dark:bg-slate-800"><span className="block text-xs opacity-70">{p.group}</span>{p.label}</th>
+            {data.roles.map(role => {
+              const enabled = role.permissions.includes('*') || role.permissions.includes(p.id);
+              return <td key={role.code} className="p-3 text-center"><span title={enabled ? 'Разрешено' : 'Запрещено'} aria-label={enabled ? 'Разрешено' : 'Запрещено'} className={enabled ? 'font-bold text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}>{enabled ? '✓' : '—'}</span></td>;
+            })}</tr>)}</tbody>
+        </table>
+      </div>}
+      <p className="mt-3 text-xs opacity-75">Матрица показывает только разрешения, подключённые к RBAC. Отдельные роли внутри проектов не отражаются.</p>
+    </section>
     {draft && <div className="mrr-role-modal fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-3 sm:p-6" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setDraft(null); }}>
       <div role="dialog" aria-modal="true" aria-label="Редактирование роли" className="mrr-role-dialog flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl">
         <div className="mrr-role-dialog__heading flex items-start justify-between gap-3 px-5 py-4">
