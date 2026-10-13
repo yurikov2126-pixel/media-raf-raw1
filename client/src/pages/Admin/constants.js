@@ -23,6 +23,7 @@ export const TAB_GROUPS = [
         label: 'Контент',
         tabs: [
             ['courses', 'Курсы', '📚'],
+            ['competencies', 'Компетенции', '🎓'],
             ['practicals-homework', 'Практики и ДЗ', '🎯'],
             ['wiki', 'Wiki', '📖'],
             ['certificates', 'Сертификаты', '🏆'],
