@@ -1,3 +1,4 @@
+import { notificationTitle as sharedNotificationTitle, notificationPreview as sharedNotificationPreview } from '../lib/notificationDisplay.js';
 import { learningNotificationPath } from '../lib/learningNotificationPath.js';
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useMemo, useState } from 'react';
@@ -27,24 +28,6 @@ const NOTIFICATION_ICON = {
   password_reset: 'settings',
   system: 'sparkles',
 };
-
-function notificationTitle(item) {
-  const p = item.payload || {};
-  switch (item.type) {
-    case 'mention': return mentionTitle(p);
-    case 'message': return 'Новое сообщение' + (p.senderName ? ' от ' + p.senderName : '');
-    case 'post': return 'Новая публикация' + (p.authorName ? ' от ' + p.authorName : '');
-    case 'certificate': return 'Новый сертификат';
-    case 'system': return p.title || 'Системное уведомление';
-    default: return p.title || 'Новое уведомление';
-  }
-}
-
-function notificationPreview(item) {
-  const p = item.payload || {};
-  if (item.type === 'mention') return mentionPreview(p) || 'Открыть упоминание';
-  return p.preview || p.message || (item.type === 'post' ? 'Открыть публикацию' : 'Открыть уведомление');
-}
 
 export default function Dashboard() {
   const { user, token } = useAuth();
@@ -105,11 +88,12 @@ export default function Dashboard() {
   const enrolledCourse = useMemo(
     () =>
       courses
-        .filter((course) => course.enrolled)
+        .filter((course) => course.enrolled && !course.completed && !course.certified)
         .sort((a, b) => (b.progress || 0) - (a.progress || 0))[0] || null,
     [courses]
   );
 
+  const completedEnrolled = courses.filter(c => c.enrolled && (c.completed || c.certified));
   const latestNotifications = notifications.items.slice(0, 4);
   const unread = notifications.unread;
   const firstName = user?.fullName?.split(' ')?.[0] || 'участник';
@@ -216,7 +200,7 @@ export default function Dashboard() {
             {dashboard.showLearning && coursesEnabled && (
               <Link to="/app/courses" className="ui-stat">
                 <div className="ui-stat__label">Обучение</div>
-                <div className="ui-stat__value">{courses.filter((c) => c.enrolled).length}</div>
+                <div className="ui-stat__value">{courses.filter((c) => c.enrolled && !c.completed && !c.certified).length}</div>
                 <div className="ui-stat__hint">активных курсов</div>
               </Link>
             )}
@@ -236,7 +220,7 @@ export default function Dashboard() {
               <div>
                 <div className="ui-card2__title">Продолжить обучение</div>
                 <div className="ui-card2__muted">
-                  {enrolledCourse ? 'Последний активный курс' : 'Ты ещё не записан ни на один курс'}
+                  {enrolledCourse ? 'Текущий активный курс' : completedEnrolled.length ? 'Курс завершён — выбери следующий' : 'Ты ещё не записан ни на один курс'}
                 </div>
               </div>
               <Link className="ui-section-link" to="/app/academy/me">
@@ -270,8 +254,8 @@ export default function Dashboard() {
               <Link to="/app/courses" className="ui-action mt-3">
                 <span className="ui-action__icon"><Icon name="book" size={18} /></span>
                 <span className="ui-action__copy">
-                  <span className="ui-action__title">Выбрать курс</span>
-                  <span className="ui-action__sub">Фото · Видео · Радио · Звук</span>
+                  <span className="ui-action__title">{completedEnrolled.length ? 'Выбрать следующий курс' : 'Выбрать курс'}</span>
+                  <span className="ui-action__sub">{completedEnrolled.length ? 'Поздравляем с окончанием обучения! Продолжай развиваться' : 'Фото · Видео · Радио · Звук'}</span>
                 </span>
                 <Icon name="chevronRight" size={15} />
               </Link>
@@ -322,6 +306,7 @@ export default function Dashboard() {
                     key={item.id}
                     type="button"
                     onClick={async () => {
+                      if (!item.readAt) notifications.markRead(item.id).catch(() => {});
                       const p = item.payload || {};
                       if (p.homeworkId || p.practicalId) {
                         try {
@@ -346,8 +331,8 @@ export default function Dashboard() {
                       <Icon name={NOTIFICATION_ICON[item.type] || 'bell'} size={16} />
                     </span>
                     <span className="ui-mini-list__copy flex-1 min-w-0 flex flex-col gap-1">
-                      <span className="ui-mini-list__title block text-sm font-semibold leading-snug break-words">{notificationTitle(item)}</span>
-                      <span className="ui-mini-list__sub block text-xs leading-relaxed opacity-65 break-words line-clamp-2">{notificationPreview(item)}</span>
+                      <span className="ui-mini-list__title block text-sm font-semibold leading-snug break-words">{sharedNotificationTitle(item)}</span>
+                      <span className="ui-mini-list__sub block text-xs leading-relaxed opacity-65 break-words line-clamp-2">{sharedNotificationPreview(item)}</span>
                     </span>
                     {!item.readAt && <span className="w-2 h-2 rounded-full bg-pink mt-3 shrink-0" />}
                   </button>
