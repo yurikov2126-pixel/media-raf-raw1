@@ -10,12 +10,14 @@ export default function Courses() {
     const { token } = useAuth();
     const [courses, setCourses] = useState([]);
     const [filter, setFilter] = useState('all');
+    const [view, setView] = useState('academy');
 
     useEffect(() => { api('/courses', { token }).then(setCourses); }, [token]);
 
     const enrolled = courses.filter((c) => c.enrolled);
     const continueCourse = enrolled.find((c) => (c.progress ?? 0) < 100) || enrolled[0];
     const shown = filter === 'all' ? courses : courses.filter((c) => c.category === filter);
+    const resumeUrl = (c) => `/app/courses/${c.slug}${c.resumeLessonOrder ? `?lesson=${c.resumeLessonOrder}` : ''}`;
 
     usePageMeta({
         title: 'Академия',
@@ -27,6 +29,19 @@ export default function Courses() {
             <h1 className="text-3xl md:text-5xl font-bold mb-2">🎓 Академия</h1>
             <p className="text-white/50 mb-6">Выбирай направление, изучай уроки и развивай навыки в медиа</p>
 
+            <div className="flex gap-2 mb-5">
+                <button type="button" aria-pressed={view === 'academy'} onClick={() => setView('academy')}
+                    className={`chip min-h-11 px-4 ${view === 'academy' ? 'bg-violet text-white' : 'bg-white/10 text-white/75'}`}>Все курсы</button>
+                <button type="button" aria-pressed={view === 'mine'} onClick={() => setView('mine')}
+                    className={`chip min-h-11 px-4 ${view === 'mine' ? 'bg-violet text-white' : 'bg-white/10 text-white/75'}`}>Моя Академия ({enrolled.length})</button>
+            </div>
+            {view === 'mine' && (
+                <div className="grid grid-cols-3 gap-2 mb-5">
+                    <div className="card p-3 text-center"><strong className="block text-xl">{enrolled.length}</strong><span className="text-xs text-white/60">Мои курсы</span></div>
+                    <div className="card p-3 text-center"><strong className="block text-xl">{enrolled.filter((c) => c.progress === 100).length}</strong><span className="text-xs text-white/60">Завершено</span></div>
+                    <div className="card p-3 text-center"><strong className="block text-xl">{enrolled.length ? Math.round(enrolled.reduce((sum,c) => sum + (c.progress || 0),0) / enrolled.length) : 0}%</strong><span className="text-xs text-white/60">Прогресс</span></div>
+                </div>
+            )}
             {continueCourse && (
                 <section className="card p-4 sm:p-6 mb-6 border border-violet-soft/25" aria-label="Продолжить обучение">
                     <p className="text-xs font-bold tracking-wide uppercase text-violet-soft mb-2">Ваше обучение</p>
@@ -35,12 +50,13 @@ export default function Courses() {
                     <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-4">
                         <div className="h-full bg-violet-soft" style={{ width: (continueCourse.progress ?? 0) + '%' }} />
                     </div>
-                    <Link to={`/app/courses/${continueCourse.slug}`} className="btn-primary inline-flex min-h-11 items-center justify-center">
+                    <Link to={resumeUrl(continueCourse)} className="btn-primary inline-flex min-h-11 items-center justify-center">
                         {continueCourse.progress === 100 ? 'Повторить курс →' : 'Продолжить обучение →'}
                     </Link>
                 </section>
             )}
-            <h2 className="font-bold text-xl mb-3">Направления обучения</h2>
+            {view === "mine" && enrolled.length === 0 && <div className="card p-5 mb-5 text-white/70">Вы пока не записаны на курсы. Выберите интересное направление во вкладке «Все курсы».</div>}
+            <h2 className="font-bold text-xl mb-3">{view === "mine" ? "Мои курсы" : "Направления обучения"}</h2>
             <div className="flex gap-2 mb-6 overflow-x-auto pb-2 sm:flex-wrap" role="group" aria-label="Направление обучения">
                 {[['all', 'Все'], ...Object.entries(CATEGORY_LABEL)].map(([k, l]) => (
                     <button key={k} onClick={() => setFilter(k)}
@@ -49,7 +65,7 @@ export default function Courses() {
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-                {shown.map((c) => {
+                {(view === "mine" ? shown.filter((c) => c.enrolled) : shown).map((c) => {
                     const lessonsCount = c.lessons?.length || 0;
                     const practicalsCount = c.lessons?.filter((l) => l.practical).length || 0;
                     const homeworksCount = c.lessons?.filter((l) => l.homework).length || 0;
@@ -59,7 +75,7 @@ export default function Courses() {
                     return (
                         <Link
                             key={c.id}
-                            to={`/app/courses/${c.slug}`}
+                            to={c.enrolled ? resumeUrl(c) : `/app/courses/${c.slug}`}
                             className="card overflow-hidden hover:-translate-y-1 transition flex flex-col focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-soft"
                         >
                             <div className="relative h-40 grid place-items-center text-5xl overflow-hidden"
