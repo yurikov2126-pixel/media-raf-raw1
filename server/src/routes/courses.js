@@ -170,13 +170,35 @@ router.get('/', auth, async (req, res) => {
     const myEnrollments = await prisma.enrollment.findMany({
         where: { userId: req.user.id },
     });
-    res.json(
-        courses.map((c) => ({
+    const enrollmentByCourse = new Map(myEnrollments.map((entry) => [entry.courseId, entry]));
+    const progress = await prisma.lessonProgress.findMany({
+        where: { userId: req.user.id, lesson: { courseId: { in: myEnrollments.map((entry) => entry.courseId) } } },
+        select: { lessonId: true, completed: true },
+    });
+    const completedIds = new Set(progress.filter((item) => item.completed).map((item) => item.lessonId));
+    const courseLessons = await prisma.lesson.findMany({
+        where: { courseId: { in: myEnrollments.map((entry) => entry.courseId) } },
+        orderBy: { order: 'asc' },
+        select: { id: true, courseId: true, order: true },
+    });
+    const lessonsByCourse = new Map();
+    for (const lesson of courseLessons) {
+        if (!lessonsByCourse.has(lesson.courseId)) lessonsByCourse.set(lesson.courseId, []);
+        lessonsByCourse.get(lesson.courseId).push(lesson);
+    }
+    res.json(courses.map((c) => {
+        const enrollment = enrollmentByCourse.get(c.id);
+        const lessons = lessonsByCourse.get(c.id) || [];
+        const saved = lessons.find((lesson) => lesson.id === enrollment?.lastLessonId);
+        const suggested = lessons.find((lesson) => !completedIds.has(lesson.id)) || lessons[0];
+        return {
             ...c,
-            enrolled: myEnrollments.some((e) => e.courseId === c.id),
-            progress: myEnrollments.find((e) => e.courseId === c.id)?.progress ?? null,
-        }))
-    );
+            enrolled: !!enrollment,
+            progress: enrollment?.progress ?? null,
+            resumeLessonOrder: saved?.order ?? suggested?.order ?? null,
+            completedLessons: lessons.filter((lesson) => completedIds.has(lesson.id)).length,
+        };
+    }));
 });
 
 /* ─────────── Конкретный курс ─────────── */
@@ -302,8 +324,33 @@ router.get('/:slug', auth, async (req, res) => {
         ...course,
         lessons,
         enrolled: !!enrollment,
+        resumeLessonOrder: lessons.find((l) => l.id === enrollment?.lastLessonId && l.unlocked)?.order ?? lessons.find((l) => l.unlocked && !l.fullyCompleted)?.order ?? lessons.find((l) => l.unlocked)?.order ?? null,
         certificate,
     });
+});
+
+/* ─────────── Запомнить текущий урок (между устройствами) ─────────── */
+router.post('/:slug/resume', auth, async (req, res) => {
+    const order = Number(req.body?.order);
+    if (!Number.isInteger(order) || order < 1) return res.status(400).json({ error: 'Некорректный номер урока' });
+    const course = await prisma.course.findUnique({ where: { slug: req.params.slug }, select: { id: true, dripMode: true, dripInterval: true, weeklyLessonLimit: true } });
+    if (!course) return res.status(404).json({ error: 'Курс не найден' });
+    const enrollment = await prisma.enrollment.findUnique({ where: { userId_courseId: { userId: req.user.id, courseId: course.id } } });
+    if (!enrollment) return res.status(403).json({ error: 'Нет записи на курс' });
+    const statuses = await getLessonStatuses(req.user.id, course.id);
+    const index = statuses.findIndex(({ lesson }) => lesson.order === order);
+    if (index < 0) return res.status(404).json({ error: 'Урок не найден' });
+    const overrides = await prisma.lessonProgress.findMany({
+        where: { userId: req.user.id, lesson: { courseId: course.id } },
+        select: { lessonId: true },
+    });
+    const access = computeAccess({ statuses, index, course, enrollment, unlockOverrides: new Set(overrides.map((v) => v.lessonId)) });
+    if (!access.unlocked) return res.status(403).json({ error: access.reason || 'Урок закрыт' });
+    await prisma.enrollment.update({
+        where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
+        data: { lastLessonId: statuses[index].lesson.id },
+    });
+    res.json({ order });
 });
 
 /* ─────────── Запись на курс (принимает id ИЛИ slug) ─────────── */
