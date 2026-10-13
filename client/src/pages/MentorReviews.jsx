@@ -502,7 +502,7 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                         </div>
                     )}
 
-                    <LearningRubric kind="practical" workId={p.id} rubric={rubric}
+                    <LearningRubric kind="practical" workId={p.id} rubric={rubric} studentId={submission.user?.id}
                         editable onChange={setRubric} onScoresChange={submission.status === 'PENDING' ? setCriteriaScores : undefined} />
                     <LearningDiscussion kind="practical" workId={p.id} studentId={submission.user?.id} />
 
@@ -666,7 +666,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                     )}
 
                     <HomeworkHistory submissionId={submission.id} />
-                    <LearningRubric kind="homework" workId={hw.id} rubric={rubric}
+                    <LearningRubric kind="homework" workId={hw.id} rubric={rubric} studentId={submission.user?.id}
                         editable onChange={setRubric} onScoresChange={submission.status === 'PENDING' ? setCriteriaScores : undefined} />
                     <LearningDiscussion kind="homework" workId={hw.id} studentId={submission.user?.id} />
 
