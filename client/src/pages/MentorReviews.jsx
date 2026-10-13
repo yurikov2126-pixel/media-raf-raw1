@@ -256,7 +256,31 @@ export default function MentorReviews() {
                         <div>Завершили: <b className="text-white">{course.completed}</b></div>
                         <div>ДЗ на проверке: <b className="text-white">{course.pendingHomework}</b></div>
                         <div>Практик: <b className="text-white">{course.pendingPracticals}</b></div>
+                        <div>Средний балл тестов: <b className="text-white">{course.averageTestScore == null ? '—' : course.averageTestScore + '%'}</b></div>
+                        <div>Неуспешных попыток: <b className="text-white">{course.failedTestPercent == null ? '—' : course.failedTestPercent + '%'}</b></div>
+                        <div className="col-span-2">Среднее время проверки: <b className="text-white">{course.averageReviewHours == null ? '—' : course.averageReviewHours + ' ч'}</b></div>
                     </div>
+                    {!!course.testStats?.length && <div className="mt-5 border-t border-white/10 pt-4">
+                        <h3 className="font-semibold text-sm mb-3">Тесты, вызывающие затруднения</h3>
+                        <div className="space-y-2">{course.testStats.map(t=><div key={t.id}>
+                            <div className="flex justify-between gap-2 text-xs text-white/75 mb-1">
+                                <span className="min-w-0 break-words">Урок {t.lessonOrder}: {t.title}</span>
+                                <span className="shrink-0">{t.failedPercent}% неудач · {t.count} попыток</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                <div className="h-full bg-amber-400/75" style={{width:t.failedPercent+'%'}} />
+                            </div>
+                        </div>)}</div>
+                    </div>}
+                    {!!course.scoreTimeline?.length && <div className="mt-4 border-t border-white/10 pt-4">
+                        <h3 className="font-semibold text-sm mb-2">Последние результаты тестов</h3>
+                        <div className="flex gap-1 items-end h-14" role="img" aria-label="Последние баллы тестов в хронологическом порядке">
+                            {course.scoreTimeline.map((t,i)=><div key={i} title={new Date(t.date).toLocaleDateString('ru-RU') + ': ' + t.score + '%'}
+                                className={`flex-1 rounded-t-sm min-w-0 ${t.passed ? 'bg-emerald-400/80' : 'bg-amber-400/80'}`}
+                                style={{height:Math.max(5,t.score)+'%'}} />)}
+                        </div>
+                        <p className="text-xs text-white/60 mt-1">Динамика результатов попыток, не история изменения процента прохождения курса</p>
+                    </div>}
                 </div>)}
                 {overview && !overview.courses.length && <p className="card p-6 text-white/60">Доступных для анализа курсов пока нет.</p>}
             </section>}
