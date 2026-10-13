@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useLocation, useOutlet, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../store/auth.jsx';
+import { api } from '../api/client.js';
 import { useSettings } from '../store/settings.jsx';
 import { useModules, moduleKeyForPath } from '../store/modules.jsx';
 import { useGamification } from '../store/gamification.jsx';
@@ -44,6 +45,15 @@ export default function Layout() {
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     const isAdmin = user?.role === 'ADMIN';
+    const [analyticsAccess, setAnalyticsAccess] = useState(false);
+    useEffect(() => {
+        let active = true;
+        if (!user) { setAnalyticsAccess(false); return; }
+        api('/admin/access', { token: localStorage.getItem('mrr_token') }).then(result => {
+            if (active) setAnalyticsAccess(Boolean(result.analytics));
+        }).catch(() => { if (active) setAnalyticsAccess(false); });
+        return () => { active = false; };
+    }, [user?.id, user?.role, location.pathname]);
     const isMentor = user?.role === 'MENTOR' || user?.role === 'ADMIN';
 
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
@@ -51,6 +61,7 @@ export default function Layout() {
         ...(isEnabled('editorial') && Object.prototype.hasOwnProperty.call(modules, 'editorial') ? [{ to: '/app/editorial', label: 'Редакция', icon: 'newspaper' }] : []),
         ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'seasonOrbit' }, { to: '/app/stickers', label: 'Стикеры', icon: 'image' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
         ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
+        ...(analyticsAccess && !isAdmin ? [{ to: '/app/analytics', label: 'Аналитика', icon: 'chart' }] : []),
         ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
     ];
     const configured = siteSettings.nav_desktop_customized === 'true';
