@@ -1,3 +1,4 @@
+import { notificationTitle as sharedNotificationTitle, notificationPreview as sharedNotificationPreview } from '../lib/notificationDisplay.js';
 import { useAuth } from '../store/auth.jsx';
 import { learningNotificationPath } from '../lib/learningNotificationPath.js';
 import SwipeDismissRow from '../components/SwipeDismissRow.jsx';
@@ -357,7 +358,7 @@ export default function Notifications() {
                             <div className="text-2xl shrink-0">{ICONS[n.type] || '🔔'}</div>
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm font-semibold truncate">
-                                    {(TITLES[n.type] || TITLES.system)(p)}
+                                    {sharedNotificationTitle(n)}
                                 </div>
                                 {subline && (
                                     <div className="text-xs text-white/50 truncate mt-0.5">
