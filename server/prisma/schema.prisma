@@ -633,6 +633,7 @@ model Homework {
 }
 
 model HomeworkSubmission {
+  versions HomeworkSubmissionVersion[]
   id          String    @id @default(cuid())
   homeworkId  String
   userId      String
@@ -658,6 +659,28 @@ model HomeworkSubmission {
   @@index([status])
   @@index([userId])
   @@index([reviewedBy])
+}
+
+model HomeworkSubmissionVersion {
+  id           String   @id @default(cuid())
+  submissionId String
+  version      Int
+  text         String?
+  link         String?
+  files        String   @default("[]")
+  status       String   @default("PENDING")
+  feedback     String?
+  grade        Int?
+  finalGrade   Float?
+  lateDays     Int?
+  latePenalty  Float?
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  submittedAt  DateTime @default(now())
+  submission   HomeworkSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, version])
+  @@index([submissionId, submittedAt])
 }
 
 model PendingDeletion {
