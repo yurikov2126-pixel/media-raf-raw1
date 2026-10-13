@@ -13,6 +13,33 @@ router.get('/', auth, async (req, res) => {
     res.json(items.map((n) => ({ ...n, payload: JSON.parse(n.payload || '{}') })));
 });
 
+// Resolve even older review notifications that contain only an assignment ID.
+router.get('/learning-target', auth, async (req, res) => {
+    const { homeworkId, practicalId } = req.query;
+    if ((!homeworkId && !practicalId) || (homeworkId && practicalId)) {
+        return res.status(400).json({ error: 'Укажите одно задание' });
+    }
+    try {
+        if (homeworkId) {
+            const submission = await prisma.homeworkSubmission.findUnique({
+                where: { homeworkId_userId: { homeworkId: String(homeworkId), userId: req.user.id } },
+                select: { homework: { select: { lesson: { select: { order: true, course: { select: { slug: true } } } } } } },
+            });
+            if (!submission) return res.status(404).json({ error: 'Домашнее задание не найдено' });
+            return res.json({ courseSlug: submission.homework.lesson.course.slug, lessonOrder: submission.homework.lesson.order, kind: 'homework' });
+        }
+        const submission = await prisma.practicalSubmission.findUnique({
+            where: { practicalId_userId: { practicalId: String(practicalId), userId: req.user.id } },
+            select: { practical: { select: { lesson: { select: { order: true } }, course: { select: { slug: true } } } } },
+        });
+        if (!submission) return res.status(404).json({ error: 'Практическая работа не найдена' });
+        return res.json({ courseSlug: submission.practical.course.slug, lessonOrder: submission.practical.lesson?.order ?? null, kind: 'practical' });
+    } catch (error) {
+        console.error('[notification learning-target]', error);
+        res.status(500).json({ error: 'Не удалось открыть задание' });
+    }
+});
+
 router.get('/unread-count', auth, async (req, res) => {
     const count = await prisma.notification.count({
         where: { userId: req.user.id, readAt: null },
