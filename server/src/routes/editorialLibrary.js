@@ -66,7 +66,7 @@ const sharedFolderPaths = async files => {
     if (!materialIdsInShare.length) return new Map();
     const materials = await prisma.editorialMaterialFile.findMany({
         where: { id: { in: materialIdsInShare } },
-        select: { id: true, uploaderId: true, task: { select: { assigneeId: true, projectId: true, project: { select: { title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
+        select: { id: true, uploaderId: true, task: { select: { id: true, title: true, workDate: true, assigneeId: true, projectId: true, project: { select: { title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
     });
     const paths = new Map();
     for (const material of materials) {
@@ -74,7 +74,21 @@ const sharedFolderPaths = async files => {
         const personId = material.task.assigneeId || material.uploaderId;
         const member = project.members.find(m => m.userId === personId);
         const name = member?.user?.fullName || member?.user?.username || 'Неизвестный участник';
-        paths.set(materialKey(material.id), { projectId: material.task.projectId, projectTitle: project.title, personId, folder: shareFolderName(member, name) });
+        const assigneeName = name;
+        const workDate = material.task.workDate ? material.task.workDate.toISOString().slice(0, 10) : null;
+        const dayLabel = workDate ? workDate.slice(8, 10) + '.' + workDate.slice(5, 7) + '.' + workDate.slice(0, 4) : 'Без даты';
+        const taskFolder = material.task.title + ' · ' + dayLabel + ' · ' + assigneeName;
+        paths.set(materialKey(material.id), {
+            projectId: material.task.projectId,
+            projectTitle: project.title,
+            taskId: material.task.id,
+            taskTitle: material.task.title,
+            workDate,
+            assigneeName,
+            taskFolder,
+            personId,
+            folder: shareFolderName(member, name),
+        });
     }
     return paths;
 };
@@ -97,7 +111,7 @@ router.get('/public/:token/archive', async (req, res, next) => {
         res.setHeader('Cache-Control', 'no-store');
         const files = await sharedFiles(share);
         const paths = await sharedFolderPaths(files);
-        return archive(res, files.map(file => ({ ...file, zipFolder: paths.get(file.id)?.folder || '' })), 'editorial-share.zip');
+        return archive(res, files.map(file => ({ ...file, zipFolder: paths.has(file.id) ? [paths.get(file.id).projectTitle, paths.get(file.id).taskFolder].join('/') : 'Общие файлы' })), 'editorial-share.zip');
     } catch (error) { next(error); }
 });
 router.get('/public/:token/files/:fileId', async (req, res, next) => {
