@@ -32,7 +32,7 @@ function normalizeLinks(items) {
 }
 
 export default function Layout() {
-    const { user, logout } = useAuth();
+    const { user, token, logout } = useAuth();
     const { brand, nav, raw: siteSettings, commandPalette } = useSettings();
     const { modules, isEnabled } = useModules();
     const { enabled: gamifEnabled } = useGamification();
@@ -49,11 +49,11 @@ export default function Layout() {
     useEffect(() => {
         let active = true;
         if (!user) { setAnalyticsAccess(false); return; }
-        api('/admin/access', { token: localStorage.getItem('mrr_token') }).then(result => {
+        api('/admin/access', { token }).then(result => {
             if (active) setAnalyticsAccess(Boolean(result.analytics));
         }).catch(() => { if (active) setAnalyticsAccess(false); });
         return () => { active = false; };
-    }, [user?.id, user?.role, location.pathname]);
+    }, [user?.id, user?.role, location.pathname, token]);
     const isMentor = user?.role === 'MENTOR' || user?.role === 'ADMIN';
 
     const rawLinks = nav.items.length > 0 ? nav.items : FALLBACK_LINKS;
