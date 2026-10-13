@@ -124,6 +124,48 @@ router.get('/production-board', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// Explicit board transitions; submitting and approving materials remain review actions.
+router.patch('/production-board/tasks/:taskId/move', async (req, res, next) => {
+    try {
+        const task = await prisma.editorialTask.findUnique({
+            where: { id: req.params.taskId },
+            select: { id: true, projectId: true, status: true, assigneeId: true },
+        });
+        if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+        const project = await getProject(task.projectId);
+        if (!project || !canSee(project, req.user)) return notFound(res);
+        const editor = canEdit(project, req.user);
+        if (!editor && task.assigneeId !== req.user.id)
+            return res.status(403).json({ error: 'Нет прав на перемещение' });
+        const nextStatus = req.body?.status;
+        const transitions = {
+            TODO: ['IN_PROGRESS'],
+            IN_PROGRESS: ['TODO'],
+            REVISION: ['IN_PROGRESS'],
+            APPROVED: ['DONE'],
+            DONE: ['IN_PROGRESS'],
+        };
+        if (!transitions[task.status]?.includes(nextStatus))
+            return res.status(409).json({ error: 'Этот переход требует отправки материалов или решения проверяющего. Откройте карточку задания.' });
+        if (!editor && nextStatus !== 'IN_PROGRESS')
+            return res.status(403).json({ error: 'Исполнитель может только начать работу' });
+        const updated = await prisma.$transaction(async tx => {
+            const changed = await tx.editorialTask.updateMany({
+                where: { id: task.id, status: task.status },
+                data: { status: nextStatus },
+            });
+            if (!changed.count) return null;
+            await tx.editorialTaskEvent.create({
+                data: { taskId: task.id, actorId: req.user.id,
+                    action: 'BOARD_MOVED', details: JSON.stringify({ before: task.status, after: nextStatus }) },
+            });
+            return tx.editorialTask.findUnique({ where: { id: task.id }, select: { id: true, status: true, updatedAt: true } });
+        });
+        if (!updated) return res.status(409).json({ error: 'Статус изменился. Обновите доску.' });
+        res.json({ task: updated });
+    } catch (error) { next(error); }
+});
+
 // Cross-project review inbox. Scope every row to projects this user can edit.
 router.get('/review-inbox', async (req, res, next) => {
     try {
