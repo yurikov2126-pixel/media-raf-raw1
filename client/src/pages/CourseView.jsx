@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -12,6 +12,7 @@ export default function CourseView() {
     const { slug } = useParams();
     const { token } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
+    const lessonContentRef = useRef(null);
 
     const [course, setCourse] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -54,6 +55,16 @@ export default function CourseView() {
         };
     }, [course, lessonParam, isEnrolled]);
 
+    // На мобильном список уроков расположен над содержимым.
+    // Прокручиваем к самому уроку только после выбора или открытия прямой ссылки.
+    useEffect(() => {
+        if (!isEnrolled || !activeLesson || (!searchParams.has('lesson') && mode === 'lesson')) return;
+        const frame = window.requestAnimationFrame(() => {
+            lessonContentRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [isEnrolled, activeLesson?.id, lessonParam, mode]);
+
     // Если не записан, а в URL стоит ?mode=test или ?mode=result — сбрасываем
     useEffect(() => {
         if (!isEnrolled && mode !== 'lesson') {
@@ -72,7 +83,6 @@ export default function CourseView() {
         next.set('lesson', String(order));
         if (!keepMode) next.set('mode', 'lesson');
         setSearchParams(next, { replace: false });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const goTest = () => {
@@ -81,7 +91,6 @@ export default function CourseView() {
         next.set('lesson', String(activeLesson.order));
         next.set('mode', 'test');
         setSearchParams(next);
-        window.scrollTo({ top: 0 });
     };
 
     const goResult = (result) => {
@@ -89,7 +98,6 @@ export default function CourseView() {
         const next = new URLSearchParams(searchParams);
         next.set('mode', 'result');
         setSearchParams(next);
-        window.scrollTo({ top: 0 });
     };
 
     const backToLesson = () => {
@@ -97,7 +105,6 @@ export default function CourseView() {
         const next = new URLSearchParams(searchParams);
         next.set('mode', 'lesson');
         setSearchParams(next);
-        window.scrollTo({ top: 0 });
     };
 
     const refreshCourse = async () => {
@@ -115,7 +122,7 @@ export default function CourseView() {
                 <div className="text-5xl mb-3">📚</div>
                 <div className="text-xl font-bold mb-2">Курс не найден</div>
                 <div className="text-white/50 mb-6">{error || 'Такого курса нет'}</div>
-                <Link to="/app/courses" className="btn-primary">← К курсам</Link>
+                <Link to="/app/courses" className="btn-primary">← В Академию</Link>
             </div>
         );
     }
@@ -149,7 +156,7 @@ export default function CourseView() {
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
             {/* Хлебные крошки */}
             <nav className="flex items-center gap-2 text-sm text-white/50 mb-4 flex-wrap">
-                <Link to="/app/courses" className="hover:text-white">📚 Курсы</Link>
+                <Link to="/app/courses" className="hover:text-white">🎓 Академия</Link>
                 <span className="text-white/30">/</span>
                 <span className="text-white/80 font-medium truncate">{course.title}</span>
             </nav>
@@ -322,7 +329,7 @@ export default function CourseView() {
                     </aside>
 
                     {/* Основной блок */}
-                    <main>
+                    <main ref={lessonContentRef} className="min-w-0 scroll-mt-20" id="academy-lesson-content">
                         {mode === 'lesson' && activeLesson && (
                             <LessonPanel
                                 lesson={activeLesson}
