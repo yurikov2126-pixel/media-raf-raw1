@@ -18,7 +18,7 @@ function isBot(req) {
 const cache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX = 500;
-const DEFAULT_OG_IMAGE_PATH = '/icon-512.png'; // Replace with /og/mediarafraw-cover-1200x630.jpg only after uploading the JPG
+const DEFAULT_OG_IMAGE_PATH = '/og/mediarafraw-cover-1200x630.jpg';
 
 function getCached(key) {
     const item = cache.get(key);
