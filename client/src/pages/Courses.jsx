@@ -16,14 +16,14 @@ export default function Courses() {
     const shown = filter === 'all' ? courses : courses.filter((c) => c.category === filter);
 
     usePageMeta({
-        title: 'Обучение',
+        title: 'Академия',
         description: 'Курсы медиацентра: видео, фото, звук, радио. Прокачай скиллы и получи сертификат.',
     });
 
     return (
         <div className="p-5 md:p-10 max-w-6xl mx-auto">
-            <h1 className="text-3xl md:text-5xl font-bold mb-2">Обучение</h1>
-            <p className="text-white/50 mb-6">Запишись на курсы и прокачай скиллы</p>
+            <h1 className="text-3xl md:text-5xl font-bold mb-2">Академия</h1>
+            <p className="text-white/50 mb-6">Выбирай направление, изучай уроки и развивай навыки в медиа</p>
 
             <div className="flex gap-2 mb-6 flex-wrap">
                 {[['all', 'Все'], ...Object.entries(CATEGORY_LABEL)].map(([k, l]) => (
