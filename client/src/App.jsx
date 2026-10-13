@@ -35,6 +35,7 @@ const Leaderboard = lazy(() => import('./pages/Leaderboard.jsx'));
 const Seasons = lazy(() => import('./pages/Seasons.jsx'));
 const Stickers = lazy(() => import('./pages/Stickers.jsx'));
 const Admin = lazy(() => import('./pages/Admin/index.jsx'));
+const DelegatedAnalytics = lazy(() => import('./pages/DelegatedAnalytics.jsx'));
 const Certificate = lazy(() => import('./pages/Certificate.jsx'));
 const Verify = lazy(() => import('./pages/Verify.jsx'));
 const Wiki = lazy(() => import('./pages/Wiki.jsx'));
@@ -129,6 +130,7 @@ export default function App() {
                     <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
                     <Route path="courses" element={<LazyPage><Courses /></LazyPage>} />
                     <Route path="courses/:slug" element={<LazyPage><CourseView /></LazyPage>} />
+                    <Route path="analytics" element={<LazyPage><DelegatedAnalytics /></LazyPage>} />
                     <Route path="leaderboard" element={<LazyPage><Leaderboard /></LazyPage>} />
                     <Route path="seasons" element={<LazyPage><Seasons /></LazyPage>} />
                     <Route path="stickers" element={<LazyPage><Stickers /></LazyPage>} />
