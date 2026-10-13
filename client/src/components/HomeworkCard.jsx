@@ -1,3 +1,4 @@
+import MarkdownView from './MarkdownView.jsx';
 import { LearningDiscussion, LearningRubric } from './LearningWorkTools.jsx';
 import HomeworkHistory from './HomeworkHistory.jsx';
 import { useState } from 'react';
@@ -120,9 +121,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
             </div>
 
             <div className="font-medium mb-1">{homework.title}</div>
-            <div className="text-sm text-white/70 whitespace-pre-wrap mb-3">
-                {homework.description}
-            </div>
+            <MarkdownView text={homework.description} className="text-sm text-white/75 mb-3 break-words" />
 
             {/* Дедлайн */}
             <DeadlineInfo deadline={homework.deadline} submission={submission} />
