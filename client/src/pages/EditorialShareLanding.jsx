@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import './editorialShareLanding.css';
 
 const BASE = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const media = file => file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.mimeType === 'application/pdf';
@@ -35,9 +36,9 @@ function groupFiles(files) {
 }
 
 function FolderCard({ title, subtitle, count, size, onClick, icon }) {
-    return <button type="button" onClick={onClick} className="group flex min-h-32 items-start gap-4 rounded-2xl border border-white/15 bg-white/[0.05] p-5 text-left transition hover:-translate-y-0.5 hover:border-violet-400 hover:bg-violet-400/10 focus-visible:outline-2 focus-visible:outline-violet-400">
+    return <button type="button" onClick={onClick} className="share-folder-card group flex min-h-32 items-start gap-4 rounded-2xl border border-slate-500/50 bg-slate-900 p-5 text-left text-slate-100 transition hover:-translate-y-0.5 hover:border-violet-400 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-violet-400">
         <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-3xl">{icon || '📁'}</span>
-        <span className="min-w-0 flex-1"><span className="block break-words text-base font-semibold text-white">{title}</span><span className="mt-1 block break-words text-xs leading-5 text-slate-400">{subtitle}</span><span className="mt-3 block text-xs font-medium text-violet-200">{count} файлов · {sizeText(size)}</span></span><span className="text-lg text-slate-500 transition group-hover:translate-x-1 group-hover:text-violet-300" aria-hidden="true">→</span>
+        <span className="min-w-0 flex-1"><span className="share-folder-title block break-words text-base font-semibold text-slate-50">{title}</span><span className="share-folder-subtitle mt-1 block break-words text-sm leading-5 text-slate-300">{subtitle}</span><span className="share-folder-meta mt-3 block text-sm font-medium text-violet-200">{count} файлов · {sizeText(size)}</span></span><span className="share-folder-arrow text-xl text-slate-300 transition group-hover:translate-x-1 group-hover:text-violet-200" aria-hidden="true">→</span>
     </button>;
 }
 
@@ -85,7 +86,7 @@ export default function EditorialShareLanding() {
     const archiveUrl = BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/archive';
     const folderBytes = files => files.reduce((sum, file) => sum + (file.size || 0), 0);
 
-    return <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-8 sm:py-10">
+    return <main className="editorial-share-landing min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-8 sm:py-10">
         <div className="mx-auto max-w-6xl space-y-7">
             <header className="border-b border-white/15 pb-6">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-300">MEDIA · РАФ · RAW</p>
@@ -106,7 +107,7 @@ export default function EditorialShareLanding() {
                     </div>
                 </section>
                 <label className="block"><span className="sr-only">Поиск файлов, проектов и заданий</span>
-                    <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти файл, проект, задание или исполнителя…" className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-400 focus:border-violet-400 focus:outline-none"/>
+                    <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти файл, проект, задание или исполнителя…" className="share-search-input w-full rounded-xl border border-slate-500/70 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-300 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/25"/>
                 </label>
                 {!searchResults && <nav aria-label="Путь к файлам" className="flex flex-wrap items-center gap-2 text-sm">
                     <button type="button" onClick={() => { setProjectId(null); setTaskId(null); }} className={'rounded-lg px-3 py-2 ' + (!activeProject ? 'bg-violet-600 text-white' : 'border border-white/20 text-violet-200 hover:bg-white/10')}>Все проекты</button>
