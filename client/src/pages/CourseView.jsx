@@ -511,6 +511,39 @@ function LessonPanel({
     const canTakeTest = !!lesson.test && lesson.unlocked;
     const testPassed = lesson.theoryPassed;
     const hasTest = !!lesson.test;
+    const [section, setSection] = useState('material');
+    const [readingProgress, setReadingProgress] = useState(0);
+    const materialRef = useRef(null);
+
+    useEffect(() => {
+        setSection('material');
+        setReadingProgress(0);
+    }, [lesson.id]);
+
+    useEffect(() => {
+        if (section !== 'material') return;
+        let frame = 0;
+        const updateProgress = () => {
+            if (frame) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = 0;
+                const content = materialRef.current;
+                if (!content) return;
+                const rect = content.getBoundingClientRect();
+                const distance = Math.max(1, rect.height - window.innerHeight * 0.5);
+                const viewed = Math.max(0, Math.min(100, Math.round((window.innerHeight * 0.5 - rect.top) / distance * 100)));
+                setReadingProgress(viewed);
+            });
+        };
+        updateProgress();
+        window.addEventListener('scroll', updateProgress, { passive: true });
+        window.addEventListener('resize', updateProgress);
+        return () => {
+            window.removeEventListener('scroll', updateProgress);
+            window.removeEventListener('resize', updateProgress);
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, [section, lesson.id]);
 
     return (
         <article className="card p-5 md:p-7">
@@ -533,6 +566,29 @@ function LessonPanel({
                 </div>
             </header>
 
+            <nav className="flex gap-2 overflow-x-auto pb-2 mb-5 border-b border-white/10" aria-label="Разделы урока">
+                {[
+                    { key: 'material', title: '📖 Материал' },
+                    ...(lesson.practical ? [{ key: 'practical', title: '🎯 Практика' }] : []),
+                    ...(lesson.homework ? [{ key: 'homework', title: '📋 Домашнее задание' }] : []),
+                ].map((tab) => (
+                    <button key={tab.key} type="button" onClick={() => setSection(tab.key)}
+                        aria-current={section === tab.key ? 'page' : undefined}
+                        className={`shrink-0 min-h-11 px-4 rounded-xl text-sm font-medium border transition ${section === tab.key
+                            ? 'bg-violet-soft/20 border-violet-soft/50 text-white'
+                            : 'bg-white/5 border-white/10 text-white/70 hover:text-white'}`}>
+                        {tab.title}
+                    </button>
+                ))}
+            </nav>
+            {section === 'material' && <div ref={materialRef}>
+                <div className="flex items-center justify-between gap-3 text-xs text-white/60 mb-3">
+                    <span>Прогресс чтения материала</span><span>{readingProgress}%</span>
+                </div>
+                <div role="progressbar" aria-label="Прогресс чтения" aria-valuemin={0} aria-valuemax={100}
+                    aria-valuenow={readingProgress} className="h-1.5 rounded-full bg-white/10 overflow-hidden mb-5">
+                    <div className="h-full bg-violet-soft transition-all" style={{width: readingProgress + '%'}} />
+                </div>
             {lesson.videoUrl && (
                 <div className="mb-6 rounded-xl overflow-hidden aspect-video bg-black">
                     <iframe
@@ -550,32 +606,36 @@ function LessonPanel({
                 className="text-white/85 text-sm md:text-base mb-6"
             />
 
-            {lesson.practical && (
-                <PracticalCard practical={lesson.practical} onRefresh={onRefresh} />
+            </div>}
+            {section === 'practical' && lesson.practical && (
+                <section aria-label="Практическая работа">
+                    <PracticalCard practical={lesson.practical} onRefresh={onRefresh} />
+                </section>
+            )}
+            {section === 'homework' && lesson.homework && (
+                <section aria-label="Домашнее задание">
+                    <HomeworkCard homework={lesson.homework} onRefresh={onRefresh} />
+                </section>
             )}
 
-            {lesson.homework && (
-                <HomeworkCard homework={lesson.homework} onRefresh={onRefresh} />
-            )}
-
-            <footer className="mt-8 pt-5 border-t border-white/10 flex flex-wrap gap-3 items-center justify-between">
+            <footer className="mt-8 pt-5 border-t border-white/10 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
                 <button
                     onClick={onPrev}
                     disabled={!hasPrev}
-                    className="btn-ghost text-sm disabled:opacity-30"
+                    className="btn-ghost min-h-11 text-sm disabled:opacity-30"
                 >
                     ← Предыдущий
                 </button>
 
-                <div className="flex gap-3 flex-wrap">
+                <div className="flex gap-3 flex-col sm:flex-row flex-wrap">
                     {canTakeTest && (
-                        <button onClick={onStartTest} className="btn-primary">
+                        <button onClick={onStartTest} className="btn-primary min-h-11">
                             {testPassed ? 'Пройти тест заново' : 'Пройти тест →'}
                         </button>
                     )}
 
                     {hasNext && (!hasTest || testPassed) && (
-                        <button onClick={onNext} className="btn-ghost">
+                        <button onClick={onNext} className="btn-ghost min-h-11">
                             Следующий урок →
                         </button>
                     )}
