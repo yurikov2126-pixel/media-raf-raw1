@@ -109,6 +109,30 @@ router.get('/popular', async (_req, res) => {
     }
 });
 
+// Случайная опубликованная статья собственной базы знаний для главной страницы.
+router.get('/random', async (_req, res) => {
+    try {
+        const where = { published: true };
+        const count = await prisma.wikiArticle.count({ where });
+        if (!count) return res.json(null);
+        const offset = Math.floor(Math.random() * count);
+        const article = await prisma.wikiArticle.findFirst({
+            where,
+            skip: offset,
+            orderBy: { id: 'asc' },
+            select: {
+                id: true, slug: true, title: true, excerpt: true, cover: true,
+                category: { select: { title: true, icon: true } },
+            },
+        });
+        res.set('Cache-Control', 'private, no-store');
+        res.json(article);
+    } catch (error) {
+        console.error('[wiki] random article:', error);
+        res.status(500).json({ error: 'Не удалось выбрать статью ВикиМедиа' });
+    }
+});
+
 // Одна статья + счётчик просмотров + соседние статьи в той же категории
 router.get('/articles/:slug', async (req, res) => {
     try {
