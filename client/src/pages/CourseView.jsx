@@ -215,6 +215,7 @@ export default function CourseView() {
                         {course.dripMode && (
                             <span className="chip bg-cyan/10 text-cyan-soft">
                                 {course.dripMode === 'test' && '🔒 Открытие по тестам'}
+                                {course.dripMode === 'test_homework' && '🔒 После теста и ДЗ'}
                                 {course.dripMode === 'test_weekly' && `🔒 Не более ${course.weeklyLessonLimit || 3}/нед.`}
                                 {course.dripMode === 'schedule' && `🗓 Каждые ${course.dripInterval || 7} дн.`}
                             </span>
