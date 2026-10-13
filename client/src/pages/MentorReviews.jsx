@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import Avatar from '../components/Avatar.jsx';
+import { Link } from 'react-router-dom';
 
 const TABS = {
     practicals: { key: 'practicals', label: '🎯 Практики' },
@@ -17,6 +18,10 @@ const STATUS_TABS = [
 export default function MentorReviews() {
     const { token, user } = useAuth();
     const [tab, setTab] = useState('practicals');
+    const [workspace, setWorkspace] = useState('reviews');
+    const [overview, setOverview] = useState(null);
+    const [overviewError, setOverviewError] = useState('');
+    const [studentQuery, setStudentQuery] = useState('');
     const [statusTab, setStatusTab] = useState('pending');
     const [courseFilter, setCourseFilter] = useState('');
     const [search, setSearch] = useState('');
@@ -45,8 +50,12 @@ export default function MentorReviews() {
     };
 
     useEffect(() => {
-        if (user?.role === 'MENTOR' || user?.role === 'ADMIN') load();
-    }, [token, user]);
+        if (user?.role === 'MENTOR' || user?.role === 'ADMIN') {
+            load();
+            api('/mentor-academy/overview', { token }).then(setOverview)
+                .catch((err) => setOverviewError(err.message || 'Не удалось получить аналитику'));
+        }
+    }, [token, user?.id, user?.role]);
 
     // Разворачиваем практики в плоский список сдач
     const practicalSubmissions = useMemo(() => {
@@ -185,6 +194,63 @@ export default function MentorReviews() {
                 </button>
             </div>
 
+            <nav className="flex gap-2 overflow-x-auto pb-3 mb-4" aria-label="Кабинет наставника">
+                {[
+                    ['reviews','Проверка работ'],
+                    ['students','Студенты'],
+                    ['analytics','Аналитика'],
+                ].map(([key, label]) => <button type="button" key={key} aria-pressed={workspace === key}
+                    onClick={() => setWorkspace(key)}
+                    className={`shrink-0 min-h-11 px-4 rounded-xl text-sm ${workspace === key ? 'bg-violet-soft/20 text-white border border-violet-soft/40' : 'bg-white/5 text-white/75 border border-white/10'}`}>
+                    {label}
+                </button>)}
+            </nav>
+            {overviewError && <p role="alert" className="text-amber-200 text-sm mb-3">{overviewError}</p>}
+            {overview && <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-5">
+                {[[overview.totals.pending,'На проверке'],[overview.totals.students,'Студентов'],[overview.totals.active,'Активных записей'],[overview.totals.completed,'Завершили курс']].map(([value,label]) =>
+                    <div key={label} className="card p-3 md:p-4"><div className="text-2xl font-bold">{value}</div><div className="text-xs text-white/65">{label}</div></div>)}
+            </div>}
+            {workspace === 'students' && <section className="space-y-4">
+                <div className="card p-4">
+                    <label className="block text-sm text-white/70 mb-2">Поиск по студентам и курсам</label>
+                    <input className="input w-full" value={studentQuery} onChange={e => setStudentQuery(e.target.value)}
+                        placeholder="Имя, логин или курс"/>
+                </div>
+                {!overview && !overviewError && <p className="text-white/60">Загружаем список студентов…</p>}
+                {(overview?.students || []).filter(item => [item.student.fullName, item.student.username, item.courseTitle]
+                    .some(value => String(value || '').toLowerCase().includes(studentQuery.toLowerCase()))).map(item =>
+                    <div key={item.id} className="card p-4 flex gap-3 items-start">
+                        <Avatar user={item.student} size={44} />
+                        <div className="flex-1 min-w-0">
+                            <div className="font-semibold break-words">{item.student.fullName || item.student.username}</div>
+                            <div className="text-xs text-white/65 mt-1">{item.courseTitle} · {item.completed ? 'Завершил' : 'Обучается'}</div>
+                            <div className="h-2 bg-white/10 rounded-full overflow-hidden my-2">
+                                <div className="bg-violet-soft h-full" style={{width: item.progress + '%'}} />
+                            </div>
+                            <div className="text-xs text-white/60">{item.progress}% обучения</div>
+                            <Link to={`/app/u/${item.student.username}`} className="inline-block text-violet-soft text-sm mt-2">Открыть профиль →</Link>
+                        </div>
+                    </div>)}
+                {overview && !overview.students.length && <p className="card p-6 text-white/60">Студентов на доступных вам курсах пока нет.</p>}
+            </section>}
+            {workspace === 'analytics' && <section className="grid sm:grid-cols-2 gap-3">
+                {!overview && !overviewError && <p className="text-white/60">Загружаем статистику…</p>}
+                {(overview?.courses || []).map(course => <div key={course.id} className="card p-5">
+                    <h2 className="font-bold text-lg mb-3">{course.title}</h2>
+                    <div className="flex justify-between text-xs text-white/70 mb-2"><span>Средний прогресс</span><span>{course.averageProgress}%</span></div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                        <div className="bg-violet-soft h-full" style={{width: course.averageProgress + '%'}} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-white/75">
+                        <div>Студентов: <b className="text-white">{course.students}</b></div>
+                        <div>Завершили: <b className="text-white">{course.completed}</b></div>
+                        <div>ДЗ на проверке: <b className="text-white">{course.pendingHomework}</b></div>
+                        <div>Практик: <b className="text-white">{course.pendingPracticals}</b></div>
+                    </div>
+                </div>)}
+                {overview && !overview.courses.length && <p className="card p-6 text-white/60">Доступных для анализа курсов пока нет.</p>}
+            </section>}
+            {workspace === 'reviews' && <>
             {/* Табы практики / ДЗ */}
             <div className="flex gap-2 mb-4 flex-wrap">
                 {Object.values(TABS).map((t) => {
@@ -314,6 +380,7 @@ export default function MentorReviews() {
                     )}
                 </div>
             )}
+            </>}
         </div>
     );
 }
