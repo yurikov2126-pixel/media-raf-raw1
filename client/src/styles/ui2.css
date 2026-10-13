@@ -2012,3 +2012,78 @@ html[data-ui-chip-shape="square"] .ui-shell .chip { border-radius: 4px; }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   html[data-ui-hover-effect="lift"] .ui-shell .card:not(.editorial-glass__dialog):hover { transform: translateY(-2px); transition: transform 180ms ease; }
 }
+
+/* Role editor: explicit theme-aware surfaces, independent of Tailwind dark-mode config. */
+.mrr-role-dialog {
+  max-height: min(90dvh, 900px);
+  background: #fff;
+  color: #101828;
+  border-color: #cbd5e1;
+  color-scheme: light;
+}
+.mrr-role-dialog__heading, .mrr-role-dialog__footer { background: #f8fafc; }
+.mrr-role-dialog__heading { border-bottom: 1px solid #e2e8f0; }
+.mrr-role-dialog__footer { border-top: 1px solid #e2e8f0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+.mrr-role-field, .mrr-role-dialog .mrr-role-field {
+  color: #101828;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  opacity: 1;
+  -webkit-text-fill-color: #101828;
+}
+.mrr-role-field::placeholder { color: #64748b; opacity: 1; }
+.mrr-role-field:disabled { background: #f1f5f9; color: #475569; -webkit-text-fill-color: #475569; }
+.mrr-role-field:focus-visible, .mrr-role-checkbox:focus-visible { outline: 3px solid #8b5cf6; outline-offset: 2px; }
+.mrr-role-group { border-color: #cbd5e1; background: #fff; }
+.mrr-role-group legend { color: #1e293b; }
+.mrr-role-option:hover { background: #f1f5f9; }
+.mrr-role-checkbox { accent-color: #6d28d9; }
+.mrr-role-count { background: #ede9fe; color: #5b21b6; }
+.mrr-role-close, .mrr-role-cancel, .mrr-role-group-toggle { color: #334155; background: #e2e8f0; }
+.mrr-role-close { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; }
+.mrr-role-dialog .btn-primary:disabled { opacity: .55; }
+.dark .mrr-role-dialog, [data-theme="dark"] .mrr-role-dialog,
+body.dark .mrr-role-dialog, html.dark .mrr-role-dialog,
+body:has([data-theme="dark"]) .mrr-role-dialog {
+  background: #161b2b;
+  color: #f8fafc;
+  border-color: #46516a;
+  color-scheme: dark;
+}
+.dark .mrr-role-dialog__heading, .dark .mrr-role-dialog__footer,
+[data-theme="dark"] .mrr-role-dialog__heading, [data-theme="dark"] .mrr-role-dialog__footer,
+body:has([data-theme="dark"]) .mrr-role-dialog__heading, body:has([data-theme="dark"]) .mrr-role-dialog__footer {
+  background: #1d2537;
+  border-color: #46516a;
+}
+.dark .mrr-role-field, [data-theme="dark"] .mrr-role-field,
+body:has([data-theme="dark"]) .mrr-role-field {
+  background: #101827;
+  color: #f8fafc;
+  border-color: #64748b;
+  -webkit-text-fill-color: #f8fafc;
+}
+.dark .mrr-role-field:disabled, [data-theme="dark"] .mrr-role-field:disabled,
+body:has([data-theme="dark"]) .mrr-role-field:disabled {
+  background: #273247;
+  color: #cbd5e1;
+  -webkit-text-fill-color: #cbd5e1;
+}
+.dark .mrr-role-field::placeholder, [data-theme="dark"] .mrr-role-field::placeholder,
+body:has([data-theme="dark"]) .mrr-role-field::placeholder { color: #cbd5e1; }
+.dark .mrr-role-group, [data-theme="dark"] .mrr-role-group,
+body:has([data-theme="dark"]) .mrr-role-group { background: #1b2537; border-color: #57657f; }
+.dark .mrr-role-group legend, [data-theme="dark"] .mrr-role-group legend,
+body:has([data-theme="dark"]) .mrr-role-group legend { color: #f8fafc; }
+.dark .mrr-role-option:hover, [data-theme="dark"] .mrr-role-option:hover,
+body:has([data-theme="dark"]) .mrr-role-option:hover { background: #334155; }
+.dark .mrr-role-count, [data-theme="dark"] .mrr-role-count,
+body:has([data-theme="dark"]) .mrr-role-count { background: #43316b; color: #f5f3ff; }
+.dark .mrr-role-close, .dark .mrr-role-cancel, .dark .mrr-role-group-toggle,
+[data-theme="dark"] .mrr-role-close, [data-theme="dark"] .mrr-role-cancel, [data-theme="dark"] .mrr-role-group-toggle,
+body:has([data-theme="dark"]) .mrr-role-close,
+body:has([data-theme="dark"]) .mrr-role-cancel,
+body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; color: #f8fafc; }
+@media (max-width: 640px) {
+  .mrr-role-dialog { max-height: calc(100dvh - 24px); }
+}
