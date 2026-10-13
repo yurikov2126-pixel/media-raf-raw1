@@ -26,6 +26,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [tab, setTab] = useState('main');
+    const [lessonSearch, setLessonSearch] = useState('');
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -104,7 +105,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
     return (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm overflow-hidden p-2 md:p-4" onClick={onClose}>
             <div
-                className="card w-full max-w-[1400px] h-full mx-auto flex flex-col overflow-hidden"
+                className="card w-full max-w-[1600px] h-full mx-auto flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-white/10 shrink-0">
@@ -133,7 +134,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                     </div>
                 </div>
 
-                <div className="flex gap-1 px-5 border-b border-white/10 shrink-0">
+                <div className="flex gap-1 px-3 md:px-5 border-b border-white/10 shrink-0 overflow-x-auto">
                     <TabBtn active={tab === 'main'} onClick={() => setTab('main')}>
                         📋 Основное
                     </TabBtn>
@@ -144,7 +145,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
 
                 <div className="flex-1 overflow-hidden">
                     {tab === 'main' && (
-                        <div className="h-full overflow-y-auto p-5">
+                        <div className="h-full overflow-y-auto p-3 md:p-6">
                             {error && (
                                 <div className="mb-3 text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
                                     {error}
@@ -172,9 +173,9 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                                 <div>
                                     <label className="text-xs text-white/40 uppercase block mb-1">Уровень</label>
                                     <select className="input" value={form.level} onChange={set('level')}>
-                                        <option value="beginner">beginner</option>
-                                        <option value="intermediate">intermediate</option>
-                                        <option value="advanced">advanced</option>
+                                        <option value="beginner">Для начинающих</option>
+                                        <option value="intermediate">Средний уровень</option>
+                                        <option value="advanced">Продвинутый</option>
                                     </select>
                                 </div>
                                 <div>
@@ -270,8 +271,8 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                     )}
 
                     {tab === 'lessons' && savedCourse && (
-                        <div className="h-full flex flex-col">
-                            <div className="flex items-center justify-between gap-2 px-5 py-2 border-b border-white/5 shrink-0">
+                        <div className="h-full flex flex-col min-h-0">
+                            <div className="flex items-center justify-between gap-2 px-3 md:px-5 py-3 border-b border-white/5 shrink-0">
                                 <div className="text-sm text-white/60">
                                     Всего: <b className="text-white">{lessons.length}</b>
                                     {activeLesson && (
@@ -285,54 +286,48 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                                 </button>
                             </div>
 
-                            <div className="flex gap-2 px-5 py-3 overflow-x-auto shrink-0 border-b border-white/5">
-                                {lessons.map((l, i) => (
-                                    <button
-                                        key={l.id}
-                                        onClick={() => setActiveLesson(l)}
-                                        className={`shrink-0 text-left p-3 rounded-xl transition min-w-[200px] max-w-[240px] ${
-                                            activeLesson?.id === l.id
-                                                ? 'bg-violet-soft/20 ring-1 ring-violet-soft/40'
-                                                : 'bg-white/5 hover:bg-white/10'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <div className="w-6 h-6 grid place-items-center rounded-full bg-white/10 text-xs font-bold shrink-0">
-                                                {i + 1}
-                                            </div>
-                                            <div className="font-semibold text-sm truncate">{l.title}</div>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-xs text-white/40">
-                                            <span>{l.duration} мин</span>
-                                            {l.test && <span>· 📝 {l.test.questions?.length || 0}</span>}
-                                            {l.practical && <span>· 🎯</span>}
-                                            {l.homework && <span>· 📋</span>}
-                                        </div>
-                                    </button>
-                                ))}
-                                {lessons.length === 0 && (
-                                    <div className="text-white/40 text-sm py-2">Уроков нет</div>
-                                )}
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto px-5 py-4">
-                                {activeLesson ? (
-                                    <LessonEditor
-                                        key={activeLesson.id}
-                                        lesson={activeLesson}
-                                        token={token}
-                                        onDeleted={() => { setActiveLesson(null); refreshLessons(); }}
-                                        onSaved={refreshLessons}
-                                    />
-                                ) : (
-                                    <div className="h-full grid place-items-center text-white/40 text-sm">
-                                        <div className="text-center">
-                                            <div className="text-4xl mb-2">📖</div>
-                                            <div>Выберите урок сверху, чтобы редактировать</div>
-                                            <div className="text-xs mt-1">или добавьте новый</div>
-                                        </div>
+                            <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+                                <aside className="lg:w-[310px] lg:shrink-0 border-b lg:border-b-0 lg:border-r border-white/10 flex flex-col min-h-0 max-h-[36vh] lg:max-h-none bg-black/10">
+                                    <div className="p-3 border-b border-white/10">
+                                        <label className="text-xs text-white/65 block mb-2">Быстрый поиск урока</label>
+                                        <input className="input text-sm" value={lessonSearch} onChange={(e) => setLessonSearch(e.target.value)} placeholder="Название или номер урока" />
                                     </div>
-                                )}
+                                    <div className="overflow-y-auto p-2 space-y-1">
+                                        {lessons.filter((l) => (String(l.order) + ' ' + l.title).toLowerCase().includes(lessonSearch.toLowerCase())).map((l) => (
+                                            <button type="button" key={l.id} onClick={() => setActiveLesson(l)}
+                                                aria-current={activeLesson?.id === l.id ? 'page' : undefined}
+                                                className={`w-full text-left rounded-xl p-3 border transition ${activeLesson?.id === l.id
+                                                    ? 'bg-violet-soft/20 border-violet-soft/50 text-white'
+                                                    : 'bg-white/5 border-transparent hover:bg-white/10 text-white/80'}`}>
+                                                <div className="flex gap-2 items-start"><span className="text-xs text-white/60 shrink-0 mt-0.5 w-6">{l.order}.</span>
+                                                    <span className="font-semibold text-sm break-words min-w-0">{l.title}</span></div>
+                                                <div className="flex gap-2 flex-wrap text-xs text-white/60 mt-2 ml-8">
+                                                    {!!l.duration && <span>⏱ {l.duration} мин</span>}
+                                                    {l.test && <span>📝 Тест</span>}
+                                                    {l.practical && <span>🎯 Практика</span>}
+                                                    {l.homework && <span>📋 ДЗ</span>}
+                                                </div>
+                                            </button>
+                                        ))}
+                                        {lessons.length === 0 && <p className="text-white/60 text-sm p-4">Уроков пока нет. Создайте первый.</p>}
+                                        {lessons.length > 0 && !lessons.some((l) => (String(l.order) + ' ' + l.title).toLowerCase().includes(lessonSearch.toLowerCase())) && <p className="p-4 text-sm text-white/60">По запросу ничего не найдено</p>}
+                                    </div>
+                                </aside>
+                                <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-3 md:p-5">
+                                    {activeLesson ? (
+                                        <LessonEditor
+                                            key={activeLesson.id}
+                                            lesson={activeLesson}
+                                            token={token}
+                                            onDeleted={() => { setActiveLesson(null); refreshLessons(); }}
+                                            onSaved={refreshLessons}
+                                        />
+                                    ) : (
+                                        <div className="h-full min-h-44 grid place-items-center text-white/60 text-sm text-center">
+                                            <div><div className="text-3xl mb-2">📖</div>Выберите урок в списке слева<br />или добавьте новый</div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
