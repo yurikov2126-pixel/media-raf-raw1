@@ -1,4 +1,4 @@
-import { LearningDiscussion, LearningRubric, readRubric } from '../components/LearningWorkTools.jsx';
+import { LearningDiscussion, LearningRubric } from '../components/LearningWorkTools.jsx';
 import HomeworkHistory from '../components/HomeworkHistory.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { api, resolveUrl } from '../api/client.js';
@@ -532,7 +532,6 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
     const [grade, setGrade] = useState('');
     const [rubric, setRubric] = useState(submission.homework?.rubric || '[]');
     const [criteriaScores, setCriteriaScores] = useState([]);
-    const [applyPenalty, setApplyPenalty] = useState(true);
 
     const hw = submission.homework || {};
     const lesson = hw.lesson || {};
@@ -547,9 +546,9 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
     const lateDays = submission.lateDays || 0;
     const rawGrade = grade !== '' ? Number(grade) : null;
     const recommended =
-        applyPenalty && rawGrade != null
+        rawGrade != null
             ? Math.max(1, Math.round((rawGrade - latePenalty) * 10) / 10)
-            : rawGrade;
+            : null;
 
     return (
         <div className="card p-5">
@@ -693,17 +692,10 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                                 />
 
                                 {latePenalty > 0 && (
-                                    <label className="flex items-center gap-2 text-xs text-white/70">
-                                        <input
-                                            type="checkbox"
-                                            checked={applyPenalty}
-                                            onChange={(e) => setApplyPenalty(e.target.checked)}
-                                        />
-                                        Применить штраф −{latePenalty}
-                                    </label>
+                                    <span className="text-xs text-white/70">Штраф −{latePenalty} применяется сервером автоматически</span>
                                 )}
 
-                                {recommended != null && latePenalty > 0 && applyPenalty && (
+                                {recommended != null && latePenalty > 0 && (
                                     <span className="text-xs text-white/60">
                                         Итог: <b className="text-white">{recommended}/5</b>
                                     </span>
