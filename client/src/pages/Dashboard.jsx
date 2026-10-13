@@ -88,11 +88,12 @@ export default function Dashboard() {
   const enrolledCourse = useMemo(
     () =>
       courses
-        .filter((course) => course.enrolled)
+        .filter((course) => course.enrolled && !course.completed && !course.certified)
         .sort((a, b) => (b.progress || 0) - (a.progress || 0))[0] || null,
     [courses]
   );
 
+  const completedEnrolled = courses.filter(c => c.enrolled && (c.completed || c.certified));
   const latestNotifications = notifications.items.slice(0, 4);
   const unread = notifications.unread;
   const firstName = user?.fullName?.split(' ')?.[0] || 'участник';
@@ -199,7 +200,7 @@ export default function Dashboard() {
             {dashboard.showLearning && coursesEnabled && (
               <Link to="/app/courses" className="ui-stat">
                 <div className="ui-stat__label">Обучение</div>
-                <div className="ui-stat__value">{courses.filter((c) => c.enrolled).length}</div>
+                <div className="ui-stat__value">{courses.filter((c) => c.enrolled && !c.completed && !c.certified).length}</div>
                 <div className="ui-stat__hint">активных курсов</div>
               </Link>
             )}
@@ -219,7 +220,7 @@ export default function Dashboard() {
               <div>
                 <div className="ui-card2__title">Продолжить обучение</div>
                 <div className="ui-card2__muted">
-                  {enrolledCourse ? 'Последний активный курс' : 'Ты ещё не записан ни на один курс'}
+                  {enrolledCourse ? 'Текущий активный курс' : completedEnrolled.length ? 'Курс завершён — выбери следующий' : 'Ты ещё не записан ни на один курс'}
                 </div>
               </div>
               <Link className="ui-section-link" to="/app/academy/me">
@@ -253,8 +254,8 @@ export default function Dashboard() {
               <Link to="/app/courses" className="ui-action mt-3">
                 <span className="ui-action__icon"><Icon name="book" size={18} /></span>
                 <span className="ui-action__copy">
-                  <span className="ui-action__title">Выбрать курс</span>
-                  <span className="ui-action__sub">Фото · Видео · Радио · Звук</span>
+                  <span className="ui-action__title">{completedEnrolled.length ? 'Выбрать следующий курс' : 'Выбрать курс'}</span>
+                  <span className="ui-action__sub">{completedEnrolled.length ? 'Поздравляем с окончанием обучения! Продолжай развиваться' : 'Фото · Видео · Радио · Звук'}</span>
                 </span>
                 <Icon name="chevronRight" size={15} />
               </Link>
