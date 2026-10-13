@@ -1,19 +1,25 @@
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
+import { readFileSync } from 'node:fs';
 import { prisma } from './prisma.js';
 
 let app;
 function messaging() {
     if (process.env.MOBILE_PUSH_ENABLED !== 'true') return null;
 
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (!raw) {
+    const credentialFile = process.env.FIREBASE_SERVICE_ACCOUNT_FILE;
+    const credentialJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+    if (!credentialFile && !credentialJson) {
         console.error('[mobile-push] Firebase credentials are not configured');
         return null;
     }
 
     try {
         if (!app) {
+            const raw = credentialFile
+                ? readFileSync(credentialFile, 'utf8')
+                : credentialJson;
             const credentials = JSON.parse(raw);
             app = getApps()[0] || initializeApp({
                 credential: cert(credentials),
