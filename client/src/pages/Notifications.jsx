@@ -273,7 +273,7 @@ export default function Notifications() {
             {filtered.length > 0 && <div className="card p-0 overflow-hidden">
                 {filtered.map((n, index) => {
                     const p = n.payload || {};
-                    const subline = (() => {
+                    const subline = sharedNotificationPreview(n) || (() => {
                         if (n.type === 'mention') return mentionPreview(p);
                         if (n.type === 'message') {
                             return (
