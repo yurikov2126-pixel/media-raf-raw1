@@ -85,7 +85,7 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
     return (
         <div className="space-y-4 min-w-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="font-bold text-lg">Редактор урока</div>
+                <div><div className="font-bold text-lg">Редактор урока</div><div className="text-xs text-white/60">Сначала настройте содержание, затем добавьте тест, практику и ДЗ</div></div>
                 <div className="flex gap-1 flex-wrap">
                     <button
                         onClick={remove}
@@ -98,13 +98,13 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
             </div>
 
             <input
-                className="input text-lg font-semibold"
+                className="input text-lg font-semibold w-full"
                 value={form.title}
                 onChange={set('title')}
                 placeholder="Название урока"
             />
 
-            <div className="flex gap-1 border-b border-white/10 pb-2 flex-wrap">
+            <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto">
                 <TabBtn active={tab === 'lesson'} onClick={() => setTab('lesson')}>
                     📖 Урок
                 </TabBtn>
@@ -135,7 +135,7 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                     </div>
 
                     {showPreview ? (
-                        <div className="border border-white/10 rounded-xl p-4 h-[420px] overflow-y-auto bg-black/20">
+                        <div className="border border-white/10 rounded-xl p-4 min-h-[360px] max-h-[70vh] overflow-y-auto bg-black/20">
                             <MarkdownView
                                 text={form.content}
                                 className="text-white/85 text-sm"
@@ -146,7 +146,7 @@ export default function LessonEditor({ lesson, token, onSaved, onDeleted }) {
                         </div>
                     ) : (
                         <textarea
-                            className="input resize-none font-mono text-xs leading-relaxed h-[420px]"
+                            className="input resize-y font-mono text-sm leading-relaxed min-h-[360px] h-[52vh] max-h-[800px]"
                             value={form.content}
                             onChange={set('content')}
                             placeholder="## Заголовок&#10;&#10;Текст урока в markdown…"
@@ -262,7 +262,7 @@ function TabBtn({ active, onClick, children }) {
         <button
             type="button"
             onClick={onClick}
-            className={`px-3 py-1.5 rounded-lg text-xs transition ${
+            className={`shrink-0 min-h-11 px-3 py-2 rounded-lg text-sm transition ${
                 active ? 'bg-violet-soft/20 text-white' : 'text-white/60 hover:bg-white/5'
             }`}
         >
