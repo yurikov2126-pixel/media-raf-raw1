@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import multer from 'multer';
 import { auth } from '../middleware/auth.js';
+import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 
@@ -24,7 +25,6 @@ const resolveFiles = async ids => {
     return ids.map(id => byId.get(id)).filter(Boolean);
 };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
-const allowed = user => ['ADMIN', 'MENTOR'].includes(user.role);
 const publicFile = file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, description: file.description || '', createdAt: file.createdAt });
 const archive = (res, files, filename) => {
     if (!files.length) return res.status(404).json({ error: 'Нет доступных файлов' });
@@ -126,7 +126,11 @@ router.get('/public/:token/files/:fileId', async (req, res, next) => {
 });
 
 router.use(auth);
-router.use((req, res, next) => allowed(req.user) ? next() : res.status(403).json({ error: 'Доступно руководителям редакции' }));
+router.use(async (req, res, next) => {
+    try { if (await hasPermission(req.user, 'editorial.library')) return next();
+      return res.status(403).json({ error: 'Нет права управлять библиотекой редакции' });
+    } catch (e) { next(e); }
+});
 router.get('/folders', async (_req, res, next) => {
     try {
         const [projects, files] = await Promise.all([
