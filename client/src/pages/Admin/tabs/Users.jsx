@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../../api/client.js';
 import { useToast } from '../../../store/toast.jsx';
 import { deleteWithUndo } from '../utils.js';
 import ChangePasswordModal from '../../../components/ChangePasswordModal.jsx';
 
-const ROLES = ['STUDENT', 'MENTOR', 'ADMIN'];
+const BASE_ROLES = ['STUDENT', 'MENTOR', 'ADMIN'];
 const DIRECTIONS = ['photo', 'video', 'radio', 'sound'];
 const DIR_LABEL = {
     photo: '📸 Фото',
@@ -16,6 +16,8 @@ const DIR_LABEL = {
 
 export default function Users({ users, setUsers, token }) {
     const toast = useToast();
+    const [roles, setRoles] = useState(BASE_ROLES);
+    useEffect(() => { api('/admin/roles', { token }).then(d => setRoles(d.roles.map(r => r.code))).catch(() => {}); }, [token]);
     const [searchParams, setSearchParams] = useSearchParams();
 
     const q = searchParams.get('q') ?? '';
@@ -221,7 +223,7 @@ export default function Users({ users, setUsers, token }) {
                         onChange={(e) => updateFilters({ role: e.target.value })}
                     >
                         <option value="">Все роли</option>
-                        {ROLES.map((r) => (
+                        {roles.map((r) => (
                             <option key={r} value={r}>
                                 {r}
                             </option>
@@ -355,7 +357,7 @@ export default function Users({ users, setUsers, token }) {
                             onChange={(e) => updateUser(u.id, { role: e.target.value })}
                             className="input !py-2 !w-auto"
                         >
-                            {ROLES.map((r) => (
+                            {roles.map((r) => (
                                 <option key={r} value={r}>
                                     {r}
                                 </option>
