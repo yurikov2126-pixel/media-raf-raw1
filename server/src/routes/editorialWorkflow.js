@@ -2,6 +2,7 @@ import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { auth } from '../middleware/auth.js';
+import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { getIo } from '../lib/notify.js';
 import { awardApprovedEditorialTask } from '../lib/editorialXp.js';
@@ -73,11 +74,12 @@ function dateValue(value) {
 // Navigation capability is derived from project membership, never from a client role guess.
 router.get('/navigation', async (req, res, next) => {
     try {
-        const canManageProjects = ['ADMIN', 'MENTOR'].includes(req.user.role)
+        const canCreateProjects = await hasPermission(req.user, 'editorial.create');
+        const canManageProjects = canCreateProjects
             || await prisma.editorialProjectMember.count({
                 where: { userId:req.user.id, role:{ in:['MANAGER','EDITOR'] } },
             }) > 0;
-        res.json({ canManageProjects });
+        res.json({ canManageProjects, canCreateProjects });
     } catch (error) { next(error); }
 });
 
