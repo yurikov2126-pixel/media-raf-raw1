@@ -72,9 +72,33 @@ npx prisma migrate deploy
 # ─── 5. Перезапуск API ───
 log "=== 5. Перезапуск API ==="
 systemctl restart mediaraf-api
-sleep 3
-systemctl is-active mediaraf-api
-curl -fsS http://localhost:4000/api/health || { log "❌ API не отвечает"; exit 1; }
+
+# Systemd может сообщать "active" раньше, чем Node начнёт слушать порт.
+# Даём приложению до 60 секунд, одновременно проверяя состояние службы.
+API_READY=0
+for attempt in $(seq 1 30); do
+  if ! systemctl is-active --quiet mediaraf-api; then
+    log "❌ Служба mediaraf-api перестала быть active"
+    journalctl -u mediaraf-api -n 60 --no-pager | tee -a "$LOG_FILE"
+    exit 1
+  fi
+
+  if curl --silent --show-error --fail --max-time 2 \
+      http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
+    API_READY=1
+    log "OK: API готов (проверка $attempt/30)"
+    break
+  fi
+
+  sleep 2
+done
+
+if [ "$API_READY" -ne 1 ]; then
+  log "❌ API не начал отвечать за 60 секунд"
+  systemctl status mediaraf-api --no-pager -l | tee -a "$LOG_FILE" || true
+  journalctl -u mediaraf-api -n 60 --no-pager | tee -a "$LOG_FILE" || true
+  exit 1
+fi
 
 # ─── 6. Клиент ───
 log "=== 6. Client: зависимости и сборка ==="
