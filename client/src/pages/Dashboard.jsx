@@ -1,33 +1,15 @@
-import { notificationTitle as sharedNotificationTitle, notificationPreview as sharedNotificationPreview } from '../lib/notificationDisplay.js';
-import { learningNotificationPath } from '../lib/learningNotificationPath.js';
-import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
+import WikimediaDiscovery from '../components/WikimediaDiscovery.jsx';
+import UpcomingEditorialTasks from '../components/UpcomingEditorialTasks.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useGamification } from '../store/gamification.jsx';
-import { useNotifications } from '../store/notifications.jsx';
 import { useSettings } from '../store/settings.jsx';
 import { useModules } from '../store/modules.jsx';
 import Icon from '../components/Icon.jsx';
 import XpProgressBar from '../components/XpProgressBar.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
-
-const NOTIFICATION_ICON = {
-  message: 'message',
-  mention: 'bell',
-  post: 'feed',
-  certificate: 'trophy',
-  lesson_new: 'book',
-  lesson_unlocked: 'book',
-  practical_scheduled: 'calendar',
-  practical_due: 'clock',
-  homework_due: 'book',
-  homework_overdue: 'clock',
-  report: 'bell',
-  password_reset: 'settings',
-  system: 'sparkles',
-};
 
 export default function Dashboard() {
   const { user, token } = useAuth();
@@ -36,7 +18,6 @@ export default function Dashboard() {
   const coursesEnabled = isEnabled('courses');
   const editorialEnabled = isEnabled('editorial');
   const gamif = useGamification();
-  const notifications = useNotifications();
   const navigate = useNavigate();
 
   const [courses, setCourses] = useState([]);
@@ -94,8 +75,6 @@ export default function Dashboard() {
   );
 
   const completedEnrolled = courses.filter(c => c.enrolled && (c.completed || c.certified));
-  const latestNotifications = notifications.items.slice(0, 4);
-  const unread = notifications.unread;
   const firstName = user?.fullName?.split(' ')?.[0] || 'участник';
   const show = (value) => value !== false;
 
@@ -125,12 +104,7 @@ export default function Dashboard() {
       icon: 'book',
       to: resumeUrl(enrolledCourse),
     }] : []),
-    {
-      label: 'Уведомления',
-      sub: unread > 0 ? `${unread} непрочитанных` : 'Всё спокойно',
-      icon: 'bell',
-      to: '/app/notifications',
-    },
+
   ];
 
   return (
@@ -180,16 +154,9 @@ export default function Dashboard() {
         )}
       </section>
 
-      {(dashboard.showNotifications || dashboard.showGamification || (dashboard.showLearning && coursesEnabled)) && (
+      {(dashboard.showGamification || (dashboard.showLearning && coursesEnabled) || user) && (
         <section className="ui-section">
           <div className="ui-stat-grid">
-            {dashboard.showNotifications && (
-              <Link to="/app/notifications" className="ui-stat">
-                <div className="ui-stat__label">Уведомления</div>
-                <div className="ui-stat__value">{unread}</div>
-                <div className="ui-stat__hint">{unread ? 'Нужно посмотреть' : 'Новых нет'}</div>
-              </Link>
-            )}
             {dashboard.showGamification && gamif.enabled && gamif.stats && (
               <Link to="/app/leaderboard" className="ui-stat">
                 <div className="ui-stat__label">Уровень</div>
@@ -287,61 +254,9 @@ export default function Dashboard() {
         )}
       </section>
 
-      {dashboard.showNotifications && (
-        <section className="ui-section">
-          <div className="ui-section-head">
-            <div>
-              <div className="ui-section-title">Последние уведомления</div>
-              <div className="ui-card2__muted">{unread ? `${unread} требуют внимания` : 'Ничего срочного'}</div>
-            </div>
-            <Link className="ui-section-link" to="/app/notifications">Все <Icon name="chevronRight" size={15} /></Link>
-          </div>
-          <div className="ui-card2">
-            {latestNotifications.length === 0 ? (
-              <div className="py-6 text-center text-sm text-white/35">Здесь появятся системные и командные события.</div>
-            ) : (
-              <div className="ui-mini-list">
-                {latestNotifications.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={async () => {
-                      if (!item.readAt) notifications.markRead(item.id).catch(() => {});
-                      const p = item.payload || {};
-                      if (p.homeworkId || p.practicalId) {
-                        try {
-                          const target = await learningNotificationPath(item, token);
-                          if (target) navigate(target);
-                        } catch (error) {
-                          console.error('[dashboard] learning notification target', error);
-                          navigate('/app/academy/me');
-                        }
-                        return;
-                      }
-                      if (item.type === 'mention' && p.postId) navigate(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
-                      else if ((item.type === 'message' || item.type === 'mention') && p.chatId) navigate(`/app/chats/${encodeURIComponent(p.chatId)}`);
-                      else if (item.type === 'post' && p.postId) navigate(`/app/feed?post=${encodeURIComponent(p.postId)}`);
-                      else if (item.type === 'post' && p.authorUsername) navigate(`/app/u/${encodeURIComponent(p.authorUsername)}`);
-                      else if (item.type === 'certificate' && p.certificateId) navigate(`/app/certificates/${encodeURIComponent(p.certificateId)}`);
-                      else navigate('/app/notifications');
-                    }}
-                    className="ui-mini-list__item w-full text-left flex items-center gap-3 min-w-0"
-                  >
-                    <span className="ui-mini-list__icon shrink-0">
-                      <Icon name={NOTIFICATION_ICON[item.type] || 'bell'} size={16} />
-                    </span>
-                    <span className="ui-mini-list__copy flex-1 min-w-0 flex flex-col gap-1">
-                      <span className="ui-mini-list__title block text-sm font-semibold leading-snug break-words">{sharedNotificationTitle(item)}</span>
-                      <span className="ui-mini-list__sub block text-xs leading-relaxed opacity-65 break-words line-clamp-2">{sharedNotificationPreview(item)}</span>
-                    </span>
-                    {!item.readAt && <span className="w-2 h-2 rounded-full bg-pink mt-3 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      {editorialEnabled && <UpcomingEditorialTasks />}
+
+      <WikimediaDiscovery />
 
       {dashboard.showFeedPreview && (
         <section className="ui-section">
