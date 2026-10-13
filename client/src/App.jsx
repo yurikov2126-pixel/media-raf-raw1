@@ -10,6 +10,7 @@ import OfflineScreen from './components/OfflineScreen.jsx';
 import NetworkBanner from './components/NetworkBanner.jsx';
 import OnboardingModal from './components/OnboardingModal.jsx';
 import AchievementToast from './components/AchievementToast.jsx';
+import CertificateCelebration from './components/CertificateCelebration.jsx';
 import GlobalCommandPalette from './components/GlobalCommandPalette.jsx';
 import Landing from './pages/Landing.jsx';
 import { EditorialSection } from './pages/Editorial.jsx';
@@ -163,6 +164,7 @@ export default function App() {
             {user && <GlobalCommandPalette />}
             {user && <OnboardingModal />}
             {user && <AchievementToast />}
+            {user && <CertificateCelebration />}
         </>
     );
 }
