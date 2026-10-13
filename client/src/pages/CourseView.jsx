@@ -88,12 +88,20 @@ export default function CourseView() {
         setCurriculumOpen(false);
     };
 
+    // Ссылка без урока возвращает к сохранённой точке, а не к первому занятию.
+    useEffect(() => {
+        if (!isEnrolled || !course?.resumeLessonOrder || searchParams.has('lesson')) return;
+        const next = new URLSearchParams(searchParams);
+        next.set('lesson', String(course.resumeLessonOrder));
+        setSearchParams(next, { replace: true });
+    }, [isEnrolled, course?.resumeLessonOrder, searchParams, setSearchParams]);
+
     // Сохраняем посещённый доступный урок на сервере для продолжения с другого устройства.
     useEffect(() => {
-        if (!isEnrolled || !activeLesson?.unlocked || mode !== 'lesson') return;
+        if (!isEnrolled || !activeLesson?.unlocked || mode !== 'lesson' || (!searchParams.has('lesson') && course?.resumeLessonOrder)) return;
         api(`/courses/${slug}/resume`, { method: 'POST', token, body: { order: activeLesson.order } })
             .catch((error) => console.warn('[academy] resume was not saved:', error));
-    }, [slug, token, isEnrolled, activeLesson?.id, activeLesson?.unlocked, mode]);
+    }, [slug, token, isEnrolled, activeLesson?.id, activeLesson?.unlocked, mode, searchParams, course?.resumeLessonOrder]);
 
     const goTest = () => {
         if (!isEnrolled || !activeLesson) return;
