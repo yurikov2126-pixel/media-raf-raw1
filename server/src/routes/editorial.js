@@ -9,7 +9,7 @@ import { createNotification } from '../lib/notify.js';
 const router = Router();
 router.use(auth);
 const ROLES = ['MANAGER', 'EDITOR', 'PARTICIPANT', 'OBSERVER'];
-const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA', 'SOUND_ENGINEER', 'INTERVIEWER', 'VIDEO_EDITOR'];
+const CREW_POSITIONS = ['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'GIMBAL', 'ACTION_CAMERA', 'SOUND_ENGINEER', 'INTERVIEWER', 'VIDEO_EDITOR', 'EDITOR_IN_CHIEF', 'PHOTO_EDITOR', 'REPORTER', 'DESIGNER', 'PRODUCER', 'CURATOR'];
 const CREW_LABELS = { LEAD_PHOTO: 'Основной фотограф', ADDITIONAL_PHOTO: 'Дополнительный фотограф', LEAD_VIDEO: 'Основной видеорепортёр', GIMBAL: 'Оператор стабилизатора', ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр', INTERVIEWER: 'Интервьюер', VIDEO_EDITOR: 'Монтажёр' };
 const parseDay = value => {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -118,7 +118,8 @@ router.post('/projects/:id/members', async (req, res, next) => {
         const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, include: { members: true } });
         if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
         const { userId, role } = req.body;
-        const crewPosition = req.body.crewPosition ?? null;
+        const defaultAssignment = await prisma.editorialTeamMember.findUnique({ where: { userId } });
+        const crewPosition = req.body.crewPosition === undefined ? (defaultAssignment?.position || null) : req.body.crewPosition;
         if (!validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
         if (project.createdById === userId && role !== 'MANAGER') return res.status(400).json({ error: 'Создатель должен оставаться руководителем' });
         if (typeof userId !== 'string' || !ROLES.includes(role)) return res.status(400).json({ error: 'Некорректный участник или роль' });
