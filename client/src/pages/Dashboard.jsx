@@ -306,6 +306,7 @@ export default function Dashboard() {
                     key={item.id}
                     type="button"
                     onClick={async () => {
+                      if (!item.readAt) notifications.markRead(item.id).catch(() => {});
                       const p = item.payload || {};
                       if (p.homeworkId || p.practicalId) {
                         try {
