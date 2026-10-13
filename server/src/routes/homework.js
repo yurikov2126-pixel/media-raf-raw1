@@ -172,6 +172,7 @@ router.post('/submissions/:id/review', async (req, res) => {
         include: { homework: true },
     });
     if (!submission) return res.status(404).json({ error: 'Заявка не найдена' });
+    if (submission.status !== 'PENDING') return res.status(409).json({ error: 'Работа уже проверена или ожидает повторной сдачи' });
 
     // Итоговая оценка = grade − latePenalty, не ниже 1
     let finalGrade = null;
