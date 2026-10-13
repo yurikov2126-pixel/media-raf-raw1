@@ -29,7 +29,8 @@ export default function Courses() {
             <h1 className="text-3xl md:text-5xl font-bold mb-2">🎓 Академия</h1>
             <p className="text-white/50 mb-6">Выбирай направление, изучай уроки и развивай навыки в медиа</p>
 
-            <div className="flex gap-2 mb-5">
+            <div className="flex gap-2 mb-5 flex-wrap">
+                <Link to="/app/academy/me" className="chip min-h-11 px-4 bg-violet-soft/20 text-violet-soft inline-flex items-center">🎓 Личный кабинет →</Link>
                 <button type="button" aria-pressed={view === 'academy'} onClick={() => setView('academy')}
                     className={`chip min-h-11 px-4 ${view === 'academy' ? 'bg-violet text-white' : 'bg-white/10 text-white/75'}`}>Все курсы</button>
                 <button type="button" aria-pressed={view === 'mine'} onClick={() => setView('mine')}
