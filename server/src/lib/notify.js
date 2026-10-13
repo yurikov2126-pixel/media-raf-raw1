@@ -1,6 +1,7 @@
 import { URLSearchParams } from 'node:url';
 import { prisma } from './prisma.js';
 import { sendPushToUser } from './push.js';
+import { sendMobilePushToUser } from './mobilePush.js';
 
 let _io = null;
 export function setIo(io) { _io = io; }
@@ -30,6 +31,10 @@ export async function createNotification(userId, type, payload) {
         // Отправляем web push (вкладка закрыта / фон)
         sendPushToUser(userId, payloadToPush(type, payload)).catch((e) =>
             console.error('[notify] push error:', e)
+        );
+
+        sendMobilePushToUser(userId, payloadToPush(type, payload)).catch((e) =>
+            console.error('[notify] mobile push error:', e)
         );
 
         return n;
