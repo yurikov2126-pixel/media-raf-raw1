@@ -395,6 +395,7 @@ router.get('/:slug', auth, async (req, res) => {
             unlockAt: access.unlockAt,
             lockReason: access.reason,
             theoryPassed: s.theoryPassed,
+            testAttempt: s.testAttempt,
             practicalPassed: s.practicalPassed,
             homeworkPassed: s.homeworkPassed,
             fullyCompleted: s.fullyCompleted,

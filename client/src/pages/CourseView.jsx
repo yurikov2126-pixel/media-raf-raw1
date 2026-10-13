@@ -347,7 +347,7 @@ export default function CourseView() {
                                     <span className="text-xs text-white/65 w-5 shrink-0">{index + 1}.</span>
                                     <span className="min-w-0 flex-1"><span className="text-sm block font-medium">{l.title}</span>
                                         {!!l.duration && <span className="text-xs text-white/60 block mt-1">{l.duration} мин</span>}</span>
-                                    <span aria-hidden="true">{l.fullyCompleted ? '✓' : l.unlocked ? '→' : '🔒'}</span>
+                                    <span aria-hidden="true">{l.fullyCompleted ? '✅' : l.test && l.testAttempt && !l.theoryPassed ? '❌' : l.unlocked ? '→' : '🔒'}</span>
                                 </button>
                             ))}
                         </div>
@@ -388,7 +388,10 @@ export default function CourseView() {
                                             </span>
                                             <span className="flex-1">{l.title}</span>
                                             {l.fullyCompleted && (
-                                                <span className="text-emerald-400 text-xs">✓</span>
+                                                <span className="text-emerald-400 text-xs" title="Урок пройден">✓</span>
+                                            )}
+                                            {!l.fullyCompleted && l.test && l.testAttempt && !l.theoryPassed && (
+                                                <span className="text-red-300 text-xs shrink-0" title={`Тест не пройден: ${l.testAttempt.score}%`}>✕</span>
                                             )}
                                             {!l.unlocked && (
                                                 <span className="text-white/40 text-xs">🔒</span>
@@ -586,6 +589,9 @@ function LessonPanel({
                     {lesson.practical && <span>🎯 Практика</span>}
                     {lesson.homework && <span>📋 ДЗ</span>}
                     {testPassed && <span className="text-emerald-400">✓ Тест пройден</span>}
+                    {lesson.test && !testPassed && lesson.testAttempt && (
+                        <span className="text-red-300">✕ Тест не пройден · {lesson.testAttempt.score}%</span>
+                    )}
                     {!lesson.unlocked && (
                         <span className="text-amber-300">
                             🔒 {lesson.lockReason || 'Урок закрыт'}
