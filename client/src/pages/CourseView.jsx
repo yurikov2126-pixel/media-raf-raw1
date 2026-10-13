@@ -13,6 +13,8 @@ export default function CourseView() {
     const { token } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const lessonContentRef = useRef(null);
+    const [curriculumOpen, setCurriculumOpen] = useState(false);
+    const [detailsOpen, setDetailsOpen] = useState(false);
 
     const [course, setCourse] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -83,6 +85,7 @@ export default function CourseView() {
         next.set('lesson', String(order));
         if (!keepMode) next.set('mode', 'lesson');
         setSearchParams(next, { replace: false });
+        setCurriculumOpen(false);
     };
 
     const goTest = () => {
@@ -151,6 +154,7 @@ export default function CourseView() {
     const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
     const progress = course.enrolled?.progress ?? course.progress ?? 0;
     const completedLessons = course.lessons?.filter((l) => l.fullyCompleted).length || 0;
+    const resumeLesson = course.lessons?.find((l) => l.unlocked && !l.fullyCompleted) || course.lessons?.find((l) => l.unlocked);
 
     return (
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -161,8 +165,27 @@ export default function CourseView() {
                 <span className="text-white/80 font-medium truncate">{course.title}</span>
             </nav>
 
+            {isEnrolled && (
+                <section className="lg:hidden card p-4 mb-4 border border-violet-soft/20">
+                    <div className="text-xs font-semibold text-violet-soft uppercase mb-2">Сейчас изучаете</div>
+                    <h2 className="font-bold text-lg mb-3">{course.title}</h2>
+                    <div className="flex justify-between text-xs text-white/70 mb-2">
+                        <span>{completedLessons} из {totalLessons} уроков</span><span>{progress}%</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                        <div className="h-full bg-violet-soft" style={{ width: progress + '%' }} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button type="button" className="btn-ghost min-h-11 border border-white/15" onClick={() => setCurriculumOpen(true)}>☰ Содержание</button>
+                        <button type="button" className="btn-primary min-h-11 disabled:opacity-40" disabled={!resumeLesson}
+                            onClick={() => resumeLesson && goLesson(resumeLesson.order)}>▶ Продолжить</button>
+                    </div>
+                    <button type="button" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}
+                        className="w-full text-sm text-white/70 py-3">{detailsOpen ? 'Скрыть описание ↑' : 'Подробнее о курсе ↓'}</button>
+                </section>
+            )}
             {/* ─── Шапка курса ─── */}
-            <header className="card overflow-hidden mb-6">
+            <header className={`card overflow-hidden mb-6 ${isEnrolled && !detailsOpen ? "hidden lg:block" : ""}`}>
                 {course.cover && (
                     <div className="relative w-full h-40 md:h-56 bg-black/40 overflow-hidden">
                         <img
@@ -282,11 +305,34 @@ export default function CourseView() {
                 </div>
             </header>
 
+            {isEnrolled && curriculumOpen && (
+                <div className="lg:hidden fixed inset-0 z-[90] flex items-end" role="dialog" aria-modal="true" aria-label="Содержание курса">
+                    <button type="button" aria-label="Закрыть содержание" onClick={() => setCurriculumOpen(false)} className="absolute inset-0 bg-black/75" />
+                    <div className="relative bg-ink-900 border border-white/15 rounded-t-2xl w-full max-h-[85dvh] p-4 flex flex-col shadow-2xl">
+                        <div className="flex items-center justify-between mb-3">
+                            <div><h2 className="font-bold text-lg">Содержание курса</h2><p className="text-xs text-white/60">{completedLessons} из {totalLessons} пройдено</p></div>
+                            <button type="button" onClick={() => setCurriculumOpen(false)} aria-label="Закрыть" className="btn-ghost min-h-11 min-w-11">✕</button>
+                        </div>
+                        <div className="overflow-y-auto overscroll-contain space-y-2 pb-4">
+                            {course.lessons.map((l, index) => (
+                                <button key={l.id} type="button" disabled={!l.unlocked} onClick={() => goLesson(l.order)}
+                                    aria-current={l.id === activeLesson?.id ? 'step' : undefined} title={!l.unlocked ? l.lockReason : ''}
+                                    className={`w-full text-left flex gap-3 items-center rounded-xl p-3 min-h-14 border ${l.id === activeLesson?.id ? 'bg-violet-soft/20 border-violet-soft/50' : 'border-white/10 bg-white/5'} ${!l.unlocked ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <span className="text-xs text-white/65 w-5 shrink-0">{index + 1}.</span>
+                                    <span className="min-w-0 flex-1"><span className="text-sm block font-medium">{l.title}</span>
+                                        {!!l.duration && <span className="text-xs text-white/60 block mt-1">{l.duration} мин</span>}</span>
+                                    <span aria-hidden="true">{l.fullyCompleted ? '✓' : l.unlocked ? '→' : '🔒'}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
             {isEnrolled ? (
                 /* ─── Записан: полный интерфейс с уроками ─── */
                 <div className="grid lg:grid-cols-[280px_1fr] gap-6">
                     {/* Сайдбар со списком уроков */}
-                    <aside className="lg:sticky lg:top-4 self-start">
+                    <aside className="hidden lg:block lg:sticky lg:top-4 self-start">
                         <div className="card p-4">
                             <div className="text-sm text-white/50 mb-3">
                                 Уроки{' '}
@@ -330,6 +376,11 @@ export default function CourseView() {
 
                     {/* Основной блок */}
                     <main ref={lessonContentRef} className="min-w-0 scroll-mt-20" id="academy-lesson-content">
+                        <div className="lg:hidden flex items-center justify-between mb-3 gap-3">
+                            <span className="text-sm text-white/70">Урок {activeLesson?.order} из {totalLessons}</span>
+                            <button type="button" onClick={() => setCurriculumOpen(true)}
+                                className="text-sm font-semibold text-violet-soft border border-violet-soft/30 rounded-lg px-3 min-h-11">☰ Все уроки</button>
+                        </div>
                         {mode === 'lesson' && activeLesson && (
                             <LessonPanel
                                 lesson={activeLesson}
