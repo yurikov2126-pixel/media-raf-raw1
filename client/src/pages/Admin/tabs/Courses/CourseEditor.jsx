@@ -212,11 +212,13 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                                     <select className="input" value={form.dripMode} onChange={(e) => setForm((f) => ({ ...f, dripMode: e.target.value }))}>
                                         <option value="">Открыт сразу</option>
                                         <option value="test">После теста (по порядку)</option>
+                                        <option value="test_homework">После теста и домашнего задания</option>
                                         <option value="test_weekly">После теста + лимит в неделю</option>
                                         <option value="schedule">По расписанию</option>
                                     </select>
                                     <div className="text-[11px] text-white/40 mt-1">
                                         {form.dripMode === 'test' && 'Каждый следующий урок откроется только после сдачи теста предыдущего.'}
+                                        {form.dripMode === 'test_homework' && 'Следующий урок открывается после успешного теста и одобрения домашнего задания. Если есть практика, она также должна быть принята. При отсутствии теста или ДЗ этот шаг пропускается.'}
                                         {form.dripMode === 'test_weekly' && 'Каждую неделю открывается новая порция уроков, внутри порции — после теста.'}
                                         {form.dripMode === 'schedule' && 'Уроки открываются с заданным интервалом от даты записи.'}
                                         {!form.dripMode && 'Все уроки доступны сразу.'}
