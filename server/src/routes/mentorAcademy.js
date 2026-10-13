@@ -63,4 +63,85 @@ router.get('/overview', async (req, res) => {
     }
 });
 
+/* Подробная учебная карточка: доступ только к назначенному наставнику курсу. */
+router.get('/students/:userId/courses/:courseId', async (req, res) => {
+    try {
+        const [canHomework, canPractical] = await Promise.all([
+            hasPermission(req.user, 'learning.homework.review'),
+            hasPermission(req.user, 'learning.practicals.review'),
+        ]);
+        if (!canHomework && !canPractical) return res.status(403).json({ error: 'Нет прав' });
+        const { userId, courseId } = req.params;
+        if (req.user.role !== 'ADMIN') {
+            const assigned = await prisma.practicalWork.findFirst({
+                where: { courseId, supervisorId: req.user.id },
+                select: { id: true },
+            });
+            if (!assigned) return res.status(403).json({ error: 'Курс не назначен наставнику' });
+        }
+        const enrollment = await prisma.enrollment.findUnique({
+            where: { userId_courseId: { userId, courseId } },
+            include: {
+                user: { select: { id: true, fullName: true, username: true, avatar: true } },
+                course: { select: { id: true, title: true, slug: true,
+                    lessons: { orderBy: { order: 'asc' }, select: { id: true, title: true, order: true } },
+                } },
+            },
+        });
+        if (!enrollment) return res.status(404).json({ error: 'Запись на курс не найдена' });
+
+        const [progress, attempts, homework, practicals] = await Promise.all([
+            prisma.lessonProgress.findMany({
+                where: { userId, lesson: { courseId } },
+                select: { lessonId: true, completed: true, completedAt: true },
+            }),
+            prisma.testAttempt.findMany({
+                where: { userId, test: { lesson: { courseId } } },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true, score: true, passed: true, createdAt: true,
+                    test: { select: { title: true, lesson: { select: { id: true, order: true } } } } },
+            }),
+            canHomework ? prisma.homeworkSubmission.findMany({
+                where: { userId, homework: { lesson: { courseId } } },
+                orderBy: { updatedAt: 'desc' },
+                select: { id: true, status: true, grade: true, finalGrade: true, feedback: true,
+                    createdAt: true, updatedAt: true, reviewedAt: true,
+                    homework: { select: { title: true, lesson: { select: { id: true, order: true } } } },
+                    reviewer: { select: { fullName: true } },
+                },
+            }) : [],
+            canPractical ? prisma.practicalSubmission.findMany({
+                where: { userId, practical: { courseId, ...(req.user.role === 'ADMIN' ? {} : { supervisorId: req.user.id }) } },
+                orderBy: { updatedAt: 'desc' },
+                select: { id: true, status: true, grade: true, feedback: true, createdAt: true,
+                    updatedAt: true, reviewedAt: true,
+                    practical: { select: { topic: true, lesson: { select: { id: true, order: true } } } },
+                    reviewer: { select: { fullName: true } },
+                },
+            }) : [],
+        ]);
+        const completed = new Set(progress.filter((entry) => entry.completed).map((entry) => entry.lessonId));
+        res.json({
+            student: enrollment.user,
+            course: { id: enrollment.course.id, title: enrollment.course.title, slug: enrollment.course.slug },
+            progress: enrollment.progress, completed: enrollment.completed,
+            lessons: enrollment.course.lessons.map((lesson) => ({
+                ...lesson, completed: completed.has(lesson.id),
+                completedAt: progress.find((entry) => entry.lessonId === lesson.id)?.completedAt || null,
+            })),
+            attempts: attempts.map((a) => ({ id: a.id, title: a.test.title, lessonOrder: a.test.lesson.order,
+                score: a.score, passed: a.passed, createdAt: a.createdAt })),
+            homework: homework.map((a) => ({ id: a.id, title: a.homework.title, lessonOrder: a.homework.lesson.order,
+                status: a.status, grade: a.finalGrade ?? a.grade, feedback: a.feedback,
+                updatedAt: a.updatedAt, reviewer: a.reviewer?.fullName || null })),
+            practicals: practicals.map((a) => ({ id: a.id, title: a.practical.topic, lessonOrder: a.practical.lesson.order,
+                status: a.status, grade: a.grade, feedback: a.feedback,
+                updatedAt: a.updatedAt, reviewer: a.reviewer?.fullName || null })),
+        });
+    } catch (error) {
+        console.error('[mentor academy student]', error);
+        res.status(500).json({ error: 'Не удалось загрузить учебную карточку' });
+    }
+});
+
 export default router;
