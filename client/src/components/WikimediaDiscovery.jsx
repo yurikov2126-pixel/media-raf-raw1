@@ -1,59 +1,57 @@
 import { useEffect, useState } from 'react';
-
-const ENDPOINT = 'https://ru.wikipedia.org/w/api.php?action=query&generator=random&grnnamespace=0&grnlimit=1&prop=extracts%7Cpageimages&exintro=1&explaintext=1&exsentences=4&pithumbsize=480&format=json&origin=*';
+import { Link } from 'react-router-dom';
+import { api, resolveUrl } from '../api/client.js';
+import { useAuth } from '../store/auth.jsx';
 
 export default function WikimediaDiscovery() {
+    const { token } = useAuth();
     const [article, setArticle] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+
     useEffect(() => {
-        // Dashboard is unmounted on navigation. Every new visit fetches a new random article.
-        const controller = new AbortController();
+        // Fetch on each dashboard mount, not from an external encyclopedia.
+        let active = true;
         setLoading(true);
-        fetch(ENDPOINT, { signal: controller.signal, cache: 'no-store' })
-            .then(res => {
-                if (!res.ok) throw new Error('Википедия недоступна');
-                return res.json();
-            })
-            .then(data => {
-                const page = Object.values(data?.query?.pages || {})[0];
-                if (!page?.title || !page?.pageid) throw new Error('Нет статьи');
-                setArticle({
-                    title: page.title,
-                    summary: page.extract || 'Узнайте больше об этой теме в Википедии.',
-                    image: page.thumbnail?.source || null,
-                    url: 'https://ru.wikipedia.org/?curid=' + encodeURIComponent(page.pageid),
-                });
-                setError(false);
-            })
-            .catch(err => { if (err.name !== 'AbortError') setError(true); })
-            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-        return () => controller.abort();
-    }, []);
-    return <section className="ui-section" aria-label="Случайная статья из Википедии">
+        setArticle(null);
+        setError(false);
+        api('/wiki/random', { token })
+            .then(data => { if (active) setArticle(data); })
+            .catch(() => { if (active) setError(true); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, [token]);
+
+    return <section className="ui-section" aria-label="Случайная статья ВикиМедиа">
         <div className="ui-section-head">
             <div>
                 <div className="ui-section-title">Открой что-то новое</div>
-                <div className="ui-card2__muted">Случайная статья из Википедии · новая при каждом посещении главной</div>
+                <div className="ui-card2__muted">Случайная статья из нашей ВикиМедиа · новая при каждом открытии главной</div>
             </div>
-            <a className="ui-section-link" href="https://ru.wikipedia.org/" target="_blank" rel="noopener noreferrer">Википедия ↗</a>
+            <Link className="ui-section-link" to="/app/wiki">ВикиМедиа →</Link>
         </div>
         <div className="ui-card2">
-            {loading ? <div role="status" className="py-8 text-sm opacity-60">Подбираем интересную статью…</div>
+            {loading ? <div role="status" className="py-8 text-sm opacity-60">Выбираем статью из ВикиМедиа…</div>
                 : error ? <div className="space-y-2 py-3">
-                    <p className="text-sm opacity-75">Не удалось загрузить статью. Википедия может быть временно недоступна.</p>
-                    <a className="ui-section-link" target="_blank" rel="noopener noreferrer" href="https://ru.wikipedia.org/wiki/Служебная:Случайная_страница">Открыть случайную статью ↗</a>
+                    <p role="alert" className="text-sm opacity-75">Не удалось загрузить статью из базы знаний.</p>
+                    <Link className="ui-section-link" to="/app/wiki">Перейти в ВикиМедиа →</Link>
+                  </div>
+                : !article ? <div className="space-y-2 py-3">
+                    <p className="text-sm opacity-75">В ВикиМедиа пока нет опубликованных статей.</p>
+                    <Link className="ui-section-link" to="/app/wiki">Открыть базу знаний →</Link>
                   </div>
                 : <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)] items-start">
                     <div className="min-w-0">
-                        <p className="text-xs text-violet-soft font-semibold mb-2">WIKIPEDIA · СЛУЧАЙНАЯ СТАТЬЯ</p>
+                        <p className="text-xs text-violet-soft font-semibold mb-2">{article.category?.icon || '📚'} ВИКИМЕДИА · {article.category?.title || 'БАЗА ЗНАНИЙ'}</p>
                         <h3 className="text-lg sm:text-xl font-bold break-words">{article.title}</h3>
-                        <p className="text-sm opacity-75 mt-3 leading-relaxed whitespace-pre-line break-words line-clamp-6">{article.summary}</p>
-                        <a className="ui-section-link inline-flex mt-4" href={article.url} target="_blank" rel="noopener noreferrer">Читать статью целиком ↗</a>
+                        <p className="text-sm opacity-75 mt-3 leading-relaxed whitespace-pre-line break-words line-clamp-6">
+                            {article.excerpt || 'Узнай больше об этой теме в нашей базе знаний.'}
+                        </p>
+                        <Link className="ui-section-link inline-flex mt-4" to={`/app/wiki/${encodeURIComponent(article.slug)}`}>Читать статью →</Link>
                     </div>
-                    {article.image && <img src={article.image} alt="" loading="lazy" className="w-full max-h-48 object-cover rounded-xl border border-white/10" />}
+                    {article.cover && <img src={resolveUrl(article.cover)} alt="" loading="lazy" className="w-full max-h-48 object-cover rounded-xl border border-white/10" />}
                   </div>}
-            <div className="mt-4 pt-3 border-t border-white/10 text-xs opacity-50">Материал и изображения предоставлены Википедией / участниками Wikimedia. Доступность зависит от внешнего сервиса.</div>
+            <div className="mt-4 pt-3 border-t border-white/10 text-xs opacity-50">Материалы внутренней базы знаний Media_РАФ_RAW.</div>
         </div>
     </section>;
 }
