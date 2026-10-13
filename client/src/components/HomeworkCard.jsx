@@ -76,6 +76,8 @@ export default function HomeworkCard({ homework, onRefresh }) {
         }
     });
     const [busy, setBusy] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [submittedNotice, setSubmittedNotice] = useState(false);
     const [error, setError] = useState('');
 
     const editable = !submission || status === 'REJECTED';
@@ -84,6 +86,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
         deadline && deadline.getTime() < Date.now() && !submission;
 
     const submit = async () => {
+        if (uploading || busy) return;
         if (!text.trim() && !link.trim() && files.length === 0) {
             setError('Нужно сдать хотя бы что-то: текст, ссылку или файл');
             return;
@@ -96,6 +99,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
                 method: 'POST',
                 body: { text, link, files },
             });
+            setSubmittedNotice(true);
             await onRefresh?.();
         } catch (e) {
             setError(e.message || 'Ошибка отправки');
@@ -205,6 +209,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
                             ⚠️ Дедлайн уже прошёл. Ваша сдача будет помечена как просроченная.
                         </div>
                     )}
+                    {status === 'REJECTED' && <div className="rounded-xl p-3 bg-amber-500/10 border border-amber-500/25 text-sm text-amber-200">Наставник вернул работу на доработку. Исправьте замечания и отправьте её повторно.</div>}
                     <textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
@@ -221,6 +226,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
                     />
                     <FileUploader
                         files={files}
+                        onBusyChange={setUploading}
                         onChange={setFiles}
                         maxFiles={homework.maxFiles || 3}
                         maxSizeMb={homework.maxFileSizeMb || 50}
@@ -228,16 +234,17 @@ export default function HomeworkCard({ homework, onRefresh }) {
                     <div className="flex items-center gap-3 flex-wrap">
                         <button
                             onClick={submit}
-                            disabled={busy}
-                            className="btn-primary text-sm disabled:opacity-40"
+                            disabled={busy || uploading}
+                            className="btn-primary text-sm min-h-11 disabled:opacity-40"
                         >
-                            {busy ? 'Отправка…' : submission ? 'Отправить повторно' : 'Сдать ДЗ'}
+                            {busy ? 'Отправка…' : uploading ? 'Загружаем файлы…' : submission ? 'Отправить повторно' : 'Сдать ДЗ'}
                         </button>
                         {error && <span className="text-xs text-red-400">{error}</span>}
                     </div>
                 </div>
             )}
 
+            {submittedNotice && !submission && <p role="status" className="text-sm text-emerald-300 mt-3">Работа отправлена. Ожидайте проверки.</p>}
             {status === 'PENDING' && (
                 <div className="text-xs text-white/50 mt-3">
                     Ожидает проверки руководителем…
