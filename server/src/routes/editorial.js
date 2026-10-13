@@ -23,7 +23,7 @@ const validateEventRange = (start, end) => {
     if (start && end && (end - start) / 86400000 > 365) return 'Проект не может длиться более 366 дней';
     return null;
 };
-const validCrewPosition = async value => value === null || (await getEditorialPositions()).some(p => p.code === value);
+const validCrewPosition = async value => value == null || (await getEditorialPositions()).some(p => p.code === value);
 const isAdmin = (user) => user.role === 'ADMIN';
 const canManage = (project, user) => isAdmin(user) || project.members.some((m) => m.userId === user.id && m.role === 'MANAGER');
 const clean = (project) => ({ ...project, members: project.members.map((m) => ({ ...m, user: m.user ? { id: m.user.id, fullName: m.user.fullName, username: m.user.username } : undefined })) });
@@ -152,7 +152,7 @@ router.patch('/projects/:id/members/:userId/crew', async (req, res, next) => {
         const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, include: { members: true } });
         if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
         const crewPosition = req.body?.crewPosition;
-        if (!(await validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
+        if (!(await validCrewPosition(crewPosition))) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
         const result = await prisma.editorialProjectMember.updateMany({
             where: { projectId: project.id, userId: req.params.userId },
             data: { crewPosition },
