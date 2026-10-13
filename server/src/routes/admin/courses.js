@@ -1,3 +1,4 @@
+import { validatedCompetencyIds } from '../competencies.js';
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { notifyNewLesson } from '../../lib/notificationEvents.js';
@@ -60,7 +61,7 @@ router.post(
     safe(async (req, res) => {
         const {
             title, slug, description, category, level, cover, published,
-            certificateTitle, certificateDescription,
+            certificateTitle, certificateDescription, competencyIds = [],
             dripMode, dripInterval, weeklyLessonLimit,
         } = req.body;
         if (!title || !slug)
@@ -76,6 +77,7 @@ router.post(
                 published: !!published,
                 certificateTitle: certificateTitle || 'Сертификат о прохождении курса',
                 certificateDescription: certificateDescription || null,
+                competencyIds: await validatedCompetencyIds(competencyIds),
                 dripMode: dripMode || null,
                 dripInterval: dripInterval ? Number(dripInterval) : null,
                 weeklyLessonLimit: weeklyLessonLimit ? Number(weeklyLessonLimit) : null,
@@ -117,6 +119,7 @@ router.patch(
             }
         }
 
+        if (req.body.competencyIds !== undefined) data.competencyIds = await validatedCompetencyIds(req.body.competencyIds);
         const course = await prisma.course.update({
             where: { id: req.params.id },
             data,
