@@ -250,4 +250,57 @@ router.get('/app/courses/:slug', async (req, res, next) => {
     }
 });
 
+
+/* ─── Публичная подборка материалов редакции ─── */
+router.get('/share/editorial/:token', async (req, res, next) => {
+    if (!isBot(req)) return next();
+    const { token } = req.params;
+    if (!/^[a-f0-9]{48}$/.test(token)) return next();
+    try {
+        const share = await prisma.editorialFileShare.findUnique({
+            where: { token },
+            select: { title: true, description: true, fileIds: true, revokedAt: true, expiresAt: true },
+        });
+        // Не показываем приватные данные отозванных/просроченных ссылок.
+        if (!share || share.revokedAt || (share.expiresAt && share.expiresAt <= new Date())) return next();
+        const base = getBaseUrl(req);
+        const count = Array.isArray(share.fileIds) ? share.fileIds.length : 0;
+        const html = renderMetaPage({
+            url: `${base}/share/editorial/${token}`,
+            title: `${share.title || 'Материалы редакции'} · MEDIA·RAF·RAW`,
+            description: share.description?.trim() || `Материалы редакции: ${count} файлов в общей подборке MEDIA·RAF·RAW.`,
+            image: `${base}/icon-512.png`,
+        });
+        res.set('Cache-Control', 'public, max-age=60');
+        res.type('html').send(html);
+    } catch (error) {
+        console.error('[publicMeta] editorial share:', error);
+        next();
+    }
+});
+
+/* ─── Разделы сайта без персональных данных ─── */
+const PUBLIC_PREVIEWS = new Map([
+    ['/', ['MEDIA·RAF·RAW — Студенческий медиацентр', 'Творческая команда студентов: фотография, видео, журналистика, обучение и совместные проекты.']],
+    ['/login', ['Вход в MEDIA·RAF·RAW', 'Войти на платформу студенческого медиацентра MEDIA·RAF·RAW.']],
+    ['/app', ['MEDIA·RAF·RAW — Главная', 'Новости, проекты и возможности студенческого медиацентра. Для просмотра потребуется авторизация.']],
+    ['/app/feed', ['Лента MEDIA·RAF·RAW', 'Публикации и новости студенческого медиацентра. Для просмотра потребуется авторизация.']],
+    ['/app/courses', ['Курсы MEDIA·RAF·RAW', 'Образовательные курсы и практика для участников медиацентра.']],
+    ['/app/wiki', ['База знаний MEDIA·RAF·RAW', 'Статьи и полезные материалы студенческого медиацентра.']],
+    ['/app/editorial', ['Редакция MEDIA·RAF·RAW', 'Командные проекты, редакционные задания и рабочие материалы. Доступ по авторизации.']],
+    ['/app/editorial/projects', ['Проекты редакции', 'Совместные творческие проекты команды MEDIA·RAF·RAW. Доступ по авторизации.']],
+]);
+router.get(['/', '/login', '/app', '/app/feed', '/app/courses', '/app/wiki', '/app/editorial', '/app/editorial/projects'], (req, res, next) => {
+    if (!isBot(req)) return next();
+    const meta = PUBLIC_PREVIEWS.get(req.path);
+    if (!meta) return next();
+    const base = getBaseUrl(req);
+    res.type('html').send(renderMetaPage({
+        url: `${base}${req.path}`,
+        title: meta[0],
+        description: meta[1],
+        image: `${base}/icon-512.png`,
+    }));
+});
+
 export default router;
