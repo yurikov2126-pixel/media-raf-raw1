@@ -89,7 +89,15 @@ export default function EditorialProjects() {
         try { await api(`/editorial/projects/${selected.id}`, { token, method: 'PATCH', body: { title: titleDraft.trim(), description: briefDraft, eventDate: projectStartDraft, eventEndDate: projectEndDraft || null } }); await reload(); setProjectEditorOpen(false); }
         catch (e) { setError(e.message); } finally { setSavingProjectEditor(false); }
     }
-    const canCreate = ['ADMIN', 'MENTOR'].includes(user?.role);
+    const [canCreate, setCanCreate] = useState(false);
+    useEffect(() => {
+        let active = true;
+        setCanCreate(false);
+        if (token) api('/editorial/workflow/navigation', { token })
+            .then((data) => { if (active) setCanCreate(Boolean(data.canCreateProjects)); })
+            .catch(() => { if (active) setCanCreate(false); });
+        return () => { active = false; };
+    }, [token, user?.role]);
     useEffect(() => {
         let active = true;
         if (personQuery.trim().length < 2) { setPeople([]); return () => { active = false; }; }
