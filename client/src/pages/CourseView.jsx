@@ -409,6 +409,7 @@ export default function CourseView() {
                         </div>
                         {mode === 'lesson' && activeLesson && (
                             <LessonPanel
+                                focus={searchParams.get('focus')}
                                 lesson={activeLesson}
                                 courseSlug={slug}
                                 onStartTest={goTest}
@@ -527,6 +528,7 @@ export default function CourseView() {
 function LessonPanel({
                          lesson,
                          courseSlug,
+                         focus,
                          onStartTest,
                          onPrev,
                          onNext,
@@ -537,14 +539,14 @@ function LessonPanel({
     const canTakeTest = !!lesson.test && lesson.unlocked;
     const testPassed = lesson.theoryPassed;
     const hasTest = !!lesson.test;
-    const [section, setSection] = useState('material');
+    const [section, setSection] = useState(() => (focus === 'homework' && lesson.homework) || (focus === 'practical' && lesson.practical) ? focus : 'material');
     const [readingProgress, setReadingProgress] = useState(0);
     const materialRef = useRef(null);
 
     useEffect(() => {
-        setSection('material');
+        setSection(((focus === 'homework' && lesson.homework) || (focus === 'practical' && lesson.practical)) ? focus : 'material');
         setReadingProgress(0);
-    }, [lesson.id]);
+    }, [lesson.id, focus]);
 
     useEffect(() => {
         if (section !== 'material') return;
