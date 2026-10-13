@@ -97,6 +97,7 @@ router.post('/:kind/:workId/:studentId/messages', async (req, res) => {
                 title: 'Новое сообщение по учебной работе',
                 message: text.slice(0, 160) || 'Прикреплены файлы',
                 courseSlug: a.data.slug, lessonOrder: a.data.lessonOrder,
+                mentorReview: a.isStudent,
                 ...(kind === 'homework' ? { homeworkId: workId } : { practicalId: workId }),
             }).catch(() => {});
         }
