@@ -17,7 +17,7 @@ const FALLBACK_LINKS = [
     { to: '/app', label: 'Главная', end: true, icon: 'dashboard' },
     { to: '/app/feed', label: 'Лента', icon: 'feed' },
     { to: '/app/chats', label: 'Чаты', icon: 'message' },
-    { to: '/app/courses', label: 'Обучение', icon: 'book' },
+    { to: '/app/courses', label: 'Академия', icon: 'book' },
     { to: '/app/wiki', label: 'Wiki', icon: 'library' },
 ];
 
