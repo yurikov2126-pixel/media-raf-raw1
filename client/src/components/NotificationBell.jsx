@@ -318,7 +318,7 @@ export default function NotificationBell({ align = 'right' }) {
                     )}
                     {items.map((n) => {
                         const p = n.payload || {};
-                        const subline = (() => {
+                        const subline = sharedNotificationPreview(n) || (() => {
                             if (n.type === 'mention') return mentionPreview(p);
                         if (n.type === 'message') {
                                 return (
