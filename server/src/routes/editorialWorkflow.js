@@ -122,7 +122,7 @@ router.get('/my-tasks', async (req, res, next) => {
 
 router.get('/people', async (req, res, next) => {
     try {
-        if (!['ADMIN', 'MENTOR'].includes(req.user.role) &&
+        if (!(await hasPermission(req.user, 'editorial.create')) &&
             !(await prisma.editorialProjectMember.count({ where: { userId: req.user.id, role: 'MANAGER' } }))) {
             return res.status(403).json({ error: 'Недостаточно прав' });
         }
@@ -130,7 +130,7 @@ router.get('/people', async (req, res, next) => {
         if (q.length < 2) return res.json({ people: [] });
         const people = await prisma.user.findMany({
             where: { isBanned: false, OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { username: { contains: q, mode: 'insensitive' } }] },
-            select: { id: true, fullName: true, username: true, avatar: true },
+            select: { id: true, fullName: true, username: true, avatar: true, editorialTeamMembership: { select: { position: true } } },
             take: 12,
             orderBy: { fullName: 'asc' },
         });
