@@ -222,6 +222,7 @@ export default function Profile() {
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
+                    {profile.editorialPositionLabel && <span className="chip bg-violet/20 text-violet-soft">🎬 {profile.editorialPositionLabel}</span>}
                     {profile.direction && (
                         <span className="chip bg-violet/20 text-violet-soft">
                             {DIR[profile.direction] || profile.direction}

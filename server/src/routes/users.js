@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { getEditorialPositions } from '../lib/editorialPositions.js';
 import { auth } from '../middleware/auth.js';
 
 const router = Router();
@@ -158,13 +159,16 @@ router.get('/:username', auth, async (req, res) => {
     const user = await prisma.user.findUnique({
         where: { username: req.params.username },
         include: {
+            editorialTeamMembership: true,
             posts: { orderBy: [{ pinnedAt: 'desc' }, { createdAt: 'desc' }], take: 30 },
             enrollments: { include: { course: true } },
             certificates: { include: { course: true } },
         },
     });
     if (!user) return res.status(404).json({ error: 'Не найден' });
-    res.json(hide(user));
+    const positions = await getEditorialPositions();
+    const editorialPosition = user.editorialTeamMembership?.position || null;
+    res.json({ ...hide(user), editorialPosition, editorialPositionLabel: positions.find(p => p.code === editorialPosition)?.label || editorialPosition });
 });
 
 // ─── Обновление профиля ─────────────────────────────────────
