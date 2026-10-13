@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 /** Review notices used to contain only a homeworkId/practicalId, so resolve them for old and new notices. */
 export async function learningNotificationPath(notification, token) {
     const p = notification?.payload || {};
+    if (p.mentorReview) return '/app/mentor';
     if (!p.homeworkId && !p.practicalId) return null;
     const query = new URLSearchParams();
     if (p.homeworkId) query.set('homeworkId', p.homeworkId);
