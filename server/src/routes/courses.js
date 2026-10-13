@@ -210,10 +210,12 @@ router.get('/my-learning', auth, async (req, res) => {
                 include: { course: { select: { id: true, slug: true, title: true, cover: true, lessons: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true } } } } },
                 orderBy: { createdAt: 'desc' },
             }),
-            prisma.homeworkSubmission.findMany({
-                where: { userId: req.user.id },
-                orderBy: { updatedAt: 'desc' },
-                include: { homework: { include: { lesson: { select: { order: true, course: { select: { slug: true, title: true } } } } } } },
+            prisma.homework.findMany({
+                where: { lesson: { course: { enrollments: { some: { userId: req.user.id } } } } },
+                include: {
+                    lesson: { select: { order: true, course: { select: { slug: true, title: true } } } },
+                    submissions: { where: { userId: req.user.id }, take: 1 },
+                },
             }),
             prisma.testAttempt.findMany({
                 where: { userId: req.user.id },
@@ -235,11 +237,15 @@ router.get('/my-learning', auth, async (req, res) => {
                     resumeLessonOrder: lessons.find((l) => l.id === lastLessonId)?.order ?? lessons[0]?.order ?? null,
                 };
             }),
-            assignments: submissions.map((s) => ({
-                id: s.id, status: s.status, feedback: s.feedback, grade: s.finalGrade ?? s.grade,
-                updatedAt: s.updatedAt, title: s.homework.title, courseTitle: s.homework.lesson.course.title,
-                slug: s.homework.lesson.course.slug, lessonOrder: s.homework.lesson.order,
-            })),
+            assignments: submissions.map((hw) => {
+                const s = hw.submissions[0];
+                return {
+                    id: hw.id, status: s?.status || 'NOT_SUBMITTED', feedback: s?.feedback ?? null,
+                    grade: s?.finalGrade ?? s?.grade ?? null, updatedAt: s?.updatedAt ?? null,
+                    title: hw.title, courseTitle: hw.lesson.course.title, slug: hw.lesson.course.slug,
+                    lessonOrder: hw.lesson.order,
+                };
+            }),
             results: attempts.map((a) => ({
                 id: a.id, score: a.score, passed: a.passed, createdAt: a.createdAt,
                 title: a.test.title, slug: a.test.lesson.course.slug, courseTitle: a.test.lesson.course.title,
