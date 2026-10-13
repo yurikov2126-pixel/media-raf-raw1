@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { auth, requireRole } from '../../middleware/auth.js';
+import { hasPermission } from '../../lib/roles.js';
 
 import rolesRouter from './roles.js';
 import statsRouter from './stats.js';
@@ -28,7 +29,21 @@ import searchRouter from './search.js';
 
 const router = Router();
 
-router.use(auth, requireRole('ADMIN'));
+router.use(auth);
+
+// Доступ к аналитике делегируется отдельно; остальные маршруты остаются ADMIN-only.
+router.get('/access', async (req, res, next) => {
+    try {
+        res.json({ analytics: await hasPermission(req.user, 'admin.analytics.view'), admin: req.user.role === 'ADMIN' });
+    } catch (error) { next(error); }
+});
+router.use('/analytics', async (req, res, next) => {
+    try {
+        if (await hasPermission(req.user, 'admin.analytics.view')) return next();
+        return res.status(403).json({ error: 'Нет права просмотра аналитики' });
+    } catch (error) { next(error); }
+}, analyticsRouter);
+router.use(requireRole('ADMIN'));
 
 router.use(rolesRouter);
 router.use(statsRouter);
@@ -37,7 +52,6 @@ router.use(actionsRouter);
 router.use(searchRouter);
 router.use(undoRouter);
 router.use(dashboardRouter);  // ← добавлено
-router.use(analyticsRouter);
 router.use(moderationRouter);
 router.use(usersRouter);
 router.use(coursesRouter);
