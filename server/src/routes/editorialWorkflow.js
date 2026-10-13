@@ -90,6 +90,40 @@ router.get('/navigation', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// Single production board, covering all projects visible to the current member.
+router.get('/production-board', async (req, res, next) => {
+    try {
+        const admin = isAdmin(req.user);
+        const projects = await prisma.editorialProject.findMany({
+            where: admin ? {} : { members: { some: { userId: req.user.id } } },
+            select: { id: true, title: true,
+                members: { where: { userId: req.user.id }, select: { role: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+        });
+        const projectIds = projects.map(project => project.id);
+        const tasks = await prisma.editorialTask.findMany({
+            where: { projectId: { in: projectIds } },
+            select: {
+                id: true, projectId: true, title: true, description: true, status: true,
+                dueAt: true, workDate: true, startTime: true, durationMinutes: true,
+                stageId: true, updatedAt: true, createdAt: true, assigneeId: true,
+                assignee: { select: { id: true, fullName: true, username: true, avatar: true } },
+                _count: { select: { materialFiles: true, comments: true } },
+            },
+            orderBy: [{ dueAt: 'asc' }, { createdAt: 'desc' }],
+            take: 1000,
+        });
+        res.json({
+            projects: projects.map(project => ({
+                id: project.id, title: project.title,
+                canEdit: admin || project.members.some(member => ['MANAGER', 'EDITOR'].includes(member.role)),
+            })),
+            tasks,
+        });
+    } catch (error) { next(error); }
+});
+
 // Cross-project review inbox. Scope every row to projects this user can edit.
 router.get('/review-inbox', async (req, res, next) => {
     try {
