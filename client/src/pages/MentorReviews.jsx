@@ -1,3 +1,4 @@
+import { LearningDiscussion, LearningRubric, readRubric } from '../components/LearningWorkTools.jsx';
 import HomeworkHistory from '../components/HomeworkHistory.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { api, resolveUrl } from '../api/client.js';
@@ -71,6 +72,7 @@ export default function MentorReviews() {
                     _practical: {
                         id: p.id,
                         topic: p.topic,
+                        rubric: p.rubric,
                         description: p.description,
                         scheduledAt: p.scheduledAt,
                     },
@@ -156,7 +158,7 @@ export default function MentorReviews() {
         );
     }
 
-    const reviewSubmission = async (kind, submissionId, status, feedback, grade) => {
+    const reviewSubmission = async (kind, submissionId, status, feedback, grade, criteriaScores) => {
         setBusyId(submissionId);
         try {
             const url =
@@ -166,7 +168,7 @@ export default function MentorReviews() {
             await api(url, {
                 token,
                 method: 'POST',
-                body: { status, feedback, grade },
+                body: { status, feedback, grade, criteriaScores },
             });
             await load();
         } catch (e) {
@@ -371,8 +373,8 @@ export default function MentorReviews() {
                                 key={s.id}
                                 submission={s}
                                 busy={busyId === s.id}
-                                onReview={(status, feedback, grade) =>
-                                    reviewSubmission('practical', s.id, status, feedback, grade)
+                                onReview={(status, feedback, grade, criteriaScores) =>
+                                    reviewSubmission('practical', s.id, status, feedback, grade, criteriaScores)
                                 }
                             />
                         ) : (
@@ -380,8 +382,8 @@ export default function MentorReviews() {
                                 key={s.id}
                                 submission={s}
                                 busy={busyId === s.id}
-                                onReview={(status, feedback, grade) =>
-                                    reviewSubmission('homework', s.id, status, feedback, grade)
+                                onReview={(status, feedback, grade, criteriaScores) =>
+                                    reviewSubmission('homework', s.id, status, feedback, grade, criteriaScores)
                                 }
                             />
                         )
@@ -398,6 +400,8 @@ function PracticalReviewCard({ submission, busy, onReview }) {
     const [open, setOpen] = useState(submission.status === 'PENDING');
     const [feedback, setFeedback] = useState('');
     const [grade, setGrade] = useState('');
+    const [rubric, setRubric] = useState(submission._practical?.rubric || '[]');
+    const [criteriaScores, setCriteriaScores] = useState([]);
 
     const p = submission._practical || {};
     const course = submission._course;
@@ -474,6 +478,10 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                         </div>
                     )}
 
+                    <LearningRubric kind="practical" workId={p.id} rubric={rubric}
+                        editable onChange={setRubric} onScoresChange={submission.status === 'PENDING' ? setCriteriaScores : undefined} />
+                    <LearningDiscussion kind="practical" workId={p.id} studentId={submission.user?.id} />
+
                     {/* Форма проверки */}
                     {submission.status === 'PENDING' && (
                         <ReviewForm
@@ -483,7 +491,7 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                             grade={grade}
                             setGrade={setGrade}
                             onSubmit={(status) =>
-                                onReview(status, feedback, grade ? Number(grade) : null)
+                                onReview(status, feedback, grade ? Number(grade) : null, criteriaScores)
                             }
                         />
                     )}
@@ -498,6 +506,8 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
     const [open, setOpen] = useState(submission.status === 'PENDING');
     const [feedback, setFeedback] = useState('');
     const [grade, setGrade] = useState('');
+    const [rubric, setRubric] = useState(submission.homework?.rubric || '[]');
+    const [criteriaScores, setCriteriaScores] = useState([]);
     const [applyPenalty, setApplyPenalty] = useState(true);
 
     const hw = submission.homework || {};
@@ -632,6 +642,9 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                     )}
 
                     <HomeworkHistory submissionId={submission.id} />
+                    <LearningRubric kind="homework" workId={hw.id} rubric={rubric}
+                        editable onChange={setRubric} onScoresChange={submission.status === 'PENDING' ? setCriteriaScores : undefined} />
+                    <LearningDiscussion kind="homework" workId={hw.id} studentId={submission.user?.id} />
 
                     {submission.status === 'PENDING' && (
                         <div className="pt-3 border-t border-white/10 space-y-3">
@@ -676,14 +689,14 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                             <div className="flex gap-2 flex-wrap">
                                 <button
                                     disabled={busy}
-                                    onClick={() => onReview('APPROVED', feedback, recommended)}
+                                    onClick={() => onReview('APPROVED', feedback, rawGrade, criteriaScores)}
                                     className="btn-primary text-sm disabled:opacity-40"
                                 >
                                     ✓ Принять
                                 </button>
                                 <button
                                     disabled={busy}
-                                    onClick={() => onReview('REJECTED', feedback, null)}
+                                    onClick={() => onReview('REJECTED', feedback, null, criteriaScores)}
                                     className="btn-ghost text-sm disabled:opacity-40"
                                 >
                                     ↺ На доработку
