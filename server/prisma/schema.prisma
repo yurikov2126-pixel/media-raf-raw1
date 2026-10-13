@@ -636,6 +636,7 @@ model Homework {
 }
 
 model HomeworkSubmission {
+  portfolioPublished Boolean @default(false)
   versions HomeworkSubmissionVersion[]
   id          String    @id @default(cuid())
   homeworkId  String
@@ -832,6 +833,7 @@ model EditorialStage {
   @@index([projectId, position])
 }
 model EditorialTask {
+  productionChecklist String @default("[]")
   requiredCompetencyIds String @default("[]")
   id String @id @default(cuid())
   projectId String
