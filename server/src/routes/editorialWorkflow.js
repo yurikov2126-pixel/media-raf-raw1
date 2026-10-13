@@ -35,6 +35,12 @@ router.use('/projects/:projectId', (req, res, next) => {
 const DEADLINE_ROLES = new Set(['LEAD_PHOTO', 'ADDITIONAL_PHOTO', 'LEAD_VIDEO', 'VIDEO_EDITOR']);
 const deadlineAllowed = (project, assigneeId) => DEADLINE_ROLES.has(project.members.find(member => member.userId === assigneeId)?.crewPosition);
 const STATUSES = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'REVISION', 'APPROVED', 'DONE'];
+function parseChecklist(raw) { try { const value=JSON.parse(raw||'[]'); return Array.isArray(value)?value:[]; } catch { return []; } }
+function validateChecklist(items) {
+    if (!Array.isArray(items)||items.length>20||items.some(item=>!item||typeof item.label!=='string'||!item.label.trim()||item.label.length>180))
+        throw Object.assign(new Error('Некорректный чек-лист (до 20 пунктов)'),{status:400});
+    return JSON.stringify(items.map(item=>({label:item.label.trim(),done:Boolean(item.done)})));
+}
 const isAdmin = (user) => user.role === 'ADMIN';
 const memberRole = (project, user) => project.members.find((member) => member.userId === user.id)?.role;
 const canEdit = (project, user) => isAdmin(user) || ['MANAGER', 'EDITOR'].includes(memberRole(project, user));
@@ -255,6 +261,7 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             data.status = req.body.status;
         }
         if (editor) {
+            if (req.body.productionChecklist !== undefined) data.productionChecklist = validateChecklist(req.body.productionChecklist);
             if (req.body.requiredCompetencyIds !== undefined) data.requiredCompetencyIds = await validatedCompetencyIds(req.body.requiredCompetencyIds);
             if (req.body.isOpen !== undefined) {
                 if (typeof req.body.isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
@@ -323,6 +330,28 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+
+router.patch('/projects/:projectId/tasks/:taskId/checklist', async (req,res,next)=>{
+    try {
+        const project=await getProject(req.params.projectId);
+        if(!project||!canSee(project,req.user))return notFound(res);
+        const task=await prisma.editorialTask.findFirst({where:{id:req.params.taskId,projectId:project.id}});
+        if(!task)return res.status(404).json({error:'Задание не найдено'});
+        if(!canEdit(project,req.user)&&task.assigneeId!==req.user.id)return res.status(403).json({error:'Нет прав'});
+        const index=Number(req.body?.index);
+        if(!Number.isInteger(index)||typeof req.body?.done!=='boolean')return res.status(400).json({error:'Некорректный пункт'});
+        const items=parseChecklist(task.productionChecklist);
+        if(index<0||index>=items.length)return res.status(404).json({error:'Пункт не найден'});
+        items[index]={...items[index],done:req.body.done};
+        const updated=await prisma.$transaction(async tx=>{
+            const result=await tx.editorialTask.update({where:{id:task.id},data:{productionChecklist:JSON.stringify(items)}});
+            await tx.editorialTaskEvent.create({data:{taskId:task.id,actorId:req.user.id,action:'CHECKLIST_UPDATED',
+                details:JSON.stringify({index,done:req.body.done,label:items[index].label})}});
+            return result;
+        });
+        res.json({productionChecklist:updated.productionChecklist});
+    } catch(e){next(e);}
+});
 
 router.post('/projects/:projectId/tasks/:taskId/review', async (req, res, next) => {
     try {
