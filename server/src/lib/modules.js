@@ -3,6 +3,8 @@ import { prisma } from './prisma.js';
 /* Список модулей платформы.
    default — состояние, если в БД настройки нет. */
 export const MODULES = [
+    { key: 'dashboard2', label: 'Dashboard 2.0', icon: '🧩', default: false,
+      description: 'Экспериментальный настраиваемый дашборд для каждого пользователя. При отключении остаётся прежний дашборд.' },
     {
         key: 'editorial',
         label: 'Редакция',
