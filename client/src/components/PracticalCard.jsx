@@ -1,3 +1,4 @@
+import MarkdownView from './MarkdownView.jsx';
 import { LearningDiscussion, LearningRubric } from './LearningWorkTools.jsx';
 import { useState } from 'react';
 import { api } from '../api/client.js';
@@ -51,9 +52,7 @@ export default function PracticalCard({ practical, onRefresh }) {
             </div>
 
             <div className="font-medium mb-1">{practical.topic}</div>
-            <div className="text-sm text-white/70 whitespace-pre-wrap mb-3">
-                {practical.description}
-            </div>
+            <MarkdownView text={practical.description} className="text-sm text-white/75 mb-3 break-words" />
 
             {practical.scheduledAt && (
                 <div className="text-xs text-white/50 mb-1">
