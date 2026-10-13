@@ -1,0 +1,51 @@
+/* Public share links are deliberately dark, independent of the signed-in site's theme.
+   Global light-theme overrides must not turn text dark on these fixed dark surfaces. */
+.editorial-share-landing {
+  color: #f1f5f9;
+  color-scheme: dark;
+}
+.editorial-share-landing .share-folder-card {
+  color: #f1f5f9 !important;
+  border-color: rgba(148, 163, 184, 0.5);
+  background-color: #111827;
+}
+.editorial-share-landing .share-folder-card:hover {
+  border-color: #a78bfa;
+  background-color: #1e293b;
+}
+.editorial-share-landing .share-folder-title {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc;
+}
+.editorial-share-landing .share-folder-subtitle {
+  color: #cbd5e1 !important;
+  -webkit-text-fill-color: #cbd5e1;
+}
+.editorial-share-landing .share-folder-meta {
+  color: #ddd6fe !important;
+}
+.editorial-share-landing .share-folder-arrow {
+  color: #cbd5e1 !important;
+}
+.editorial-share-landing .share-folder-card:hover .share-folder-arrow {
+  color: #ddd6fe !important;
+}
+.editorial-share-landing .share-search-input {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc;
+  background-color: #111827;
+  border-color: rgba(148, 163, 184, 0.7);
+}
+.editorial-share-landing .share-search-input::placeholder,
+html[data-theme="light"] .editorial-share-landing .share-search-input::placeholder {
+  color: #cbd5e1 !important;
+  -webkit-text-fill-color: #cbd5e1;
+  opacity: 1;
+}
+.editorial-share-landing .share-search-input:focus {
+  border-color: #a78bfa;
+}
+html[data-theme="light"] .editorial-share-landing .text-white,
+html[data-theme="light"] .editorial-share-landing .share-folder-title {
+  color: #f8fafc !important;
+}
