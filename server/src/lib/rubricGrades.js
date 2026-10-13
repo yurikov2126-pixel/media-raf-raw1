@@ -12,8 +12,9 @@ export function calculateRubricGrade(raw, scores, status) {
         throw Object.assign(new Error('Заполните оценки по всем критериям'), { status: 400 });
     }
     const lines = rubric.map((criterion, index) => {
-        const score = Number(scores[index]?.score);
-        if (!Number.isInteger(score) || score < 0 || score > criterion.max) {
+        const raw = scores[index]?.score;
+        const score = Number(raw);
+        if (raw === '' || raw == null || !Number.isInteger(score) || score < 0 || score > criterion.max) {
             throw Object.assign(new Error('Некорректный балл по критерию'), { status: 400 });
         }
         return { title: criterion.title, max: criterion.max, score };
