@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { hasPermission } from '../lib/roles.js';
 import { auth } from '../middleware/auth.js';
+import { getEditorialPositions } from '../lib/editorialPositions.js';
 import { prisma } from '../lib/prisma.js';
 import { createNotification } from '../lib/notify.js';
 
@@ -22,10 +23,14 @@ const validateEventRange = (start, end) => {
     if (start && end && (end - start) / 86400000 > 365) return 'Проект не может длиться более 366 дней';
     return null;
 };
-const validCrewPosition = value => value === null || CREW_POSITIONS.includes(value);
+const validCrewPosition = async value => value === null || (await getEditorialPositions()).some(p => p.code === value);
 const isAdmin = (user) => user.role === 'ADMIN';
 const canManage = (project, user) => isAdmin(user) || project.members.some((m) => m.userId === user.id && m.role === 'MANAGER');
 const clean = (project) => ({ ...project, members: project.members.map((m) => ({ ...m, user: m.user ? { id: m.user.id, fullName: m.user.fullName, username: m.user.username } : undefined })) });
+
+router.get('/positions', async (_req, res, next) => {
+    try { res.json({ positions: await getEditorialPositions() }); } catch(e) { next(e); }
+});
 
 router.get('/projects', async (req, res, next) => {
     try {
@@ -119,16 +124,18 @@ router.post('/projects/:id/members', async (req, res, next) => {
         if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
         const { userId, role } = req.body;
         const crewPosition = req.body.crewPosition ?? null;
-        if (!validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
+        if (!(await validCrewPosition(crewPosition))) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
         if (project.createdById === userId && role !== 'MANAGER') return res.status(400).json({ error: 'Создатель должен оставаться руководителем' });
         if (typeof userId !== 'string' || !ROLES.includes(role)) return res.status(400).json({ error: 'Некорректный участник или роль' });
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isBanned: true } });
         if (!user || user.isBanned) return res.status(404).json({ error: 'Пользователь не найден' });
         const previousMember = project.members.find((m) => m.userId === userId);
+        const defaultPosition = await prisma.editorialTeamMember.findUnique({ where: { userId }, select: { position: true } });
+        const effectivePosition = req.body.crewPosition === undefined || req.body.crewPosition === null ? (previousMember?.crewPosition ?? defaultPosition?.position ?? null) : crewPosition;
         const member = await prisma.editorialProjectMember.upsert({
             where: { projectId_userId: { projectId: project.id, userId } },
-            create: { projectId: project.id, userId, role, crewPosition },
-            update: { role, ...(req.body.crewPosition !== undefined ? { crewPosition } : {}) },
+            create: { projectId: project.id, userId, role, crewPosition: effectivePosition },
+            update: { role, ...(req.body.crewPosition !== undefined ? { crewPosition: effectivePosition } : {}) },
         });
         res.json({ member });
         if (userId !== req.user.id && (!previousMember || previousMember.role !== member.role || (req.body.crewPosition !== undefined && previousMember.crewPosition !== member.crewPosition))) {
@@ -145,7 +152,7 @@ router.patch('/projects/:id/members/:userId/crew', async (req, res, next) => {
         const project = await prisma.editorialProject.findUnique({ where: { id: req.params.id }, include: { members: true } });
         if (!project || !canManage(project, req.user)) return res.status(404).json({ error: 'Проект не найден' });
         const crewPosition = req.body?.crewPosition;
-        if (!validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
+        if (!(await validCrewPosition(crewPosition)) return res.status(400).json({ error: 'Некорректная съёмочная позиция' });
         const result = await prisma.editorialProjectMember.updateMany({
             where: { projectId: project.id, userId: req.params.userId },
             data: { crewPosition },
