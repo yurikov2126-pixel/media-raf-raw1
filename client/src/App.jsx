@@ -30,6 +30,7 @@ const Profile = lazy(() => import('./pages/Profile.jsx'));
 const Messenger = lazy(() => import('./pages/Messenger.jsx'));
 const Notifications = lazy(() => import('./pages/Notifications.jsx'));
 const Courses = lazy(() => import('./pages/Courses.jsx'));
+const AcademyDashboard = lazy(() => import('./pages/AcademyDashboard.jsx'));
 const CourseView = lazy(() => import('./pages/CourseView.jsx'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard.jsx'));
 const Seasons = lazy(() => import('./pages/Seasons.jsx'));
@@ -129,6 +130,7 @@ export default function App() {
                     <Route path="chats/:chatId" element={<LazyPage><Messenger /></LazyPage>} />
                     <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
                     <Route path="courses" element={<LazyPage><Courses /></LazyPage>} />
+                    <Route path="academy/me" element={<LazyPage><AcademyDashboard /></LazyPage>} />
                     <Route path="courses/:slug" element={<LazyPage><CourseView /></LazyPage>} />
                     <Route path="analytics" element={<LazyPage><DelegatedAnalytics /></LazyPage>} />
                     <Route path="leaderboard" element={<LazyPage><Leaderboard /></LazyPage>} />

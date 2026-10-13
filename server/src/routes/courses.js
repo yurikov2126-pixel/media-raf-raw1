@@ -170,13 +170,95 @@ router.get('/', auth, async (req, res) => {
     const myEnrollments = await prisma.enrollment.findMany({
         where: { userId: req.user.id },
     });
-    res.json(
-        courses.map((c) => ({
+    const enrollmentByCourse = new Map(myEnrollments.map((entry) => [entry.courseId, entry]));
+    const progress = await prisma.lessonProgress.findMany({
+        where: { userId: req.user.id, lesson: { courseId: { in: myEnrollments.map((entry) => entry.courseId) } } },
+        select: { lessonId: true, completed: true },
+    });
+    const completedIds = new Set(progress.filter((item) => item.completed).map((item) => item.lessonId));
+    const courseLessons = await prisma.lesson.findMany({
+        where: { courseId: { in: myEnrollments.map((entry) => entry.courseId) } },
+        orderBy: { order: 'asc' },
+        select: { id: true, courseId: true, order: true },
+    });
+    const lessonsByCourse = new Map();
+    for (const lesson of courseLessons) {
+        if (!lessonsByCourse.has(lesson.courseId)) lessonsByCourse.set(lesson.courseId, []);
+        lessonsByCourse.get(lesson.courseId).push(lesson);
+    }
+    res.json(courses.map((c) => {
+        const enrollment = enrollmentByCourse.get(c.id);
+        const lessons = lessonsByCourse.get(c.id) || [];
+        const saved = lessons.find((lesson) => lesson.id === enrollment?.lastLessonId);
+        const suggested = lessons.find((lesson) => !completedIds.has(lesson.id)) || lessons[0];
+        return {
             ...c,
-            enrolled: myEnrollments.some((e) => e.courseId === c.id),
-            progress: myEnrollments.find((e) => e.courseId === c.id)?.progress ?? null,
-        }))
-    );
+            enrolled: !!enrollment,
+            progress: enrollment?.progress ?? null,
+            resumeLessonOrder: saved?.order ?? suggested?.order ?? null,
+            completedLessons: lessons.filter((lesson) => completedIds.has(lesson.id)).length,
+        };
+    }));
+});
+
+/* ─────────── Учебный кабинет текущего студента ─────────── */
+router.get('/my-learning', auth, async (req, res) => {
+    try {
+        const [enrollments, submissions, attempts, certificates] = await Promise.all([
+            prisma.enrollment.findMany({
+                where: { userId: req.user.id },
+                include: { course: { select: { id: true, slug: true, title: true, cover: true, lessons: { orderBy: { order: 'asc' }, select: { id: true, order: true, title: true } } } } },
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.homework.findMany({
+                where: { lesson: { course: { enrollments: { some: { userId: req.user.id } } } } },
+                include: {
+                    lesson: { select: { order: true, course: { select: { slug: true, title: true } } } },
+                    submissions: { where: { userId: req.user.id }, take: 1 },
+                },
+            }),
+            prisma.testAttempt.findMany({
+                where: { userId: req.user.id },
+                orderBy: { createdAt: 'desc' },
+                take: 30,
+                include: { test: { select: { title: true, lesson: { select: { order: true, course: { select: { slug: true, title: true } } } } } } },
+            }),
+            prisma.certificate.findMany({
+                where: { userId: req.user.id },
+                orderBy: { issuedAt: 'desc' },
+            }),
+        ]);
+        res.json({
+            courses: enrollments.map(({ course, progress, completed, lastLessonId }) => {
+                const lessons = course.lessons;
+                return {
+                    id: course.id, slug: course.slug, title: course.title, cover: course.cover,
+                    progress, completed, totalLessons: lessons.length,
+                    resumeLessonOrder: lessons.find((l) => l.id === lastLessonId)?.order ?? lessons[0]?.order ?? null,
+                };
+            }),
+            assignments: submissions.map((hw) => {
+                const s = hw.submissions[0];
+                return {
+                    id: hw.id, status: s?.status || 'NOT_SUBMITTED', feedback: s?.feedback ?? null,
+                    grade: s?.finalGrade ?? s?.grade ?? null, updatedAt: s?.updatedAt ?? null,
+                    title: hw.title, courseTitle: hw.lesson.course.title, slug: hw.lesson.course.slug,
+                    lessonOrder: hw.lesson.order,
+                };
+            }),
+            results: attempts.map((a) => ({
+                id: a.id, score: a.score, passed: a.passed, createdAt: a.createdAt,
+                title: a.test.title, slug: a.test.lesson.course.slug, courseTitle: a.test.lesson.course.title,
+                lessonOrder: a.test.lesson.order,
+            })),
+            certificates: certificates.map((c) => ({
+                id: c.id, title: c.title, issuedAt: c.issuedAt,
+            })),
+        });
+    } catch (error) {
+        console.error('[academy] dashboard failed', error);
+        res.status(500).json({ error: 'Не удалось загрузить учебный кабинет' });
+    }
 });
 
 /* ─────────── Конкретный курс ─────────── */
@@ -302,8 +384,33 @@ router.get('/:slug', auth, async (req, res) => {
         ...course,
         lessons,
         enrolled: !!enrollment,
+        resumeLessonOrder: lessons.find((l) => l.id === enrollment?.lastLessonId && l.unlocked)?.order ?? lessons.find((l) => l.unlocked && !l.fullyCompleted)?.order ?? lessons.find((l) => l.unlocked)?.order ?? null,
         certificate,
     });
+});
+
+/* ─────────── Запомнить текущий урок (между устройствами) ─────────── */
+router.post('/:slug/resume', auth, async (req, res) => {
+    const order = Number(req.body?.order);
+    if (!Number.isInteger(order) || order < 1) return res.status(400).json({ error: 'Некорректный номер урока' });
+    const course = await prisma.course.findUnique({ where: { slug: req.params.slug }, select: { id: true, dripMode: true, dripInterval: true, weeklyLessonLimit: true } });
+    if (!course) return res.status(404).json({ error: 'Курс не найден' });
+    const enrollment = await prisma.enrollment.findUnique({ where: { userId_courseId: { userId: req.user.id, courseId: course.id } } });
+    if (!enrollment) return res.status(403).json({ error: 'Нет записи на курс' });
+    const statuses = await getLessonStatuses(req.user.id, course.id);
+    const index = statuses.findIndex(({ lesson }) => lesson.order === order);
+    if (index < 0) return res.status(404).json({ error: 'Урок не найден' });
+    const overrides = await prisma.lessonProgress.findMany({
+        where: { userId: req.user.id, lesson: { courseId: course.id } },
+        select: { lessonId: true },
+    });
+    const access = computeAccess({ statuses, index, course, enrollment, unlockOverrides: new Set(overrides.map((v) => v.lessonId)) });
+    if (!access.unlocked) return res.status(403).json({ error: access.reason || 'Урок закрыт' });
+    await prisma.enrollment.update({
+        where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
+        data: { lastLessonId: statuses[index].lesson.id },
+    });
+    res.json({ order });
 });
 
 /* ─────────── Запись на курс (принимает id ИЛИ slug) ─────────── */

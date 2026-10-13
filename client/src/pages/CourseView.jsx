@@ -57,6 +57,16 @@ export default function CourseView() {
         };
     }, [course, lessonParam, isEnrolled]);
 
+    // Если доступ к сохранённому уроку изменился, возвращаемся к доступному.
+    useEffect(() => {
+        if (!isEnrolled || !activeLesson || activeLesson.unlocked || !course?.resumeLessonOrder) return;
+        if (activeLesson.order === course.resumeLessonOrder) return;
+        const next = new URLSearchParams(searchParams);
+        next.set('lesson', String(course.resumeLessonOrder));
+        next.set('mode', 'lesson');
+        setSearchParams(next, { replace: true });
+    }, [isEnrolled, activeLesson?.id, activeLesson?.unlocked, activeLesson?.order, course?.resumeLessonOrder, searchParams, setSearchParams]);
+
     // На мобильном список уроков расположен над содержимым.
     // Прокручиваем к самому уроку только после выбора или открытия прямой ссылки.
     useEffect(() => {
@@ -87,6 +97,21 @@ export default function CourseView() {
         setSearchParams(next, { replace: false });
         setCurriculumOpen(false);
     };
+
+    // Ссылка без урока возвращает к сохранённой точке, а не к первому занятию.
+    useEffect(() => {
+        if (!isEnrolled || !course?.resumeLessonOrder || searchParams.has('lesson')) return;
+        const next = new URLSearchParams(searchParams);
+        next.set('lesson', String(course.resumeLessonOrder));
+        setSearchParams(next, { replace: true });
+    }, [isEnrolled, course?.resumeLessonOrder, searchParams, setSearchParams]);
+
+    // Сохраняем посещённый доступный урок на сервере для продолжения с другого устройства.
+    useEffect(() => {
+        if (!isEnrolled || !activeLesson?.unlocked || mode !== 'lesson' || (!searchParams.has('lesson') && course?.resumeLessonOrder)) return;
+        api(`/courses/${slug}/resume`, { method: 'POST', token, body: { order: activeLesson.order } })
+            .catch((error) => console.warn('[academy] resume was not saved:', error));
+    }, [slug, token, isEnrolled, activeLesson?.id, activeLesson?.unlocked, mode, searchParams, course?.resumeLessonOrder]);
 
     const goTest = () => {
         if (!isEnrolled || !activeLesson) return;
@@ -154,7 +179,7 @@ export default function CourseView() {
     const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
     const progress = course.enrolled?.progress ?? course.progress ?? 0;
     const completedLessons = course.lessons?.filter((l) => l.fullyCompleted).length || 0;
-    const resumeLesson = course.lessons?.find((l) => l.unlocked && !l.fullyCompleted) || course.lessons?.find((l) => l.unlocked);
+    const resumeLesson = course.lessons?.find((l) => l.order === course.resumeLessonOrder && l.unlocked) || course.lessons?.find((l) => l.unlocked && !l.fullyCompleted) || course.lessons?.find((l) => l.unlocked);
 
     return (
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
