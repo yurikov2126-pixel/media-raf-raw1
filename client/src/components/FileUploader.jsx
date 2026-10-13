@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { uploadFile } from '../api/client.js';
+import { uploadFileWithProgress } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 
 export default function FileUploader({
@@ -8,10 +8,12 @@ export default function FileUploader({
                                          maxFiles = 3,
                                          maxSizeMb = 50,
                                          accept,
+                                         onBusyChange,
                                      }) {
     const { token } = useAuth();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [progress, setProgress] = useState(null);
 
     const handlePick = async (e) => {
         const picked = Array.from(e.target.files || []);
@@ -19,16 +21,19 @@ export default function FileUploader({
 
         const slotsLeft = maxFiles - files.length;
         const toUpload = picked.slice(0, slotsLeft);
+        if (!toUpload.length) return;
 
         setBusy(true);
+        onBusyChange?.(true);
         setError('');
+        const uploaded = [];
         try {
-            const uploaded = [];
-            for (const f of toUpload) {
+            for (const [index, f] of toUpload.entries()) {
                 if (f.size > maxSizeMb * 1024 * 1024) {
                     throw new Error(`Файл «${f.name}» больше ${maxSizeMb} МБ`);
                 }
-                const res = await uploadFile(f, token);
+                setProgress({ name: f.name, index, count: toUpload.length, percent: 0 });
+                const res = await uploadFileWithProgress(f, token, (percent) => setProgress({ name: f.name, index, count: toUpload.length, percent }));
                 uploaded.push({
                     url: res.url,
                     name: f.name,
@@ -36,16 +41,18 @@ export default function FileUploader({
                     type: res.type ?? f.type,
                 });
             }
-            onChange([...files, ...uploaded]);
         } catch (err) {
             setError(err.message || 'Ошибка загрузки');
         } finally {
+            if (uploaded.length) onChange([...files, ...uploaded]);
             setBusy(false);
+            onBusyChange?.(false);
+            setProgress(null);
             e.target.value = '';
         }
     };
 
-    const remove = (idx) => onChange(files.filter((_, i) => i !== idx));
+    const remove = (idx) => { if (!busy) onChange(files.filter((_, i) => i !== idx)); };
 
     return (
         <div>
@@ -61,6 +68,7 @@ export default function FileUploader({
                         <button
                             type="button"
                             onClick={() => remove(i)}
+                            disabled={busy}
                             className="text-white/40 hover:text-red-400"
                         >
                             ✕
@@ -83,7 +91,23 @@ export default function FileUploader({
                 </label>
             )}
 
-            {error && <div className="text-xs text-red-400 mt-1">{error}</div>}
+            {progress && (
+                <div className="mt-3 rounded-xl border border-violet-soft/30 bg-violet-soft/10 p-3" role="status" aria-live="polite">
+                    <div className="flex justify-between gap-3 text-sm mb-2">
+                        <span className="min-w-0 truncate text-white/85">📎 {progress.name}</span>
+                        <span className="shrink-0 font-semibold text-violet-soft">{progress.percent}%</span>
+                    </div>
+                    <div role="progressbar" aria-label="Прогресс загрузки" aria-valuemin={0} aria-valuemax={100}
+                        aria-valuenow={progress.percent} className="h-2.5 rounded-full overflow-hidden bg-white/10">
+                        <div className="h-full bg-violet-soft transition-[width] duration-150" style={{ width: progress.percent + '%' }} />
+                    </div>
+                    <div className="flex justify-between text-xs text-white/60 mt-2 gap-3">
+                        <span>Файл {progress.index + 1} из {progress.count}</span>
+                        <span>Всего {Math.round((progress.index + progress.percent / 100) / progress.count * 100)}%</span>
+                    </div>
+                </div>
+            )}
+            {error && <div role="alert" className="text-xs text-red-300 mt-2">{error}</div>}
         </div>
     );
 }
