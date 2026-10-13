@@ -1,3 +1,4 @@
+import { notificationTitle as sharedNotificationTitle, notificationPreview as sharedNotificationPreview } from '../lib/notificationDisplay.js';
 import { learningNotificationPath } from '../lib/learningNotificationPath.js';
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useMemo, useState } from 'react';
@@ -27,24 +28,6 @@ const NOTIFICATION_ICON = {
   password_reset: 'settings',
   system: 'sparkles',
 };
-
-function notificationTitle(item) {
-  const p = item.payload || {};
-  switch (item.type) {
-    case 'mention': return mentionTitle(p);
-    case 'message': return 'Новое сообщение' + (p.senderName ? ' от ' + p.senderName : '');
-    case 'post': return 'Новая публикация' + (p.authorName ? ' от ' + p.authorName : '');
-    case 'certificate': return 'Новый сертификат';
-    case 'system': return p.title || 'Системное уведомление';
-    default: return p.title || 'Новое уведомление';
-  }
-}
-
-function notificationPreview(item) {
-  const p = item.payload || {};
-  if (item.type === 'mention') return mentionPreview(p) || 'Открыть упоминание';
-  return p.preview || p.message || (item.type === 'post' ? 'Открыть публикацию' : 'Открыть уведомление');
-}
 
 export default function Dashboard() {
   const { user, token } = useAuth();
@@ -346,8 +329,8 @@ export default function Dashboard() {
                       <Icon name={NOTIFICATION_ICON[item.type] || 'bell'} size={16} />
                     </span>
                     <span className="ui-mini-list__copy flex-1 min-w-0 flex flex-col gap-1">
-                      <span className="ui-mini-list__title block text-sm font-semibold leading-snug break-words">{notificationTitle(item)}</span>
-                      <span className="ui-mini-list__sub block text-xs leading-relaxed opacity-65 break-words line-clamp-2">{notificationPreview(item)}</span>
+                      <span className="ui-mini-list__title block text-sm font-semibold leading-snug break-words">{sharedNotificationTitle(item)}</span>
+                      <span className="ui-mini-list__sub block text-xs leading-relaxed opacity-65 break-words line-clamp-2">{sharedNotificationPreview(item)}</span>
                     </span>
                     {!item.readAt && <span className="w-2 h-2 rounded-full bg-pink mt-3 shrink-0" />}
                   </button>
