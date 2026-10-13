@@ -3,6 +3,7 @@ import { auth, requireRole } from '../../middleware/auth.js';
 import { hasPermission } from '../../lib/roles.js';
 
 import rolesRouter from './roles.js';
+import editorialTeamRouter from './editorialTeam.js';
 import statsRouter from './stats.js';
 import systemRouter from './system.js';
 import actionsRouter from './actions.js';           // ← добавлено
@@ -48,6 +49,7 @@ router.use(analyticsRouter);
 router.use(requireRole('ADMIN'));
 
 router.use(rolesRouter);
+router.use(editorialTeamRouter);
 router.use(statsRouter);
 router.use(systemRouter);
 router.use(actionsRouter);
