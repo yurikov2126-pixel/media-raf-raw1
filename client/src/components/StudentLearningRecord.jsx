@@ -1,3 +1,4 @@
+import HomeworkHistory from './HomeworkHistory.jsx';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
@@ -6,7 +7,7 @@ import { useAuth } from '../store/auth.jsx';
 const statusNames = { PENDING: 'На проверке', APPROVED: 'Принято', REJECTED: 'Доработка' };
 const dateLabel = (value) => value ? new Date(value).toLocaleDateString('ru-RU') : '';
 
-function WorkList({ title, items, slug }) {
+function WorkList({ title, items, slug, showHistory = false }) {
     return <section className="space-y-2">
         <h3 className="font-semibold text-lg">{title} <span className="text-white/50 text-sm">({items.length})</span></h3>
         {items.map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
@@ -22,6 +23,7 @@ function WorkList({ title, items, slug }) {
                 <div className="text-xs text-white/60 mb-1">Комментарий {item.reviewer ? '· ' + item.reviewer : ''}</div>
                 {item.feedback}
             </div>}
+            {showHistory && <HomeworkHistory submissionId={item.id} />}
             <Link to={`/app/courses/${encodeURIComponent(slug)}?lesson=${item.lessonOrder}`} className="inline-block text-violet-soft text-xs">Открыть урок →</Link>
         </div>)}
         {!items.length && <div className="p-4 text-sm text-white/60 rounded-xl bg-white/5">Работ этого типа пока нет.</div>}
@@ -73,7 +75,7 @@ export default function StudentLearningRecord({ userId, courseId, onClose }) {
                 </div>)}
                 {!record.attempts.length && <p className="text-white/60 text-sm">Попыток тестирования пока нет.</p>}
             </section>
-            <WorkList title="Домашние задания" items={record.homework} slug={record.course.slug} />
+            <WorkList title="Домашние задания" items={record.homework} slug={record.course.slug} showHistory />
             <WorkList title="Практические работы" items={record.practicals} slug={record.course.slug} />
         </>}
     </div>;
