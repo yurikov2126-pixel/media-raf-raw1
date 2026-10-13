@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../../../api/client.js';
 import { useToast } from '../../../../store/toast.jsx';
 import LessonEditor from './LessonEditor.jsx';
@@ -11,6 +11,7 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
         slug: course?.slug || '',
         description: course?.description || '',
         category: course?.category || 'photo',
+        competencyIds: (() => { try { return JSON.parse(course?.competencyIds || '[]'); } catch { return []; } })(),
         level: course?.level || 'beginner',
         cover: course?.cover || '',
         published: course?.published ?? false,
@@ -20,6 +21,8 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
         dripInterval: course?.dripInterval ?? 7,
         weeklyLessonLimit: course?.weeklyLessonLimit ?? 3,
     }));
+    const [competencies, setCompetencies] = useState([]);
+    useEffect(()=>{ api('/competencies',{token}).then(setCompetencies).catch(()=>{}); },[token]);
     const [lessons, setLessons] = useState(course?.lessons || []);
     const [savedCourse, setSavedCourse] = useState(course || null);
     const [activeLesson, setActiveLesson] = useState(null);
@@ -152,6 +155,14 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
                                 </div>
                             )}
 
+                            <section className="mb-4 rounded-xl border border-violet-500/30 p-4">
+                                <h3 className="font-semibold mb-2">Подтверждаемые компетенции</h3>
+                                <p className="text-xs opacity-65 mb-3">После завершения курса студент получит отмеченные компетенции вместе с сертификатом. Справочник — в разделе «Компетенции» админки.</p>
+                                <div className="flex flex-wrap gap-2">{competencies.filter(c=>c.active || form.competencyIds.includes(c.id)).map(c=><label key={c.id} className="flex items-center gap-2 rounded-lg border border-current/15 px-3 py-2 text-sm">
+                                    <input type="checkbox" disabled={!c.active} checked={form.competencyIds.includes(c.id)}
+                                        onChange={e=>setForm(v=>({...v,competencyIds:e.target.checked?[...v.competencyIds,c.id]:v.competencyIds.filter(id=>id!==c.id)}))}/>{c.name}
+                                </label>)}</div>
+                            </section>
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="md:col-span-2">
                                     <label className="text-xs text-white/40 uppercase block mb-1">Название</label>

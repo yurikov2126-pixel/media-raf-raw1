@@ -15,6 +15,9 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     const [description, setDescription] = useState(task.description || project.description || '');
     const [location, setLocation] = useState(task.location || '');
     const [assigneeId, setAssigneeId] = useState(task.assigneeId || '');
+    const [competencies, setCompetencies] = useState([]);
+    const [requiredCompetencyIds, setRequiredCompetencyIds] = useState(() => { try { return JSON.parse(task.requiredCompetencyIds || '[]'); } catch { return []; } });
+    useEffect(() => { api('/competencies',{token}).then(setCompetencies).catch(() => {}); }, [token]);
     const [parentId, setParentId] = useState(task.parentId || '');
     const [workDate, setWorkDate] = useState(task.workDate ? task.workDate.slice(0, 10) : '');
     const [dueAt, setDueAt] = useState(task.dueAt ? localDatetime(task.dueAt) : '');
@@ -24,6 +27,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
     useEffect(() => {
         setTitle(task.title); setDescription(task.description || project.description || ''); setLocation(task.location || '');
         setAssigneeId(task.assigneeId || '');
+        try { setRequiredCompetencyIds(JSON.parse(task.requiredCompetencyIds || '[]')); } catch { setRequiredCompetencyIds([]); }
         setParentId(task.parentId || '');
         setWorkDate(task.workDate ? task.workDate.slice(0, 10) : '');
         setDueAt(task.dueAt ? localDatetime(task.dueAt) : '');
@@ -57,6 +61,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
         event.preventDefault();
         run(() => api(base, { method: 'PATCH', token, body: {
             title: title.trim(), description, location: location.trim(), assigneeId: assigneeId || null,
+            requiredCompetencyIds,
             parentId: parentId || null, workDate: workDate || null, dueAt: deadlineAllowed && dueAt ? new Date(dueAt).toISOString() : null,
         } }));
     }
@@ -93,6 +98,15 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
                 <span className="mt-1 block text-xs opacity-65">Описание индивидуально для этого задания. Общие требования проекта можно скопировать заново.</span>
                 {canEdit&&project.description&&<button type="button" disabled={saving} onClick={()=>setDescription(project.description)} className="mt-2 rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs">Скопировать описание проекта</button>}
             </label>
+            <section className="sm:col-span-2 rounded-xl border border-violet-400/30 p-3 space-y-2">
+                <h3 className="font-semibold text-sm">🎓 Необходимые компетенции</h3>
+                <p className="text-xs opacity-65">Требования к заданию. Они не назначают исполнителя автоматически и не ограничивают его доступ.</p>
+                <div className="flex flex-wrap gap-2">{competencies.filter(c=>c.active||requiredCompetencyIds.includes(c.id)).map(c=><label key={c.id} className="flex items-center gap-2 rounded-lg border border-current/20 px-3 py-2 text-sm">
+                    <input type="checkbox" disabled={!canEdit||saving||!c.active} checked={requiredCompetencyIds.includes(c.id)}
+                        onChange={e=>setRequiredCompetencyIds(v=>e.target.checked?[...v,c.id]:v.filter(id=>id!==c.id))}/>{c.name}
+                </label>)}</div>
+                {!competencies.length && <p className="text-xs opacity-60">Справочник пока пуст. Добавьте компетенции в админке.</p>}
+            </section>
             <label className="block min-w-0 text-sm">Исполнитель
                 <select disabled={!canEdit || saving} value={assigneeId} onChange={(e) => { setAssigneeId(e.target.value); setDueAt(''); }} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2 disabled:opacity-60">
                     <option value="">Не назначен</option>{project.members.map((m) => <option key={m.userId} value={m.userId}>{m.user?.fullName || m.userId}</option>)}

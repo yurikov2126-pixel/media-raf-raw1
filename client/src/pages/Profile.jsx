@@ -95,6 +95,7 @@ export default function Profile() {
     const [editorOpen, setEditorOpen] = useState(false);
     const [composerOpen, setComposerOpen] = useState(false);
     const [gamif, setGamif] = useState(null);
+    const [verifiedCompetencies, setVerifiedCompetencies] = useState([]);
 
     const isMe = me.username === username;
     const sortedPosts = [...(profile?.posts || [])].sort((a, b) => {
@@ -111,6 +112,15 @@ export default function Profile() {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [username, token]);
+
+    useEffect(() => {
+        if (!profile?.id) { setVerifiedCompetencies([]); return; }
+        let active = true;
+        api('/competencies/verified/' + encodeURIComponent(profile.id), { token })
+            .then(items => { if (active) setVerifiedCompetencies(items); })
+            .catch(() => { if (active) setVerifiedCompetencies([]); });
+        return () => { active = false; };
+    }, [profile?.id, token]);
 
     useEffect(() => {
         if (!isMe || !location.state?.compose) return;
@@ -245,6 +255,18 @@ export default function Profile() {
 
                 {profile.bio && (
                     <p className="mt-4 text-white/70 whitespace-pre-wrap">{profile.bio}</p>
+                )}
+
+                {verifiedCompetencies.length > 0 && (
+                    <section className="mt-4 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4" aria-label="Подтверждённые компетенции">
+                        <h3 className="font-semibold text-sm mb-2">🎓 Подтверждённые компетенции</h3>
+                        <p className="text-xs opacity-65 mb-3">Получены после успешного завершения курсов Академии и выдачи сертификатов.</p>
+                        <div className="flex flex-wrap gap-2">{verifiedCompetencies.map(c => (
+                            <span title={c.description || c.name} key={c.id} className="inline-flex gap-1.5 items-center rounded-full px-3 py-2 border border-emerald-400/40 bg-emerald-400/10 text-sm text-emerald-800 dark:text-emerald-200">
+                                ✓ {c.name}
+                            </span>
+                        ))}</div>
+                    </section>
                 )}
 
                 {skills.length > 0 && (

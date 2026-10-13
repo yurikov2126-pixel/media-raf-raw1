@@ -29,6 +29,7 @@ const PracticalsHomework = lazy(() => import('./tabs/PracticalsHomework.jsx'));
 const Actions = lazy(() => import('./tabs/Actions.jsx'));
 
 const CoursesRoot = lazy(() => import('./tabs/Courses/index.jsx'));
+const Competencies = lazy(() => import('./tabs/Competencies.jsx'));
 const WikiRoot = lazy(() => import('./tabs/Wiki/index.jsx'));
 const BulkRoot = lazy(() => import('./tabs/Bulk/index.jsx'));
 const SiteDesignRoot = lazy(() => import('./tabs/SiteDesign/index.jsx'));
@@ -204,6 +205,7 @@ export default function Admin() {
                         {tab === 'users' && (
                             <Users users={users} setUsers={setUsers} token={token} />
                         )}
+                        {tab === 'competencies' && <Competencies token={token} />}
                         {tab === 'courses' && (
                             <CoursesRoot
                                 courses={courses}

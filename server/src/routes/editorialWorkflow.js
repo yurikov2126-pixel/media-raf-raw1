@@ -1,3 +1,4 @@
+import { validatedCompetencyIds } from './competencies.js';
 import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -202,7 +203,7 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
     try {
         const project = await getProject(req.params.projectId);
         if (!project || !canEdit(project, req.user)) return notFound(res);
-        const { title, description = '', location = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, workDate = null, isOpen = false, startTime = null, durationMinutes = null } = req.body;
+        const { title, description = '', location = '', stageId = null, parentId = null, assigneeId = null, dueAt = null, workDate = null, isOpen = false, startTime = null, durationMinutes = null, requiredCompetencyIds = [] } = req.body;
         if (!validText(title, 160) || typeof description !== 'string' || description.length > 10000) return res.status(400).json({ error: 'Некорректное название или описание' });
         if (stageId && !(await prisma.editorialStage.findFirst({ where: { id: stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
         if (parentId && !(await prisma.editorialTask.findFirst({ where: { id: parentId, projectId: project.id } }))) return res.status(400).json({ error: 'Родительская задача не найдена' });
@@ -216,7 +217,7 @@ router.post('/projects/:projectId/tasks', async (req, res, next) => {
         if (due && !deadlineAllowed(project, assigneeId)) return res.status(400).json({ error: 'Дедлайн доступен только фотографу, видеографу и монтажёру' });
         if (due === undefined) return res.status(400).json({ error: 'Некорректный срок' });
         if (typeof isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
-        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, location: location.trim(), stageId, parentId, assigneeId, dueAt: due, workDate: day, startTime, durationMinutes, isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
+        const task = await prisma.editorialTask.create({ data: { projectId: project.id, title: title.trim(), description, location: location.trim(), stageId, parentId, assigneeId, dueAt: due, workDate: day, startTime, durationMinutes, requiredCompetencyIds: await validatedCompetencyIds(requiredCompetencyIds), isOpen, createdById: req.user.id, events: { create: { actorId: req.user.id, action: 'CREATED' } } } });
         if (task.assigneeId) await notifyEditorial(prisma, project, task, [task.assigneeId], 'assigned', req.user.id);
         res.status(201).json({ task });
     } catch (error) { next(error); }
@@ -254,6 +255,7 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             data.status = req.body.status;
         }
         if (editor) {
+            if (req.body.requiredCompetencyIds !== undefined) data.requiredCompetencyIds = await validatedCompetencyIds(req.body.requiredCompetencyIds);
             if (req.body.isOpen !== undefined) {
                 if (typeof req.body.isOpen !== 'boolean') return res.status(400).json({ error: 'Некорректная настройка заявок' });
                 data.isOpen = req.body.isOpen;

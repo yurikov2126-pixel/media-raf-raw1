@@ -208,6 +208,7 @@ model Reaction {
 }
 
 model Course {
+  competencyIds String @default("[]")
   id                     String   @id @default(cuid())
   slug                   String   @unique
   title                  String
@@ -831,6 +832,7 @@ model EditorialStage {
   @@index([projectId, position])
 }
 model EditorialTask {
+  requiredCompetencyIds String @default("[]")
   id String @id @default(cuid())
   projectId String
   stageId String?
@@ -1189,4 +1191,13 @@ model EditorialTeamMember {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([memberType, position])
+}
+
+model AcademyCompetency {
+  id String @id @default(cuid())
+  name String @unique
+  description String @default("")
+  icon String @default("award")
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
 }
