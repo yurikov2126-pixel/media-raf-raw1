@@ -3,27 +3,31 @@ import {api} from '../../../api/client.js';
 
 export default function GeneralStudentChat({token}){
  const [data,setData]=useState(null),[chatId,setChatId]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const [memberQuery,setMemberQuery]=useState(''),[users,setUsers]=useState([]),[memberId,setMemberId]=useState('');
+ const [memberQuery,setMemberQuery]=useState(''),[users,setUsers]=useState([]),[searchOpen,setSearchOpen]=useState(false),[searchBusy,setSearchBusy]=useState(false);
  const [memberBusy,setMemberBusy]=useState(false);
  useEffect(()=>{
+  const query=memberQuery.trim();
+  if(query.length<2){setUsers([]);setSearchBusy(false);return;}
   let active=true;
-  const search=async()=>{
+  const timer=setTimeout(async()=>{
+   setSearchBusy(true);
    try{
-    const result=await api('/admin/general-student-chat/users?q='+encodeURIComponent(memberQuery.trim()),{token});
+    const result=await api('/admin/general-student-chat/users?q='+encodeURIComponent(query),{token});
     if(active)setUsers(result.users||[]);
    }catch(e){if(active)setError(e.message||'Ошибка поиска пользователей');}
-  };
-  search();return()=>{active=false;};
+   finally{if(active)setSearchBusy(false);}
+  },250);
+  return()=>{active=false;clearTimeout(timer);};
  },[token,memberQuery]);
- const addMember=async()=>{
-  if(!chatId||!memberId)return;
+ const addMember=async user=>{
+  if(!chatId||!user?.id)return;
   setMemberBusy(true);setError('');setNotice('');
   try{
    const result=await api('/admin/general-student-chat/members',{
-    method:'POST',token,body:{chatId,userId:memberId},
+    method:'POST',token,body:{chatId,userId:user.id},
    });
-   setNotice(result.added?'Участник добавлен в выбранный чат.':'Этот пользователь уже состоит в чате.');
-   setMemberId('');await load();
+   setNotice(result.added?`${user.fullName||user.username} добавлен(а) в выбранный чат.`:'Этот пользователь уже состоит в чате.');
+   setMemberQuery('');setUsers([]);setSearchOpen(false);await load();
   }catch(e){setError(e.message||'Не удалось добавить участника');}
   finally{setMemberBusy(false);}
  };
@@ -68,18 +72,32 @@ export default function GeneralStudentChat({token}){
   <section className="card p-5 space-y-4">
    <div><h3 className="text-lg font-bold">Добавить участника вручную</h3>
     <p className="text-sm text-slate-600 dark:text-white/70 mt-1">Можно добавить любого зарегистрированного незаблокированного пользователя, включая наставников и администраторов. Выберите чат выше — автоматические правила для студентов останутся без изменений.</p></div>
-   <label className="block text-sm font-semibold">Найти пользователя
-    <input className="input w-full mt-2" value={memberQuery} onChange={e=>{setMemberQuery(e.target.value);setMemberId('');}}
-     placeholder="Имя или логин" aria-label="Поиск участника"/>
-   </label>
-   <label className="block text-sm font-semibold">Пользователь
-    <select className="input w-full mt-2" value={memberId} onChange={e=>setMemberId(e.target.value)}>
-     <option value="">Выберите человека</option>
-     {users.map(u=><option key={u.id} value={u.id}>{u.fullName} (@{u.username}) · {u.role}</option>)}
-    </select>
-   </label>
-   <button type="button" className="btn-primary min-h-11" disabled={busy||memberBusy||!chatId||!memberId}
-     onClick={addMember}>{memberBusy?'Добавляем…':'Добавить в выбранный чат'}</button>
+   <div className="relative">
+    <label htmlFor="general-chat-member-search" className="block text-sm font-semibold mb-2">Поиск участника</label>
+    <div className="relative">
+     <input id="general-chat-member-search" className="input w-full pr-10" role="combobox"
+      aria-autocomplete="list" aria-expanded={searchOpen&&memberQuery.trim().length>=2}
+      aria-controls="general-chat-member-results" autoComplete="off"
+      value={memberQuery} disabled={busy||memberBusy||!chatId}
+      onChange={e=>{setMemberQuery(e.target.value);setSearchOpen(true);}}
+      onFocus={()=>setSearchOpen(true)}
+      onKeyDown={e=>{if(e.key==='Escape')setSearchOpen(false);}}
+      placeholder={chatId?"Введите имя или @логин (от 2 символов)":"Сначала выберите групповой чат"}/>
+     {searchBusy&&<span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 dark:text-white/60">Поиск…</span>}
+    </div>
+    {searchOpen&&memberQuery.trim().length>=2&&<div id="general-chat-member-results" role="listbox"
+      className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/20 bg-white dark:bg-slate-900 shadow-xl">
+      {!searchBusy&&users.length===0&&<p className="px-4 py-3 text-sm text-slate-600 dark:text-white/70">Пользователи не найдены</p>}
+      {users.map(user=><button key={user.id} type="button" role="option" aria-selected={false}
+       disabled={memberBusy}
+       className="block w-full px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-white/10 focus:bg-violet-50 dark:focus:bg-white/10 border-b last:border-b-0 border-slate-100 dark:border-white/10"
+       onClick={()=>addMember(user)}>
+        <span className="block font-medium text-sm text-slate-900 dark:text-white">{user.fullName||user.username}</span>
+        <span className="block text-xs text-slate-600 dark:text-white/65">@{user.username} · {user.role}</span>
+      </button>)}
+     </div>}
+    <p className="mt-2 text-xs text-slate-600 dark:text-white/60">Найдите человека и нажмите на результат — он сразу добавится в выбранный чат.</p>
+   </div>
    {!data?.chats?.length&&<p className="text-sm text-amber-800 dark:text-amber-200">Сначала создайте групповой чат.</p>}
   </section>
  </div>;
