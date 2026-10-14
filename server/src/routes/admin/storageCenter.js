@@ -33,7 +33,7 @@ const filesOf = async (type, count) => {
   const entries = await fs.readdir(root, { withFileTypes: true }).catch(e=>e.code==='ENOENT'?[]:Promise.reject(e));
   return entries.filter(e=>e.isFile()&&metaName(e.name)).slice(0,count).map(e=>e.name);
 };
-async function snapshot({ deep = false } = {}) {
+export async function snapshot({ deep = false } = {}) {
   const [library, materials, shares, totals] = await Promise.all([
     prisma.editorialLibraryFile.findMany({ select: { id:true,name:true,mimeType:true,size:true,storageName:true,uploaderId:true,createdAt:true } }),
     prisma.editorialMaterialFile.findMany({ select: { id:true,name:true,mimeType:true,size:true,storageName:true,uploaderId:true,createdAt:true,version:true,taskId:true,task:{select:{ title:true,projectId:true,project:{select:{title:true}} }} } }),
@@ -71,11 +71,26 @@ async function snapshot({ deep = false } = {}) {
         createdAt:stat.birthtime,refs:[],issues:['untracked'],status:'untracked',recoverable:true});
     }
   }
+  // Check orphaned previews separately. Preview files are never mistaken for originals.
+  for(const type of ['library','materials']) {
+    const previewRoot=path.join(ROOTS[type],'thumbnails');
+    const entries=await fs.readdir(previewRoot,{withFileTypes:true}).catch(e=>e.code==='ENOENT'?[]:Promise.reject(e));
+    const valid=new Set((type==='library'?library:materials).map(f=>f.storageName+'.webp'));
+    for(const entry of entries) {
+      if(!entry.isFile()||!entry.name.endsWith('.webp')||valid.has(entry.name))continue;
+      const original=entry.name.slice(0,-5);
+      if(!metaName(original))continue;
+      const stat=await exists(path.join(previewRoot,entry.name));
+      if(!stat)continue;
+      orphan.push({id:'preview:'+entry.name,type,name:entry.name,storageName:entry.name,size:stat.size,
+        actualSize:stat.size,refs:[],issues:['orphan_thumbnail'],status:'orphan_preview',recoverable:false});
+    }
+  }
   const quarantineSettings=await prisma.setting.findMany({where:{key:{startsWith:'storage_quarantine_'}}});
   const quarantine=quarantineSettings.map(x=>{try{return JSON.parse(x.value);}catch{return null;}}).filter(Boolean);
   const size=report.reduce((a,f)=>a+f.size,0),orphanBytes=orphan.reduce((a,f)=>a+f.size,0);
-  return {files:[...report,...orphan],quarantine,stats:{registered:report.length,untracked:orphan.length,broken:report.filter(f=>f.issues.length).length,
-    registeredBytes:size,untrackedBytes:orphanBytes,quarantineCount:quarantine.length,quarantineBytes:quarantine.reduce((a,f)=>a+(f.size||0),0),
+  return {files:[...report,...orphan],quarantine,stats:{registered:report.length,untracked:orphan.filter(f=>f.status==='untracked').length,orphanPreviews:orphan.filter(f=>f.status==='orphan_preview').length,broken:report.filter(f=>f.issues.length).length,
+    registeredBytes:size,untrackedBytes:orphan.filter(f=>f.status==='untracked').reduce((a,f)=>a+f.size,0),orphanPreviewBytes:orphan.filter(f=>f.status==='orphan_preview').reduce((a,f)=>a+f.size,0),quarantineCount:quarantine.length,quarantineBytes:quarantine.reduce((a,f)=>a+(f.size||0),0),
     databaseBytes:Number(totals[0]?.bytes||0),databaseName:totals[0]?.name||null},
     shares:shares.map(s=>({id:s.id,title:s.title,active:shareActive(s),count:Array.isArray(s.fileIds)?s.fileIds.length:0})),
     checkedAt:new Date().toISOString()};
