@@ -230,7 +230,8 @@ router.post('/files', upload.single('file'), async (req, res, next) => {
                 try { await ensureEditorialThumbnail(root, file); }
                 catch (error) { console.error('[editorial-library] preview generation failed', error); }
             }
-            res.status(201).json({ file: publicFile(file) });
+            await prisma.adminAction.create({data:{adminId:req.user.id,action:'storage_upload',payload:JSON.stringify({type:'library',id:file.id,name:file.name,size:file.size,storageName:file.storageName}),affected:1}}).catch(error=>console.error('[storage] upload audit failed',error));
+             res.status(201).json({ file: publicFile(file) });
         } catch (error) { await fs.unlink(path.join(root, storageName)).catch(() => {}); throw error; }
     } catch (error) { next(error); }
 });
