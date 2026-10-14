@@ -15,6 +15,7 @@ export const TAB_GROUPS = [
             ['users', 'Пользователи', '👥'],
             ['roles', 'Роли и права', '🔐'],
             ['editorial-team', 'Команда редакции', '🎬'],
+            ['general-student-chat', 'Общий чат студентов', '💬'],
             ['password-resets', 'Восстановление', '🔑'],
         ],
     },
