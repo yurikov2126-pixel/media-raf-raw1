@@ -1,3 +1,4 @@
+import StorageTriage from './StorageTriage.jsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../api/client.js';
@@ -7,35 +8,37 @@ const date = d => d ? new Date(d).toLocaleString('ru-RU') : '—';
 const key = f => f.type+':'+f.storageName;
 const issues = {missing:'Оригинал отсутствует',size_mismatch:'Размер не совпадает',untracked:'Нет записи в БД',orphan_thumbnail:'Лишнее превью'};
 const validCandidate = f => f.status==='untracked' || f.status==='orphan_preview';
-const tabs = [['overview','Обзор'],['files','Файлы и связи'],['cleanup','Очистка'],['history','История'],['database','База данных']];
+const tabs = [['overview','Обзор'],['files','Файлы и связи'],['triage','Разбор файлов'],['cleanup','Карантин и очистка'],['history','История'],['database','База данных']];
 const noticeClass = 'rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200';
 
 export default function StorageCenter({token}) {
  const [tab,setTab]=useState('overview'),[data,setData]=useState(null),[database,setDatabase]=useState(null),[history,setHistory]=useState([]),[trend,setTrend]=useState([]);
- const [lastAudit,setLastAudit]=useState(null),[period,setPeriod]=useState(30);
+ const [lastAudit,setLastAudit]=useState(null),[period,setPeriod]=useState(30),[reviews,setReviews]=useState([]);
  const [query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[store,setStore]=useState('all');
  const [selected,setSelected]=useState(null),[picked,setPicked]=useState(new Set()),[confirm,setConfirm]=useState(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[report,setReport]=useState(null);
  const reload=useCallback(async()=>{
    setBusy(true);setError('');
    try{
-     const [overview,db,h,previous,historyTrend] = await Promise.all([
+     const [overview,db,h,previous,historyTrend,reviewRows] = await Promise.all([
       api('/admin/storage-center/overview',{token}),api('/admin/storage-center/database',{token}),
       api('/admin/storage-center/history',{token}),api('/admin/storage-center/audit-last',{token}),
-      api('/admin/storage-center/audit-history',{token})]);
-     setData(overview);setDatabase(db);setHistory(h);setLastAudit(previous);setTrend(historyTrend||[]);
+      api('/admin/storage-center/audit-history',{token}),api('/admin/storage-center/review',{token})]);
+     setData(overview);setDatabase(db);setHistory(h);setLastAudit(previous);setTrend(historyTrend||[]);setReviews(reviewRows||[]);
    }catch(e){setError(e.message||'Не удалось загрузить данные');}
    finally{setBusy(false);}
  },[token]);
  useEffect(()=>{reload();},[reload]);
  const files=data?.files||[],stats=data?.stats||{},quarantine=data?.quarantine||[];
  const candidates=files.filter(validCandidate);
+ const reviewMap=new Map(reviews.map(row=>[row.type+':'+row.filename,row.decision]));
+ const approved=candidates.filter(f=>reviewMap.get(key(f))==='discard');
  const shown=useMemo(()=>files.filter(f=>(store==='all'||f.type===store)
   &&(filter==='all'||filter==='candidates'&&validCandidate(f)||filter==='issues'&&f.issues.length||filter==='linked'&&!f.issues.length)
   &&[f.name,f.storageName,f.project,f.task].some(x=>String(x||'').toLowerCase().includes(query.trim().toLowerCase()))),
   [files,store,filter,query,tab]);
- const visibleCandidates=shown.filter(validCandidate);
- const selectedCandidates=candidates.filter(f=>picked.has(key(f)));
+ const visibleCandidates=shown.filter(f=>validCandidate(f)&&reviewMap.get(key(f))==='discard');
+ const selectedCandidates=approved.filter(f=>picked.has(key(f)));
  const selectedBytes=selectedCandidates.reduce((s,f)=>s+(f.size||0),0);
  const changePick=(file,checked)=>setPicked(old=>{const n=new Set(old);checked?n.add(key(file)):n.delete(key(file));return n;});
  const selectVisible=()=>setPicked(old=>{const n=new Set(old);visibleCandidates.slice(0,100).forEach(f=>n.add(key(f)));return n;});
@@ -85,8 +88,8 @@ export default function StorageCenter({token}) {
       <p className="text-xs opacity-65">Последняя проверка: {lastAudit?.checkedAt?date(lastAudit.checkedAt):'Ещё не проводилась'}</p>
       <button className="btn-primary min-h-11" onClick={()=>setConfirm({kind:'audit'})} disabled={busy}>Запустить аудит</button></section>
      <section className="card p-4 space-y-3"><h3 className="font-bold">Рекомендована очистка</h3>
-      <p className="text-sm opacity-70">Найдено {candidates.length} файлов или превью без записи. Их можно безопасно проверить и переместить в карантин.</p>
-      <button className="btn-primary min-h-11" onClick={()=>{setTab('cleanup');setFilter('candidates');}}>Перейти к очистке →</button></section>
+      <p className="text-sm opacity-70">Найдено {candidates.length} файлов без записи или отдельно оставшихся превью. Сначала попытайтесь восстановить связи и только затем решайте вопрос об очистке.</p>
+      <button className="btn-primary min-h-11" onClick={()=>setTab('triage')}>Разобрать файлы →</button></section>
     </div>
     <section className="card p-4 space-y-3"><div className="flex gap-3 flex-wrap items-center justify-between">
       <h3 className="font-bold">Динамика занятого места</h3><div className="flex gap-1">{[7,30,90].map(n=><button key={n} aria-pressed={period===n} onClick={()=>setPeriod(n)}
@@ -97,8 +100,9 @@ export default function StorageCenter({token}) {
        :<p className="text-sm opacity-65">Данные накопятся после ежедневных проверок.</p>}
     </section>
    </div>}
+   {tab==='triage'&&<StorageTriage token={token} files={files} reviews={reviews} onUpdated={reload}/>}
    {(tab==='files'||tab==='cleanup')&&<div className="space-y-4">
-    {tab==='cleanup'&&<div className={noticeClass}>Доступны только незарегистрированные оригиналы и лишние превью. Материалы заданий и файлы с записями в БД защищены. После помещения в карантин восстановление возможно 30 дней.</div>}
+    {tab==='cleanup'&&<div className={noticeClass}>Здесь видны только файлы, которые администратор проверил и явно признал ненужными во вкладке «Разбор файлов». Восстановление из карантина возможно 30 дней.</div>}
     <div className="card p-4 space-y-3">
      <div className="flex flex-wrap gap-2">
        <input className="input flex-1 min-w-[180px]" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по имени, проекту, заданию…" aria-label="Поиск файлов"/>
@@ -113,9 +117,9 @@ export default function StorageCenter({token}) {
        <span className="text-sm opacity-70">Выбрано: {selectedCandidates.length} · {bytes(selectedBytes)}</span>
        <button disabled={!selectedCandidates.length||busy} className="btn-primary min-h-11 sm:ml-auto" onClick={()=>setConfirm({kind:'batch'})}>Переместить в карантин</button>
      </div>}
-     <p className="text-xs text-slate-600 dark:text-white/60">Найдено {shown.length} файлов. Нажмите на строку для просмотра всех связей.</p>
+     <p className="text-xs text-slate-600 dark:text-white/60">Найдено {tab==='cleanup'?visibleCandidates.length:shown.length} файлов. Нажмите на строку для просмотра всех связей.</p>
      <div className="divide-y divide-slate-200 dark:divide-white/10 max-h-[620px] overflow-y-auto">
-      {(tab==='cleanup'?shown.filter(validCandidate):shown).slice(0,300).map(f=><div key={key(f)} className="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg">
+      {(tab==='cleanup'?shown.filter(f=>validCandidate(f)&&reviewMap.get(key(f))==='discard'):shown).slice(0,300).map(f=><div key={key(f)} className="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg">
        {tab==='cleanup'&&<input aria-label={'Выбрать '+f.name} type="checkbox" checked={picked.has(key(f))} onChange={e=>changePick(f,e.target.checked)} />}
        <button type="button" className="flex-1 flex items-center min-w-0 text-left gap-3" onClick={()=>setSelected(f)}>
         <span className="text-xl">{f.status==='orphan_preview'?'🖼️':f.mimeType?.startsWith('video/')?'🎬':f.mimeType?.startsWith('image/')?'📸':'📄'}</span>
@@ -160,7 +164,7 @@ export default function StorageCenter({token}) {
          className="text-xs text-violet-700 dark:text-violet-300">Открыть задание →</Link>}</div>)}
       {!selected.refs?.length&&<p className="text-sm opacity-65">Связей нет.</p>}
       {selected.status==='untracked' || selected.status==='orphan_preview'
-       ? <button className="btn-primary min-h-11" onClick={()=>{changePick(selected,true);setTab('cleanup');setSelected(null);}}>Выбрать для очистки</button>:null}
+       ? <button className="btn-primary min-h-11" onClick={()=>{changePick(selected,true);setTab('triage');setSelected(null);}}>Разобрать файл</button>:null}
       {!selected.thumbnail && selected.actualSize!=null && selected.mimeType?.startsWith('image/') &&
        <button className="btn-ghost min-h-11" onClick={()=>{setConfirm({kind:'thumbnail',file:selected});setSelected(null);}}>Создать превью</button>}
     </section></div>}
