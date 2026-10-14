@@ -49,7 +49,8 @@ router.post('/projects/:projectId/tasks/:taskId/materials', upload.single('file'
                 try { await ensureEditorialThumbnail(root, file); }
                 catch (error) { console.error('[editorial-materials] thumbnail generation failed', error); }
             }
-            res.status(201).json({ file });
+            await prisma.adminAction.create({data:{adminId:req.user.id,action:'storage_upload',payload:JSON.stringify({type:'materials',id:file.id,name:file.name,size:file.size,storageName:file.storageName,taskId:file.taskId}),affected:1}}).catch(error=>console.error('[storage] upload audit failed',error));
+             res.status(201).json({ file });
         } catch (e) { await fs.unlink(path.join(root,storageName)).catch(()=>{}); throw e; }
     } catch (e) { next(e); }
 });
