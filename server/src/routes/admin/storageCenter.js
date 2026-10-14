@@ -164,8 +164,24 @@ router.post('/restore/:id',safe(async(req,res)=>{
  if(item.originalId) await restoreRegisteredLibraryFile(item);
  else {
    if(item.preview) await fs.mkdir(path.dirname(dest),{recursive:true});
-   await fs.rename(path.join(ROOTS[item.type],'.quarantine',item.id),dest);
-   await prisma.setting.delete({where:{key}});
+   const quarantineDir=path.join(ROOTS[item.type],'.quarantine');
+   const thumbnailDest=path.join(ROOTS[item.type],'thumbnails',item.filename+'.webp');
+   const thumbnailSrc=path.join(quarantineDir,item.id+'.webp');
+   if(item.thumbnailMoved && await exists(thumbnailDest))return res.status(409).json({error:'Превью с этим именем уже существует'});
+   await fs.rename(path.join(quarantineDir,item.id),dest);
+   let thumbnailRestored=false;
+   try{
+     if(item.thumbnailMoved){
+       await fs.mkdir(path.dirname(thumbnailDest),{recursive:true});
+       await fs.rename(thumbnailSrc,thumbnailDest);
+       thumbnailRestored=true;
+     }
+     await prisma.setting.delete({where:{key}});
+   }catch(error){
+     await fs.rename(dest,path.join(quarantineDir,item.id)).catch(()=>{});
+     if(thumbnailRestored) await fs.rename(thumbnailDest,thumbnailSrc).catch(()=>{});
+     throw error;
+   }
  }
  await record(req,'restore',{id:item.id,type:item.type,filename:item.filename});
  res.json({ok:true});
