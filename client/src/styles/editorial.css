@@ -52,7 +52,7 @@
   background: var(--ed-surface); border-color: var(--ed-border);
   color: var(--ed-text); box-shadow: var(--ed-shadow);
 }
-.editorial-glass .editorial-my-tasks > .grid > div span { color: var(--ed-muted); }
+.editorial-glass .editorial-my-tasks > .grid > div:has(> strong) > span { color: var(--ed-muted); }
 .editorial-glass .editorial-my-tasks .editorial-task-filters {
   display: flex; flex-wrap: wrap; gap: .5rem; overflow: visible; padding: .25rem 0;
 }
@@ -582,3 +582,45 @@ body.dark .editorial-project-wizard :is(input,select,textarea),
 body[data-theme="dark"] .editorial-project-wizard :is(input,select,textarea) { color-scheme: dark; }
 .editorial-project-wizard :is(button,input,select,textarea):focus-visible { outline: 3px solid #a78bfa; outline-offset: 2px; }
 @media (max-width: 639px) { .editorial-project-wizard { max-height: 94dvh; padding-bottom: max(16px,env(safe-area-inset-bottom)); } }
+
+/* My Tasks contrast: prevent broad card span styles from washing out status badges
+   and date chips. Explicit theme colors also support data-theme-based dark mode. */
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-project {
+  color: var(--ed-muted);
+  -webkit-text-fill-color: var(--ed-muted);
+  opacity: 1;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-date {
+  color: #4c1d95;
+  -webkit-text-fill-color: #4c1d95;
+  background: #f3e8ff;
+  border-color: #c4b5fd;
+  opacity: 1;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-status {
+  color: #1e293b;
+  -webkit-text-fill-color: #1e293b;
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  opacity: 1;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="IN_PROGRESS"] { background: #dbeafe; border-color: #60a5fa; color: #1e3a8a; -webkit-text-fill-color: #1e3a8a; }
+.editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="IN_REVIEW"] { background: #fef3c7; border-color: #f59e0b; color: #78350f; -webkit-text-fill-color: #78350f; }
+.editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="REVISION"] { background: #ffedd5; border-color: #fb923c; color: #7c2d12; -webkit-text-fill-color: #7c2d12; }
+.editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="APPROVED"] { background: #d1fae5; border-color: #34d399; color: #064e3b; -webkit-text-fill-color: #064e3b; }
+.editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="DONE"] { background: #ccfbf1; border-color: #2dd4bf; color: #134e4a; -webkit-text-fill-color: #134e4a; }
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-date,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-date {
+  color: #ede9fe; -webkit-text-fill-color: #ede9fe;
+  background: #3b305e; border-color: #8b5cf6;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-status,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-status {
+  color: #f1f5f9; -webkit-text-fill-color: #f1f5f9;
+  background: #334155; border-color: #64748b;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="IN_PROGRESS"] { background: #172554; border-color: #3b82f6; color: #bfdbfe; -webkit-text-fill-color: #bfdbfe; }
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="IN_REVIEW"] { background: #451a03; border-color: #d97706; color: #fde68a; -webkit-text-fill-color: #fde68a; }
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="REVISION"] { background: #431407; border-color: #ea580c; color: #fed7aa; -webkit-text-fill-color: #fed7aa; }
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="APPROVED"] { background: #052e25; border-color: #10b981; color: #a7f3d0; -webkit-text-fill-color: #a7f3d0; }
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="DONE"] { background: #042f2e; border-color: #14b8a6; color: #99f6e4; -webkit-text-fill-color: #99f6e4; }
