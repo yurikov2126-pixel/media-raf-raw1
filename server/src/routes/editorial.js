@@ -1,3 +1,4 @@
+import { quarantineDetachedMaterials } from '../lib/storageQuarantine.js';
 import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -170,7 +171,7 @@ router.delete('/projects/:id', async (req, res, next) => {
         if (!project.completedAt) return res.status(409).json({ error: 'Сначала завершите проект' });
         const files = await prisma.editorialMaterialFile.findMany({
             where: { task: { projectId: project.id } },
-            select: { id: true, storageName: true },
+            select: { id: true, storageName: true, name: true, mimeType: true, size: true, taskId: true },
         });
         const ids = new Set(files.map(file => 'material:' + file.id));
         await prisma.$transaction(async tx => {
@@ -182,18 +183,8 @@ router.delete('/projects/:id', async (req, res, next) => {
             }
             await tx.editorialProject.delete({ where: { id: project.id } });
         });
-        const root = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
-        const failures = [];
-        for (const file of files) {
-            try {
-                await fs.unlink(path.join(root, file.storageName));
-                await fs.unlink(path.join(root, 'thumbnails', file.storageName + '.webp')).catch(error => { if (error.code !== 'ENOENT') throw error; });
-            } catch (error) {
-                if (error.code !== 'ENOENT') failures.push(file.storageName);
-            }
-        }
-        if (failures.length) console.error('[editorial] files requiring cleanup:', failures);
-        res.json({ ok: true, cleanupPending: failures.length });
+        const cleanup = await quarantineDetachedMaterials(files, req.user.id, { projectId: project.id });
+        res.json({ ok: true, quarantinedFiles: cleanup.quarantined.length, cleanupPending: cleanup.failed.length });
     } catch (error) { next(error); }
 });
 

@@ -54,6 +54,7 @@ export const TAB_GROUPS = [
         tabs: [
             ['actions', 'История действий', '📜'],
             ['backups', 'Бэкапы', '🗄️'],
+            ['storage-center', 'Хранилище и база данных', '💾'],
             ['settings', 'Настройки', '⚙️'],
         ],
     },

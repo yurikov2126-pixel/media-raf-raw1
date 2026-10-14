@@ -7,6 +7,7 @@ import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { getIo } from '../lib/notify.js';
 import { awardApprovedEditorialTask } from '../lib/editorialXp.js';
+import { quarantineDetachedMaterials } from '../lib/storageQuarantine.js';
 
 const router = Router();
 router.use(auth);
@@ -311,14 +312,22 @@ router.delete('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
         if (!project || !canEdit(project, req.user)) return notFound(res);
         const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id }, select: { id: true } });
         if (!task) return res.status(404).json({ error: 'Задание не найдено' });
-        const files = await prisma.editorialMaterialFile.findMany({ where: { taskId: task.id }, select: { storageName: true } });
-        await prisma.editorialTask.delete({ where: { id: task.id } });
-        const storageRoot = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
-        await Promise.all(files.map(async ({ storageName }) => {
-            try { await fs.unlink(path.join(storageRoot, storageName)); }
-            catch (error) { if (error.code !== 'ENOENT') console.error('[editorial] failed to remove task material:', storageName, error); }
-        }));
-        res.json({ ok: true, deletedTaskId: task.id });
+        const files = await prisma.editorialMaterialFile.findMany({ where: { taskId: task.id },
+            select: { id: true, storageName: true, name: true, mimeType: true, size: true, taskId: true } });
+        // DB cascade removes material rows; stage physical originals and previews for recovery.
+        await prisma.$transaction(async tx => {
+            const fileIds=new Set(files.map(f=>'material:'+f.id));
+            const shares=await tx.editorialFileShare.findMany({where:{revokedAt:null},select:{id:true,fileIds:true}});
+            for(const share of shares) {
+                if(Array.isArray(share.fileIds)&&share.fileIds.some(id=>fileIds.has(id))) {
+                    await tx.editorialFileShare.update({where:{id:share.id},data:{revokedAt:new Date()}});
+                }
+            }
+            await tx.editorialTask.delete({ where: { id: task.id } });
+        });
+        const cleanup = await quarantineDetachedMaterials(files, req.user.id, { taskId: task.id, projectId: project.id });
+        res.json({ ok: true, deletedTaskId: task.id, quarantinedFiles: cleanup.quarantined.length,
+            cleanupPending: cleanup.failed.length });
     } catch (error) { next(error); }
 });
 
