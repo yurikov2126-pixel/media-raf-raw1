@@ -8,6 +8,7 @@ import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
+import { quarantineLibraryFile } from '../lib/storageQuarantine.js';
 
 const router = Router();
 const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial');
@@ -237,9 +238,8 @@ router.delete('/files/:fileId', async (req, res, next) => {
     try {
         const file = await prisma.editorialLibraryFile.findUnique({ where: { id: req.params.fileId } });
         if (!file) return res.status(404).json({ error: 'Файл не найден' });
-        await prisma.editorialLibraryFile.delete({ where: { id: file.id } });
-        await fs.unlink(path.join(root, file.storageName)).catch(error => console.error('[editorial-library] cleanup failed', error));
-        res.json({ ok: true });
+        const quarantined = await quarantineLibraryFile(file, req.user.id);
+        res.json({ ok: true, quarantined: true, restoreUntil: quarantined.expiresAt });
     } catch (error) { next(error); }
 });
 router.get('/files/:fileId', async (req, res, next) => {
