@@ -119,6 +119,30 @@ router.patch(
             }
         }
 
+        // Course drip settings are editable after creation too (including turning drip off).
+        if (req.body.dripMode !== undefined || req.body.dripInterval !== undefined || req.body.weeklyLessonLimit !== undefined) {
+            const existing = await prisma.course.findUnique({
+                where: { id: req.params.id },
+                select: { dripMode: true, dripInterval: true, weeklyLessonLimit: true },
+            });
+            if (!existing) return res.status(404).json({ error: 'Курс не найден' });
+            const mode = req.body.dripMode !== undefined ? (req.body.dripMode || null) : existing.dripMode;
+            if (mode !== null && !['test', 'test_homework', 'test_weekly', 'schedule'].includes(mode)) {
+                return res.status(400).json({ error: 'Неизвестный дрип-режим' });
+            }
+            const interval = req.body.dripInterval !== undefined ? req.body.dripInterval : existing.dripInterval;
+            const weekly = req.body.weeklyLessonLimit !== undefined ? req.body.weeklyLessonLimit : existing.weeklyLessonLimit;
+            const validPositive = v => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 365;
+            if (mode === 'schedule' && !validPositive(interval)) {
+                return res.status(400).json({ error: 'Интервал открытия уроков должен быть от 1 до 365 дней' });
+            }
+            if (mode === 'test_weekly' && !validPositive(weekly)) {
+                return res.status(400).json({ error: 'Количество уроков в неделю должно быть от 1 до 365' });
+            }
+            data.dripMode = mode;
+            data.dripInterval = mode === 'schedule' ? Number(interval) : null;
+            data.weeklyLessonLimit = mode === 'test_weekly' ? Number(weekly) : null;
+        }
         if (req.body.competencyIds !== undefined) data.competencyIds = await validatedCompetencyIds(req.body.competencyIds);
         const course = await prisma.course.update({
             where: { id: req.params.id },
