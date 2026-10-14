@@ -32,7 +32,7 @@ describe('editorial materials file selection', () => {
         expect(screen.getByText('Отпустите файлы для добавления')).toBeTruthy();
         fireEvent.drop(zone, { dataTransfer:{ files:[file] } });
         expect(screen.getByText('portrait.jpg')).toBeTruthy();
-        expect(screen.getByPlaceholderText('Добавить подпись к этому файлу (необязательно)')).toBeTruthy();
+        expect(screen.getByPlaceholderText('Подпись к файлу')).toBeTruthy();
         expect(screen.getByRole('button', { name:'Отправить на проверку' })).toBeTruthy();
     });
     it('does not expose the drop zone after submission', () => {
