@@ -136,7 +136,7 @@ router.post('/regenerate-thumbnail',safe(async(req,res)=>{
  await record(req,'thumbnail_regenerated',{type,fileId:id,storageName:file.storageName});
  res.json({ok:true,thumbnail:!!thumbnail});
 }));
-async function quarantineOne(item,userId) {
+async function quarantineOne(item,userId,eligible=null) {
  const {type,filename}=item;
  const preview=typeof filename==='string'&&filename.endsWith('.webp')&&metaName(filename.slice(0,-5));
  if(!rootFor(type)||(!metaName(filename)&&!preview))throw Object.assign(new Error('Недопустимый файл'),{status:400});
@@ -144,8 +144,8 @@ async function quarantineOne(item,userId) {
  const found=await prisma[model].findUnique({where:{storageName:originalName}});
  if(found)throw Object.assign(new Error('Файл или превью зарегистрированы'),{status:409});
  // Always recheck immediately before moving, not merely relying on an earlier audit.
- const scan=await snapshot();
- if(!scan.files.some(f=>f.type===type&&f.storageName===filename&&(f.status==='untracked'||preview&&f.status==='orphan_preview')))
+ const list=eligible||(await snapshot()).files;
+ if(!list.some(f=>f.type===type&&f.storageName===filename&&(f.status==='untracked'||preview&&f.status==='orphan_preview')))
    throw Object.assign(new Error('Файл больше не свободен'),{status:409});
  const source=preview?path.join(ROOTS[type],'thumbnails',filename):location(type,filename);
  const stat=await exists(source);
@@ -173,8 +173,10 @@ router.post('/quarantine/batch',safe(async(req,res)=>{
  const unique=new Set(items.map(i=>String(i?.type)+':'+String(i?.filename)));
  if(unique.size!==items.length)return res.status(400).json({error:'Повторяющиеся файлы'});
  const result=[];
+ // One inventory for the operation; every individual file still rechecks DB and filesystem.
+ const eligible=(await snapshot()).files;
  for(const item of items){
-   try{const saved=await quarantineOne(item,req.user.id);result.push({type:item.type,filename:item.filename,ok:true,id:saved.id,size:saved.size});}
+   try{const saved=await quarantineOne(item,req.user.id,eligible);result.push({type:item.type,filename:item.filename,ok:true,id:saved.id,size:saved.size});}
    catch(e){result.push({type:item?.type,filename:item?.filename,ok:false,error:e.message});}
  }
  res.json({results:result,success:result.filter(x=>x.ok).length,failed:result.filter(x=>!x.ok).length});
