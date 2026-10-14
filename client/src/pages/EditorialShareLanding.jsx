@@ -84,6 +84,7 @@ export default function EditorialShareLanding() {
     const listedFiles = searchResults || (activeTask ? activeTask.files : activeProject ? null : null);
     const fileUrl = file => BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/files/' + encodeURIComponent(file.id);
     const archiveUrl = BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/archive';
+    const thumbnailUrl = file => fileUrl(file) + '/thumbnail';
     const folderBytes = files => files.reduce((sum, file) => sum + (file.size || 0), 0);
 
     return <main className="editorial-share-landing min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-8 sm:py-10">
@@ -124,7 +125,7 @@ export default function EditorialShareLanding() {
                     {listedFiles.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {listedFiles.map(file => <article key={file.id} className="overflow-hidden rounded-2xl border border-white/15 bg-white/5">
                             <button type="button" disabled={!media(file)} onClick={() => setPreview(file)} className="group flex h-44 w-full items-center justify-center overflow-hidden bg-slate-900 disabled:cursor-default">
-                                {file.mimeType.startsWith('image/') ? <img loading="lazy" src={fileUrl(file)} alt={file.name} className="h-full w-full object-contain transition-transform group-hover:scale-[1.02]" /> : <span className="text-5xl" aria-hidden="true">{file.mimeType.startsWith('video/') ? '🎬' : '📄'}</span>}
+                                {file.mimeType.startsWith('image/') ? <img loading="lazy" decoding="async" src={thumbnailUrl(file)} alt={file.name} className="h-full w-full object-contain transition-transform group-hover:scale-[1.02]" /> : <span className="text-5xl" aria-hidden="true">{file.mimeType.startsWith('video/') ? '🎬' : '📄'}</span>}
                             </button>
                             <div className="space-y-3 p-4"><h4 className="break-all text-sm font-semibold">{file.name}</h4>
                                 <p className="text-xs text-slate-400">{sizeText(file.size)} · {new Date(file.createdAt).toLocaleDateString('ru-RU')}</p>
