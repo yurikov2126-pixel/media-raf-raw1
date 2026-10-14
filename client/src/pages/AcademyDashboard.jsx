@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
+import MarkdownView from '../components/MarkdownView.jsx';
 
 const destination = (slug, order, mode = 'lesson') =>
     `/app/courses/${encodeURIComponent(slug)}${order ? `?lesson=${order}&mode=${mode}` : ''}`;
@@ -101,7 +102,7 @@ export default function AcademyDashboard() {
                 <div className="text-xs text-slate-600 dark:text-white/65">{p.courseTitle} · Урок {p.lessonOrder}</div>
                 {p.scheduledAt && <div className="text-xs text-slate-600 dark:text-white/65 mt-2">Дата практики: {new Date(p.scheduledAt).toLocaleString('ru-RU')}</div>}
                 {p.location && <div className="text-xs text-slate-600 dark:text-white/65 mt-1">Место: {p.location}</div>}
-                {p.description && <p className="text-sm text-slate-700 dark:text-white/75 mt-2 line-clamp-3">{p.description}</p>}
+                {p.description && <MarkdownView text={p.description} className="text-sm text-slate-700 dark:text-white/75 mt-2 break-words line-clamp-4" />}
                 {p.feedback && <div className="mt-3 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-3 text-sm text-slate-800 dark:text-white/85 whitespace-pre-wrap">Комментарий наставника: {p.feedback}</div>}
                 {p.grade != null && <div className="text-sm text-violet-700 dark:text-violet-soft mt-2">Оценка: {p.grade}/5</div>}
                 <div className="text-sm text-violet-700 dark:text-violet-soft mt-3">Открыть практику →</div>
