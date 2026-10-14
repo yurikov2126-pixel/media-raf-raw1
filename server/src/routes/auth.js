@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
 import { createResetRequest, verifyCodeAndReset } from '../lib/passwordReset.js';
 import { recordDailyActivity } from '../lib/gamification.js';
+import { ensureStudentGeneralChatMembership } from '../lib/studentGeneralChat.js';
 
 const router = Router();
 
@@ -140,6 +141,7 @@ router.post(
             },
         });
 
+        await ensureStudentGeneralChatMembership(user.id).catch(error => console.error('[general-chat] registration sync failed',error));
         const token = signToken(user);
         res.json({ token, user: hidePrivate(user) });
     })
