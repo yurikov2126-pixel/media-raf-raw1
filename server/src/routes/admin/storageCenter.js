@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../lib/prisma.js';
 import { safe } from './_shared.js';
+import { restoreRegisteredLibraryFile, deleteQuarantinedThumb } from '../../lib/storageQuarantine.js';
 
 const router = Router();
 const ROOTS = {
@@ -143,8 +144,11 @@ router.post('/restore/:id',safe(async(req,res)=>{
  if(!row)return res.status(404).json({error:'Запись карантина не найдена'});
  const item=JSON.parse(row.value),dest=location(item.type,item.filename);
  if(await exists(dest))return res.status(409).json({error:'Файл с этим именем уже существует'});
- await fs.rename(path.join(ROOTS[item.type],'.quarantine',item.id),dest);
- await prisma.setting.delete({where:{key}});
+ if(item.originalId) await restoreRegisteredLibraryFile(item);
+ else {
+   await fs.rename(path.join(ROOTS[item.type],'.quarantine',item.id),dest);
+   await prisma.setting.delete({where:{key}});
+ }
  await record(req,'restore',{id:item.id,type:item.type,filename:item.filename});
  res.json({ok:true});
 }));
@@ -155,6 +159,7 @@ router.post('/purge/:id',safe(async(req,res)=>{
  if(new Date(item.expiresAt).getTime()>Date.now())return res.status(409).json({error:'30 дней хранения ещё не истекли'});
  const file=path.join(ROOTS[item.type],'.quarantine',item.id);
  await fs.unlink(file).catch(e=>{if(e.code!=='ENOENT')throw e;});
+ await deleteQuarantinedThumb(item);
  await prisma.setting.delete({where:{key}});
  await record(req,'purge',{id:item.id,filename:item.filename,type:item.type,size:item.size});
  res.json({ok:true});
