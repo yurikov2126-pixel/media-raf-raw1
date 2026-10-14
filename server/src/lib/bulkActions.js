@@ -599,6 +599,50 @@ export async function importCurriculum({ adminId, data, mode = 'merge', preserve
                 }
             }
 
+            // The import schema supports independent practice and homework blocks.
+            // Update by unique lessonId so existing submissions and grades survive MERGE.
+            for (const c of data) {
+                const course = await prisma.course.findUnique({ where: { slug: c.slug }, select: { id: true } });
+                if (!course) continue;
+                for (const l of c.lessons || []) {
+                    if (!l.title || (!l.practical && !l.homework)) continue;
+                    const lesson = await prisma.lesson.findFirst({
+                        where: { courseId: course.id, title: l.title }, select: { id: true },
+                    });
+                    if (!lesson) continue;
+                    if (l.practical?.topic && l.practical?.description) {
+                        const p = l.practical;
+                        const entry = {
+                            courseId: course.id,
+                            topic: String(p.topic),
+                            description: String(p.description),
+                            location: p.location || null,
+                            durationMin: Math.max(1, Math.min(600, Number(p.durationMin) || 50)),
+                        };
+                        await prisma.practicalWork.upsert({
+                            where: { lessonId: lesson.id },
+                            create: { lessonId: lesson.id, ...entry },
+                            update: entry,
+                        });
+                    }
+                    if (l.homework?.title && l.homework?.description) {
+                        const h = l.homework;
+                        const entry = {
+                            title: String(h.title),
+                            description: String(h.description),
+                            maxFiles: Math.max(1, Math.min(20, Number(h.maxFiles) || 3)),
+                            maxFileSizeMb: Math.max(1, Math.min(200, Number(h.maxFileSizeMb) || 50)),
+                            hoursToComplete: Number(h.hoursToComplete) > 0 ? Number(h.hoursToComplete) : null,
+                        };
+                        await prisma.homework.upsert({
+                            where: { lessonId: lesson.id },
+                            create: { lessonId: lesson.id, ...entry },
+                            update: entry,
+                        });
+                    }
+                }
+            }
+
             const totalAffected =
                 stats.createdCourses +
                 stats.updatedCourses +
@@ -664,6 +708,8 @@ function serializeCourse(course) {
             videoUrl: l.videoUrl,
             order: l.order,
             duration: l.duration,
+            practical: l.practical ? { topic: l.practical.topic, description: l.practical.description, location: l.practical.location, durationMin: l.practical.durationMin } : null,
+            homework: l.homework ? { title: l.homework.title, description: l.homework.description, maxFiles: l.homework.maxFiles, maxFileSizeMb: l.homework.maxFileSizeMb, hoursToComplete: l.homework.hoursToComplete } : null,
             test: l.test
                 ? {
                     title: l.test.title,
@@ -701,6 +747,8 @@ export async function exportCourseAsJSON({ adminId, courseId }) {
                             test: {
                                 include: { questions: true },
                             },
+                            practical: true,
+                            homework: true,
                         },
                     },
                 },
@@ -721,7 +769,7 @@ export async function exportAllCoursesAsJSON({ adminId }) {
                 include: {
                     lessons: {
                         orderBy: { order: 'asc' },
-                        include: { test: { include: { questions: true } } },
+                        include: { test: { include: { questions: true } }, practical: true, homework: true },
                     },
                 },
             });
