@@ -4,10 +4,12 @@ import { auth } from '../middleware/auth.js';
 import { getOnlineUserIds } from '../socket.js';
 import { getIo } from '../lib/notify.js';
 import { hardDeleteChat } from '../lib/chatCleanup.js';
+import { ensureStudentGeneralChatMembership } from '../lib/studentGeneralChat.js';
 
 const router = Router();
 
 router.get('/', auth, async (req, res) => {
+    await ensureStudentGeneralChatMembership(req.user.id).catch(e=>console.error('[general-chat] membership reconciliation failed',e));
     const members = await prisma.chatMember.findMany({
         where: { userId: req.user.id },
         include: {
