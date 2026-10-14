@@ -97,11 +97,11 @@ export default function EditorialMyTasks() {
                     const deadline = deadlineState(task,now);
                     return <div key={task.id} className="editorial-personal-task-card block min-w-0 rounded-xl border border-slate-300 bg-white p-4 shadow-sm transition dark:border-slate-600 dark:bg-slate-800 dark:hover:border-violet-400">
                         <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="min-w-0 flex-1 break-words text-base font-semibold">{task.title}</h3>
-                            <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status] || STATUS_STYLE.TODO}`}>{STATUS_LABELS[task.status] || task.status}</span></div>
-                        <p className="mt-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{task.project?.title || 'Проект'}</p>
+                            <span data-status={task.status} className={`editorial-personal-task-status rounded-full border px-2 py-1 text-xs font-semibold ${STATUS_STYLE[task.status] || STATUS_STYLE.TODO}`}>{STATUS_LABELS[task.status] || task.status}</span></div>
+                        <p className="editorial-personal-task-project mt-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{task.project?.title || 'Проект'}</p>
                         {task.description && <p className="mt-2 line-clamp-2 break-words text-sm text-slate-700 dark:text-slate-200">{task.description}</p>}
                         {(task.workDate||task.startTime||task.durationMinutes)&&<div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-800 dark:text-slate-100">
-                            {task.workDate&&<span className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 dark:border-violet-600 dark:bg-slate-700">📅 {new Date(task.workDate.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU')}</span>}
+                            {task.workDate&&<span className="editorial-personal-task-date rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 dark:border-violet-600 dark:bg-slate-700">📅 {new Date(task.workDate.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU')}</span>}
                             {task.startTime&&<span className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 dark:border-violet-600 dark:bg-slate-700">🕘 Начало: {task.startTime}</span>}
                             {task.durationMinutes&&<span className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 dark:border-violet-600 dark:bg-slate-700">⏱ Продолжительность: {task.durationMinutes} мин.</span>}
                         </div>}
