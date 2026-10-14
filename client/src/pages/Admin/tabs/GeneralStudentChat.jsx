@@ -3,6 +3,30 @@ import {api} from '../../../api/client.js';
 
 export default function GeneralStudentChat({token}){
  const [data,setData]=useState(null),[chatId,setChatId]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [memberQuery,setMemberQuery]=useState(''),[users,setUsers]=useState([]),[memberId,setMemberId]=useState('');
+ const [memberBusy,setMemberBusy]=useState(false);
+ useEffect(()=>{
+  let active=true;
+  const search=async()=>{
+   try{
+    const result=await api('/admin/general-student-chat/users?q='+encodeURIComponent(memberQuery.trim()),{token});
+    if(active)setUsers(result.users||[]);
+   }catch(e){if(active)setError(e.message||'Ошибка поиска пользователей');}
+  };
+  search();return()=>{active=false;};
+ },[token,memberQuery]);
+ const addMember=async()=>{
+  if(!chatId||!memberId)return;
+  setMemberBusy(true);setError('');setNotice('');
+  try{
+   const result=await api('/admin/general-student-chat/members',{
+    method:'POST',token,body:{chatId,userId:memberId},
+   });
+   setNotice(result.added?'Участник добавлен в выбранный чат.':'Этот пользователь уже состоит в чате.');
+   setMemberId('');await load();
+  }catch(e){setError(e.message||'Не удалось добавить участника');}
+  finally{setMemberBusy(false);}
+ };
  const load=useCallback(async()=>{
    setBusy(true);setError('');
    try{const result=await api('/admin/general-student-chat',{token});setData(result);setChatId(result.chatId||'');}
@@ -41,5 +65,22 @@ export default function GeneralStudentChat({token}){
      <button className="btn-ghost min-h-11" disabled={busy} onClick={load}>Обновить</button>
     </div>
   </div>
+  <section className="card p-5 space-y-4">
+   <div><h3 className="text-lg font-bold">Добавить участника вручную</h3>
+    <p className="text-sm text-slate-600 dark:text-white/70 mt-1">Можно добавить любого зарегистрированного незаблокированного пользователя, включая наставников и администраторов. Выберите чат выше — автоматические правила для студентов останутся без изменений.</p></div>
+   <label className="block text-sm font-semibold">Найти пользователя
+    <input className="input w-full mt-2" value={memberQuery} onChange={e=>{setMemberQuery(e.target.value);setMemberId('');}}
+     placeholder="Имя или логин" aria-label="Поиск участника"/>
+   </label>
+   <label className="block text-sm font-semibold">Пользователь
+    <select className="input w-full mt-2" value={memberId} onChange={e=>setMemberId(e.target.value)}>
+     <option value="">Выберите человека</option>
+     {users.map(u=><option key={u.id} value={u.id}>{u.fullName} (@{u.username}) · {u.role}</option>)}
+    </select>
+   </label>
+   <button type="button" className="btn-primary min-h-11" disabled={busy||memberBusy||!chatId||!memberId}
+     onClick={addMember}>{memberBusy?'Добавляем…':'Добавить в выбранный чат'}</button>
+   {!data?.chats?.length&&<p className="text-sm text-amber-800 dark:text-amber-200">Сначала создайте групповой чат.</p>}
+  </section>
  </div>;
 }
