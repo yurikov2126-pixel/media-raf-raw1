@@ -152,7 +152,7 @@ export default function MentorReviews() {
 
     if (user?.role !== 'MENTOR' && user?.role !== 'ADMIN') {
         return (
-            <div className="p-10 text-center text-white/60">
+            <div className="p-10 text-center text-slate-600 dark:text-white/60">
                 Доступ только для руководителей.
             </div>
         );
@@ -185,7 +185,7 @@ export default function MentorReviews() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold">🧑‍🏫 Кабинет руководителя</h1>
-                    <div className="text-sm text-white/50 mt-1">
+                    <div className="text-sm text-slate-600 dark:text-white/50 mt-1">
                         ПРОВЕРКА ПРАКТИК И ДОМАШНИХ ЗАДАНИЙ
                     </div>
                 </div>
@@ -206,52 +206,52 @@ export default function MentorReviews() {
                     ['analytics','Аналитика'],
                 ].map(([key, label]) => <button type="button" key={key} aria-pressed={workspace === key}
                     onClick={() => setWorkspace(key)}
-                    className={`shrink-0 min-h-11 px-4 rounded-xl text-sm ${workspace === key ? 'bg-violet-soft/20 text-white border border-violet-soft/40' : 'bg-white/5 text-white/75 border border-white/10'}`}>
+                    className={`shrink-0 min-h-11 px-4 rounded-xl text-sm ${workspace === key ? 'bg-violet-100 text-violet-900 dark:bg-violet-soft/20 dark:text-white border border-violet-400/40' : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white/75 border border-slate-200 dark:border-white/10'}`}>
                     {label}
                 </button>)}
             </nav>
-            {overviewError && <p role="alert" className="text-amber-200 text-sm mb-3">{overviewError}</p>}
+            {overviewError && <p role="alert" className="text-amber-800 dark:text-amber-200 text-sm mb-3">{overviewError}</p>}
             {overview && <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-5">
                 {[[overview.totals.pending,'На проверке'],[overview.totals.students,'Студентов'],[overview.totals.active,'Активных записей'],[overview.totals.completed,'Завершили курс']].map(([value,label]) =>
-                    <div key={label} className="card p-3 md:p-4"><div className="text-2xl font-bold">{value}</div><div className="text-xs text-white/65">{label}</div></div>)}
+                    <div key={label} className="card p-3 md:p-4"><div className="text-2xl font-bold">{value}</div><div className="text-xs text-slate-600 dark:text-white/65">{label}</div></div>)}
             </div>}
             {workspace === 'students' && <section className="space-y-4">
                 {selectedStudent && <StudentLearningRecord key={selectedStudent.id} userId={selectedStudent.student.id}
                     courseId={selectedStudent.courseId} onClose={() => setSelectedStudent(null)} />}
                 <div className="card p-4">
-                    <label className="block text-sm text-white/70 mb-2">Поиск по студентам и курсам</label>
+                    <label className="block text-sm text-slate-700 dark:text-white/70 mb-2">Поиск по студентам и курсам</label>
                     <input className="input w-full" value={studentQuery} onChange={e => setStudentQuery(e.target.value)}
                         placeholder="Имя, логин или курс"/>
                 </div>
-                {!overview && !overviewError && <p className="text-white/60">Загружаем список студентов…</p>}
+                {!overview && !overviewError && <p className="text-slate-600 dark:text-white/60">Загружаем список студентов…</p>}
                 {(overview?.students || []).filter(item => [item.student.fullName, item.student.username, item.courseTitle]
                     .some(value => String(value || '').toLowerCase().includes(studentQuery.toLowerCase()))).map(item =>
                     <div key={item.id} className="card p-4 flex gap-3 items-start">
                         <Avatar user={item.student} size={44} />
                         <div className="flex-1 min-w-0">
                             <div className="font-semibold break-words">{item.student.fullName || item.student.username}</div>
-                            <div className="text-xs text-white/65 mt-1">{item.courseTitle} · {item.completed ? 'Завершил' : 'Обучается'}</div>
-                            <div className="h-2 bg-white/10 rounded-full overflow-hidden my-2">
+                            <div className="text-xs text-slate-600 dark:text-white/65 mt-1">{item.courseTitle} · {item.completed ? 'Завершил' : 'Обучается'}</div>
+                            <div className="h-2 bg-slate-200/70 dark:bg-white/10 rounded-full overflow-hidden my-2">
                                 <div className="bg-violet-soft h-full" style={{width: item.progress + '%'}} />
                             </div>
-                            <div className="text-xs text-white/60">{item.progress}% обучения</div>
+                            <div className="text-xs text-slate-600 dark:text-white/60">{item.progress}% обучения</div>
                             <div className="flex flex-wrap gap-3 items-center mt-3">
                                 <button type="button" className="btn-primary text-sm min-h-10" onClick={() => setSelectedStudent(item)}>Учебная карточка</button>
-                                <Link to={`/app/u/${item.student.username}`} className="text-violet-soft text-sm">Профиль →</Link>
+                                <Link to={`/app/u/${item.student.username}`} className="text-violet-700 dark:text-violet-soft text-sm">Профиль →</Link>
                             </div>
                         </div>
                     </div>)}
-                {overview && !overview.students.length && <p className="card p-6 text-white/60">Студентов на доступных вам курсах пока нет.</p>}
+                {overview && !overview.students.length && <p className="card p-6 text-slate-600 dark:text-white/60">Студентов на доступных вам курсах пока нет.</p>}
             </section>}
             {workspace === 'analytics' && <section className="grid sm:grid-cols-2 gap-3">
-                {!overview && !overviewError && <p className="text-white/60">Загружаем статистику…</p>}
+                {!overview && !overviewError && <p className="text-slate-600 dark:text-white/60">Загружаем статистику…</p>}
                 {(overview?.courses || []).map(course => <div key={course.id} className="card p-5">
                     <h2 className="font-bold text-lg mb-3">{course.title}</h2>
-                    <div className="flex justify-between text-xs text-white/70 mb-2"><span>Средний прогресс</span><span>{course.averageProgress}%</span></div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+                    <div className="flex justify-between text-xs text-slate-700 dark:text-white/70 mb-2"><span>Средний прогресс</span><span>{course.averageProgress}%</span></div>
+                    <div className="h-2 bg-slate-200/70 dark:bg-white/10 rounded-full overflow-hidden mb-4">
                         <div className="bg-violet-soft h-full" style={{width: course.averageProgress + '%'}} />
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-white/75">
+                    <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white/75">
                         <div>Студентов: <b className="text-white">{course.students}</b></div>
                         <div>Завершили: <b className="text-white">{course.completed}</b></div>
                         <div>ДЗ на проверке: <b className="text-white">{course.pendingHomework}</b></div>
@@ -260,29 +260,29 @@ export default function MentorReviews() {
                         <div>Неуспешных попыток: <b className="text-white">{course.failedTestPercent == null ? '—' : course.failedTestPercent + '%'}</b></div>
                         <div className="col-span-2">Среднее время проверки: <b className="text-white">{course.averageReviewHours == null ? '—' : course.averageReviewHours + ' ч'}</b></div>
                     </div>
-                    {!!course.testStats?.length && <div className="mt-5 border-t border-white/10 pt-4">
+                    {!!course.testStats?.length && <div className="mt-5 border-t border-slate-200 dark:border-white/10 pt-4">
                         <h3 className="font-semibold text-sm mb-3">Тесты, вызывающие затруднения</h3>
                         <div className="space-y-2">{course.testStats.map(t=><div key={t.id}>
-                            <div className="flex justify-between gap-2 text-xs text-white/75 mb-1">
+                            <div className="flex justify-between gap-2 text-xs text-slate-700 dark:text-white/75 mb-1">
                                 <span className="min-w-0 break-words">Урок {t.lessonOrder}: {t.title}</span>
                                 <span className="shrink-0">{t.failedPercent}% неудач · {t.count} попыток</span>
                             </div>
-                            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div className="h-1.5 rounded-full bg-slate-200/70 dark:bg-white/10 overflow-hidden">
                                 <div className="h-full bg-amber-400/75" style={{width:t.failedPercent+'%'}} />
                             </div>
                         </div>)}</div>
                     </div>}
-                    {!!course.scoreTimeline?.length && <div className="mt-4 border-t border-white/10 pt-4">
+                    {!!course.scoreTimeline?.length && <div className="mt-4 border-t border-slate-200 dark:border-white/10 pt-4">
                         <h3 className="font-semibold text-sm mb-2">Последние результаты тестов</h3>
                         <div className="flex gap-1 items-end h-14" role="img" aria-label="Последние баллы тестов в хронологическом порядке">
                             {course.scoreTimeline.map((t,i)=><div key={i} title={new Date(t.date).toLocaleDateString('ru-RU') + ': ' + t.score + '%'}
                                 className={`flex-1 rounded-t-sm min-w-0 ${t.passed ? 'bg-emerald-400/80' : 'bg-amber-400/80'}`}
                                 style={{height:Math.max(5,t.score)+'%'}} />)}
                         </div>
-                        <p className="text-xs text-white/60 mt-1">Динамика результатов попыток, не история изменения процента прохождения курса</p>
+                        <p className="text-xs text-slate-600 dark:text-white/60 mt-1">Динамика результатов попыток, не история изменения процента прохождения курса</p>
                     </div>}
                 </div>)}
-                {overview && !overview.courses.length && <p className="card p-6 text-white/60">Доступных для анализа курсов пока нет.</p>}
+                {overview && !overview.courses.length && <p className="card p-6 text-slate-600 dark:text-white/60">Доступных для анализа курсов пока нет.</p>}
             </section>}
             {workspace === 'reviews' && <>
             {/* Табы практики / ДЗ */}
@@ -297,7 +297,7 @@ export default function MentorReviews() {
                             className={`px-4 py-2 rounded-xl text-sm transition flex items-center gap-2 ${
                                 tab === t.key
                                     ? 'bg-violet-soft/20 text-white'
-                                    : 'hover:bg-white/5 text-white/70'
+                                    : 'hover:bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white/70'
                             }`}
                         >
                             <span>{t.label}</span>
@@ -306,7 +306,7 @@ export default function MentorReviews() {
                                     {badge}
                                 </span>
                             )}
-                            <span className="text-xs text-white/40">
+                            <span className="text-xs text-slate-600 dark:text-white/40">
                                 всего {c.all}
                             </span>
                         </button>
@@ -322,12 +322,12 @@ export default function MentorReviews() {
                         onClick={() => setStatusTab(s.key)}
                         className={`chip ${
                             statusTab === s.key
-                                ? 'bg-white/15 text-white'
-                                : 'bg-white/5 text-white/60'
+                                ? 'bg-violet-100 text-violet-900 dark:bg-white/15 dark:text-white'
+                                : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-white/60'
                         }`}
                     >
                         {s.label}
-                        <span className="ml-2 text-white/40">
+                        <span className="ml-2 text-slate-600 dark:text-white/40">
                             {currentCounts[s.key]}
                         </span>
                     </button>
@@ -368,7 +368,7 @@ export default function MentorReviews() {
                 )}
             </div>
 
-            {loading && <div className="text-white/40 text-center py-10">Загрузка…</div>}
+            {loading && <div className="text-slate-600 dark:text-white/40 text-center py-10">Загрузка…</div>}
             {error && <div className="text-red-400 text-center py-10">{error}</div>}
 
             {!loading && !error && filtered.length === 0 && (
@@ -376,12 +376,12 @@ export default function MentorReviews() {
                     <div className="text-5xl mb-3">
                         {statusTab === 'pending' ? '🎉' : '📭'}
                     </div>
-                    <div className="text-white/70 font-medium">
+                    <div className="text-slate-700 dark:text-white/70 font-medium">
                         {statusTab === 'pending'
                             ? 'Всё проверено!'
                             : 'Ничего не найдено'}
                     </div>
-                    <div className="text-sm text-white/40 mt-1">
+                    <div className="text-sm text-slate-600 dark:text-white/40 mt-1">
                         {statusTab === 'pending'
                             ? 'Новых сдач на проверку нет'
                             : 'Попробуйте изменить фильтры'}
@@ -437,7 +437,7 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                 <Avatar user={submission.user} size={44} />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-xs text-white/40">
+                        <span className="text-xs text-slate-600 dark:text-white/40">
                             {course?.title} · урок {lesson?.order} · 🎯 практика
                         </span>
                         <StatusBadge status={submission.status} />
@@ -445,7 +445,7 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                     <div className="font-semibold text-white truncate">
                         {p.topic}
                     </div>
-                    <div className="text-xs text-white/50 mt-1">
+                    <div className="text-xs text-slate-600 dark:text-white/50 mt-1">
                         Студент: {submission.user?.fullName || submission.user?.username}
                         {submission.updatedAt && (
                             <span className="ml-2">
@@ -463,17 +463,17 @@ function PracticalReviewCard({ submission, busy, onReview }) {
             </div>
 
             {open && (
-                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
                     {/* Описание практики */}
-                    <div className="text-sm text-white/60 whitespace-pre-wrap">
+                    <div className="text-sm text-slate-600 dark:text-white/60 whitespace-pre-wrap">
                         {p.description}
                     </div>
 
                     {/* Комментарий студента */}
                     {submission.note && (
-                        <div className="text-sm bg-white/5 border border-white/10 rounded-lg p-3">
-                            <div className="text-xs text-white/40 mb-1">Комментарий студента</div>
-                            <div className="text-white/80 whitespace-pre-wrap">
+                        <div className="text-sm bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg p-3">
+                            <div className="text-xs text-slate-600 dark:text-white/40 mb-1">Комментарий студента</div>
+                            <div className="text-slate-800 dark:text-white/80 whitespace-pre-wrap">
                                 {submission.note}
                             </div>
                         </div>
@@ -484,8 +484,8 @@ function PracticalReviewCard({ submission, busy, onReview }) {
                         <div
                             className={`rounded-lg p-3 text-sm border ${
                                 submission.status === 'APPROVED'
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200'
                             }`}
                         >
                             <div className="font-medium mb-1">
@@ -556,7 +556,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                 <Avatar user={submission.user} size={44} />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-xs text-white/40">
+                        <span className="text-xs text-slate-600 dark:text-white/40">
                             {course?.title} · урок {lesson.order} · 📋 ДЗ
                         </span>
                         <StatusBadge status={submission.status} />
@@ -567,7 +567,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                         )}
                     </div>
                     <div className="font-semibold text-white truncate">{hw.title}</div>
-                    <div className="text-xs text-white/50 mt-1">
+                    <div className="text-xs text-slate-600 dark:text-white/50 mt-1">
                         Студент: {submission.user?.fullName || submission.user?.username}
                         {submission.createdAt && (
                             <span className="ml-2">
@@ -585,7 +585,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
             </div>
 
             {open && (
-                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
                     {latePenalty > 0 && (
                         <div className="text-sm bg-pink/10 border border-pink/30 text-pink rounded-lg p-3">
                             ⚠️ Сдано с опозданием на <b>{lateDays} дн.</b>.
@@ -594,21 +594,21 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                     )}
 
                     {submission.text && (
-                        <div className="text-sm bg-white/5 border border-white/10 rounded-lg p-3">
-                            <div className="text-xs text-white/40 mb-1">Текстовый ответ</div>
-                            <div className="text-white/80 whitespace-pre-wrap">
+                        <div className="text-sm bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg p-3">
+                            <div className="text-xs text-slate-600 dark:text-white/40 mb-1">Текстовый ответ</div>
+                            <div className="text-slate-800 dark:text-white/80 whitespace-pre-wrap">
                                 {submission.text}
                             </div>
                         </div>
                     )}
                     {submission.link && (
                         <div className="text-sm">
-                            <span className="text-white/40">Ссылка: </span>
+                            <span className="text-slate-600 dark:text-white/40">Ссылка: </span>
                             <a
                                 href={submission.link}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-violet-soft hover:underline break-all"
+                                className="text-violet-700 dark:text-violet-soft hover:underline break-all"
                             >
                                 {submission.link}
                             </a>
@@ -616,7 +616,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                     )}
                     {files.length > 0 && (
                         <div>
-                            <div className="text-xs text-white/40 mb-1">Файлы</div>
+                            <div className="text-xs text-slate-600 dark:text-white/40 mb-1">Файлы</div>
                             <div className="flex flex-wrap gap-2">
                                 {files.map((f, i) => (
                                     <a
@@ -624,7 +624,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                                         href={f.url}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs hover:border-white/20"
+                                        className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs hover:border-slate-300 dark:border-white/20"
                                     >
                                         📎 {f.name || `Файл ${i + 1}`}
                                     </a>
@@ -637,8 +637,8 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                         <div
                             className={`rounded-lg p-3 text-sm border ${
                                 submission.status === 'APPROVED'
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200'
                             }`}
                         >
                             <div className="font-medium mb-1">
@@ -670,7 +670,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                     <LearningDiscussion kind="homework" workId={hw.id} studentId={submission.user?.id} />
 
                     {submission.status === 'PENDING' && (
-                        <div className="pt-3 border-t border-white/10 space-y-3">
+                        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
                             <textarea
                                 value={feedback}
                                 onChange={(e) => setFeedback(e.target.value)}
@@ -692,11 +692,11 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
                                 />
 
                                 {latePenalty > 0 && (
-                                    <span className="text-xs text-white/70">Штраф −{latePenalty} применяется сервером автоматически</span>
+                                    <span className="text-xs text-slate-700 dark:text-white/70">Штраф −{latePenalty} применяется сервером автоматически</span>
                                 )}
 
                                 {recommended != null && latePenalty > 0 && (
-                                    <span className="text-xs text-white/60">
+                                    <span className="text-xs text-slate-600 dark:text-white/60">
                                         Итог: <b className="text-white">{recommended}/5</b>
                                     </span>
                                 )}
@@ -729,17 +729,17 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
 /* ─────────── ОБЩИЕ ─────────── */
 function StatusBadge({ status }) {
     const map = {
-        PENDING: ['bg-amber-500/20 text-amber-200', '⏳ На проверке'],
-        APPROVED: ['bg-emerald-500/20 text-emerald-200', '✓ Принято'],
+        PENDING: ['bg-amber-500/20 text-amber-800 dark:text-amber-200', '⏳ На проверке'],
+        APPROVED: ['bg-emerald-500/20 text-emerald-800 dark:text-emerald-200', '✓ Принято'],
         REJECTED: ['bg-red-500/20 text-red-200', '↺ На доработке'],
     };
-    const [cls, label] = map[status] || ['bg-white/10 text-white/60', status];
+    const [cls, label] = map[status] || ['bg-slate-200/70 dark:bg-white/10 text-slate-600 dark:text-white/60', status];
     return <span className={`text-xs px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
 }
 
 function ReviewForm({ busy, feedback, setFeedback, grade, setGrade, onSubmit }) {
     return (
-        <div className="pt-3 border-t border-white/10 space-y-3">
+        <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
             <textarea
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
