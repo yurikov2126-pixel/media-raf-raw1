@@ -116,6 +116,12 @@ router.post('/audit',safe(async(req,res)=>{
  await record(req,'audit',{registered:data.stats.registered,untracked:data.stats.untracked,broken:data.stats.broken},0);
  res.json(data);
 }));
+router.get('/audit-history',safe(async(_req,res)=>{
+ const row=await prisma.setting.findUnique({where:{key:'storage_audit_history'}});
+ let history=[];
+ try{history=JSON.parse(row?.value||'[]');}catch{}
+ res.json(Array.isArray(history)?history:[]);
+}));
 router.get('/audit-last',safe(async(_req,res)=>{
  const row=await prisma.setting.findUnique({where:{key:'storage_audit_last'}});
  res.json(row?JSON.parse(row.value):null);
