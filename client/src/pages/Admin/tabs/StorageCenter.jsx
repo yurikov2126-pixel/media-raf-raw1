@@ -10,11 +10,12 @@ export default function StorageCenter({token}){
  const [tab,setTab]=useState('overview'),[data,setData]=useState(null),[database,setDatabase]=useState(null),[history,setHistory]=useState([]);
  const [selected,setSelected]=useState(null),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
  const [lastAudit,setLastAudit]=useState(null);
+ const [auditHistory,setAuditHistory]=useState([]),[period,setPeriod]=useState(30);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[confirm,setConfirm]=useState(null);
  const load=useCallback(async()=>{setBusy(true);setError('');
    try{const d=await api('/admin/storage-center/overview',{token});setData(d);
-     const [db,h,last]=await Promise.all([api('/admin/storage-center/database',{token}),api('/admin/storage-center/history',{token}),api('/admin/storage-center/audit-last',{token})]);
-     setDatabase(db);setHistory(h);setLastAudit(last);
+     const [db,h,last,trend]=await Promise.all([api('/admin/storage-center/database',{token}),api('/admin/storage-center/history',{token}),api('/admin/storage-center/audit-last',{token}),api('/admin/storage-center/audit-history',{token})]);
+     setDatabase(db);setHistory(h);setLastAudit(last);setAuditHistory(trend||[]);
    }catch(e){setError(e.message||'Не удалось получить сведения о хранилище');}finally{setBusy(false);}
  },[token]);
  useEffect(()=>{load();},[load]);
@@ -40,6 +41,15 @@ export default function StorageCenter({token}){
   {[['Записи файлов',overview.registered],['Объём оригиналов',fmt(overview.registeredBytes)],['Без записи в БД',overview.untracked],['Проблемы целостности',overview.broken],
   ['Незарегистрировано',fmt(overview.untrackedBytes)],['Превью без записи',overview.orphanPreviews],['Карантин',overview.quarantineCount],['Размер карантина',fmt(overview.quarantineBytes)],['PostgreSQL',fmt(overview.databaseBytes)]]
    .map(([name,value])=><div className="card p-4" key={name}><div className="text-xs text-slate-600 dark:text-white/60">{name}</div><div className="font-bold text-xl mt-2 tabular-nums">{value??'—'}</div></div>)}</div>}
+ {tab==='overview'&&<section className="card p-4 space-y-3">
+   <div className="flex justify-between items-center gap-3 flex-wrap"><h3 className="font-bold">Динамика хранения</h3>
+     <div className="flex gap-1">{[7,30,90].map(n=><button key={n} type="button" aria-pressed={period===n}
+      onClick={()=>setPeriod(n)} className={`rounded-lg px-3 py-1 text-sm border ${period===n?'bg-violet-600 text-white border-violet-600':'border-slate-300 dark:border-white/20'}`}>{n} дн.</button>)}</div></div>
+   {auditHistory.length ? <div className="flex items-end gap-1 min-h-[140px] h-[140px]">
+      {auditHistory.slice(-period).map((point,i)=>{const value=point.stats?.registeredBytes||0;const max=Math.max(1,...auditHistory.slice(-period).map(v=>v.stats?.registeredBytes||0));return <div key={i} title={asDate(point.checkedAt)+' · '+fmt(value)} className="flex-1 min-w-[2px] rounded-t bg-violet-500/75" style={{height:Math.max(3,value/max*100)+'%'}}/>;})}
+     </div>:<p className="text-sm text-slate-600 dark:text-white/60">История накопится после ежедневных проверок. Существующие данные за прошлые дни восстановить нельзя.</p>}
+   <p className="text-xs text-slate-600 dark:text-white/60">График объёма зарегистрированных оригиналов; обновляется ежедневным аудитом.</p>
+ </section>}
  {tab==='overview'&&<div className="grid lg:grid-cols-2 gap-3">
  <section className="card p-4 space-y-2"><h3 className="font-bold">Состояние хранилища</h3>
  <p className="text-sm text-slate-700 dark:text-white/75">Проверка сверяет файл на диске с записью PostgreSQL, размером и наличием превью. Ошибки не удаляются автоматически.</p>
