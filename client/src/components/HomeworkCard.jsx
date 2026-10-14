@@ -8,18 +8,18 @@ import FileUploader from './FileUploader.jsx';
 
 function StatusBadge({ status }) {
     const map = {
-        PENDING: ['bg-amber-500/20 text-amber-200', 'На проверке'],
-        APPROVED: ['bg-emerald-500/20 text-emerald-200', 'Принято'],
-        REJECTED: ['bg-red-500/20 text-red-200', 'Отклонено'],
+        PENDING: ['bg-amber-500/20 text-amber-800 dark:text-amber-200', 'На проверке'],
+        APPROVED: ['bg-emerald-500/20 text-emerald-800 dark:text-emerald-200', 'Принято'],
+        REJECTED: ['bg-red-500/20 text-red-800 dark:text-red-200', 'Отклонено'],
     };
-    const [cls, label] = map[status] || ['bg-white/10 text-white/60', status];
+    const [cls, label] = map[status] || ['bg-slate-200/70 dark:bg-white/10 text-slate-600 dark:text-white/60', status];
     return <span className={`text-xs px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
 }
 
 function DeadlineInfo({ deadline, submission }) {
     if (!deadline) {
         return (
-            <div className="text-xs text-white/50 mb-3">
+            <div className="text-xs text-slate-600 dark:text-white/50 mb-3">
                 ⏱ Без срока сдачи
             </div>
         );
@@ -32,7 +32,7 @@ function DeadlineInfo({ deadline, submission }) {
     const isUrgent = diff > 0 && diff < 24 * 60 * 60 * 1000;
     const isDone = submission && (submission.status === 'PENDING' || submission.status === 'APPROVED');
 
-    let cls = 'text-white/60';
+    let cls = 'text-slate-600 dark:text-white/60';
     if (isPast && !isDone) cls = 'text-red-400';
     else if (isUrgent && !isDone) cls = 'text-amber-300';
 
@@ -121,7 +121,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
             </div>
 
             <div className="font-medium mb-1">{homework.title}</div>
-            <MarkdownView text={homework.description} className="text-sm text-white/75 mb-3 break-words" />
+            <MarkdownView text={homework.description} className="text-sm text-slate-700 dark:text-white/75 mb-3 break-words" />
 
             {/* Дедлайн */}
             <DeadlineInfo deadline={homework.deadline} submission={submission} />
@@ -136,7 +136,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
 
             {/* Штраф по этой сдаче — снапшот */}
             {submission?.latePenalty > 0 && (
-                <div className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 mb-3">
+                <div className="text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 mb-3">
                     📌 Сдано с опозданием на {submission.lateDays} дн.
                     Штраф: −{submission.latePenalty} балла.
                 </div>
@@ -147,8 +147,8 @@ export default function HomeworkCard({ homework, onRefresh }) {
                 <div
                     className={`mt-1 mb-3 rounded-lg p-3 text-sm ${
                         status === 'APPROVED'
-                            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-200'
-                            : 'bg-amber-500/10 border border-amber-500/30 text-amber-200'
+                            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                            : 'bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200'
                     }`}
                 >
                     <div className="font-medium mb-1">
@@ -156,7 +156,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
                         {submission.finalGrade != null && ` · Итоговая оценка: ${submission.finalGrade}/5`}
                         {submission.finalGrade == null && submission.grade != null && ` · Оценка ${submission.grade}/5`}
                         {submission.latePenalty > 0 && status === 'APPROVED' && (
-                            <span className="text-amber-200/80 ml-1">
+                            <span className="text-amber-800 dark:text-amber-200/80 ml-1">
                                 (штраф −{submission.latePenalty})
                             </span>
                         )}
@@ -167,7 +167,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
 
             {/* Просмотр сдачи */}
             {submission && status === 'APPROVED' && (
-                <div className="mt-3 pt-3 border-t border-white/10 text-xs text-white/60 space-y-1">
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-white/60 space-y-1">
                     {submission.text && (
                         <div className="whitespace-pre-wrap">Текст: {submission.text}</div>
                     )}
@@ -178,7 +178,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
                                 href={submission.link}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-violet-soft hover:underline"
+                                className="text-violet-700 dark:text-violet-soft hover:underline"
                             >
                                 {submission.link}
                             </a>
@@ -192,7 +192,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
                                     href={f.url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:border-white/20"
+                                    className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-white/20"
                                 >
                                     📎 {f.name}
                                 </a>
@@ -209,13 +209,13 @@ export default function HomeworkCard({ homework, onRefresh }) {
 
             {/* Форма сдачи */}
             {editable && (
-                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10 space-y-3">
                     {isOverdue && (
-                        <div className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
+                        <div className="text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
                             ⚠️ Дедлайн уже прошёл. Ваша сдача будет помечена как просроченная.
                         </div>
                     )}
-                    {status === 'REJECTED' && <div className="rounded-xl p-3 bg-amber-500/10 border border-amber-500/25 text-sm text-amber-200">Наставник вернул работу на доработку. Исправьте замечания и отправьте её повторно.</div>}
+                    {status === 'REJECTED' && <div className="rounded-xl p-3 bg-amber-500/10 border border-amber-500/25 text-sm text-amber-800 dark:text-amber-200">Наставник вернул работу на доработку. Исправьте замечания и отправьте её повторно.</div>}
                     <textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
@@ -252,7 +252,7 @@ export default function HomeworkCard({ homework, onRefresh }) {
 
             {submittedNotice && !submission && <p role="status" className="text-sm text-emerald-300 mt-3">Работа отправлена. Ожидайте проверки.</p>}
             {status === 'PENDING' && (
-                <div className="text-xs text-white/50 mt-3">
+                <div className="text-xs text-slate-600 dark:text-white/50 mt-3">
                     Ожидает проверки руководителем…
                 </div>
             )}
