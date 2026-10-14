@@ -708,6 +708,8 @@ function serializeCourse(course) {
             videoUrl: l.videoUrl,
             order: l.order,
             duration: l.duration,
+            practical: l.practical ? { topic: l.practical.topic, description: l.practical.description, location: l.practical.location, durationMin: l.practical.durationMin } : null,
+            homework: l.homework ? { title: l.homework.title, description: l.homework.description, maxFiles: l.homework.maxFiles, maxFileSizeMb: l.homework.maxFileSizeMb, hoursToComplete: l.homework.hoursToComplete } : null,
             test: l.test
                 ? {
                     title: l.test.title,
@@ -745,6 +747,8 @@ export async function exportCourseAsJSON({ adminId, courseId }) {
                             test: {
                                 include: { questions: true },
                             },
+                            practical: true,
+                            homework: true,
                         },
                     },
                 },
