@@ -2,6 +2,7 @@ import { Router } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import { prisma } from '../../lib/prisma.js';
 import { safe } from './_shared.js';
 import { restoreRegisteredLibraryFile, deleteQuarantinedThumb } from '../../lib/storageQuarantine.js';
@@ -136,7 +137,7 @@ router.post('/regenerate-thumbnail',safe(async(req,res)=>{
  await record(req,'thumbnail_regenerated',{type,fileId:id,storageName:file.storageName});
  res.json({ok:true,thumbnail:!!thumbnail});
 }));
-async function quarantineOne(item,userId,eligible=null) {
+async function quarantineOne(item,userId,eligible=null,verifiedCorrupt=false) {
  const {type,filename}=item;
  const preview=typeof filename==='string'&&filename.endsWith('.webp')&&metaName(filename.slice(0,-5));
  if(!rootFor(type)||(!metaName(filename)&&!preview))throw Object.assign(new Error('Недопустимый файл'),{status:400});
@@ -151,7 +152,7 @@ async function quarantineOne(item,userId,eligible=null) {
  const review=await prisma.setting.findUnique({where:{key:reviewKey}});
  let decision=null;
  try { decision=JSON.parse(review?.value||'null')?.decision; }catch{}
- if(decision!=='discard')throw Object.assign(new Error('Сначала отметьте файл как ненужный в разделе Разбор файлов'),{status:409});
+ if(decision!=='discard'&&!verifiedCorrupt)throw Object.assign(new Error('Сначала отметьте файл как ненужный в разделе Разбор файлов'),{status:409});
  const source=preview?path.join(ROOTS[type],'thumbnails',filename):location(type,filename);
  const stat=await exists(source);
  if(!stat)throw Object.assign(new Error('Файл отсутствует'),{status:404});
@@ -168,6 +169,31 @@ async function quarantineOne(item,userId,eligible=null) {
 
  return metadata;
 }
+router.post('/auto-reconcile',safe(async(req,res)=>{
+ // Only demonstrably corrupted, unregistered bytes are automatically quarantined.
+ // Valid originals remain untouched pending manual recovery into the database.
+ const scan=await snapshot();
+ const candidates=scan.files.filter(f=>f.status==='untracked'||f.status==='orphan_preview').slice(0,100);
+ const results=[];
+ for(const f of candidates){
+   try {
+     const filename=f.storageName,preview=f.status==='orphan_preview',type=f.type;
+     const full=path.join(ROOTS[type],preview?'thumbnails':'',filename);
+     const stat=await fs.stat(full);
+     let corrupt=!stat.isFile()||stat.size===0;
+     if(preview&&!corrupt){
+       try{const m=await sharp(full,{limitInputPixels:80_000_000}).metadata();corrupt=!m.width||!m.height;}
+       catch{corrupt=true;}
+     }
+     if(!corrupt){results.push({type,filename,status:'kept',reason:'Нет подтверждения повреждения; нужно восстановить связь вручную'});continue;}
+     const item=await quarantineOne({type,filename},req.user.id,scan.files,true);
+     results.push({type,filename,status:'quarantined',quarantineId:item.id});
+   }catch(e){results.push({type:f.type,filename:f.storageName,status:'error',reason:e.message});}
+ }
+ await record(req,'auto_reconcile',{inspected:candidates.length,quarantined:results.filter(x=>x.status==='quarantined').length},0);
+ res.json({results,inspected:candidates.length,quarantined:results.filter(x=>x.status==='quarantined').length,
+   kept:results.filter(x=>x.status==='kept').length,errors:results.filter(x=>x.status==='error').length});
+}));
 router.post('/quarantine',safe(async(req,res)=>{
  const result=await quarantineOne(req.body||{},req.user.id);
  res.json(result);
