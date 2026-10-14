@@ -315,7 +315,16 @@ router.delete('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
         const files = await prisma.editorialMaterialFile.findMany({ where: { taskId: task.id },
             select: { id: true, storageName: true, name: true, mimeType: true, size: true, taskId: true } });
         // DB cascade removes material rows; stage physical originals and previews for recovery.
-        await prisma.editorialTask.delete({ where: { id: task.id } });
+        await prisma.$transaction(async tx => {
+            const fileIds=new Set(files.map(f=>'material:'+f.id));
+            const shares=await tx.editorialFileShare.findMany({where:{revokedAt:null},select:{id:true,fileIds:true}});
+            for(const share of shares) {
+                if(Array.isArray(share.fileIds)&&share.fileIds.some(id=>fileIds.has(id))) {
+                    await tx.editorialFileShare.update({where:{id:share.id},data:{revokedAt:new Date()}});
+                }
+            }
+            await tx.editorialTask.delete({ where: { id: task.id } });
+        });
         const cleanup = await quarantineDetachedMaterials(files, req.user.id, { taskId: task.id, projectId: project.id });
         res.json({ ok: true, deletedTaskId: task.id, quarantinedFiles: cleanup.quarantined.length,
             cleanupPending: cleanup.failed.length });
