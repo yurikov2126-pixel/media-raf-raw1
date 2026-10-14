@@ -11,6 +11,27 @@ export default function CurriculumImportForm({ token, onResult }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const fileRef = useRef(null);
+    const zipRef = useRef(null);
+    const [zipBusy,setZipBusy] = useState(false);
+    const importZip = async (event) => {
+      const file=event.target.files?.[0];event.target.value='';
+      if(!file)return;
+      if(!file.name.toLowerCase().endsWith('.zip')){setError('Выберите ZIP-архив');return;}
+      if(file.size>40*1024*1024){setError('ZIP больше 40 МБ');return;}
+      if(!confirm('Импортировать курс из ZIP вместе с иллюстрациями? Режим MERGE.'))return;
+      setZipBusy(true);setError('');
+      try{
+        const fd=new FormData();fd.append('archive',file);
+        const apiBase=import.meta.env.VITE_API_URL||'/api';
+        const response=await fetch(apiBase.replace(/\/$/,'')+'/admin/bulk/import-course-zip',{
+          method:'POST',headers:{Authorization:'Bearer '+token},body:fd,
+        });
+        const result=await response.json();
+        if(!response.ok)throw new Error(result.error||'Ошибка импорта ZIP');
+        onResult?.(result.result);
+        alert('Импорт выполнен. Иллюстраций: '+result.images+'. Ссылок в уроках: '+result.references);
+      }catch(e){setError(e.message);}finally{setZipBusy(false);}
+    };
 
     const parse = () => {
         try {
@@ -74,6 +95,12 @@ export default function CurriculumImportForm({ token, onResult }) {
     return (
         <div className="space-y-3">
             <div className="text-xs text-white/50">Формат: массив курсов с уроками и тестами. Существующие курсы — по <code>slug</code>, уроки — по названию.</div>
+            <div className="rounded-xl border border-violet/30 bg-violet/10 p-3 space-y-2">
+                <div className="text-sm font-semibold">📦 Курс с иллюстрациями — импорт ZIP</div>
+                <p className="text-xs text-white/70">Архив должен содержать course.json и папку assets с PNG/JPEG/WebP. Изображения автоматически сохраняются и привязываются к урокам. Режим MERGE — существующие курсы не удаляются.</p>
+                <button type="button" className="btn-primary" disabled={zipBusy} onClick={()=>zipRef.current?.click()}>{zipBusy?'Импортируем…':'📁 Выбрать ZIP курса'}</button>
+                <input ref={zipRef} type="file" accept=".zip,application/zip" hidden onChange={importZip}/>
+            </div>
             <div className="flex gap-2 flex-wrap">
                 <button onClick={() => { setJson(JSON.stringify(CURRICULUM_TEMPLATE, null, 2)); setValidation(null); setError(''); }} className="chip bg-white/5 hover:bg-white/10">📋 Шаблон</button>
                 <button onClick={() => downloadJSON(CURRICULUM_TEMPLATE, 'curriculum-template.json')} className="chip bg-white/5 hover:bg-white/10">⬇ Скачать шаблон</button>
