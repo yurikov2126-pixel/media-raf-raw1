@@ -91,33 +91,26 @@ router.patch(
     '/courses/:id',
     safe(async (req, res) => {
         const allowed = [
-            'title', 'description', 'maxFiles', 'maxFileSizeMb',
-            'dueAt', 'hoursToComplete', 'latePenaltyPerDay', 'latePenaltyMax',
+            'title', 'slug', 'description', 'category', 'level', 'cover',
+            'published', 'certificateTitle', 'certificateDescription',
         ];
         const data = {};
         for (const k of allowed) {
-            if (req.body[k] !== undefined) {
-                if (k === 'maxFiles')
-                    data[k] = Math.max(1, Math.min(20, Number(req.body[k]) || 3));
-                else if (k === 'maxFileSizeMb')
-                    data[k] = Math.max(1, Math.min(500, Number(req.body[k]) || 50));
-                else if (k === 'dueAt')
-                    data[k] = req.body[k] ? new Date(req.body[k]) : null;
-                else if (k === 'hoursToComplete')
-                    data[k] = req.body[k] != null
-                        ? Math.max(1, Math.min(2000, Number(req.body[k])))
-                        : null;
-                else if (k === 'latePenaltyPerDay')
-                    data[k] = req.body[k] != null
-                        ? Math.max(0, Math.min(5, Number(req.body[k])))
-                        : 0;
-                else if (k === 'latePenaltyMax')
-                    data[k] = req.body[k] != null
-                        ? Math.max(0, Math.min(5, Number(req.body[k])))
-                        : 5;
-                else data[k] = req.body[k];
+            if (req.body[k] === undefined) continue;
+            if (k === 'published') {
+                if (typeof req.body.published !== 'boolean')
+                    return res.status(400).json({ error: 'published должен быть boolean' });
+                data.published = req.body.published;
+            } else if (k === 'cover' || k === 'certificateDescription') {
+                data[k] = req.body[k] || null;
+            } else {
+                data[k] = req.body[k];
             }
         }
+        if (data.slug !== undefined && !/^[a-z0-9-]+$/.test(data.slug))
+            return res.status(400).json({ error: 'Некорректный slug курса' });
+        if (data.title !== undefined && !String(data.title).trim())
+            return res.status(400).json({ error: 'Название курса не может быть пустым' });
 
         // Course drip settings are editable after creation too (including turning drip off).
         if (req.body.dripMode !== undefined || req.body.dripInterval !== undefined || req.body.weeklyLessonLimit !== undefined) {

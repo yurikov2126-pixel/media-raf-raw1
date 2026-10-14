@@ -57,10 +57,12 @@ export default function CourseEditor({ course, token, onClose, onSaved }) {
             setForm((f) => ({
                 ...f,
                 slug: full.slug,
+                published: full.published,
                 dripMode: full.dripMode || '',
                 dripInterval: full.dripInterval ?? 7,
                 weeklyLessonLimit: full.weeklyLessonLimit ?? 3,
             }));
+            toast.success(full.published ? 'Курс сохранён и опубликован' : 'Курс сохранён как черновик');
         } catch (e) {
             setError(e.message || 'Ошибка сохранения');
         } finally {
