@@ -64,7 +64,7 @@ export default function AcademyDashboard() {
         {[...assignments, ...practicals].some((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED') && <section className="card p-4 border border-amber-500/20">
             <h2 className="font-bold mb-3">Требует внимания</h2>
             {[...assignments.map(a => ({...a, kind: 'homework'})), ...practicals.map(a => ({...a, kind: 'practical'}))].filter((a) => a.status === 'REJECTED' || a.status === 'NOT_SUBMITTED').slice(0, 3).map((a) =>
-                <Link className="block p-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200/70 dark:bg-white/10 mb-2" key={a.id} to={`${destination(a.slug, a.lessonOrder)}&focus=${a.kind}`}>
+                <Link className="block p-3 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 mb-2" key={a.id} to={`${destination(a.slug, a.lessonOrder)}&focus=${a.kind}`}>
                     <div className="font-medium text-sm">{a.kind === 'practical' ? '🎯 ' : '📋 '}{a.title}</div>
                     <div className="text-xs text-amber-800 dark:text-amber-200 mt-1">{a.status === 'REJECTED' ? 'Нужно исправить работу →' : 'Задание ещё не сдано →'}</div>
                 </Link>)}
