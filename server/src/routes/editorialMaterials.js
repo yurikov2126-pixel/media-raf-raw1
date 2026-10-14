@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import sharp from 'sharp';
+import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -45,6 +45,10 @@ router.post('/projects/:projectId/tasks/:taskId/materials', upload.single('file'
         await fs.writeFile(path.join(root,storageName),req.file.buffer,{ flag:'wx' });
         try {
             const file = await prisma.editorialMaterialFile.create({ data: { taskId:ctx.task.id, uploaderId:req.user.id, version, name:path.basename(req.file.originalname).slice(0,255), mimeType:req.file.mimetype, size:req.file.size, storageName, caption } });
+            if (thumbnailSupported(file.mimeType)) {
+                try { await ensureEditorialThumbnail(root, file); }
+                catch (error) { console.error('[editorial-materials] thumbnail generation failed', error); }
+            }
             res.status(201).json({ file });
         } catch (e) { await fs.unlink(path.join(root,storageName)).catch(()=>{}); throw e; }
     } catch (e) { next(e); }
@@ -108,23 +112,8 @@ router.get('/projects/:projectId/tasks/:taskId/materials/:fileId/thumbnail', asy
         const ctx = await context(req,res); if (!ctx) return;
         const file = await prisma.editorialMaterialFile.findFirst({ where: { id:req.params.fileId, taskId:ctx.task.id } });
         if (!file) return res.status(404).json({ error:'Файл не найден' });
-        if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.mimeType)) {
-            return res.status(415).json({ error:'Миниатюра недоступна для этого формата' });
-        }
-        const thumbnailRoot = path.join(root, 'thumbnails');
-        const thumbnailPath = path.join(thumbnailRoot, file.storageName + '.webp');
-        await fs.mkdir(thumbnailRoot, { recursive:true });
-        try {
-            await fs.access(thumbnailPath);
-        } catch {
-            const temporary = thumbnailPath + '.' + randomUUID() + '.tmp';
-            try {
-                await sharp(path.join(root,file.storageName), { limitInputPixels: 80_000_000 })
-                    .rotate().resize({ width:480, height:480, fit:'inside', withoutEnlargement:true })
-                    .webp({ quality:72, effort:3 }).toFile(temporary);
-                await fs.rename(temporary, thumbnailPath);
-            } finally { await fs.unlink(temporary).catch(() => {}); }
-        }
+        if (!thumbnailSupported(file.mimeType)) return res.status(415).json({ error:'Миниатюра недоступна для этого формата' });
+        const thumbnailPath = await ensureEditorialThumbnail(root, file);
         res.setHeader('Content-Type','image/webp');
         res.setHeader('X-Content-Type-Options','nosniff');
         res.setHeader('Cache-Control','private, max-age=300');
