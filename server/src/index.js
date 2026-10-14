@@ -16,6 +16,7 @@ import { schedulePersonalEventReminders } from './lib/personalEventReminderCron.
 import { scheduleDripUnlockNotifications } from './lib/dripCron.js';
 import { startPendingDeletionWorker } from './lib/pendingDeletion.js';
 import { scheduleActionCleanup } from './lib/adminActionCleanupCron.js';
+import { scheduleStorageAudit } from './lib/storageAuditCron.js';
 
 
 /* ─────────── HTTP-сервер + Socket.IO ─────────── */
@@ -46,6 +47,7 @@ if (process.env.PREVIEW_MODE !== 'true') {
     scheduleDripUnlockNotifications();
     startPendingDeletionWorker();
     scheduleActionCleanup();
+    scheduleStorageAudit();
 } else {
     console.log('[PREVIEW] Background jobs disabled');
 }
