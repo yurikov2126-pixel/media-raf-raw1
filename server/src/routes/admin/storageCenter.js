@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '../../lib/prisma.js';
 import { safe } from './_shared.js';
 import { restoreRegisteredLibraryFile, deleteQuarantinedThumb } from '../../lib/storageQuarantine.js';
+import { ensureEditorialThumbnail, thumbnailSupported } from '../../lib/editorialThumbnails.js';
 
 const router = Router();
 const ROOTS = {
@@ -114,6 +115,20 @@ router.post('/audit',safe(async(req,res)=>{
  const data=await snapshot({deep:true});
  await record(req,'audit',{registered:data.stats.registered,untracked:data.stats.untracked,broken:data.stats.broken},0);
  res.json(data);
+}));
+router.get('/audit-last',safe(async(_req,res)=>{
+ const row=await prisma.setting.findUnique({where:{key:'storage_audit_last'}});
+ res.json(row?JSON.parse(row.value):null);
+}));
+router.post('/regenerate-thumbnail',safe(async(req,res)=>{
+ const {type,id}=req.body||{};
+ if(!MODEL[type]||typeof id!=='string')return res.status(400).json({error:'Некорректный файл'});
+ const file=await prisma[MODEL[type]].findUnique({where:{id}});
+ if(!file)return res.status(404).json({error:'Файл не найден'});
+ if(!thumbnailSupported(file.mimeType))return res.status(415).json({error:'Предпросмотр этого формата не поддерживается'});
+ const thumbnail=await ensureEditorialThumbnail(ROOTS[type],file);
+ await record(req,'thumbnail_regenerated',{type,fileId:id,storageName:file.storageName});
+ res.json({ok:true,thumbnail:!!thumbnail});
 }));
 router.post('/quarantine',safe(async(req,res)=>{
  const {type,filename}=req.body||{};
