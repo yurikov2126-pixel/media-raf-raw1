@@ -1,3 +1,4 @@
+import { AcademyPulseWidget, ProductionPulseWidget, EditorialCalendarWidget, CertificatesShowcaseWidget } from '../components/DashboardInteractiveWidgets.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
@@ -125,27 +126,10 @@ export default function Dashboard2() {
                     <span className="ui-action__icon">👤</span><span className="ui-action__copy"><span className="ui-action__title">Открыть профиль</span></span><span>→</span>
                 </Link>
             </div></section>;
-            case 'certificates': return <section className="ui-section"><div className="ui-card2">
-                <div className="ui-card2__title">🏆 Сертификаты Академии</div>
-                <p className="text-sm opacity-65 mt-3">Все полученные сертификаты и результаты обучения в одном месте.</p>
-                <Link className="ui-action mt-3" to="/app/academy/me"><span className="ui-action__copy"><span className="ui-action__title">Мои сертификаты →</span></span></Link>
-            </div></section>;
-            case 'academy': return <section className="ui-section"><div className="ui-card2">
-                <div className="ui-card2__title">🎓 Моя Академия</div>
-                <div className="text-2xl font-bold mt-3">{activeCourses.length}</div>
-                <p className="text-xs opacity-65 mb-3">Активных курсов</p>
-                <Link className="ui-action" to="/app/academy/me"><span className="ui-action__copy"><span className="ui-action__title">Обучение, домашние задания и практики →</span></span></Link>
-            </div></section>;
-            case 'production': return <section className="ui-section"><div className="ui-card2">
-                <div className="ui-card2__title">🎬 Производство</div>
-                <p className="text-sm opacity-70 my-3">Производственная канбан-доска редакции.</p>
-                <Link className="ui-action" to="/app/editorial/production"><span className="ui-action__copy"><span className="ui-action__title">Открыть канбан →</span></span></Link>
-            </div></section>;
-            case 'calendar': return <section className="ui-section"><div className="ui-card2">
-                <div className="ui-card2__title">📆 Редакционный календарь</div>
-                <p className="text-sm opacity-70 my-3">Ближайшие съёмки, мероприятия и сроки.</p>
-                <Link className="ui-action" to="/app/editorial/calendar"><span className="ui-action__copy"><span className="ui-action__title">Открыть календарь →</span></span></Link>
-            </div></section>;
+            case 'certificates': return <CertificatesShowcaseWidget />;
+            case 'academy': return <AcademyPulseWidget />;
+            case 'production': return <ProductionPulseWidget />;
+            case 'calendar': return <EditorialCalendarWidget />;
             case 'feed': return <section className="ui-section"><div className="ui-card2 space-y-3">
                 <div className="ui-card2__title">Лента команды</div>
                 {posts.length ? posts.map(post=><Link key={post.id} to={'/app/feed?post='+encodeURIComponent(post.id)}
