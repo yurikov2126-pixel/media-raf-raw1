@@ -16,6 +16,7 @@ export default function StorageCenter({token}) {
  const [lastAudit,setLastAudit]=useState(null),[period,setPeriod]=useState(30),[reviews,setReviews]=useState([]);
  const [query,setQuery]=useState(''),[filter,setFilter]=useState('all'),[store,setStore]=useState('all');
  const [selected,setSelected]=useState(null),[picked,setPicked]=useState(new Set()),[confirm,setConfirm]=useState(null);
+ const [autoResult,setAutoResult]=useState(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[report,setReport]=useState(null);
  const reload=useCallback(async()=>{
    setBusy(true);setError('');
@@ -100,7 +101,22 @@ export default function StorageCenter({token}) {
        :<p className="text-sm opacity-65">Данные накопятся после ежедневных проверок.</p>}
     </section>
    </div>}
-   {tab==='triage'&&<StorageTriage token={token} files={files} reviews={reviews} onUpdated={reload}/>}
+   {tab==='triage'&&<div className="space-y-3">
+     <section className="card p-4 space-y-2">
+       <h3 className="font-bold">Автоматическая диагностика и восстановление порядка</h3>
+       <p className="text-sm text-slate-700 dark:text-white/70">Проверяем до 100 файлов за запуск. Только подтверждённо повреждённые и не зарегистрированные файлы перемещаются в карантин на 30 дней. Исправные оригиналы остаются на месте для восстановления записей.</p>
+       <button type="button" className="btn-primary min-h-11" disabled={busy} onClick={async()=>{
+         setBusy(true);setError('');setAutoResult(null);
+         try{const result=await api('/admin/storage-center/auto-reconcile',{method:'POST',token,body:{}});
+           setAutoResult(result);await reload();
+         }catch(e){setError(e.message);}finally{setBusy(false);}
+       }}>{busy?'Проверка…':'Проверить и обработать автоматически'}</button>
+       {autoResult&&<div role="status" className="text-sm rounded-lg border border-slate-200 dark:border-white/10 p-3">
+         Проверено: {autoResult.inspected}. В карантине: {autoResult.quarantined}. Сохранено для разбора: {autoResult.kept}. Ошибок: {autoResult.errors}.
+       </div>}
+     </section>
+     <StorageTriage token={token} files={files} reviews={reviews} onUpdated={reload}/>
+   </div>}
    {(tab==='files'||tab==='cleanup')&&<div className="space-y-4">
     {tab==='cleanup'&&<div className={noticeClass}>Здесь видны только файлы, которые администратор проверил и явно признал ненужными во вкладке «Разбор файлов». Восстановление из карантина возможно 30 дней.</div>}
     <div className="card p-4 space-y-3">
