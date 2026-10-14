@@ -147,6 +147,11 @@ async function quarantineOne(item,userId,eligible=null) {
  const list=eligible||(await snapshot()).files;
  if(!list.some(f=>f.type===type&&f.storageName===filename&&(f.status==='untracked'||preview&&f.status==='orphan_preview')))
    throw Object.assign(new Error('Файл больше не свободен'),{status:409});
+ const reviewKey='storage_review_'+type+'_'+filename;
+ const review=await prisma.setting.findUnique({where:{key:reviewKey}});
+ let decision=null;
+ try { decision=JSON.parse(review?.value||'null')?.decision; }catch{}
+ if(decision!=='discard')throw Object.assign(new Error('Сначала отметьте файл как ненужный в разделе Разбор файлов'),{status:409});
  const source=preview?path.join(ROOTS[type],'thumbnails',filename):location(type,filename);
  const stat=await exists(source);
  if(!stat)throw Object.assign(new Error('Файл отсутствует'),{status:404});
