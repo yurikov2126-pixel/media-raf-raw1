@@ -33,7 +33,7 @@ export default function StorageCenter({token}) {
  const shown=useMemo(()=>files.filter(f=>(store==='all'||f.type===store)
   &&(filter==='all'||filter==='candidates'&&validCandidate(f)||filter==='issues'&&f.issues.length||filter==='linked'&&!f.issues.length)
   &&[f.name,f.storageName,f.project,f.task].some(x=>String(x||'').toLowerCase().includes(query.trim().toLowerCase()))),
-  [files,store,filter,query]);
+  [files,store,filter,query,tab]);
  const visibleCandidates=shown.filter(validCandidate);
  const selectedCandidates=candidates.filter(f=>picked.has(key(f)));
  const selectedBytes=selectedCandidates.reduce((s,f)=>s+(f.size||0),0);
