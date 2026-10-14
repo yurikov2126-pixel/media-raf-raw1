@@ -769,7 +769,7 @@ export async function exportAllCoursesAsJSON({ adminId }) {
                 include: {
                     lessons: {
                         orderBy: { order: 'asc' },
-                        include: { test: { include: { questions: true } } },
+                        include: { test: { include: { questions: true } }, practical: true, homework: true },
                     },
                 },
             });
