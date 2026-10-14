@@ -207,7 +207,13 @@ router.post('/shares/quick', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 router.get('/files', async (_req, res, next) => {
-    try { res.json({ files: (await prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 })).map(publicFile) }); }
+    try {
+        const [libraryFiles, taskFiles] = await Promise.all([
+            prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
+            prisma.editorialMaterialFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
+        ]);
+        res.json({ files: [...libraryFiles.map(publicFile), ...taskFiles.map(fileView)].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)) });
+    }
     catch (error) { next(error); }
 });
 router.post('/files', upload.single('file'), async (req, res, next) => {
