@@ -252,13 +252,13 @@ export default function MentorReviews() {
                         <div className="bg-violet-soft h-full" style={{width: course.averageProgress + '%'}} />
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white/75">
-                        <div>Студентов: <b className="text-white">{course.students}</b></div>
-                        <div>Завершили: <b className="text-white">{course.completed}</b></div>
-                        <div>ДЗ на проверке: <b className="text-white">{course.pendingHomework}</b></div>
-                        <div>Практик: <b className="text-white">{course.pendingPracticals}</b></div>
-                        <div>Средний балл тестов: <b className="text-white">{course.averageTestScore == null ? '—' : course.averageTestScore + '%'}</b></div>
-                        <div>Неуспешных попыток: <b className="text-white">{course.failedTestPercent == null ? '—' : course.failedTestPercent + '%'}</b></div>
-                        <div className="col-span-2">Среднее время проверки: <b className="text-white">{course.averageReviewHours == null ? '—' : course.averageReviewHours + ' ч'}</b></div>
+                        <div>Студентов: <b className="text-slate-900 dark:text-white">{course.students}</b></div>
+                        <div>Завершили: <b className="text-slate-900 dark:text-white">{course.completed}</b></div>
+                        <div>ДЗ на проверке: <b className="text-slate-900 dark:text-white">{course.pendingHomework}</b></div>
+                        <div>Практик: <b className="text-slate-900 dark:text-white">{course.pendingPracticals}</b></div>
+                        <div>Средний балл тестов: <b className="text-slate-900 dark:text-white">{course.averageTestScore == null ? '—' : course.averageTestScore + '%'}</b></div>
+                        <div>Неуспешных попыток: <b className="text-slate-900 dark:text-white">{course.failedTestPercent == null ? '—' : course.failedTestPercent + '%'}</b></div>
+                        <div className="col-span-2">Среднее время проверки: <b className="text-slate-900 dark:text-white">{course.averageReviewHours == null ? '—' : course.averageReviewHours + ' ч'}</b></div>
                     </div>
                     {!!course.testStats?.length && <div className="mt-5 border-t border-slate-200 dark:border-white/10 pt-4">
                         <h3 className="font-semibold text-sm mb-3">Тесты, вызывающие затруднения</h3>
@@ -296,7 +296,7 @@ export default function MentorReviews() {
                             onClick={() => setTab(t.key)}
                             className={`px-4 py-2 rounded-xl text-sm transition flex items-center gap-2 ${
                                 tab === t.key
-                                    ? 'bg-violet-soft/20 text-white'
+                                    ? 'bg-violet-100 text-violet-900 dark:bg-violet-soft/20 dark:text-white'
                                     : 'hover:bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white/70'
                             }`}
                         >
@@ -697,7 +697,7 @@ function HomeworkReviewCard({ submission, busy, onReview }) {
 
                                 {recommended != null && latePenalty > 0 && (
                                     <span className="text-xs text-slate-600 dark:text-white/60">
-                                        Итог: <b className="text-white">{recommended}/5</b>
+                                        Итог: <b className="text-slate-900 dark:text-white">{recommended}/5</b>
                                     </span>
                                 )}
                             </div>
