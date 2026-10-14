@@ -182,13 +182,14 @@ export default function Dashboard2() {
                     </div>}
                 </div>;})}</div>
                 <div className="flex gap-3 items-center flex-wrap">
-                    <button className="btn-ghost text-sm" type="button" disabled={saving} onClick={()=>save(DEFAULT)}>Восстановить по умолчанию</button>
+                    <button className="btn-ghost text-sm" type="button" disabled={saving} onClick={()=>save(DEFAULT.filter(key => available.some(widget => widget.key === key)))}>Восстановить по умолчанию</button>
                     {saving && <span role="status" className="text-xs opacity-65">Сохраняем…</span>}
                 </div>
             </section>}
             {visible.length === 0 && <section className="ui-card2"><p className="text-sm opacity-70">Здесь пока нет виджетов. Открой настройки и добавь нужные блоки.</p></section>}
             <div className="grid lg:grid-cols-2 gap-4 items-start">
                 {visible.map(key=><div className={`min-w-0 ${key==='wiki'||key==='tasks'?'lg:col-span-2':''}`} key={key}>
+                    {catalogMap.get(key)?.kind === 'builtin' && <div className="mb-2 text-xs text-violet-soft font-medium">{catalogMap.get(key).title}</div>}
                     {render(key)}
                 </div>)}
             </div>
