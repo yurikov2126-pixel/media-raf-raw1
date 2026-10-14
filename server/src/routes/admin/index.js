@@ -1,3 +1,4 @@
+import courseZipRouter from './courseZip.js';
 import { Router } from 'express';
 import { auth, requireRole } from '../../middleware/auth.js';
 import { hasPermission } from '../../lib/roles.js';
@@ -69,6 +70,7 @@ router.use(certificatesRouter);
 router.use(settingsRouter);
 router.use(backupsRouter);
 router.use(bulkRouter);
+router.use(courseZipRouter);
 router.use(wikiRouter);
 router.use(pushRouter);
 router.use(notificationsRouter);
