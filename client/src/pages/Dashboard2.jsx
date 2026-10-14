@@ -25,6 +25,7 @@ export default function Dashboard2() {
     const { isEnabled } = useModules();
     const gamif = useGamification();
     const [widgets, setWidgets] = useState(DEFAULT);
+    const [catalog, setCatalog] = useState([]);
     const [editing, setEditing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -36,7 +37,7 @@ export default function Dashboard2() {
     useEffect(() => {
         let active = true; setLoading(true); setError('');
         api('/dashboard-preferences', {token})
-            .then(data => {if(active)setWidgets(data.widgets || DEFAULT);})
+            .then(data => {if(active){setWidgets(data.widgets || DEFAULT);setCatalog(data.catalog || []);}})
             .catch(e => {if(active)setError(e.message || 'Настройки недоступны');})
             .finally(() => {if(active)setLoading(false);});
         return () => {active=false;};
@@ -53,8 +54,9 @@ export default function Dashboard2() {
         api('/posts/feed?limit=3', {token}).then(data=>{if(live)setPosts(data?.items||[]);}).catch(()=>{});
         return () => {live=false;};
     }, [token, widgets.includes('feed'), isEnabled]);
-    const available = useMemo(() => Object.entries(META).filter(([,m])=>!m.module||isEnabled(m.module)), [isEnabled]);
-    const visible = widgets.filter(k => META[k] && (!META[k].module || isEnabled(META[k].module)));
+    const catalogMap = useMemo(() => new Map(catalog.map(w => [w.key,w])), [catalog]);
+    const available = useMemo(() => catalog.filter(w=>w.enabled!==false&&(!w.module||isEnabled(w.module))), [catalog,isEnabled]);
+    const visible = widgets.filter(k => catalogMap.has(k) && (!catalogMap.get(k).module || isEnabled(catalogMap.get(k).module)));
     const save = async next => {
         const previous = widgets;
         setWidgets(next); setSaving(true);setError('');
@@ -73,6 +75,17 @@ export default function Dashboard2() {
     const courseUrl=course?'/app/courses/'+encodeURIComponent(course.slug)+(course.resumeLessonOrder?'?lesson='+course.resumeLessonOrder:''):'/app/courses';
 
     const render = key => {
+        const widget = catalogMap.get(key);
+        if (widget?.kind === 'text') return <section className="ui-section"><div className="ui-card2">
+            <div className="ui-card2__title">{widget.title}</div>
+            <p className="text-sm opacity-75 mt-3 leading-relaxed whitespace-pre-wrap break-words">{widget.content}</p>
+        </div></section>;
+        if (widget?.kind === 'link') return <section className="ui-section"><div className="ui-card2">
+            <div className="ui-card2__title">{widget.title}</div>
+            <p className="text-sm opacity-70 mt-2 break-words">{widget.content || widget.description}</p>
+            <Link to={widget.url || '/app'} className="ui-action mt-4"><span className="ui-action__copy">
+                <span className="ui-action__title">Открыть раздел</span></span><span>→</span></Link>
+        </div></section>;
         switch(key) {
             case 'tasks': return <UpcomingEditorialTasks />;
             case 'wiki': return <WikimediaDiscovery />;
@@ -112,6 +125,27 @@ export default function Dashboard2() {
                     <span className="ui-action__icon">👤</span><span className="ui-action__copy"><span className="ui-action__title">Открыть профиль</span></span><span>→</span>
                 </Link>
             </div></section>;
+            case 'certificates': return <section className="ui-section"><div className="ui-card2">
+                <div className="ui-card2__title">🏆 Сертификаты Академии</div>
+                <p className="text-sm opacity-65 mt-3">Все полученные сертификаты и результаты обучения в одном месте.</p>
+                <Link className="ui-action mt-3" to="/app/academy/me"><span className="ui-action__copy"><span className="ui-action__title">Мои сертификаты →</span></span></Link>
+            </div></section>;
+            case 'academy': return <section className="ui-section"><div className="ui-card2">
+                <div className="ui-card2__title">🎓 Моя Академия</div>
+                <div className="text-2xl font-bold mt-3">{activeCourses.length}</div>
+                <p className="text-xs opacity-65 mb-3">Активных курсов</p>
+                <Link className="ui-action" to="/app/academy/me"><span className="ui-action__copy"><span className="ui-action__title">Обучение, домашние задания и практики →</span></span></Link>
+            </div></section>;
+            case 'production': return <section className="ui-section"><div className="ui-card2">
+                <div className="ui-card2__title">🎬 Производство</div>
+                <p className="text-sm opacity-70 my-3">Производственная канбан-доска редакции.</p>
+                <Link className="ui-action" to="/app/editorial/production"><span className="ui-action__copy"><span className="ui-action__title">Открыть канбан →</span></span></Link>
+            </div></section>;
+            case 'calendar': return <section className="ui-section"><div className="ui-card2">
+                <div className="ui-card2__title">📆 Редакционный календарь</div>
+                <p className="text-sm opacity-70 my-3">Ближайшие съёмки, мероприятия и сроки.</p>
+                <Link className="ui-action" to="/app/editorial/calendar"><span className="ui-action__copy"><span className="ui-action__title">Открыть календарь →</span></span></Link>
+            </div></section>;
             case 'feed': return <section className="ui-section"><div className="ui-card2 space-y-3">
                 <div className="ui-card2__title">Лента команды</div>
                 {posts.length ? posts.map(post=><Link key={post.id} to={'/app/feed?post='+encodeURIComponent(post.id)}
@@ -137,7 +171,7 @@ export default function Dashboard2() {
             {editing && <section className="rounded-2xl border border-violet-400/30 bg-violet-400/5 p-4 space-y-3" aria-label="Настройки виджетов">
                 <div className="font-semibold">Мои виджеты</div>
                 <p className="text-sm opacity-65">Добавляй, скрывай и перемещай блоки. Порядок сохраняется в твоём профиле и действует на всех устройствах.</p>
-                <div className="grid gap-2 sm:grid-cols-2">{available.map(([key,m])=><div key={key} className="rounded-xl border border-white/10 p-3 flex items-center gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">{available.map(m=>{const key=m.key;return <div key={key} className="rounded-xl border border-white/10 p-3 flex items-center gap-2">
                     <label className="min-w-0 flex-1 flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={widgets.includes(key)} disabled={saving} onChange={()=>toggle(key)} />
                         <span className="min-w-0"><strong className="block">{m.title}</strong><span className="block opacity-60 text-xs">{m.description}</span></span>
@@ -146,7 +180,7 @@ export default function Dashboard2() {
                         <button type="button" aria-label={'Поднять '+m.title} disabled={saving || widgets.indexOf(key)===0} className="btn-ghost min-w-9 min-h-9" onClick={()=>move(key,-1)}>↑</button>
                         <button type="button" aria-label={'Опустить '+m.title} disabled={saving || widgets.indexOf(key)===widgets.length-1} className="btn-ghost min-w-9 min-h-9" onClick={()=>move(key,1)}>↓</button>
                     </div>}
-                </div>)}</div>
+                </div>;})}</div>
                 <div className="flex gap-3 items-center flex-wrap">
                     <button className="btn-ghost text-sm" type="button" disabled={saving} onClick={()=>save(DEFAULT)}>Восстановить по умолчанию</button>
                     {saving && <span role="status" className="text-xs opacity-65">Сохраняем…</span>}
