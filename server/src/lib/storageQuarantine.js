@@ -68,3 +68,37 @@ export async function restoreRegisteredLibraryFile(item){
 export async function deleteQuarantinedThumb(item){
  if(item.thumbnailMoved)await fs.unlink(path.join(root,'.quarantine',item.id+'.webp')).catch(e=>{if(e.code!=='ENOENT')throw e;});
 }
+
+const materialRoot=path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
+/**
+ * A deleted task/project cannot own files anymore. Preserve original bytes for 30 days
+ * as detached material files, recoverable to the original material directory.
+ * The administrator must reattach a restored file to a new task if needed.
+ */
+export async function quarantineDetachedMaterials(files,userId,context={}){
+ const result={quarantined:[],failed:[]};
+ const folder=path.join(materialRoot,'.quarantine');
+ await fs.mkdir(folder,{recursive:true,mode:0o700});
+ for(const f of files){
+   const id=randomUUID(),source=path.join(materialRoot,f.storageName),destination=path.join(folder,id);
+   const thumb=path.join(materialRoot,'thumbnails',f.storageName+'.webp'),thumbDest=path.join(folder,id+'.webp');
+   let moved=false,thumbMoved=false;
+   try{
+     await fs.rename(source,destination);moved=true;
+     try{await fs.rename(thumb,thumbDest);thumbMoved=true;}catch(err){if(err.code!=='ENOENT')throw err;}
+     const item={id,type:'materials',filename:f.storageName,name:f.name||f.storageName,size:f.size||0,
+       mimeType:f.mimeType||'',sourceId:f.id,taskId:f.taskId||context.taskId,projectId:context.projectId,
+       originalDeleted:true,thumbnailMoved:thumbMoved,by:userId,createdAt:new Date().toISOString(),
+       expiresAt:new Date(Date.now()+30*86400000).toISOString()};
+     await prisma.setting.create({data:{key:settingKey(id),value:JSON.stringify(item)}});
+     result.quarantined.push(item.id);
+   }catch(error){
+     if(moved)await fs.rename(destination,source).catch(()=>{});
+     if(thumbMoved)await fs.rename(thumbDest,thumb).catch(()=>{});
+     result.failed.push({filename:f.storageName,error:error.message});
+   }
+ }
+ await prisma.adminAction.create({data:{adminId:userId,action:'storage_materials_detached',payload:JSON.stringify({...context,...result}),
+   affected:result.quarantined.length}}).catch(error=>console.error('[storage] failed to log detached materials',error));
+ return result;
+}
