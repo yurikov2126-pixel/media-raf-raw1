@@ -23,6 +23,7 @@ const Backups = lazy(() => import('./tabs/Backups.jsx'));
 const Moderation = lazy(() => import('./tabs/Moderation.jsx'));
 const Settings = lazy(() => import('./tabs/Settings.jsx'));
 const Modules = lazy(() => import('./tabs/Modules.jsx'));
+const StorageCenter = lazy(() => import('./tabs/StorageCenter.jsx'));
 const DashboardWidgets = lazy(() => import('./tabs/DashboardWidgets.jsx'));
 const Gamification = lazy(() => import('./tabs/Gamification.jsx'));
 const PasswordResets = lazy(() => import('./tabs/PasswordResets.jsx'));
@@ -253,6 +254,7 @@ export default function Admin() {
                         {tab === 'dashboard-widgets' && <DashboardWidgets token={token} />}
                         {tab === 'gamification' && <Gamification token={token} />}
                         {tab === 'backups' && <Backups token={token} />}
+                        {tab === 'storage-center' && <StorageCenter token={token} />}
                         {tab === 'actions' && <Actions token={token} />}
                         {tab === 'password-resets' && <PasswordResets token={token} />}
                         {tab === 'settings' && (
