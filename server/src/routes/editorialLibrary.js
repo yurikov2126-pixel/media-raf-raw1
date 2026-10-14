@@ -7,6 +7,7 @@ import { auth } from '../middleware/auth.js';
 import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
+import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
 
 const router = Router();
 const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial');
@@ -125,6 +126,23 @@ router.get('/public/:token/files/:fileId', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// The share token authorizes thumbnails only for files explicitly included in the share.
+router.get('/public/:token/files/:fileId/thumbnail', async (req, res, next) => {
+    try {
+        const share = await getShare(req.params.token);
+        if (!share || !Array.isArray(share.fileIds) || !share.fileIds.includes(req.params.fileId)) return res.status(404).json({ error: 'Файл не найден' });
+        const file = (await resolveFiles([req.params.fileId]))[0];
+        if (!file) return res.status(404).json({ error: 'Файл не найден' });
+        if (!thumbnailSupported(file.mimeType)) return res.status(415).json({ error: 'Превью недоступно' });
+        const directory = file.id.startsWith('material:') ? materialRoot : root;
+        const thumbnailPath = await ensureEditorialThumbnail(directory, file);
+        res.setHeader('Content-Type', 'image/webp');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.sendFile(thumbnailPath, error => { if (error && !res.headersSent) next(error); });
+    } catch (error) { next(error); }
+});
+
 router.use(auth);
 router.use(async (req, res, next) => {
     try { if (await hasPermission(req.user, 'editorial.library')) return next();
@@ -201,6 +219,10 @@ router.post('/files', upload.single('file'), async (req, res, next) => {
         await fs.writeFile(path.join(root, storageName), req.file.buffer, { flag: 'wx', mode: 0o600 });
         try {
             const file = await prisma.editorialLibraryFile.create({ data: { name, storageName, mimeType: req.file.mimetype || 'application/octet-stream', size: req.file.size, uploaderId: req.user.id } });
+            if (thumbnailSupported(file.mimeType)) {
+                try { await ensureEditorialThumbnail(root, file); }
+                catch (error) { console.error('[editorial-library] preview generation failed', error); }
+            }
             res.status(201).json({ file: publicFile(file) });
         } catch (error) { await fs.unlink(path.join(root, storageName)).catch(() => {}); throw error; }
     } catch (error) { next(error); }
