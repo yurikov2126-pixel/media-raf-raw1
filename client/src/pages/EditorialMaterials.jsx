@@ -62,6 +62,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     const [selected,setSelected]=useState([]);
     const [progress,setProgress]=useState(null);
     const [batchProgress,setBatchProgress]=useState(null);
+    const [uploadStates,setUploadStates]=useState([]);
     const xhrRef = useRef(null);
     const fileInputRef = useRef(null);
     const [dragActive,setDragActive] = useState(false);
@@ -115,14 +116,14 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     }
     useEffect(()=>{load();},[base,token]);
     function open(file) { setPreview(file.id); }
-    function uploadOne(file,caption) {
+    function uploadOne(file,caption,onProgress) {
         return new Promise((resolve,reject)=>{
             if (cancelledRef.current) { reject(new Error('Загрузка отменена')); return; }
             const xhr=new XMLHttpRequest();
             xhrRef.current=xhr;
             xhr.open('POST',API+base);
             xhr.setRequestHeader('Authorization',`Bearer ${token}`);
-            xhr.upload.onprogress=(event)=>{if(event.lengthComputable)setProgress(Math.round(event.loaded/event.total*100));};
+            xhr.upload.onprogress=(event)=>{if(event.lengthComputable){const percent=Math.round(event.loaded/event.total*100);setProgress(percent);onProgress?.(percent);}};
             xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText);}catch{}if(xhr.status>=200&&xhr.status<300)resolve(data);else reject(new Error(data.error||'Ошибка загрузки'));};
             xhr.onerror=()=>reject(new Error('Сетевая ошибка при загрузке'));
             xhr.onabort=()=>reject(new Error('Загрузка отменена'));
@@ -133,11 +134,14 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     async function uploadSelected() {
         cancelledRef.current=false;
         const pending = [...selected];
+        setUploadStates(pending.map(item => ({ name:item.file.name, size:item.file.size, percent:0, state:'pending' })));
         for (const [index,item] of pending.entries()) {
             if (cancelledRef.current) throw new Error('Загрузка отменена');
             setBatchProgress({ completed:index, total:pending.length, name:item.file.name });
             setProgress(0);
-            await uploadOne(item.file, item.caption);
+            setUploadStates(states => states.map((state,i) => i===index ? {...state,state:'uploading'} : state));
+            await uploadOne(item.file, item.caption, percent => setUploadStates(states => states.map((state,i) => i===index ? {...state,percent} : state)));
+            setUploadStates(states => states.map((state,i) => i===index ? {...state,percent:100,state:'done'} : state));
             // Preserve only not-yet-uploaded files if a later upload fails.
             setSelected((items) => removeUploadedItem(items, item));
             setBatchProgress({ completed:index+1, total:pending.length, name:item.file.name });
@@ -220,7 +224,9 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
                 disabled={busy} aria-label="Выбрать файлы для загрузки"
                 onChange={event => { setSelected(previous => [...previous, ...Array.from(event.target.files || []).map(file => ({ file, caption:'' }))]); event.target.value = ''; }}
                 className="sr-only" tabIndex={-1} />
-            {selected.map((item,i)=><div key={i} className="rounded-lg border border-current/10 p-2"><div className="flex items-center justify-between gap-2"><span className="min-w-0 truncate text-sm">{item.file.name}</span><button type="button" onClick={()=>setSelected(v=>v.filter((_,j)=>j!==i))} className="text-xs underline">Убрать</button></div><input value={item.caption} maxLength={1000} placeholder="Подпись к файлу" onChange={e=>setSelected(v=>v.map((x,j)=>j===i?{...x,caption:e.target.value}:x))} className="mt-2 w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm" /></div>)}
+            {selected.length>0&&<div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">Очередь загрузки · {selected.length} файл(ов) · {(selected.reduce((n,item)=>n+item.file.size,0)/1048576).toFixed(1)} МБ</span><button type="button" disabled={busy} onClick={()=>setSelected([])} className="text-xs underline disabled:opacity-50">Очистить список</button></div>}
+             {selected.map((item,i)=><div key={i} className="rounded-lg border border-current/10 bg-white/40 p-3 dark:bg-slate-900/30"><div className="flex items-center justify-between gap-2"><span className="min-w-0 truncate text-sm font-medium">{item.file.name}</span><button type="button" disabled={busy} onClick={()=>setSelected(v=>v.filter((_,j)=>j!==i))} className="text-xs underline disabled:opacity-50">Убрать</button></div><p className="mt-1 text-xs opacity-65">{(item.file.size/1048576).toFixed(1)} МБ · {item.file.type.startsWith('image/')?'Фотография':'Материал'}</p><input value={item.caption} disabled={busy} maxLength={1000} placeholder="Добавить подпись к этому файлу (необязательно)" onChange={e=>setSelected(v=>v.map((x,j)=>j===i?{...x,caption:e.target.value}:x))} className="mt-2 w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm disabled:opacity-60" /></div>)}
+             {uploadStates.length>0&&<div className="space-y-2 rounded-xl border border-current/15 p-3" aria-live="polite"><p className="text-sm font-semibold">Состояние файлов</p>{uploadStates.map((item,i)=><div key={i}><div className="flex justify-between gap-2 text-xs"><span className="truncate">{item.name}</span><span>{item.state==='done'?'Готово':item.state==='uploading'?`${item.percent}%`:'В очереди'}</span></div><progress aria-label={`Загрузка ${item.name}`} value={item.percent} max={100} className="w-full" /></div>)}</div>}
             {batchProgress&&<div role="status" className="space-y-2 rounded-lg border border-slate-300 p-3 dark:border-slate-600"><div className="text-sm font-medium">Файл {batchProgress.completed+1} из {batchProgress.total}: {batchProgress.name}</div><progress aria-label="Общий прогресс загрузки" value={batchUploadProgress(batchProgress.completed,batchProgress.total,progress)} max={100} className="w-full"/><div className="text-xs">Текущий файл: {progress||0}% · Загружено: {batchProgress.completed} из {batchProgress.total}</div><progress aria-label="Прогресс текущего файла" value={progress||0} max="100" className="w-full"/><button type="button" onClick={()=>{cancelledRef.current=true;xhrRef.current?.abort();}} className="min-h-11 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
             {selected.length>0&&<p className="text-xs opacity-65">Файлы загрузятся автоматически при отправке на проверку.</p>}
         </div>}
