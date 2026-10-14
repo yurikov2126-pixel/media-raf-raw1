@@ -624,3 +624,62 @@ body[data-theme="dark"] .editorial-project-wizard :is(input,select,textarea) { c
 :is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="REVISION"] { background: #431407; border-color: #ea580c; color: #fed7aa; -webkit-text-fill-color: #fed7aa; }
 :is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="APPROVED"] { background: #052e25; border-color: #10b981; color: #a7f3d0; -webkit-text-fill-color: #a7f3d0; }
 :is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-status[data-status="DONE"] { background: #042f2e; border-color: #14b8a6; color: #99f6e4; -webkit-text-fill-color: #99f6e4; }
+
+/* My Tasks mobile: all schedule pills use the same dark surface (not the global
+   white input/pill style), and metadata must remain legible on glass cards. */
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-description {
+  color: #334155;
+  -webkit-text-fill-color: #334155;
+  background: transparent !important;
+  opacity: 1 !important;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-date {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  background: #f3e8ff !important;
+  color: #4c1d95 !important;
+  -webkit-text-fill-color: #4c1d95 !important;
+  border-color: #c4b5fd !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline {
+  color: #475569;
+  -webkit-text-fill-color: #475569;
+  background: transparent !important;
+  opacity: 1 !important;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline.text-amber-800 {
+  color: #92400e; -webkit-text-fill-color: #92400e;
+}
+.editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline.text-rose-700 {
+  color: #be123c; -webkit-text-fill-color: #be123c;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-description,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-description {
+  color: #d6d0e6 !important; -webkit-text-fill-color: #d6d0e6 !important;
+  background: transparent !important;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-date,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-date {
+  background: #302846 !important;
+  border-color: #7662aa !important;
+  color: #f5f0ff !important;
+  -webkit-text-fill-color: #f5f0ff !important;
+  box-shadow: none !important;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline {
+  color: #d3cbe4; -webkit-text-fill-color: #d3cbe4;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline.text-amber-800,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline.text-amber-800 {
+  color: #fcd34d; -webkit-text-fill-color: #fcd34d;
+}
+:is(.dark, [data-theme="dark"]) .editorial-glass .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline.text-rose-700,
+.editorial-glass:is(.dark, [data-theme="dark"]) .editorial-my-tasks .editorial-personal-task-card .editorial-personal-task-deadline.text-rose-700 {
+  color: #fda4af; -webkit-text-fill-color: #fda4af;
+}
