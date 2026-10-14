@@ -66,7 +66,8 @@ export async function restoreRegisteredLibraryFile(item){
  }
 }
 export async function deleteQuarantinedThumb(item){
- if(item.thumbnailMoved)await fs.unlink(path.join(root,'.quarantine',item.id+'.webp')).catch(e=>{if(e.code!=='ENOENT')throw e;});
+ const folder=item.type==='materials'?materialRoot:root;
+ if(item.thumbnailMoved)await fs.unlink(path.join(folder,'.quarantine',item.id+'.webp')).catch(e=>{if(e.code!=='ENOENT')throw e;});
 }
 
 const materialRoot=path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
