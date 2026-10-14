@@ -6,6 +6,7 @@ import rolesRouter from './roles.js';
 import editorialTeamRouter from './editorialTeam.js';
 import statsRouter from './stats.js';
 import systemRouter from './system.js';
+import storageRecoveryRouter from './storageRecovery.js';
 import storageCenterRouter from './storageCenter.js';
 import actionsRouter from './actions.js';           // ← добавлено
 import analyticsRouter from './analytics.js';
@@ -53,6 +54,7 @@ router.use(rolesRouter);
 router.use(editorialTeamRouter);
 router.use(statsRouter);
 router.use(systemRouter);
+router.use('/storage-center',storageRecoveryRouter);
 router.use('/storage-center',storageCenterRouter);
 router.use(actionsRouter);
 router.use(searchRouter);
