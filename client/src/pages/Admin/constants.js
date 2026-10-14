@@ -43,6 +43,7 @@ export const TAB_GROUPS = [
         tabs: [
             ['site', 'Дизайн сайта', '🎨'],
             ['modules', 'Модули', '🧩'],
+            ['dashboard-widgets', 'Виджеты Dashboard 2.0', '🎛️'],
             ['gamification', 'Геймификация', '🎮'],
             ['bulk', 'Пакетные действия', '🛠'],
         ],
