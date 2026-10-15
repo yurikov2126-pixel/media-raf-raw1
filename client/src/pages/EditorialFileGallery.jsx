@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { usePhotoGestures } from './editorialGestures.js';
 
 const BASE = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const filePath = id => '/editorial/library/files/' + encodeURIComponent(id);
@@ -30,6 +31,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     const [metadata,setMetadata] = useState(null);
     const [compareId,setCompareId] = useState('');
     const [compareUrl,setCompareUrl] = useState('');
+    const gestures = usePhotoGestures({onLeft:()=>onNavigate(1),onRight:()=>onNavigate(-1),onDown:onClose});
     useEffect(() => { setName(file.name); setDescription(file.description || file.caption || ''); setMetadata(null); setCompareId(''); api(filePath(file.id) + '/metadata',{token}).then(result=>setMetadata(result.metadata)).catch(()=>{}); }, [file.id, file.name, file.description, file.caption, token]);
     useEffect(() => {
         if (!compareId) { setCompareUrl(''); return undefined; }
@@ -71,7 +73,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     }
     return <div role="dialog" aria-modal="true" aria-label={'Просмотр ' + file.name} className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-3 text-white sm:p-6">
         <header className="flex items-center justify-between gap-2"><span className="min-w-0 truncate font-semibold">{file.name} · {index + 1} / {files.length}</span><button type="button" className="rounded-lg border border-white/40 px-3 py-2" onClick={onClose}>Закрыть ✕</button></header>
-        <div className="my-3 flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-xl bg-black/30">
+        <div {...gestures} className="my-3 flex min-h-0 flex-1 touch-pan-y items-center justify-center overflow-auto rounded-xl bg-black/30">
             {url && file.mimeType?.startsWith('image/') ? <div className={compareUrl?'grid h-full w-full grid-cols-2 gap-2':'flex h-full w-full items-center justify-center'}><img src={url} alt={file.name} className="max-h-full max-w-full object-contain" />{compareUrl && <img src={compareUrl} alt="Сравниваемый кадр" className="max-h-full max-w-full object-contain" />}</div> :
                 url && file.mimeType?.startsWith('video/') ? <video controls src={url} className="max-h-full max-w-full" /> :
                 url && file.mimeType === 'application/pdf' ? <iframe title={file.name} src={url} className="h-full w-full bg-white" /> :
@@ -86,16 +88,27 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
 
 export default function EditorialFileGallery({ files, folders = [], currentFolder, onMove, token, view, selection, setSelection, onShare, onDelete, onUpdate, onError, downloadFile }) {
     const [index, setIndex] = useState(null);
+    const [menu,setMenu] = useState(null);
+    const timer = useRef(null);
     useEffect(() => { setIndex(null); }, [files.length, view]);
+    const openMenu = (file,x,y) => setMenu({file,x:Math.min(x,window.innerWidth-230),y:Math.min(y,window.innerHeight-280)});
+    const handlers = file => ({
+        onContextMenu: event => {event.preventDefault();openMenu(file,event.clientX,event.clientY);},
+        onTouchStart: event => {const touch=event.touches[0];clearTimeout(timer.current);timer.current=setTimeout(()=>openMenu(file,touch.clientX,touch.clientY),550);},
+        onTouchMove:()=>clearTimeout(timer.current),
+        onTouchEnd:()=>clearTimeout(timer.current),
+        onTouchCancel:()=>clearTimeout(timer.current),
+    });
     const navigate = delta => setIndex(current => (current + delta + files.length) % files.length);
     return <>
         <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'space-y-2'}>
-            {files.map((file, i) => <article key={file.id} className={view === 'grid' ? 'min-w-0 rounded-xl border border-current/20 p-3' : 'flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-current/20 p-3'}>
-                <div className={view === 'grid' ? 'mb-2' : 'w-24 shrink-0'}><Preview file={file} token={token} onOpen={() => setIndex(i)} /></div>
-                <div className="min-w-0 flex-1"><h3 className="break-all font-semibold">{file.name}</h3><p className="my-1 text-xs opacity-80">{(file.size / 1048576).toFixed(2)} МБ · {new Date(file.createdAt).toLocaleDateString('ru-RU')}{file.taskTitle ? ' · ' + file.taskTitle : ''}{file.version ? ' · Версия ' + file.version : ''}</p>{(file.description || file.caption) && <p className="line-clamp-2 text-xs opacity-85">{file.description || file.caption}</p>}</div>
-                <div className="flex flex-wrap items-center gap-2"><label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={selection.includes(file.id)} onChange={e => setSelection(items => e.target.checked ? [...items,file.id] : items.filter(id => id !== file.id))} /> Выбрать</label><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => setIndex(i)}>Просмотр</button><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => downloadFile(filePath(file.id), token, file.name).catch(e => onError(e.message))}>Скачать</button><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => onShare(file)}>Общий доступ</button>{!file.source && <select aria-label={'Переместить ' + file.name} value={currentFolder || ''} onChange={event => onMove(file,event.target.value || null)} className="min-w-0 max-w-44 rounded-lg border border-current/20 bg-transparent px-2 py-2 text-xs"><option value="">Корень</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.title}</option>)}</select>}<button type="button" className="rounded-lg border border-rose-400/50 px-3 py-2 text-sm" onClick={() => onDelete(file)}>В корзину</button></div>
+            {files.map((file, i) => <article key={file.id} {...handlers(file)} className={view === 'grid' ? 'group min-w-0 overflow-hidden rounded-xl bg-violet-500/5 transition hover:bg-violet-500/10' : 'flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-current/20 p-3'}>
+                <div className={view === 'grid' ? 'w-full' : 'w-24 shrink-0'}><Preview file={file} token={token} onOpen={() => setIndex(i)} /></div>
+                <div className="min-w-0 flex-1 px-2 pb-2"><h3 className="truncate text-xs font-semibold">{file.name}</h3><p className="my-1 text-xs opacity-80">{(file.size / 1048576).toFixed(2)} МБ · {new Date(file.createdAt).toLocaleDateString('ru-RU')}{file.taskTitle ? ' · ' + file.taskTitle : ''}{file.version ? ' · Версия ' + file.version : ''}</p>{(file.description || file.caption) && <p className="line-clamp-2 text-xs opacity-85">{file.description || file.caption}</p>}</div>
+                <button type="button" aria-label={'Действия с файлом '+file.name} className="mx-2 mb-2 rounded-lg border border-current/20 px-2 py-1 text-xs" onClick={event=>openMenu(file,event.clientX,event.clientY)}>⋯</button>
             </article>)}
         </div>
+        {menu && <><button type="button" aria-label="Закрыть контекстное меню" className="fixed inset-0 z-[110] cursor-default" onClick={()=>setMenu(null)} /><div role="menu" className="fixed z-[111] w-52 space-y-1 rounded-xl border border-violet-400/30 bg-slate-900 p-2 text-sm text-white shadow-2xl" style={{left:Math.max(8,menu.x),top:Math.max(8,menu.y)}}>{[['Просмотр',()=>setIndex(files.findIndex(item=>item.id===menu.file.id))],['Скачать',()=>downloadFile(filePath(menu.file.id),token,menu.file.name).catch(error=>onError(error.message))],['Общий доступ',()=>onShare(menu.file)],['В корзину',()=>onDelete(menu.file)],['Выбрать',()=>setSelection(items=>items.includes(menu.file.id)?items.filter(id=>id!==menu.file.id):[...items,menu.file.id])]].map(([label,run])=><button type="button" role="menuitem" key={label} onClick={()=>{setMenu(null);run();}} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-violet-600/40">{label}</button>)}{!menu.file.source && <label className="block px-2 text-xs">Переместить<select className="mt-1 w-full rounded-lg bg-slate-700 p-2 text-white" value={currentFolder||''} onChange={event=>{onMove(menu.file,event.target.value||null);setMenu(null);}}><option value="">Корень</option>{folders.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}</div></>}
         {index !== null && files[index] && <Viewer files={files} index={index} token={token} onClose={() => setIndex(null)} onNavigate={navigate} onUpdate={onUpdate} onError={onError} downloadFile={downloadFile} />}
     </>;
 }
