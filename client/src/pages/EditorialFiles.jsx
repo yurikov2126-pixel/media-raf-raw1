@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import EditorialFileGallery from './EditorialFileGallery.jsx';
+import { uploadEditorialResumable } from './editorialResumableUpload.js';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 
@@ -28,18 +29,21 @@ export default function EditorialFiles() {
     const [collectionTitle, setCollectionTitle] = useState('');
     const [sharing, setSharing] = useState(false);
     useEffect(() => { let active = true; api('/editorial/library/folders', { token }).then(data => { if (active) { setFiles(data.files); setFolders(data.folders); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
-    function upload(event) {
-        const selected = event.target.files?.[0];
-        if (!selected) return;
-        setBusy(true); setError(''); setProgress(0);
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', BASE + '/editorial/library/files');
-        xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-        xhr.upload.onprogress = e => { if (e.lengthComputable) setProgress(Math.round(e.loaded / e.total * 100)); };
-        xhr.onload = () => { setBusy(false); setProgress(null); if (xhr.status >= 200 && xhr.status < 300) setRefresh(n => n + 1); else { try { setError(JSON.parse(xhr.responseText).error || 'Ошибка загрузки'); } catch { setError('Ошибка загрузки'); } } };
-        xhr.onerror = () => { setBusy(false); setProgress(null); setError('Сетевая ошибка'); };
-        const form = new FormData(); form.append('file', selected); xhr.send(form);
+    async function upload(event) {
+        const chosen = Array.from(event.target.files || []);
         event.target.value = '';
+        if (!chosen.length) return;
+        setBusy(true); setError(''); setProgress(0);
+        try {
+            for (let index = 0; index < chosen.length; index++) {
+                await uploadEditorialResumable({
+                    path:'/editorial/library', file:chosen[index], token,
+                    onProgress:percentage => setProgress(Math.round((index * 100 + percentage) / chosen.length)),
+                });
+            }
+            setRefresh(n => n + 1);
+        } catch (error) { setError(error.message); }
+        finally { setBusy(false); setProgress(null); }
     }
     async function share(item, projectId = null) {
         setError('');
@@ -79,7 +83,7 @@ export default function EditorialFiles() {
         catch (e) { setError(e.message); }
     }
     return <div className="editorial-workspace-content space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Файлы редакции</h2><p className="text-sm opacity-70">Закрытое хранилище для передачи материалов другим подразделениям.</p></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white">+ Загрузить файл<input type="file" className="sr-only" onChange={upload} disabled={busy} /></label></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Файлы редакции</h2><p className="text-sm opacity-70">Закрытое хранилище для передачи материалов другим подразделениям.</p></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white">+ Загрузить файл<input type="file" multiple className="sr-only" onChange={upload} disabled={busy} /></label></div>
         {progress !== null && <div role="status" className="space-y-1 text-sm"><span>Загрузка: {progress}%</span><progress max="100" value={progress} className="block w-full" /></div>}
         {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
