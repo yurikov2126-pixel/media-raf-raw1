@@ -324,6 +324,17 @@ router.use('/uploads', editorialResumableRouter({
         return publicFile(file);
     },
 }));
+// Download a selection without creating an external public share.
+router.post('/files/archive', async (req,res,next) => {
+    try {
+        const ids = req.body?.fileIds;
+        if (!Array.isArray(ids) || ids.length < 1 || ids.length > 500 || ids.some(id => typeof id !== 'string' || id.length > 256) || new Set(ids).size !== ids.length) return res.status(400).json({error:'Выберите от 1 до 500 разных файлов'});
+        const files = await resolveFiles(ids);
+        if (files.length !== ids.length) return res.status(404).json({error:'Часть файлов больше недоступна'});
+        res.setHeader('Cache-Control','private, no-store');
+        return archive(res,files,'editorial-selected.zip');
+    } catch(error) { next(error); }
+});
 router.get('/files', async (_req, res, next) => {
     try {
         const [libraryFiles, taskFiles] = await Promise.all([
