@@ -31,13 +31,13 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     const [metadata,setMetadata] = useState(null);
     const [compareId,setCompareId] = useState('');
     const [compareUrl,setCompareUrl] = useState('');
-    const gestures = usePhotoGestures({onLeft:()=>onNavigate(1),onRight:()=>onNavigate(-1),onDown:onClose});
+    const gestures = usePhotoGestures({onLeft:()=>onNavigate(1),onRight:()=>onNavigate(-1),onDown:onClose,onUp:onClose});
     useEffect(() => { setName(file.name); setDescription(file.description || file.caption || ''); setMetadata(null); setCompareId(''); api(filePath(file.id) + '/metadata',{token}).then(result=>setMetadata(result.metadata)).catch(()=>{}); }, [file.id, file.name, file.description, file.caption, token]);
     useEffect(() => {
         if (!compareId) { setCompareUrl(''); return undefined; }
         const controller = new AbortController();
         let objectUrl = '';
-        fetch(BASE+filePath(compareId),{headers:{Authorization:'Bearer '+token},signal:controller.signal})
+        fetch(BASE+filePath(compareId) + '/preview',{headers:{Authorization:'Bearer '+token},signal:controller.signal})
             .then(res => { if(!res.ok) throw Error('Сравнение недоступно'); return res.blob(); })
             .then(blob => { if (!controller.signal.aborted) { objectUrl=URL.createObjectURL(blob); setCompareUrl(objectUrl); } })
             .catch(error=>{if(!controller.signal.aborted) onError(error.message);});
@@ -47,7 +47,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
         const controller = new AbortController();
         let objectUrl = '';
         const supported = file.mimeType?.startsWith('image/') || file.mimeType?.startsWith('video/') || file.mimeType === 'application/pdf';
-        if (supported) fetch(BASE + filePath(file.id), { headers: { Authorization: 'Bearer ' + token }, signal: controller.signal })
+        if (supported) fetch(BASE + filePath(file.id) + (file.mimeType?.startsWith('image/') ? '/preview' : ''), { headers: { Authorization: 'Bearer ' + token }, signal: controller.signal })
             .then(res => { if (!res.ok) throw new Error('Не удалось открыть файл'); return res.blob(); })
             .then(blob => { if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); } })
             .catch(error => { if (!controller.signal.aborted) onError(error.message); });
