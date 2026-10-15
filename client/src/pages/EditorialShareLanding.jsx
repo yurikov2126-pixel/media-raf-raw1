@@ -79,12 +79,7 @@ export default function EditorialShareLanding() {
     const projects = useMemo(() => groupFiles(data?.files || []), [data]);
     const activeProject = projects.find(project => project.id === projectId);
     const activeTask = activeProject?.tasks.find(task => task.id === taskId);
-    const search = query.trim().toLocaleLowerCase('ru');
-    const searchResults = useMemo(() => !search ? null : (data?.files || []).filter(file => [
-        file.name, file.caption, file.description, file.projectTitle, file.taskTitle, file.assigneeName,
-    ].some(value => String(value || '').toLocaleLowerCase('ru').includes(search))), [data, search]);
-
-    const listedFiles = searchResults || (activeTask ? activeTask.files : activeProject ? null : null);
+    const listedFiles = activeTask ? activeTask.files : null;
     const fileUrl = file => BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/files/' + encodeURIComponent(file.id);
     const archiveUrl = BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/archive';
     const thumbnailUrl = file => fileUrl(file) + '/thumbnail';
@@ -118,21 +113,18 @@ export default function EditorialShareLanding() {
                         {data.share.expiresAt && <span>Доступ до {new Date(data.share.expiresAt).toLocaleDateString('ru-RU')}</span>}
                     </div>
                 </section>
-                <label className="block"><span className="sr-only">Поиск файлов, проектов и заданий</span>
-                    <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти файл, проект, задание или исполнителя…" className="share-search-input w-full rounded-xl border border-slate-500/70 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-300 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-500/25"/>
-                </label>
-                {!searchResults && <nav aria-label="Путь к файлам" className="flex flex-wrap items-center gap-2 text-sm">
+                {<nav aria-label="Путь к файлам" className="flex flex-wrap items-center gap-2 text-sm">
                     <button type="button" onClick={() => { setProjectId(null); setTaskId(null); }} className={'rounded-lg px-3 py-2 ' + (!activeProject ? 'bg-violet-600 text-white' : 'border border-white/20 text-violet-200 hover:bg-white/10')}>Все проекты</button>
                     {activeProject && <><span className="text-slate-500">/</span><button type="button" onClick={() => setTaskId(null)} className={'max-w-full break-words rounded-lg px-3 py-2 ' + (!activeTask ? 'bg-violet-600 text-white' : 'border border-white/20 text-violet-200 hover:bg-white/10')}>{activeProject.title}</button></>}
                     {activeTask && <><span className="text-slate-500">/</span><span className="max-w-full break-words rounded-lg border border-white/20 px-3 py-2">{activeTask.title}</span></>}
                 </nav>}
-                {!searchResults && !activeProject && (projects.length ? <section className="space-y-3"><h3 className="text-lg font-semibold">Папки проектов</h3><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {!activeProject && (projects.length ? <section className="space-y-3"><h3 className="text-lg font-semibold">Папки проектов</h3><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {projects.map(project => <FolderCard key={project.id} icon="📁" title={project.title} subtitle={project.tasks.length + ' папок заданий'} count={project.files.length} size={folderBytes(project.files)} onClick={() => { setProjectId(project.id); setTaskId(null); }}/>)}
                 </div></section> : <p className="rounded-xl border border-white/10 p-6 text-slate-400">В этой подборке пока нет доступных файлов.</p>)}
-                {!searchResults && activeProject && !activeTask && <section className="space-y-3"><div><h3 className="text-lg font-semibold">Задания проекта</h3><p className="mt-1 text-sm text-slate-400">{activeProject.title}</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {activeProject && !activeTask && <section className="space-y-3"><div><h3 className="text-lg font-semibold">Задания проекта</h3><p className="mt-1 text-sm text-slate-400">{activeProject.title}</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {activeProject.tasks.map(task => <FolderCard key={task.id} icon="📂" title={task.title} subtitle={dateText(task.date) + (task.assignee ? ' · ' + task.assignee : '')} count={task.files.length} size={folderBytes(task.files)} onClick={() => setTaskId(task.id)}/>)}
                 </div></section>}
-                {listedFiles && <section className="space-y-3"><div className="flex flex-wrap items-end justify-between gap-2"><h3 className="text-lg font-semibold">{searchResults ? 'Результаты поиска' : 'Файлы задания'}</h3><span className="text-xs text-slate-400">{listedFiles.length} файлов · {sizeText(folderBytes(listedFiles))}</span></div>
+                {listedFiles && <section className="space-y-3"><div className="flex flex-wrap items-end justify-between gap-2"><h3 className="text-lg font-semibold">Файлы задания</h3><span className="text-xs text-slate-400">{listedFiles.length} файлов · {sizeText(folderBytes(listedFiles))}</span></div>
                     {listedFiles.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {listedFiles.map(file => <article key={file.id} className="overflow-hidden rounded-2xl border border-white/15 bg-white/5">
                             <button type="button" disabled={!media(file)} onClick={() => setPreview(file)} className="group flex h-44 w-full items-center justify-center overflow-hidden bg-slate-900 disabled:cursor-default">
@@ -140,7 +132,7 @@ export default function EditorialShareLanding() {
                             </button>
                             <div className="space-y-3 p-4"><h4 className="break-all text-sm font-semibold">{file.name}</h4>
                                 <p className="text-xs text-slate-400">{sizeText(file.size)} · {new Date(file.createdAt).toLocaleDateString('ru-RU')}</p>
-                                {searchResults && <p className="text-xs text-violet-200">{[file.projectTitle, file.taskTitle, file.assigneeName].filter(Boolean).join(' / ') || 'Общие файлы'}</p>}
+}
                                 {(file.caption || file.description) && <p className="line-clamp-3 whitespace-pre-wrap break-words text-xs text-slate-300">{file.caption || file.description}</p>}
                                 <div className="flex flex-wrap gap-2">{media(file) && <button type="button" onClick={() => setPreview(file)} className="rounded-lg border border-white/30 px-3 py-2 text-sm hover:bg-white/10">Просмотр</button>}<a href={fileUrl(file) + '?download=1'} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold hover:bg-violet-500">↓ Скачать</a></div>
                             </div>
@@ -148,11 +140,11 @@ export default function EditorialShareLanding() {
                     </div> : <p className="rounded-xl border border-white/15 p-5 text-sm text-slate-400">Ничего не найдено. Попробуйте другой запрос.</p>}
                 </section>}
             </>}
-            {preview && <div role="dialog" aria-modal="true" aria-label={'Просмотр: ' + preview.name} {...gestures} className="fixed inset-0 z-50 flex touch-pan-y flex-col bg-black/95 p-4">
+            <AnimatePresence>{preview && <motion.div key="public-viewer" initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:100}} transition={{duration:.2}} role="dialog" aria-modal="true" aria-label={'Просмотр: ' + preview.name} {...gestures} className="fixed inset-0 z-50 flex touch-pan-y flex-col bg-black/95 p-4">
                 <div className="mb-4 flex items-center justify-between gap-3"><h2 className="min-w-0 break-all text-sm">{preview.name}</h2><div className="flex shrink-0 gap-2"><a href={fileUrl(preview) + '?download=1'} className="rounded-lg border border-white/40 px-3 py-2 text-sm">Скачать</a><button type="button" onClick={() => setPreview(null)} className="rounded-lg border border-white/40 px-3 py-2 text-sm">Закрыть ✕</button></div></div>
                 <div className="mb-2 flex justify-center gap-3 text-xs text-slate-400"><button type="button" onClick={()=>stepPreview(-1)} className="hidden rounded-lg border border-white/30 px-4 py-2 text-white sm:block">←</button><span>{Math.max(0,previewFiles.findIndex(file=>file.id===preview.id))+1} / {previewFiles.length} · Свайп ← → для листания, ↑ ↓ для закрытия</span><button type="button" onClick={()=>stepPreview(1)} className="hidden rounded-lg border border-white/30 px-4 py-2 text-white sm:block">→</button></div>
                 {preview.mimeType.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.img key={preview.id} src={previewUrl(preview)} alt={preview.name} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} className="min-h-0 flex-1 object-contain" /></AnimatePresence> : : preview.mimeType.startsWith('video/') ? <video controls autoPlay src={fileUrl(preview)} className="min-h-0 flex-1" /> : <iframe title={preview.name} src={fileUrl(preview)} className="min-h-0 flex-1 bg-white" />}
-            </div>}
+            </motion.div>}</AnimatePresence>
         </div>
     </main>;
 }
