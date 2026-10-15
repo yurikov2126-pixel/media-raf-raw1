@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import sharp from 'sharp';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import multer from 'multer';
@@ -8,7 +10,7 @@ import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
-import { quarantineLibraryFile, quarantineTaskMaterialFile } from '../lib/storageQuarantine.js';
+import { quarantineLibraryFile, quarantineTaskMaterialFile, restoreRegisteredLibraryFile } from '../lib/storageQuarantine.js';
 import { canRemoveEditorialMaterial, canRemoveEditorialProjectFolder } from '../lib/editorialFileDeletion.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
 
@@ -214,6 +216,82 @@ router.delete('/files/materials/:materialId', async (req,res,next) => {
         res.json({ ok:true, quarantined:true, restoreUntil:result.expiresAt });
     } catch(error) { next(error); }
 });
+
+// User-defined virtual folders (library files only), independent of project folders.
+// Setting records avoid moving originals or invalidating existing shared links.
+const folderKey = id => 'editorial_custom_folder_' + id;
+const placementKey = id => 'editorial_custom_file_' + id;
+const decodeSetting = row => { try { return JSON.parse(row.value); } catch { return null; } };
+router.get('/trash', async (_req,res,next) => {
+    try {
+        const rows = await prisma.setting.findMany({where:{key:{startsWith:'storage_quarantine_'}}});
+        const entries = rows.map(row => decodeSetting(row)).filter(item => item && ['library','materials'].includes(item.type));
+        res.json({ entries:entries.sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)) });
+    } catch(error) { next(error); }
+});
+router.post('/trash/:id/restore', async (req,res,next) => {
+    try {
+        const row = await prisma.setting.findUnique({where:{key:'storage_quarantine_' + req.params.id}});
+        const item = row && decodeSetting(row);
+        if (!item || item.type !== 'library' || !item.originalId) return res.status(409).json({error:'Восстановление этого материала доступно в центре хранения администратора'});
+        await restoreRegisteredLibraryFile(item);
+        res.json({ok:true});
+    } catch(error) { next(error); }
+});
+router.get('/custom-folders', async (_req,res,next) => {
+    try {
+        const rows = await prisma.setting.findMany({ where:{ OR:[{ key:{ startsWith:'editorial_custom_folder_' } },{ key:{ startsWith:'editorial_custom_file_' } }] } });
+        const folders = rows.filter(row => row.key.startsWith('editorial_custom_folder_')).map(decodeSetting).filter(Boolean);
+        const placements = Object.fromEntries(rows.filter(row => row.key.startsWith('editorial_custom_file_')).map(row => [row.key.slice(22),row.value]));
+        res.json({ folders, placements });
+    } catch(error) { next(error); }
+});
+router.post('/custom-folders', async (req,res,next) => {
+    try {
+        const title = String(req.body?.title || '').trim();
+        const parentId = req.body?.parentId || null;
+        if (!title || title.length > 100 || (parentId !== null && typeof parentId !== 'string')) return res.status(400).json({ error:'Укажите название папки до 100 символов' });
+        if (parentId && !(await prisma.setting.findUnique({where:{key:folderKey(parentId)}}))) return res.status(404).json({error:'Родительская папка не найдена'});
+        const folder = { id:randomUUID(), title, parentId, createdAt:new Date().toISOString() };
+        await prisma.setting.create({data:{key:folderKey(folder.id),value:JSON.stringify(folder)}});
+        res.status(201).json({ folder });
+    } catch(error) { next(error); }
+});
+router.patch('/custom-folders/:id', async (req,res,next) => {
+    try {
+        const row = await prisma.setting.findUnique({where:{key:folderKey(req.params.id)}});
+        if (!row) return res.status(404).json({error:'Папка не найдена'});
+        const title = String(req.body?.title || '').trim();
+        if (!title || title.length > 100) return res.status(400).json({error:'Название должно содержать от 1 до 100 символов'});
+        const folder = { ...decodeSetting(row),title };
+        await prisma.setting.update({where:{key:row.key},data:{value:JSON.stringify(folder)}});
+        res.json({folder});
+    } catch(error) { next(error); }
+});
+router.delete('/custom-folders/:id', async (req,res,next) => {
+    try {
+        const row = await prisma.setting.findUnique({where:{key:folderKey(req.params.id)}});
+        if (!row) return res.status(404).json({error:'Папка не найдена'});
+        const children = await prisma.setting.findMany({where:{ OR:[{key:{startsWith:'editorial_custom_folder_'}},{key:{startsWith:'editorial_custom_file_'}}] }});
+        if (children.some(item => item.key.startsWith('editorial_custom_folder_') && decodeSetting(item)?.parentId === req.params.id) ||
+            children.some(item => item.key.startsWith('editorial_custom_file_') && item.value === req.params.id))
+            return res.status(409).json({error:'Папка не пуста. Сначала переместите файлы и вложенные папки.'});
+        await prisma.setting.delete({where:{key:row.key}});
+        res.json({ok:true});
+    } catch(error) { next(error); }
+});
+router.patch('/files/:fileId/folder', async (req,res,next) => {
+    try {
+        const file = await prisma.editorialLibraryFile.findUnique({where:{id:req.params.fileId}});
+        if (!file) return res.status(404).json({error:'Перемещать можно только файлы библиотеки'});
+        const folderId = req.body?.folderId ?? null;
+        if (folderId !== null && !(await prisma.setting.findUnique({where:{key:folderKey(folderId)}}))) return res.status(404).json({error:'Папка не найдена'});
+        if (folderId === null) await prisma.setting.deleteMany({where:{key:placementKey(file.id)}});
+        else await prisma.setting.upsert({where:{key:placementKey(file.id)},create:{key:placementKey(file.id),value:folderId},update:{value:folderId}});
+        res.json({ok:true,folderId});
+    } catch(error) { next(error); }
+});
+
 router.post('/shares/quick', async (req, res, next) => {
     try {
         const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId : null;
@@ -248,6 +326,57 @@ router.use('/uploads', editorialResumableRouter({
         return publicFile(file);
     },
 }));
+// Download a selection without creating an external public share.
+router.post('/files/archive', async (req,res,next) => {
+    try {
+        const ids = req.body?.fileIds;
+        if (!Array.isArray(ids) || ids.length < 1 || ids.length > 500 || ids.some(id => typeof id !== 'string' || id.length > 256) || new Set(ids).size !== ids.length) return res.status(400).json({error:'Выберите от 1 до 500 разных файлов'});
+        const files = await resolveFiles(ids);
+        if (files.length !== ids.length) return res.status(404).json({error:'Часть файлов больше недоступна'});
+        res.setHeader('Cache-Control','private, no-store');
+        return archive(res,files,'editorial-selected.zip');
+    } catch(error) { next(error); }
+});
+const hashFile = file => new Promise((resolve,reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(file);
+    stream.on('error',reject);
+    stream.on('data',chunk => hash.update(chunk));
+    stream.on('end',() => resolve(hash.digest('hex')));
+});
+router.get('/files/duplicates', async (_req,res,next) => {
+    try {
+        // Explicit user action only; do not hash large libraries on page load.
+        const files = await prisma.editorialLibraryFile.findMany({orderBy:{createdAt:'desc'},take:300});
+        const bySize = new Map();
+        for (const file of files) bySize.set(file.size,[...(bySize.get(file.size)||[]),file]);
+        const byHash = new Map();
+        for (const candidates of bySize.values()) {
+            if (candidates.length < 2) continue;
+            for (const file of candidates) {
+                const hash = await hashFile(path.join(root,file.storageName));
+                byHash.set(hash,[...(byHash.get(hash)||[]),publicFile(file)]);
+            }
+        }
+        res.json({ groups:[...byHash.entries()].filter(([,items])=>items.length>1).map(([sha256,files])=>({sha256,files})),scanned:files.length,limited:files.length===300 });
+    } catch(error) { next(error); }
+});
+router.get('/files/:fileId/metadata', async (req,res,next) => {
+    try {
+        const file = (await resolveFiles([req.params.fileId]))[0];
+        if (!file) return res.status(404).json({error:'Файл не найден'});
+        const result = {name:file.name,mimeType:file.mimeType,size:file.size,createdAt:file.createdAt};
+        if (thumbnailSupported(file.mimeType)) {
+            const dir = file.id.startsWith('material:') ? materialRoot : root;
+            const info = await sharp(path.join(dir,file.storageName),{limitInputPixels:80_000_000}).metadata();
+            result.width = info.width; result.height = info.height;
+            result.format = info.format; result.orientation = info.orientation;
+            if (info.density) result.density = info.density;
+            // Deliberately do not transmit raw EXIF: GPS/location and serial numbers are private.
+        }
+        res.json({metadata:result});
+    } catch(error) { next(error); }
+});
 router.get('/files', async (_req, res, next) => {
     try {
         const [libraryFiles, taskFiles] = await Promise.all([
@@ -281,6 +410,7 @@ router.delete('/files/:fileId', async (req, res, next) => {
         const file = await prisma.editorialLibraryFile.findUnique({ where: { id: req.params.fileId } });
         if (!file) return res.status(404).json({ error: 'Файл не найден' });
         const quarantined = await quarantineLibraryFile(file, req.user.id);
+        await prisma.setting.deleteMany({ where:{key:placementKey(file.id)} });
         res.json({ ok: true, quarantined: true, restoreUntil: quarantined.expiresAt });
     } catch (error) { next(error); }
 });
