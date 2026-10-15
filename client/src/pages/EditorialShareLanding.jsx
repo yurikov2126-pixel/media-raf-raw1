@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import './editorialShareLanding.css';
 import { usePhotoGestures } from './editorialGestures.js';
+import { useEditorialViewerScrollLock } from './editorialViewerScrollLock.js';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BASE = import.meta.env.VITE_API || 'http://localhost:4000/api';
@@ -49,6 +50,7 @@ export default function EditorialShareLanding() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const [preview, setPreview] = useState(null);
+    useEditorialViewerScrollLock(Boolean(preview));
     const [slideDirection,setSlideDirection] = useState(1);
     const [projectId, setProjectId] = useState(null);
     const [taskId, setTaskId] = useState(null);
@@ -69,11 +71,9 @@ export default function EditorialShareLanding() {
 
     useEffect(() => {
         if (!preview) return undefined;
-        const before = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
         const onKey = e => { if (e.key === 'Escape') setPreview(null); };
         window.addEventListener('keydown', onKey);
-        return () => { document.body.style.overflow = before; window.removeEventListener('keydown', onKey); };
+        return () => { window.removeEventListener('keydown', onKey); };
     }, [preview]);
 
     const projects = useMemo(() => groupFiles(data?.files || []), [data]);
@@ -132,18 +132,17 @@ export default function EditorialShareLanding() {
                             </button>
                             <div className="space-y-3 p-4"><h4 className="break-all text-sm font-semibold">{file.name}</h4>
                                 <p className="text-xs text-slate-400">{sizeText(file.size)} · {new Date(file.createdAt).toLocaleDateString('ru-RU')}</p>
-}
                                 {(file.caption || file.description) && <p className="line-clamp-3 whitespace-pre-wrap break-words text-xs text-slate-300">{file.caption || file.description}</p>}
                                 <div className="flex flex-wrap gap-2">{media(file) && <button type="button" onClick={() => setPreview(file)} className="rounded-lg border border-white/30 px-3 py-2 text-sm hover:bg-white/10">Просмотр</button>}<a href={fileUrl(file) + '?download=1'} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold hover:bg-violet-500">↓ Скачать</a></div>
                             </div>
                         </article>)}
-                    </div> : <p className="rounded-xl border border-white/15 p-5 text-sm text-slate-400">Ничего не найдено. Попробуйте другой запрос.</p>}
+                    </div> : <p className="rounded-xl border border-white/15 p-5 text-sm text-slate-400">В этой папке пока нет файлов.</p>}
                 </section>}
             </>}
-            <AnimatePresence>{preview && <motion.div key="public-viewer" initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:100}} transition={{duration:.2}} role="dialog" aria-modal="true" aria-label={'Просмотр: ' + preview.name} {...gestures} className="fixed inset-0 z-50 flex touch-pan-y flex-col bg-black/95 p-4">
+            <AnimatePresence>{preview && <motion.div key="public-viewer" initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:100}} transition={{duration:.2}} role="dialog" aria-modal="true" aria-label={'Просмотр: ' + preview.name} {...gestures} className="fixed inset-0 z-50 flex touch-none select-none flex-col overflow-hidden overscroll-none bg-black/95 p-4">
                 <div className="mb-4 flex items-center justify-between gap-3"><h2 className="min-w-0 break-all text-sm">{preview.name}</h2><div className="flex shrink-0 gap-2"><a href={fileUrl(preview) + '?download=1'} className="rounded-lg border border-white/40 px-3 py-2 text-sm">Скачать</a><button type="button" onClick={() => setPreview(null)} className="rounded-lg border border-white/40 px-3 py-2 text-sm">Закрыть ✕</button></div></div>
                 <div className="mb-2 flex justify-center gap-3 text-xs text-slate-400"><button type="button" onClick={()=>stepPreview(-1)} className="hidden rounded-lg border border-white/30 px-4 py-2 text-white sm:block">←</button><span>{Math.max(0,previewFiles.findIndex(file=>file.id===preview.id))+1} / {previewFiles.length} · Свайп ← → для листания, ↑ ↓ для закрытия</span><button type="button" onClick={()=>stepPreview(1)} className="hidden rounded-lg border border-white/30 px-4 py-2 text-white sm:block">→</button></div>
-                {preview.mimeType.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.img key={preview.id} src={previewUrl(preview)} alt={preview.name} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} className="min-h-0 flex-1 object-contain" /></AnimatePresence> : preview.mimeType.startsWith('video/') ? <video controls autoPlay src={fileUrl(preview)} className="min-h-0 flex-1" /> : <iframe title={preview.name} src={fileUrl(preview)} className="min-h-0 flex-1 bg-white" />}
+                {preview.mimeType.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.img key={preview.id} src={previewUrl(preview)} alt={preview.name} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} draggable={false} className="min-h-0 flex-1 select-none object-contain" /></AnimatePresence> : preview.mimeType.startsWith('video/') ? <video controls autoPlay src={fileUrl(preview)} className="min-h-0 flex-1" /> : <iframe title={preview.name} src={fileUrl(preview)} className="min-h-0 flex-1 bg-white" />}
             </motion.div>}</AnimatePresence>
         </div>
     </main>;
