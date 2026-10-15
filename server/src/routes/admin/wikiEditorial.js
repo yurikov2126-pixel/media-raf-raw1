@@ -21,13 +21,15 @@ router.post('/wiki/proposals/:id/review', safe(async (req,res) => {
   const result = await prisma.$transaction(async tx => {
     const p = await tx.wikiProposal.findUnique({ where: { id: req.params.id } });
     if (!p || p.status !== 'PENDING') return null;
+    const claimed = await tx.wikiProposal.updateMany({ where:{id:p.id,status:'PENDING'}, data:{status:req.body.status,reviewedBy:req.user.id,reviewedAt:new Date()} });
+    if (!claimed.count) return null;
     if (req.body.status === 'APPROVED') {
       const article = await tx.wikiArticle.findUnique({ where: { id: p.articleId } });
       if (!article) return null;
       await tx.wikiRevision.create({ data: snapshot(article, req.user.id) });
       await tx.wikiArticle.update({ where: { id: p.articleId }, data: { content: p.content } });
     }
-    const result = await tx.wikiProposal.update({ where: { id: p.id }, data: { status: req.body.status, reviewedBy: req.user.id, reviewedAt: new Date() } });
+    const result = { ...p, status:req.body.status };
     const amount = Math.max(0,Math.min(1000,Number(settings.xp.wiki_approved_edit ?? 25)||0));
     if (p.authorId && req.body.status === 'APPROVED' && settings.enabled && amount) {
       await tx.userStats.upsert({ where:{userId:p.authorId}, create:{userId:p.authorId,xp:0,level:1}, update:{} });
