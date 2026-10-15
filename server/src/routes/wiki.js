@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
+import { ensureEditorialEquipment } from '../lib/wikiEquipment.js';
 
 const router = Router();
 router.use(auth);
@@ -25,6 +26,7 @@ function parseArticle(a) {
 // Все категории + число опубликованных статей
 router.get('/categories', async (_req, res) => {
     try {
+        await ensureEditorialEquipment();
         const categories = await prisma.wikiCategory.findMany({
             orderBy: { order: 'asc' },
             include: {
