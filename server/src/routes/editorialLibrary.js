@@ -87,12 +87,12 @@ const sharedFolderPaths = async files => {
         const taskFolder = material.task.title + ' · ' + dayLabel + ' · ' + assigneeName;
         paths.set(materialKey(material.id), {
             projectId: material.task.projectId,
-            projectTitle: project.title,
+            projectTitle: project.title + (project.eventDate ? ' · ' + new Date(project.eventDate).toISOString().slice(0,10).split('-').reverse().join('.') + (project.eventEndDate && +new Date(project.eventEndDate) !== +new Date(project.eventDate) ? ' – ' + new Date(project.eventEndDate).toISOString().slice(0,10).split('-').reverse().join('.') : '') : ' · Без даты'),
             taskId: material.task.id,
             taskTitle: material.task.title,
             workDate,
             assigneeName,
-            taskFolder,
+            taskFolder: material.task.title + ' — ' + shareFolderName(member,name),
             personId,
             folder: shareFolderName(member, name),
         });
