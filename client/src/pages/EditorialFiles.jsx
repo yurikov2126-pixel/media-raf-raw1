@@ -48,10 +48,11 @@ export default function EditorialFiles() {
         setBusy(true); setError(''); setProgress(0);
         try {
             for (let index = 0; index < chosen.length; index++) {
-                await uploadEditorialResumable({
+                const uploaded = await uploadEditorialResumable({
                     path:'/editorial/library', file:chosen[index], token,
                     onProgress:percentage => setProgress(Math.round((index * 100 + percentage) / chosen.length)),
                 });
+                if (customId && uploaded?.id) await api('/editorial/library/files/' + encodeURIComponent(uploaded.id) + '/folder',{token,method:'PATCH',body:{folderId:customId}});
             }
             setRefresh(n => n + 1);
         } catch (error) { setError(error.message); }
