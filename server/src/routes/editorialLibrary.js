@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
 import { quarantineLibraryFile } from '../lib/storageQuarantine.js';
+import { editorialResumableRouter } from '../lib/editorialResumable.js';
 
 const router = Router();
 const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial');
@@ -207,6 +208,17 @@ router.post('/shares/quick', async (req, res, next) => {
         res.status(201).json({ share });
     } catch (error) { next(error); }
 });
+router.use('/uploads', editorialResumableRouter({
+    root,
+    scope:'editorial-library',
+    allowed: mimeType => typeof mimeType === 'string' && mimeType.length <= 200,
+    authorize:async () => true, // The parent router already enforces authentication and editorial.library.
+    complete:async (req, session) => {
+        const file = await prisma.editorialLibraryFile.create({ data: { name:session.name, storageName:session.storageName, mimeType:session.mimeType, size:session.size, uploaderId:req.user.id } });
+        if (thumbnailSupported(file.mimeType)) ensureEditorialThumbnail(root,file).catch(error => console.error('[editorial-library] thumbnail failed',error));
+        return publicFile(file);
+    },
+}));
 router.get('/files', async (_req, res, next) => {
     try {
         const [libraryFiles, taskFiles] = await Promise.all([
