@@ -138,7 +138,7 @@ router.post('/wiki/import', upload.single('archive'), safe(async (req, res) => {
                 const content = item.content.replace(MARKDOWN_IMAGE_RE, (_all, alt, name) => '![' + alt + '](' + urls.get(name) + ')');
                 const data = { title: item.title, excerpt: item.excerpt || null, content, cover: item.cover ? urls.get(item.cover) : null,
                     tags: JSON.stringify(Array.isArray(item.tags) ? item.tags : []), categoryId: categoryMap.get(item.categorySlug),
-                    published: item.published === true };
+                    published: existing ? existing.published : item.published === true };
                 if (existing) { await tx.wikiArticle.update({ where: { slug: item.slug }, data }); updated++; }
                 else { await tx.wikiArticle.create({ data: { ...data, slug: item.slug, authorId: req.user.id } }); created++; }
             }
