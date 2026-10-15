@@ -31,6 +31,7 @@ export default function EditorialFiles() {
     const [search, setSearch] = useState('');
     const [type, setType] = useState('all');
     const [sort, setSort] = useState('newest');
+    const [smart,setSmart] = useState('all');
     const [bulkBusy, setBulkBusy] = useState(false);
     const [customFolders,setCustomFolders] = useState([]);
     const [placements,setPlacements] = useState({});
@@ -75,7 +76,7 @@ export default function EditorialFiles() {
         } catch (e) { setError(e.message); }
     }
     const sourceFiles = folder ? (personFolder ? personFolder.files : []) : files.filter(file => (placements[file.id] || null) === customId);
-    const visibleFiles = sourceFiles.filter(file => (type === 'all' || (type === 'image' ? file.mimeType?.startsWith('image/') : type === 'video' ? file.mimeType?.startsWith('video/') : !file.mimeType?.startsWith('image/') && !file.mimeType?.startsWith('video/'))) && (file.name + ' ' + (file.description || file.caption || '') + ' ' + (file.taskTitle || '')).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name,'ru') : sort === 'size' ? b.size-a.size : new Date(b.createdAt)-new Date(a.createdAt));
+    const visibleFiles = sourceFiles.filter(file => (smart === 'all' || (smart === 'recent' ? Date.now()-new Date(file.createdAt).getTime() <= 7*86400000 : smart === 'large' ? file.size >= 20*1048576 : smart === 'uncaptioned' ? !(file.description || file.caption)?.trim() : true)) && (type === 'all' || (type === 'image' ? file.mimeType?.startsWith('image/') : type === 'video' ? file.mimeType?.startsWith('video/') : !file.mimeType?.startsWith('image/') && !file.mimeType?.startsWith('video/'))) && (file.name + ' ' + (file.description || file.caption || '') + ' ' + (file.taskTitle || '')).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name,'ru') : sort === 'size' ? b.size-a.size : new Date(b.createdAt)-new Date(a.createdAt));
     async function shareSelection() {
         if (!selection.length || !collectionTitle.trim()) return;
         setSharing(true); setError('');
@@ -197,6 +198,7 @@ export default function EditorialFiles() {
             {(folder.folders || []).map(group => <article key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => setPersonFolder(group)}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{group.title}</span><span className="block text-xs opacity-60">{group.files.length} файлов</span></button><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => sharePerson(group)}>Общий доступ</button></article>)}
         </div>}
         {!folder && <h3 className="font-semibold">Общие файлы</h3>}
+        <div className="flex flex-wrap gap-2" aria-label="Умные подборки">{[['all','Все файлы'],['recent','За 7 дней'],['large','Крупные от 20 МБ'],['uncaptioned','Без описания']].map(([value,label])=><button key={value} type="button" aria-pressed={smart===value} onClick={()=>setSmart(value)} className={`rounded-full border px-3 py-2 text-xs font-semibold ${smart===value?'border-violet-500 bg-violet-600 text-white':'border-current/20 bg-violet-500/5'}`}>{label}</button>)}</div>
         <div className="grid gap-2 rounded-xl border border-current/15 bg-violet-500/5 p-3 sm:grid-cols-[1fr_auto_auto]">
             <input aria-label="Поиск файлов" placeholder="Поиск по названию, описанию или заданию…" value={search} onChange={event => setSearch(event.target.value)} className="min-w-0 rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm" />
             <select aria-label="Тип файла" value={type} onChange={event => setType(event.target.value)} className="rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm"><option value="all">Все типы</option><option value="image">Фотографии</option><option value="video">Видео</option><option value="other">Документы</option></select>
