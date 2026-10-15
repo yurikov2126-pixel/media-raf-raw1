@@ -26,7 +26,7 @@ async function context(req, res) {
 
 router.use('/projects/:projectId/tasks/:taskId/materials/uploads', editorialResumableRouter({
     root,
-    scope: 'editorial-task',
+    scope: req => 'editorial-task:' + req.params.projectId + ':' + req.params.taskId,
     allowed: mimeType => allowed.has(mimeType),
     authorize: async (req,res) => {
         const ctx = await context(req,res); if (!ctx) return false;
