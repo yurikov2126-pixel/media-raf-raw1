@@ -51,13 +51,13 @@ async function getProject(id) {
 }
 
 // Notifications share the existing site inbox; never send to non-members.
-async function notifyEditorial(tx, project, task, recipients, event, actorId) {
+async function notifyEditorial(tx, project, task, recipients, event, actorId, note = '') {
     const allowed = new Set(project.members.map((member) => member.userId));
     const ids = [...new Set(recipients)].filter((id) => id && id !== actorId && allowed.has(id));
     if (!ids.length) return;
     await tx.notification.createMany({ data: ids.map((userId) => ({
         userId, type: 'editorial',
-        payload: JSON.stringify({ projectId: project.id, projectTitle: project.title, taskId: task.id, taskTitle: task.title, event }),
+        payload: JSON.stringify({ projectId: project.id, projectTitle: project.title, taskId: task.id, taskTitle: task.title, event, note }),
     })) });
 }
 
@@ -464,7 +464,7 @@ router.post('/projects/:projectId/tasks/:taskId/review', async (req, res, next) 
             const recipients = action === 'submit'
                 ? project.members.filter((m) => ['MANAGER', 'EDITOR'].includes(m.role)).map((m) => m.userId)
                 : [task.assigneeId, task.createdById];
-            await notifyEditorial(tx, project, result, recipients, action === 'submit' ? 'review_submitted' : action === 'approve' ? 'review_approved' : 'review_revision', req.user.id);
+            await notifyEditorial(tx, project, result, recipients, action === 'submit' ? 'review_submitted' : action === 'approve' ? 'review_approved' : 'review_revision', req.user.id, note);
             return result;
         });
         res.json({ task: updated });
@@ -564,6 +564,8 @@ router.patch('/projects/:projectId/tasks/:taskId/applications/:applicationId', a
         const project = await getProject(req.params.projectId);
         if (!project || !canEdit(project, req.user)) return notFound(res);
         if (!['APPROVED', 'REJECTED'].includes(req.body.status)) return res.status(400).json({ error: 'Некорректное решение' });
+        const rejectionReason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+        if (req.body.status === 'REJECTED' && (!rejectionReason || rejectionReason.length > 3000)) return res.status(400).json({ error: 'Укажите причину отклонения заявки (до 3000 символов)' });
         const task = await prisma.editorialTask.findFirst({ where: { id: req.params.taskId, projectId: project.id } });
         if (!task) return res.status(404).json({ error: 'Задача не найдена' });
         const result = await prisma.$transaction(async (tx) => {
@@ -574,9 +576,9 @@ router.patch('/projects/:projectId/tasks/:taskId/applications/:applicationId', a
                 if (!claimed.count) return { error: 'Задание уже занято или набор закрыт' };
                 await tx.editorialTaskApplication.updateMany({ where: { taskId: task.id, status: 'PENDING', id: { not: application.id } }, data: { status: 'REJECTED', reviewedById: req.user.id, reviewedAt: new Date() } });
             }
-            const updated = await tx.editorialTaskApplication.update({ where: { id: application.id }, data: { status: req.body.status, reviewedById: req.user.id, reviewedAt: new Date() } });
-            await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: req.body.status === 'APPROVED' ? 'APPLICATION_APPROVED' : 'APPLICATION_REJECTED', details: JSON.stringify({ userId: application.userId }) } });
-            await notifyEditorial(tx, project, task, [application.userId], req.body.status === 'APPROVED' ? 'application_approved' : 'application_rejected', req.user.id);
+            const updated = await tx.editorialTaskApplication.update({ where: { id: application.id }, data: { status: req.body.status, note: req.body.status === 'REJECTED' ? rejectionReason : application.note, reviewedById: req.user.id, reviewedAt: new Date() } });
+            await tx.editorialTaskEvent.create({ data: { taskId: task.id, actorId: req.user.id, action: req.body.status === 'APPROVED' ? 'APPLICATION_APPROVED' : 'APPLICATION_REJECTED', details: JSON.stringify({ userId: application.userId, reason: rejectionReason }) } });
+            await notifyEditorial(tx, project, task, [application.userId], req.body.status === 'APPROVED' ? 'application_approved' : 'application_rejected', req.user.id, rejectionReason);
             return { application: updated };
         });
         if (result.error) return res.status(409).json({ error: result.error });
