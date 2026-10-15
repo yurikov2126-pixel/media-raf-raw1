@@ -26,6 +26,10 @@ router.post('/wiki/proposals/:id/review', safe(async (req,res) => {
     return tx.wikiProposal.update({ where: { id: p.id }, data: { status: req.body.status, reviewedBy: req.user.id, reviewedAt: new Date() } });
   });
   if (!result) return res.status(409).json({ error: 'Предложение уже обработано или статья удалена' });
+  if (result.authorId) {
+    const article = await prisma.wikiArticle.findUnique({ where: { id: result.articleId }, select: { title: true, slug: true } });
+    await prisma.notification.create({ data: { userId: result.authorId, type: 'system', payload: JSON.stringify({ title: result.status === 'APPROVED' ? 'Правка статьи одобрена' : 'Правка статьи отклонена', preview: `ВикиМедиа: «${article?.title || 'Статья'}». ${result.status === 'APPROVED' ? 'Предложенные изменения опубликованы.' : 'Предложенные изменения не приняты.'}`, url: article ? `/app/wiki/${article.slug}` : '/app/wiki' }) } });
+  }
   res.json({ ok: true, status: result.status });
 }));
 router.get('/wiki/articles/:id/revisions', safe(async (req,res) => {
