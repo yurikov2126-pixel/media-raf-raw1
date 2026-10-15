@@ -205,7 +205,7 @@ router.delete('/folders/projects/:projectId', async (req,res,next) => {
 });
 // Task attachments may be discarded only when both the project and assignment
 // have finished. The existing quarantine handles active public shares and recovery.
-router.delete('/files/material:materialId', async (req,res,next) => {
+router.delete('/files/materials/:materialId', async (req,res,next) => {
     try {
         const file = await prisma.editorialMaterialFile.findUnique({ where:{ id:req.params.materialId }, include:{ task:{ select:{ id:true, status:true, projectId:true, project:{ select:{ completedAt:true } } } } } });
         if (!file) return res.status(404).json({ error:'Материал не найден' });
