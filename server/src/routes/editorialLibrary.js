@@ -156,7 +156,7 @@ router.use(async (req, res, next) => {
 router.get('/folders', async (_req, res, next) => {
     try {
         const [projects, files] = await Promise.all([
-            prisma.editorialProject.findMany({ select: { id: true, title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } }, tasks: { select: { id: true, title: true, assigneeId: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true, uploaderId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
+            prisma.editorialProject.findMany({ select: { id: true, title: true, completedAt: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } }, tasks: { select: { id: true, title: true, assigneeId: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true, uploaderId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
             prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
         ]);
         const roles = {
@@ -167,7 +167,7 @@ router.get('/folders', async (_req, res, next) => {
         };
         const hidden = await prisma.setting.findMany({ where: { key: { startsWith:'editorial_files_hidden_project_' } }, select:{ key:true } });
         const hiddenIds = new Set(hidden.map(item => item.key.slice('editorial_files_hidden_project_'.length)));
-        const projectFolders = projects.filter(p => !hiddenIds.has(p.id)).map(p => {
+        const projectFolders = projects.filter(p => !hiddenIds.has(p.id) || !p.completedAt || p.tasks.some(task => task.materialFiles.length > 0)).map(p => {
             const members = new Map(p.members.map(m => [m.userId, m]));
             const grouped = new Map();
             for (const task of p.tasks) {
