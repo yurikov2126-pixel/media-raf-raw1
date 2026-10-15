@@ -11,6 +11,9 @@ export default function Wiki() {
     const [articles, setArticles] = useState([]);
     const [popular, setPopular] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [debouncedSearch, setDebouncedSearch] = useState(params.get('q') || '');
 
     const [search, setSearch] = useState(params.get('q') || '');
     const activeCategory = params.get('cat') || '';
@@ -27,17 +30,28 @@ export default function Wiki() {
     }, [token]);
 
     useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 350);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    useEffect(() => { setPage(1); }, [activeCategory, debouncedSearch]);
+
+    useEffect(() => {
         if (!token) return;
+        let cancelled = false;
         setLoading(true);
         const qs = new URLSearchParams();
         if (activeCategory) qs.set('category', activeCategory);
-        if (search.trim()) qs.set('q', search.trim());
+        if (debouncedSearch.trim()) qs.set('q', debouncedSearch.trim());
+        qs.set('page', String(page));
+        qs.set('limit', '24');
         const url = `/wiki/articles${qs.toString() ? `?${qs}` : ''}`;
         api(url, { token })
-            .then(setArticles)
-            .catch(() => setArticles([]))
-            .finally(() => setLoading(false));
-    }, [token, activeCategory, search]);
+            .then((result) => { if (!cancelled) { setArticles(result.items || []); setTotal(result.total || 0); } })
+            .catch(() => { if (!cancelled) { setArticles([]); setTotal(0); } })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [token, activeCategory, debouncedSearch, page]);
 
     const updateParam = (key, value) => {
         const next = new URLSearchParams(params);
@@ -75,7 +89,7 @@ export default function Wiki() {
     });
 
     return (
-        <div className="p-4 md:p-10 max-w-6xl mx-auto">
+        <div className="p-4 md:p-10 max-w-7xl mx-auto">
             {/* Заголовок */}
             <div className="mb-6">
                 <div className="flex items-center gap-3 mb-2">
@@ -99,10 +113,10 @@ export default function Wiki() {
             </form>
 
             {/* Категории */}
-            <div className="flex flex-wrap gap-2 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
                 <button
                     onClick={() => updateParam('cat', '')}
-                    className={`chip ${!activeCategory ? 'bg-violet text-white' : 'bg-white/5 text-white/60'}`}
+                    className={`rounded-2xl p-4 text-left border transition ${!activeCategory ? 'bg-violet/20 border-violet' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                 >
                     📖 Все статьи
                 </button>
@@ -110,20 +124,20 @@ export default function Wiki() {
                     <button
                         key={c.id}
                         onClick={() => updateParam('cat', c.slug)}
-                        className={`chip ${
+                        className={`rounded-2xl p-4 text-left border transition ${
                             activeCategory === c.slug
-                                ? 'bg-violet text-white'
-                                : 'bg-white/5 text-white/60'
+                                ? 'bg-violet/20 border-violet'
+                                : 'bg-white/5 border-white/10 hover:bg-white/10'
                         }`}
                     >
-                        {c.icon} {c.title} ({c.articlesCount})
+                        <span className="block text-2xl mb-2">{c.icon}</span><span className="block font-semibold text-sm">{c.title}</span><span className="text-xs opacity-60">{c.articlesCount} статей</span>
                     </button>
                 ))}
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid lg:grid-cols-4 gap-6">
                 {/* Основной список */}
-                <div className="md:col-span-2 space-y-4">
+                <div className="lg:col-span-3 space-y-4">
                     {loading && (
                         <div className="card p-8 text-center text-white/40">Загрузка…</div>
                     )}
@@ -135,7 +149,7 @@ export default function Wiki() {
                     )}
 
                     {!loading && activeCategory && (
-                        <div className="space-y-3">
+                        <div className="grid sm:grid-cols-2 gap-3">
                             {articles.map((a) => (
                                 <ArticleCard key={a.id} article={a} />
                             ))}
@@ -150,7 +164,7 @@ export default function Wiki() {
                                         <span className="text-2xl">{g.icon}</span>
                                         <h2 className="text-xl font-bold">{g.title}</h2>
                                     </div>
-                                    <div className="space-y-3">
+                                    <div className="grid sm:grid-cols-2 gap-3">
                                         {g.articles.map((a) => (
                                             <ArticleCard key={a.id} article={a} />
                                         ))}
@@ -162,7 +176,7 @@ export default function Wiki() {
                 </div>
 
                 {/* Сайдбар: популярное */}
-                <aside className="md:col-span-1 space-y-4">
+                <aside className="lg:col-span-1 space-y-4">
                     <div className="card p-5">
                         <div className="font-bold mb-3 flex items-center gap-2">
                             🔥 Популярное
@@ -190,11 +204,12 @@ export default function Wiki() {
                         <div className="font-bold mb-3">📊 Статистика</div>
                         <div className="text-sm text-white/60 space-y-1">
                             <div>Категорий: <b className="text-white">{categories.length}</b></div>
-                            <div>Статей: <b className="text-white">{articles.length}</b></div>
+                            <div>Всего статей: <b className="text-white">{total}</b></div>
                         </div>
                     </div>
                 </aside>
             </div>
+            {total > 24 && <div className="flex justify-center items-center gap-3 mt-6"><button className="btn-ghost" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>← Назад</button><span className="text-sm text-white/60">{page} / {Math.ceil(total / 24)}</span><button className="btn-ghost" disabled={page * 24 >= total} onClick={() => setPage((p) => p + 1)}>Далее →</button></div>}
         </div>
     );
 }
@@ -203,9 +218,10 @@ function ArticleCard({ article }) {
     return (
         <Link
             to={`/app/wiki/${article.slug}`}
-            className="card p-5 block hover:-translate-y-0.5 transition group"
+            className="card overflow-hidden block hover:-translate-y-0.5 transition group"
         >
-            <div className="flex items-start gap-3">
+            {article.cover && <img src={article.cover} alt="" loading="lazy" className="w-full h-36 object-cover" />}
+            <div className="flex items-start gap-3 p-5">
                 <div className="text-2xl shrink-0">
                     {article.category?.icon || '📄'}
                 </div>
@@ -224,7 +240,7 @@ function ArticleCard({ article }) {
                 {article.category.title}
               </span>
                         )}
-                        {article.tags.slice(0, 3).map((t) => (
+                        {(article.tags || []).slice(0, 3).map((t) => (
                             <span key={t} className="chip bg-white/5 text-white/50">
                 #{t}
               </span>
