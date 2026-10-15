@@ -107,7 +107,7 @@ function payloadToPush(type, payload) {
         return {
             title: payload.title || 'MEDIA·RAF·RAW',
             body: payload.message || '',
-            url: '/app',
+            url: typeof payload.url === 'string' && payload.url.startsWith('/app/') ? payload.url : '/app',
             tag: `sys-${Date.now()}`,
         };
     }
