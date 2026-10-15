@@ -8,7 +8,7 @@ import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
-import { quarantineLibraryFile } from '../lib/storageQuarantine.js';
+import { quarantineLibraryFile, quarantineTaskMaterialFile } from '../lib/storageQuarantine.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
 
 const router = Router();
@@ -16,6 +16,8 @@ const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editoria
 const materialRoot = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
 const materialKey = id => `material:${id}`;
 const MAX_SHARED_FILES = 5000;
+const finishedStatuses = ['DONE', 'APPROVED'];
+const hiddenFolderKey = id => 'editorial_files_hidden_project_' + id;
 const fileView = file => ({ ...publicFile(file), id: materialKey(file.id), taskId: file.taskId, version: file.version, caption: file.caption, source: 'material' });
 const materialIds = ids => ids.filter(id => typeof id === 'string' && id.startsWith('material:')).map(id => id.slice(9));
 const libraryIds = ids => ids.filter(id => typeof id === 'string' && !id.startsWith('material:'));
@@ -163,7 +165,9 @@ router.get('/folders', async (_req, res, next) => {
             ACTION_CAMERA: 'Оператор экшн-камеры', SOUND_ENGINEER: 'Звукорежиссёр',
             INTERVIEWER: 'Интервьюер', VIDEO_EDITOR: 'Монтажёр',
         };
-        const projectFolders = projects.map(p => {
+        const hidden = await prisma.setting.findMany({ where: { key: { startsWith:'editorial_files_hidden_project_' } }, select:{ key:true } });
+        const hiddenIds = new Set(hidden.map(item => item.key.slice('editorial_files_hidden_project_'.length)));
+        const projectFolders = projects.filter(p => !hiddenIds.has(p.id)).map(p => {
             const members = new Map(p.members.map(m => [m.userId, m]));
             const grouped = new Map();
             for (const task of p.tasks) {
@@ -184,6 +188,31 @@ router.get('/folders', async (_req, res, next) => {
         });
         res.json({ folders: projectFolders, files: files.map(publicFile) });
     } catch (error) { next(error); }
+});
+// Project folders in this view are virtual. Hiding an empty, completed folder
+// never deletes a project, assignment, report or source file.
+router.delete('/folders/projects/:projectId', async (req,res,next) => {
+    try {
+        const project = await prisma.editorialProject.findUnique({ where:{ id:req.params.projectId }, select:{ id:true, completedAt:true, tasks:{ select:{ id:true, status:true, _count:{ select:{ materialFiles:true } } } } } });
+        if (!project) return res.status(404).json({ error:'Папка проекта не найдена' });
+        if (!project.completedAt) return res.status(409).json({ error:'Проект ещё активен. Завершите его перед удалением папки.' });
+        if (project.tasks.some(task => !finishedStatuses.includes(task.status))) return res.status(409).json({ error:'В проекте остались активные задания.' });
+        if (project.tasks.some(task => task._count.materialFiles)) return res.status(409).json({ error:'В папке остались файлы. Удалите неиспользуемые материалы по отдельности.' });
+        await prisma.setting.upsert({ where:{ key:hiddenFolderKey(project.id) }, create:{ key:hiddenFolderKey(project.id),value:'hidden' }, update:{ value:'hidden' } });
+        await prisma.adminAction.create({ data:{ adminId:req.user.id, action:'editorial_folder_hidden', payload:JSON.stringify({ projectId:project.id }),affected:1 } }).catch(() => {});
+        res.json({ ok:true });
+    } catch(error) { next(error); }
+});
+// Task attachments may be discarded only when both the project and assignment
+// have finished. The existing quarantine handles active public shares and recovery.
+router.delete('/files/material:materialId', async (req,res,next) => {
+    try {
+        const file = await prisma.editorialMaterialFile.findUnique({ where:{ id:req.params.materialId }, include:{ task:{ select:{ id:true, status:true, projectId:true, project:{ select:{ completedAt:true } } } } } });
+        if (!file) return res.status(404).json({ error:'Материал не найден' });
+        if (!file.task.project.completedAt || !finishedStatuses.includes(file.task.status)) return res.status(409).json({ error:'Материал используется в активном проекте или задании.' });
+        const result = await quarantineTaskMaterialFile(file,req.user.id,{ projectId:file.task.projectId });
+        res.json({ ok:true, quarantined:true, restoreUntil:result.expiresAt });
+    } catch(error) { next(error); }
 });
 router.post('/shares/quick', async (req, res, next) => {
     try {
