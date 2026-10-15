@@ -17,6 +17,7 @@ export async function downloadEditorialFile(path, token, name) {
 export default function EditorialFiles() {
     const { token } = useAuth();
     const [files, setFiles] = useState([]);
+    const [stats,setStats] = useState({ count:0,photos:0,videos:0,size:0 });
     const [folders, setFolders] = useState([]);
     const [folder, setFolder] = useState(null);
     const [personFolder, setPersonFolder] = useState(null);
@@ -40,7 +41,7 @@ export default function EditorialFiles() {
     const [trash,setTrash] = useState([]);
     const [duplicateGroups,setDuplicateGroups] = useState(null);
     const [duplicatesBusy,setDuplicatesBusy] = useState(false);
-    useEffect(() => { let active = true; Promise.all([api('/editorial/library/folders',{token}),api('/editorial/library/custom-folders',{token}),api('/editorial/library/trash',{token})]).then(([data,custom,deleted]) => { if (active) { setFiles(data.files||[]); setFolders(data.folders||[]); setCustomFolders(custom.folders||[]); setPlacements(custom.placements||{}); setTrash(deleted.entries||[]); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
+    useEffect(() => { let active = true; Promise.all([api('/editorial/library/folders',{token}),api('/editorial/library/custom-folders',{token}),api('/editorial/library/trash',{token})]).then(([data,custom,deleted]) => { if (active) { setFiles(data.files||[]); setFolders(data.folders||[]); setStats(data.stats||{count:0,photos:0,videos:0,size:0}); setCustomFolders(custom.folders||[]); setPlacements(custom.placements||{}); setTrash(deleted.entries||[]); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
     async function upload(event) {
         const chosen = Array.from(event.target.files || []);
         event.target.value = '';
@@ -177,7 +178,7 @@ export default function EditorialFiles() {
     return <div className="editorial-workspace-content space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Файлы редакции</h2><p className="text-sm opacity-70">Закрытое хранилище для передачи материалов другим подразделениям.</p></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white">+ Загрузить файл<input type="file" multiple className="sr-only" onChange={upload} disabled={busy} /></label></div>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Сводка медиатеки">
-            {[['Всего файлов', files.length], ['Фотографий', files.filter(file=>file.mimeType?.startsWith('image/')).length], ['Видео',files.filter(file=>file.mimeType?.startsWith('video/')).length],['Объём', (files.reduce((sum,file)=>sum+file.size,0)/1073741824).toFixed(2)+' ГБ']].map(([label,value])=><div key={label} className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3"><strong className="block text-xl font-bold text-violet-700 dark:text-violet-200">{value}</strong><span className="text-xs text-slate-600 dark:text-slate-300">{label}</span></div>)}
+            {[['Всего файлов', stats.count], ['Фотографий', stats.photos], ['Видео',stats.videos],['Объём',stats.size>=1073741824?(stats.size/1073741824).toFixed(2)+' ГБ':(stats.size/1048576).toFixed(1)+' МБ']].map(([label,value])=><div key={label} className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3"><strong className="block text-xl font-bold text-violet-700 dark:text-violet-200">{value}</strong><span className="text-xs text-slate-600 dark:text-slate-300">{label}</span></div>)}
         </div>
         {progress !== null && <div role="status" className="space-y-1 text-sm"><span>Загрузка: {progress}%</span><progress max="100" value={progress} className="block w-full" /></div>}
         {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
