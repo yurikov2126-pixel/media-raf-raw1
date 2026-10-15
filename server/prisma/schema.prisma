@@ -833,6 +833,9 @@ model EditorialStage {
   @@index([projectId, position])
 }
 model EditorialTask {
+  assignmentDecision String @default("PENDING")
+  assignmentDeclineReason String?
+  assignmentRespondedAt DateTime?
   productionChecklist String @default("[]")
   requiredCompetencyIds String @default("[]")
   id String @id @default(cuid())
