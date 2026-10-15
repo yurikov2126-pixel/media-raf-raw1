@@ -31,6 +31,7 @@ export default function EditorialFiles() {
     const [search, setSearch] = useState('');
     const [type, setType] = useState('all');
     const [sort, setSort] = useState('newest');
+    const [bulkBusy, setBulkBusy] = useState(false);
     useEffect(() => { let active = true; api('/editorial/library/folders', { token }).then(data => { if (active) { setFiles(data.files); setFolders(data.folders); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
     async function upload(event) {
         const chosen = Array.from(event.target.files || []);
@@ -90,6 +91,23 @@ export default function EditorialFiles() {
             setRefresh(n => n + 1);
         } catch (error) { setError(error.message); }
     }
+    async function removeSelected() {
+        const targets = sourceFiles.filter(file => selection.includes(file.id));
+        if (!targets.length) return;
+        if (!window.confirm('Переместить ' + targets.length + ' выбранных файлов в корзину? Активные и опубликованные материалы останутся защищены.')) return;
+        setBulkBusy(true); setError('');
+        const failed = [];
+        for (const file of targets) {
+            const route = file.source === 'material' ? '/editorial/library/files/materials/' + encodeURIComponent(file.id.slice(9)) : '/editorial/library/files/' + encodeURIComponent(file.id);
+            try {
+                await api(route,{token,method:'DELETE'});
+                setSelection(ids => ids.filter(id => id !== file.id));
+            } catch (error) { failed.push(file.name + ': ' + error.message); }
+        }
+        setBulkBusy(false);
+        setRefresh(n => n + 1);
+        if (failed.length) setError('Не удалось удалить ' + failed.length + ' из ' + targets.length + ' файлов. ' + failed.slice(0,3).join('; '));
+    }
     async function removeFolder(item) {
         if (!window.confirm('Убрать пустую завершённую папку «' + item.title + '» из файлового менеджера? Сам проект и его история сохранятся.')) return;
         try {
@@ -119,7 +137,7 @@ export default function EditorialFiles() {
             <select aria-label="Сортировка файлов" value={sort} onChange={event => setSort(event.target.value)} className="rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm"><option value="newest">Сначала новые</option><option value="name">По имени</option><option value="size">По размеру</option></select>
             <p className="sm:col-span-3 text-xs opacity-75">Показано: {visibleFiles.length} из {sourceFiles.length} · Объём: {(visibleFiles.reduce((sum,file) => sum + file.size,0) / 1048576).toFixed(1)} МБ · Удалённые файлы доступны для восстановления из корзины администратора в течение 30 дней.</p>
         </div>
-        {visibleFiles.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-400/40 bg-violet-500/10 p-3"><span className="text-sm font-semibold">Подборка · {selection.length} выбрано</span><input value={collectionTitle} onChange={e => setCollectionTitle(e.target.value)} placeholder="Название подборки" maxLength={160} aria-label="Название подборки" className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent p-2 text-sm" /><button type="button" disabled={!selection.length || !collectionTitle.trim() || sharing} onClick={shareSelection} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Создать общую ссылку</button></div>}
+        {visibleFiles.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-400/40 bg-violet-500/10 p-3"><span className="text-sm font-semibold">Подборка · {selection.length} выбрано</span><button type="button" onClick={() => setSelection(visibleFiles.map(file => file.id))} className="rounded-lg border border-current/20 px-2 py-1 text-xs">Выбрать все</button><button type="button" onClick={() => setSelection([])} className="rounded-lg border border-current/20 px-2 py-1 text-xs">Снять выбор</button><button type="button" disabled={!selection.length || bulkBusy} onClick={removeSelected} className="rounded-lg border border-rose-400/60 px-2 py-1 text-xs text-rose-700 disabled:opacity-50 dark:text-rose-200">{bulkBusy ? 'Удаляем…' : 'В корзину выбранное'}</button><input value={collectionTitle} onChange={e => setCollectionTitle(e.target.value)} placeholder="Название подборки" maxLength={160} aria-label="Название подборки" className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent p-2 text-sm" /><button type="button" disabled={!selection.length || !collectionTitle.trim() || sharing} onClick={shareSelection} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Создать общую ссылку</button></div>}
         <EditorialFileGallery files={visibleFiles} token={token} view={view} selection={selection} setSelection={setSelection} onShare={share} onDelete={remove} onUpdate={() => setRefresh(n => n + 1)} onError={setError} downloadFile={downloadEditorialFile} />
         {folder && !(folder.folders || []).length && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">В проекте пока нет загруженных материалов.</p>}
         {!folder && !files.length && !folders.length && !error && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">Здесь пока нет файлов и проектов.</p>}
