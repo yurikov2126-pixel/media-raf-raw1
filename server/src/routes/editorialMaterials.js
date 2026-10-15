@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
+import { editorialResumableRouter } from '../lib/editorialResumable.js';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -23,6 +24,25 @@ async function context(req, res) {
     return { project, task };
 }
 
+router.use('/projects/:projectId/tasks/:taskId/materials/uploads', editorialResumableRouter({
+    root,
+    scope: 'editorial-task',
+    allowed: mimeType => allowed.has(mimeType),
+    authorize: async (req,res) => {
+        const ctx = await context(req,res); if (!ctx) return false;
+        if (!manager(ctx.project,req.user) && ctx.task.assigneeId !== req.user.id) { res.status(403).json({ error:'Нет прав на загрузку' }); return false; }
+        if (!['TODO','IN_PROGRESS','REVISION'].includes(ctx.task.status)) { res.status(409).json({ error:'Для загрузки верните задание в работу' }); return false; }
+        return true;
+    },
+    complete: async (req, session) => {
+        const ctx = await context(req, { status:() => ({ json:()=>{} }) });
+        if (!ctx) throw new Error('Задание не найдено');
+        const version = (await prisma.editorialTaskEvent.count({ where: { taskId:ctx.task.id, action:'REVIEW_SUBMITTED' } })) + 1;
+        const file = await prisma.editorialMaterialFile.create({ data:{ taskId:ctx.task.id, uploaderId:req.user.id, version, name:session.name, mimeType:session.mimeType, size:session.size, storageName:session.storageName, caption:session.caption } });
+        if (thumbnailSupported(file.mimeType)) ensureEditorialThumbnail(root,file).catch(error => console.error('[editorial-materials] thumbnail failed',error));
+        return file;
+    },
+}));
 router.get('/projects/:projectId/tasks/:taskId/materials', async (req,res,next) => {
     try {
         const ctx = await context(req,res); if (!ctx) return;
