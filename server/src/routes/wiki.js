@@ -53,7 +53,7 @@ router.get('/categories', async (_req, res) => {
 // Список статей с фильтрами: ?category=slug&q=строка&tag=тег&limit=N
 router.get('/articles', async (req, res) => {
     try {
-        const { category, q, tag, limit } = req.query;
+        const { category, q, tag, limit, page } = req.query;
         const where = { published: true };
 
         if (category) {
@@ -70,10 +70,13 @@ router.get('/articles', async (req, res) => {
             ];
         }
 
+        const paged = page !== undefined;
+        const pageNumber = Math.max(1, Math.min(100000, Number(page) || 1));
+        const pageSize = Math.max(1, Math.min(60, Number(limit) || 24));
         let articles = await prisma.wikiArticle.findMany({
             where,
             orderBy: [{ updatedAt: 'desc' }],
-            take: limit ? Math.min(Number(limit), 500) : 500,
+            ...(paged ? { skip: (pageNumber - 1) * pageSize, take: pageSize } : { take: limit ? Math.min(Math.max(Number(limit) || 1, 1), 500) : 500 }),
             include: {
                 category: { select: { id: true, slug: true, title: true, icon: true } },
                 author: { select: { id: true, fullName: true, username: true, avatar: true } },
@@ -84,6 +87,10 @@ router.get('/articles', async (req, res) => {
             articles = articles.filter((a) => safeJSON(a.tags, []).includes(tag));
         }
 
+        if (paged) {
+            const total = await prisma.wikiArticle.count({ where });
+            return res.json({ items: articles.map(parseArticle), total, page: pageNumber, pageSize, hasMore: pageNumber * pageSize < total });
+        }
         res.json(articles.map(parseArticle));
     } catch (e) {
         console.error('[wiki] articles:', e);
