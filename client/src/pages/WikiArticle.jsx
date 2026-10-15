@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
 import MarkdownView from '../components/MarkdownView.jsx';
+import {saveWikiOffline,getWikiOffline,removeWikiOffline} from '../lib/wikiOffline.js';
 
 export default function WikiArticle() {
     const { slug } = useParams();
@@ -13,6 +14,7 @@ export default function WikiArticle() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [tocOpen, setTocOpen] = useState(false);
+    const [offlineAt,setOfflineAt]=useState(null);
     const [personal, setPersonal] = useState({ bookmarked: false, checklist: [] });
     const [proposalOpen, setProposalOpen] = useState(false);
     const [proposalContent, setProposalContent] = useState('');
@@ -35,7 +37,7 @@ export default function WikiArticle() {
         setError('');
         api(`/wiki/articles/${slug}`, { token })
             .then(setArticle)
-            .catch((e) => setError(e.message))
+.catch(async(e)=>{ const offline=await getWikiOffline(slug);if(offline){setArticle(offline);setOfflineAt(offline.savedOfflineAt);}else setError(e.message); })
             .finally(() => setLoading(false));
         api('/wiki/state/' + slug, { token }).then(setPersonal).catch(() => {});
         window.scrollTo({ top: 0 });
@@ -113,10 +115,13 @@ export default function WikiArticle() {
                 <button className="btn-ghost" onClick={() => savePersonal({ bookmarked: !personal.bookmarked })}>
                     {personal.bookmarked ? '★ В закладках' : '☆ В закладки'}
                 </button>
+                <button className="btn-ghost" onClick={async()=>{try{await saveWikiOffline(article);setOfflineAt(new Date().toISOString());setFeedback('Инструкция сохранена на устройстве.');}catch(e){setFeedback(e.message)}}}>⬇ Сохранить офлайн</button>
+                {offlineAt && <button className="btn-ghost" onClick={async()=>{await removeWikiOffline(slug);setOfflineAt(null);setFeedback('Офлайн-копия удалена.')}}>Удалить офлайн-копию</button>}
                 <button className="btn-ghost" onClick={() => { setProposalContent(article.content); setProposalOpen(true); }}>
                     ✎ Предложить правку
                 </button>
             </div>
+            {offlineAt && <p className="text-xs text-amber-300 mb-2">Сохранённая копия от {new Date(offlineAt).toLocaleString('ru-RU')}. Для актуальной редакции подключитесь к сети.</p>}
             {feedback && <p role="status" className="text-sm text-white/70 mb-4">{feedback}</p>}
             {article.cover && (
                 <div className="rounded-2xl overflow-hidden mb-6">
