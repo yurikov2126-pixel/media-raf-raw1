@@ -214,6 +214,66 @@ router.delete('/files/materials/:materialId', async (req,res,next) => {
         res.json({ ok:true, quarantined:true, restoreUntil:result.expiresAt });
     } catch(error) { next(error); }
 });
+
+// User-defined virtual folders (library files only), independent of project folders.
+// Setting records avoid moving originals or invalidating existing shared links.
+const folderKey = id => 'editorial_custom_folder_' + id;
+const placementKey = id => 'editorial_custom_file_' + id;
+const decodeSetting = row => { try { return JSON.parse(row.value); } catch { return null; } };
+router.get('/custom-folders', async (_req,res,next) => {
+    try {
+        const rows = await prisma.setting.findMany({ where:{ OR:[{ key:{ startsWith:'editorial_custom_folder_' } },{ key:{ startsWith:'editorial_custom_file_' } }] } });
+        const folders = rows.filter(row => row.key.startsWith('editorial_custom_folder_')).map(decodeSetting).filter(Boolean);
+        const placements = Object.fromEntries(rows.filter(row => row.key.startsWith('editorial_custom_file_')).map(row => [row.key.slice(22),row.value]));
+        res.json({ folders, placements });
+    } catch(error) { next(error); }
+});
+router.post('/custom-folders', async (req,res,next) => {
+    try {
+        const title = String(req.body?.title || '').trim();
+        const parentId = req.body?.parentId || null;
+        if (!title || title.length > 100 || (parentId !== null && typeof parentId !== 'string')) return res.status(400).json({ error:'Укажите название папки до 100 символов' });
+        if (parentId && !(await prisma.setting.findUnique({where:{key:folderKey(parentId)}}))) return res.status(404).json({error:'Родительская папка не найдена'});
+        const folder = { id:randomUUID(), title, parentId, createdAt:new Date().toISOString() };
+        await prisma.setting.create({data:{key:folderKey(folder.id),value:JSON.stringify(folder)}});
+        res.status(201).json({ folder });
+    } catch(error) { next(error); }
+});
+router.patch('/custom-folders/:id', async (req,res,next) => {
+    try {
+        const row = await prisma.setting.findUnique({where:{key:folderKey(req.params.id)}});
+        if (!row) return res.status(404).json({error:'Папка не найдена'});
+        const title = String(req.body?.title || '').trim();
+        if (!title || title.length > 100) return res.status(400).json({error:'Название должно содержать от 1 до 100 символов'});
+        const folder = { ...decodeSetting(row),title };
+        await prisma.setting.update({where:{key:row.key},data:{value:JSON.stringify(folder)}});
+        res.json({folder});
+    } catch(error) { next(error); }
+});
+router.delete('/custom-folders/:id', async (req,res,next) => {
+    try {
+        const row = await prisma.setting.findUnique({where:{key:folderKey(req.params.id)}});
+        if (!row) return res.status(404).json({error:'Папка не найдена'});
+        const children = await prisma.setting.findMany({where:{ OR:[{key:{startsWith:'editorial_custom_folder_'}},{key:{startsWith:'editorial_custom_file_'}}] }});
+        if (children.some(item => item.key.startsWith('editorial_custom_folder_') && decodeSetting(item)?.parentId === req.params.id) ||
+            children.some(item => item.key.startsWith('editorial_custom_file_') && item.value === req.params.id))
+            return res.status(409).json({error:'Папка не пуста. Сначала переместите файлы и вложенные папки.'});
+        await prisma.setting.delete({where:{key:row.key}});
+        res.json({ok:true});
+    } catch(error) { next(error); }
+});
+router.patch('/files/:fileId/folder', async (req,res,next) => {
+    try {
+        const file = await prisma.editorialLibraryFile.findUnique({where:{id:req.params.fileId}});
+        if (!file) return res.status(404).json({error:'Перемещать можно только файлы библиотеки'});
+        const folderId = req.body?.folderId ?? null;
+        if (folderId !== null && !(await prisma.setting.findUnique({where:{key:folderKey(folderId)}}))) return res.status(404).json({error:'Папка не найдена'});
+        if (folderId === null) await prisma.setting.deleteMany({where:{key:placementKey(file.id)}});
+        else await prisma.setting.upsert({where:{key:placementKey(file.id)},create:{key:placementKey(file.id),value:folderId},update:{value:folderId}});
+        res.json({ok:true,folderId});
+    } catch(error) { next(error); }
+});
+
 router.post('/shares/quick', async (req, res, next) => {
     try {
         const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId : null;
