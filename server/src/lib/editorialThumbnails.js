@@ -25,3 +25,20 @@ export async function ensureEditorialThumbnail(directory, file) {
     }
     return destination;
 }
+
+/** A bounded viewing copy: original pixels and metadata never travel to the gallery viewer. */
+export async function ensureEditorialViewingCopy(directory, file) {
+    if (!thumbnailSupported(file.mimeType)) return null;
+    const destination = path.join(directory, 'previews', file.storageName + '.webp');
+    await fs.mkdir(path.dirname(destination), { recursive:true, mode:0o700 });
+    try { await fs.access(destination); return destination; }
+    catch { /* older files are generated lazily */ }
+    const temp = destination + '.' + randomUUID() + '.tmp';
+    try {
+        await sharp(path.join(directory,file.storageName), { limitInputPixels:80_000_000 })
+            .rotate().resize({ width:1920, height:1920, fit:'inside', withoutEnlargement:true })
+            .webp({ quality:76, effort:4 }).toFile(temp);
+        await fs.rename(temp,destination);
+    } finally { await fs.unlink(temp).catch(()=>{}); }
+    return destination;
+}
