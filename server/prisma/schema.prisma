@@ -1258,3 +1258,15 @@ model EditorialTaskWikiLink {
   @@unique([taskId, articleId])
   @@index([taskId])
 }
+
+model EditorialWikiChecklistState {
+  id        String   @id @default(cuid())
+  taskId    String
+  articleId String
+  userId    String
+  checked   String   @default("[]")
+  updatedAt DateTime @updatedAt
+
+  @@unique([taskId, articleId, userId])
+  @@index([taskId, userId])
+}
