@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
 import { quarantineLibraryFile, quarantineTaskMaterialFile } from '../lib/storageQuarantine.js';
+import { canRemoveEditorialMaterial, canRemoveEditorialProjectFolder } from '../lib/editorialFileDeletion.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
 
 const router = Router();
@@ -16,7 +17,6 @@ const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editoria
 const materialRoot = path.resolve(process.env.EDITORIAL_MATERIAL_DIR || 'private/editorial-materials');
 const materialKey = id => `material:${id}`;
 const MAX_SHARED_FILES = 5000;
-const finishedStatuses = ['DONE', 'APPROVED'];
 const hiddenFolderKey = id => 'editorial_files_hidden_project_' + id;
 const fileView = file => ({ ...publicFile(file), id: materialKey(file.id), taskId: file.taskId, version: file.version, caption: file.caption, source: 'material' });
 const materialIds = ids => ids.filter(id => typeof id === 'string' && id.startsWith('material:')).map(id => id.slice(9));
@@ -195,9 +195,8 @@ router.delete('/folders/projects/:projectId', async (req,res,next) => {
     try {
         const project = await prisma.editorialProject.findUnique({ where:{ id:req.params.projectId }, select:{ id:true, completedAt:true, tasks:{ select:{ id:true, status:true, _count:{ select:{ materialFiles:true } } } } } });
         if (!project) return res.status(404).json({ error:'Папка проекта не найдена' });
-        if (!project.completedAt) return res.status(409).json({ error:'Проект ещё активен. Завершите его перед удалением папки.' });
-        if (project.tasks.some(task => !finishedStatuses.includes(task.status))) return res.status(409).json({ error:'В проекте остались активные задания.' });
-        if (project.tasks.some(task => task._count.materialFiles)) return res.status(409).json({ error:'В папке остались файлы. Удалите неиспользуемые материалы по отдельности.' });
+        const safety = canRemoveEditorialProjectFolder(project);
+        if (!safety.allowed) return res.status(409).json({ error:safety.reason });
         await prisma.setting.upsert({ where:{ key:hiddenFolderKey(project.id) }, create:{ key:hiddenFolderKey(project.id),value:'hidden' }, update:{ value:'hidden' } });
         await prisma.adminAction.create({ data:{ adminId:req.user.id, action:'editorial_folder_hidden', payload:JSON.stringify({ projectId:project.id }),affected:1 } }).catch(() => {});
         res.json({ ok:true });
@@ -209,7 +208,8 @@ router.delete('/files/materials/:materialId', async (req,res,next) => {
     try {
         const file = await prisma.editorialMaterialFile.findUnique({ where:{ id:req.params.materialId }, include:{ task:{ select:{ id:true, status:true, projectId:true, project:{ select:{ completedAt:true } } } } } });
         if (!file) return res.status(404).json({ error:'Материал не найден' });
-        if (!file.task.project.completedAt || !finishedStatuses.includes(file.task.status)) return res.status(409).json({ error:'Материал используется в активном проекте или задании.' });
+        const safety = canRemoveEditorialMaterial(file);
+        if (!safety.allowed) return res.status(409).json({ error:safety.reason });
         const result = await quarantineTaskMaterialFile(file,req.user.id,{ projectId:file.task.projectId });
         res.json({ ok:true, quarantined:true, restoreUntil:result.expiresAt });
     } catch(error) { next(error); }
