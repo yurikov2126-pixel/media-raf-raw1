@@ -584,4 +584,55 @@ router.patch('/projects/:projectId/tasks/:taskId/applications/:applicationId', a
     } catch (error) { next(error); }
 });
 
+
+const WIKI_RULES = [
+  { test: /фото|фоторепортаж|портрет|снимк|photograph/i, slugs: ['canon-eos-m50','tripods-monopods'] },
+  { test: /видео|видеосъём|видеосъем|видеорепортаж|видеомонтаж|видеокамера/i, slugs: ['sony-fdr-ax700','tripods-monopods'] },
+  { test: /интервью|подкаст|диктор|озвуч|звук|микрофон/i, slugs: ['dji-mic-2','shure-reporter-microphone'] },
+  { test: /стабилиза|проходк|gimbal|телефон/i, slugs: ['feiyutech-scorp-mini'] },
+];
+async function wikiTaskContext(req,res) {
+  const project = await getProject(req.params.projectId);
+  if (!project || !canSee(project,req.user)) { res.status(404).json({error:'Проект не найден'}); return null; }
+  const task = await prisma.editorialTask.findFirst({ where: { id:req.params.taskId, projectId:project.id } });
+  if (!task) { res.status(404).json({error:'Задание не найдено'}); return null; }
+  return {project,task};
+}
+router.get('/projects/:projectId/tasks/:taskId/wiki', async(req,res,next)=>{
+ try {
+  const ctx=await wikiTaskContext(req,res); if(!ctx)return;
+  const {task}=ctx;
+  const articles=await prisma.wikiArticle.findMany({where:{published:true},select:{id:true,slug:true,title:true,excerpt:true,cover:true,tags:true,category:{select:{title:true}}}});
+  const overrides=await prisma.editorialTaskWikiLink.findMany({where:{taskId:task.id}});
+  const excluded=new Set(overrides.filter(x=>x.excluded).map(x=>x.articleId));
+  const chosen=new Set(overrides.filter(x=>!x.excluded).map(x=>x.articleId));
+  const text=[task.title,task.description,ctx.project.title].filter(Boolean).join(' ');
+  const relevant=new Set(WIKI_RULES.filter(x=>x.test.test(text)).flatMap(x=>x.slugs));
+  const scored=articles.map(a=>{
+    const tags=(()=>{try{return JSON.parse(a.tags||'[]')}catch{return[]}})();
+    let score=relevant.has(a.slug)?10:0;
+    const words=text.toLowerCase().match(/[а-яa-z0-9]{4,}/gi)||[];
+    score+=words.filter(w=>(a.title+' '+a.excerpt+' '+tags.join(' ')).toLowerCase().includes(w.toLowerCase())).length;
+    return {...a,score,source:chosen.has(a.id)?'manual':'auto'};
+  });
+  const manual=scored.filter(x=>chosen.has(x.id));
+  const automatic=scored.filter(x=>!chosen.has(x.id)&&!excluded.has(x.id)&&x.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
+  res.json({manual,automatic,excluded:overrides.filter(x=>x.excluded).map(x=>x.articleId)});
+ }catch(e){next(e)}
+});
+router.put('/projects/:projectId/tasks/:taskId/wiki',async(req,res,next)=>{
+ try{
+  const ctx=await wikiTaskContext(req,res);if(!ctx)return;
+  if(!canEdit(ctx.project,req.user))return res.status(403).json({error:'Нет права редактирования задания'});
+  const {articleId,mode}=req.body||{};
+  if(!['manual','exclude','remove'].includes(mode)||typeof articleId!=='string')return res.status(400).json({error:'Некорректное действие'});
+  const article=await prisma.wikiArticle.findUnique({where:{id:articleId},select:{id:true,published:true}});
+  if(!article?.published)return res.status(404).json({error:'Статья не найдена'});
+  const key={taskId:ctx.task.id,articleId};
+  if(mode==='remove')await prisma.editorialTaskWikiLink.deleteMany({where:key});
+  else await prisma.editorialTaskWikiLink.upsert({where:{taskId_articleId:key},create:{...key,excluded:mode==='exclude'},update:{excluded:mode==='exclude'}});
+  res.json({ok:true});
+ }catch(e){next(e)}
+});
+
 export default router;

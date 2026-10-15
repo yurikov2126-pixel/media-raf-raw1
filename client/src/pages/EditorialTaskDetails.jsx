@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialTaskDiscussion from './EditorialTaskDiscussion.jsx';
 import EditorialMaterials from './EditorialMaterials.jsx';
+import EditorialWikiRecommendations from './EditorialWikiRecommendations.jsx';
 import { canHaveDeadline } from './editorialDeadlines.js';
 
 const STATUSES = [
@@ -89,6 +90,7 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             {task.durationMinutes&&<span>⏱ Продолжительность: {task.durationMinutes} мин.</span>}
         </div>}
         <div hidden={tab !== 'details'} className="space-y-4">
+        <EditorialWikiRecommendations task={task} project={project} token={token} canEdit={canEdit} />
         {task.assigneeId === user?.id && ['TODO', 'IN_PROGRESS', 'REVISION'].includes(task.status) && <div className="rounded-xl border border-violet-300 bg-violet-50 p-3 dark:border-violet-500 dark:bg-slate-800">
             <button type="button" onClick={() => setTab('materials')} className="min-h-11 w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700">Загрузить файлы на проверку</button>
             <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Выберите файлы во вкладке «Материалы», добавьте подписи и нажмите «Отправить на проверку».</p>

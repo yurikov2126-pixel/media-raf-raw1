@@ -1247,3 +1247,14 @@ model WikiProposal {
   @@index([articleId, status])
   @@index([status, createdAt])
 }
+
+model EditorialTaskWikiLink {
+  id        String   @id @default(cuid())
+  taskId    String
+  articleId String
+  excluded  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, articleId])
+  @@index([taskId])
+}
