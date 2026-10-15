@@ -28,7 +28,19 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     const [description, setDescription] = useState(file.description || file.caption || '');
     const [saving, setSaving] = useState(false);
     const [metadata,setMetadata] = useState(null);
-    useEffect(() => { setName(file.name); setDescription(file.description || file.caption || ''); setMetadata(null); api(filePath(file.id) + '/metadata',{token}).then(result=>setMetadata(result.metadata)).catch(()=>{}); }, [file.id, file.name, file.description, file.caption, token]);
+    const [compareId,setCompareId] = useState('');
+    const [compareUrl,setCompareUrl] = useState('');
+    useEffect(() => { setName(file.name); setDescription(file.description || file.caption || ''); setMetadata(null); setCompareId(''); api(filePath(file.id) + '/metadata',{token}).then(result=>setMetadata(result.metadata)).catch(()=>{}); }, [file.id, file.name, file.description, file.caption, token]);
+    useEffect(() => {
+        if (!compareId) { setCompareUrl(''); return undefined; }
+        const controller = new AbortController();
+        let objectUrl = '';
+        fetch(BASE+filePath(compareId),{headers:{Authorization:'Bearer '+token},signal:controller.signal})
+            .then(res => { if(!res.ok) throw Error('Сравнение недоступно'); return res.blob(); })
+            .then(blob => { if (!controller.signal.aborted) { objectUrl=URL.createObjectURL(blob); setCompareUrl(objectUrl); } })
+            .catch(error=>{if(!controller.signal.aborted) onError(error.message);});
+        return ()=>{controller.abort();if(objectUrl) URL.revokeObjectURL(objectUrl);};
+    },[compareId,token]);
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl = '';
@@ -60,12 +72,13 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     return <div role="dialog" aria-modal="true" aria-label={'Просмотр ' + file.name} className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-3 text-white sm:p-6">
         <header className="flex items-center justify-between gap-2"><span className="min-w-0 truncate font-semibold">{file.name} · {index + 1} / {files.length}</span><button type="button" className="rounded-lg border border-white/40 px-3 py-2" onClick={onClose}>Закрыть ✕</button></header>
         <div className="my-3 flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-xl bg-black/30">
-            {url && file.mimeType?.startsWith('image/') ? <img src={url} alt={file.name} className="max-h-full max-w-full object-contain" /> :
+            {url && file.mimeType?.startsWith('image/') ? <div className={compareUrl?'grid h-full w-full grid-cols-2 gap-2':'flex h-full w-full items-center justify-center'}><img src={url} alt={file.name} className="max-h-full max-w-full object-contain" />{compareUrl && <img src={compareUrl} alt="Сравниваемый кадр" className="max-h-full max-w-full object-contain" />}</div> :
                 url && file.mimeType?.startsWith('video/') ? <video controls src={url} className="max-h-full max-w-full" /> :
                 url && file.mimeType === 'application/pdf' ? <iframe title={file.name} src={url} className="h-full w-full bg-white" /> :
                 <p className="p-6 text-center text-sm">{file.mimeType?.startsWith('image/') || file.mimeType?.startsWith('video/') || file.mimeType === 'application/pdf' ? 'Загрузка предпросмотра…' : 'Предпросмотр этого формата недоступен'}</p>}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-2"><button type="button" className="rounded-lg border border-white/40 px-4 py-2" onClick={() => onNavigate(-1)}>←</button><button type="button" className="rounded-lg border border-white/40 px-4 py-2" onClick={() => onNavigate(1)}>→</button></div><button type="button" className="rounded-lg bg-violet-600 px-4 py-2 font-semibold" onClick={() => downloadFile(filePath(file.id), token, file.name).catch(e => onError(e.message))}>Скачать оригинал</button></div>
+        {file.mimeType?.startsWith('image/') && <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-200">Сравнить с <select value={compareId} onChange={event=>setCompareId(event.target.value)} className="min-w-0 max-w-full rounded-lg border border-white/30 bg-slate-800 p-2 text-white"><option value="">Не сравнивать</option>{files.filter(item=>item.id!==file.id&&item.mimeType?.startsWith('image/')).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         {metadata && <p className="mt-2 text-xs text-slate-300">{[metadata.width && metadata.height ? metadata.width + " × " + metadata.height + " пикс." : null,metadata.format?.toUpperCase(),(metadata.size/1048576).toFixed(2) + " МБ",metadata.density ? metadata.density + " DPI" : null].filter(Boolean).join(" · ")}</p>}
         {!file.source && <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_2fr_auto]"><input aria-label="Название файла" value={name} onChange={e => setName(e.target.value)} maxLength={255} className="min-w-0 rounded-lg border border-white/30 bg-slate-800 p-2 text-white" /><input aria-label="Описание файла" value={description} onChange={e => setDescription(e.target.value)} maxLength={2000} placeholder="Добавить описание" className="min-w-0 rounded-lg border border-white/30 bg-slate-800 p-2 text-white" /><button type="button" disabled={saving || !name.trim()} onClick={save} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold disabled:opacity-50">{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}
     </div>;
