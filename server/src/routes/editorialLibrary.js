@@ -410,6 +410,7 @@ router.delete('/files/:fileId', async (req, res, next) => {
         const file = await prisma.editorialLibraryFile.findUnique({ where: { id: req.params.fileId } });
         if (!file) return res.status(404).json({ error: 'Файл не найден' });
         const quarantined = await quarantineLibraryFile(file, req.user.id);
+        await prisma.setting.deleteMany({ where:{key:placementKey(file.id)} });
         res.json({ ok: true, quarantined: true, restoreUntil: quarantined.expiresAt });
     } catch (error) { next(error); }
 });
