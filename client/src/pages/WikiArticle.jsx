@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
 import MarkdownView from '../components/MarkdownView.jsx';
+import { readOfflineWiki, saveOfflineWiki, removeOfflineWiki } from '../lib/wikiOffline.js';
 
 export default function WikiArticle() {
     const { slug } = useParams();
@@ -13,6 +14,8 @@ export default function WikiArticle() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [tocOpen, setTocOpen] = useState(false);
+    const [offlineSaved, setOfflineSaved] = useState(false);
+    const [offlineView, setOfflineView] = useState(false);
     const [personal, setPersonal] = useState({ bookmarked: false, checklist: [] });
     const [proposalOpen, setProposalOpen] = useState(false);
     const [proposalContent, setProposalContent] = useState('');
@@ -34,10 +37,11 @@ export default function WikiArticle() {
         setLoading(true);
         setError('');
         api(`/wiki/articles/${slug}`, { token })
-            .then(setArticle)
-            .catch((e) => setError(e.message))
+            .then((item) => { setArticle(item); setOfflineView(false); })
+            .catch(async (e) => { const cached = user?.id ? await readOfflineWiki(user.id,slug).catch(()=>null) : null; if(cached){setArticle(cached);setOfflineView(true)} else setError(e.message); })
             .finally(() => setLoading(false));
         api('/wiki/state/' + slug, { token }).then(setPersonal).catch(() => {});
+        if(user?.id)readOfflineWiki(user.id,slug).then(v=>setOfflineSaved(!!v)).catch(()=>{});
         window.scrollTo({ top: 0 });
     }, [slug, token]);
 
@@ -118,6 +122,14 @@ export default function WikiArticle() {
                 </button>
             </div>
             {feedback && <p role="status" className="text-sm text-white/70 mb-4">{feedback}</p>}
+            {offlineView && <div className="mb-4 rounded-xl border border-amber-500/30 p-3 text-sm">Офлайн-копия. Изменения в оригинале могут быть новее.</div>}
+            <div className="mb-4"><button className="btn-ghost" onClick={async()=>{
+                if(!user?.id)return;
+                try{
+                    if(offlineSaved){await removeOfflineWiki(user.id,slug);setOfflineSaved(false)}
+                    else {await saveOfflineWiki(user.id,article);setOfflineSaved(true)}
+                }catch(e){setFeedback('Не удалось сохранить для офлайн-доступа: '+e.message)}
+            }}>{offlineSaved?'✓ Удалить офлайн-копию':'↓ Сохранить для офлайн-чтения'}</button></div>
             {article.cover && (
                 <div className="rounded-2xl overflow-hidden mb-6">
                     <img src={article.cover} alt="" className="w-full max-h-72 object-cover" />
