@@ -4,6 +4,7 @@ import { useToast } from '../../../../store/toast.jsx';
 import ArticleEditor from './ArticleEditor.jsx';
 import CategoryEditor from './CategoryEditor.jsx';
 import WikiModeration from './WikiModeration.jsx';
+import WikiAnalytics from './WikiAnalytics.jsx';
 import WikiImport from './WikiImport.jsx';
 
 export default function Wiki({ token }) {
@@ -15,6 +16,7 @@ export default function Wiki({ token }) {
     const [editing, setEditing] = useState(null);
     const [editingCat, setEditingCat] = useState(null);
     const [moderationOpen, setModerationOpen] = useState(false);
+    const [analyticsOpen, setAnalyticsOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -103,6 +105,7 @@ export default function Wiki({ token }) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <button onClick={() => setImportOpen(true)} className="btn-primary">⬆ Импорт ZIP</button>
+                        <button className="btn-ghost" onClick={() => setAnalyticsOpen(true)}>📊 Аналитика</button>
                         <button className="btn-ghost" onClick={() => setModerationOpen(true)}>✎ Предложения правок</button>
                         <button onClick={seedEquipment} disabled={busy} className="btn-ghost">🎥 Оборудование редакции</button>
                         <button onClick={seedDefaults} disabled={busy} className="btn-ghost">{busy ? '⏳…' : '🌱 Стартовые'}</button>
@@ -153,6 +156,7 @@ export default function Wiki({ token }) {
             </div>
 
             {importOpen && <WikiImport token={token} onClose={() => setImportOpen(false)} onImported={async (result) => { setImportOpen(false); await reload(); toast.success(`Статей добавлено: ${result.created}, обновлено: ${result.updated}, пропущено: ${result.skipped}`); }} />}
+            {analyticsOpen && <WikiAnalytics token={token} onClose={() => setAnalyticsOpen(false)} />}
             {moderationOpen && <WikiModeration token={token} onClose={() => setModerationOpen(false)} />}
             {editing && (
                 <ArticleEditor
