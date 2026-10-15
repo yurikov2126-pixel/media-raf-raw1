@@ -74,7 +74,8 @@ function payloadToPush(type, payload) {
             project_created: 'Создан новый командный проект', project_joined: 'Вас добавили в проект',
             assigned: 'Назначено задание', status: 'Изменён статус задания',
             comment: 'Новый комментарий', application: 'Заявка на задание',
-            application_approved: 'Заявка одобрена', application_rejected: 'Заявка отклонена',
+            application_approved: 'Ваша заявка на задание принята', application_rejected: 'Ваша заявка на задание отклонена',
+            review_submitted: 'Материалы задания отправлены на проверку', review_approved: 'Ваша работа по заданию принята', review_revision: 'Работа по заданию отклонена — требуется доработка',
             deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено', deadline_changed: 'Изменён срок задания',
         };
         const query = new URLSearchParams();
@@ -82,7 +83,7 @@ function payloadToPush(type, payload) {
         if (payload.projectId && payload.taskId) query.set('task', payload.taskId);
         return {
             title: titles[payload.event] || 'Редакция',
-            body: payload.event === 'project_joined' ? `${payload.projectTitle || 'Проект'} · Роль: ${payload.crewRole || 'Участник команды'}` : (payload.taskTitle || payload.projectTitle || ''),
+            body: payload.event === 'project_joined' ? `${payload.projectTitle || 'Проект'} · Роль: ${payload.crewRole || 'Участник команды'}` : [payload.taskTitle || payload.projectTitle || 'Задание', payload.note ? `Причина/замечание: ${payload.note}` : ''].filter(Boolean).join(' · '),
             url: '/app/editorial/projects' + (query.toString() ? '?' + query.toString() : ''),
             tag: 'editorial-' + (payload.taskId || 'project') + '-' + (payload.event || 'event'),
         };
