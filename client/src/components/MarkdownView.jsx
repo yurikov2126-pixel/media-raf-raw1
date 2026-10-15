@@ -15,7 +15,7 @@ function escapeHtml(s) {
  */
 function renderInline(text) {
     let s = escapeHtml(text);
-    s = s.replace(/!\[([^\]<>]*)\]\((\/uploads\/course-assets\/[a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|webp))\)/gi,
+    s = s.replace(/!\[([^\]<>]*)\]\((\/uploads\/(?:course-assets|wiki-assets)\/[a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|webp))\)/gi,
       '<img src="$2" alt="$1" loading="lazy" style="max-width:100%;height:auto;border-radius:12px;margin:12px 0" />');
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
