@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import EditorialFileGallery from './EditorialFileGallery.jsx';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 
@@ -23,6 +24,9 @@ export default function EditorialFiles() {
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState(null);
     const [refresh, setRefresh] = useState(0);
+    const [selection, setSelection] = useState([]);
+    const [collectionTitle, setCollectionTitle] = useState('');
+    const [sharing, setSharing] = useState(false);
     useEffect(() => { let active = true; api('/editorial/library/folders', { token }).then(data => { if (active) { setFiles(data.files); setFolders(data.folders); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
     function upload(event) {
         const selected = event.target.files?.[0];
@@ -55,6 +59,19 @@ export default function EditorialFiles() {
             catch { window.prompt('Скопируйте ссылку:', url); }
         } catch (e) { setError(e.message); }
     }
+    const visibleFiles = folder ? (personFolder ? personFolder.files : []) : files;
+    async function shareSelection() {
+        if (!selection.length || !collectionTitle.trim()) return;
+        setSharing(true); setError('');
+        try {
+            const { share: link } = await api('/editorial/library/shares', { token, method:'POST', body:{ title:collectionTitle.trim(), fileIds:selection, expiresInDays:30 } });
+            setSelection([]); setCollectionTitle('');
+            const url = window.location.origin + '/share/editorial/' + link.token;
+            try { await navigator.clipboard.writeText(url); window.alert('Ссылка скопирована: ' + url); }
+            catch { window.prompt('Скопируйте ссылку:', url); }
+        } catch (e) { setError(e.message); }
+        finally { setSharing(false); }
+    }
     function changeView(next) { setView(next); localStorage.setItem('editorial-files-view', next); }
     async function remove(file) {
         if (!window.confirm('Удалить файл «' + file.name + '»? Он также исчезнет из общих ссылок.')) return;
@@ -76,13 +93,8 @@ export default function EditorialFiles() {
             {(folder.folders || []).map(group => <article key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => setPersonFolder(group)}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{group.title}</span><span className="block text-xs opacity-60">{group.files.length} файлов</span></button><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => sharePerson(group)}>Общий доступ</button></article>)}
         </div>}
         {!folder && <h3 className="font-semibold">Общие файлы</h3>}
-        <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
-            {(folder ? (personFolder ? personFolder.files : []) : files).map(file => <article key={file.id} className={view === 'grid' ? 'rounded-xl border border-current/20 p-4' : 'flex flex-wrap items-center gap-3 rounded-xl border border-current/20 p-3'}>
-                <div className="text-2xl">{file.mimeType.startsWith('image/') ? '🖼️' : file.mimeType.startsWith('video/') ? '🎬' : '📄'}</div>
-                <div className="min-w-0 flex-1"><h3 className="break-all font-semibold">{file.name}</h3><p className="my-1 text-xs opacity-70">{(file.size / 1048576).toFixed(2)} МБ · {new Date(file.createdAt).toLocaleDateString('ru-RU')}{file.taskTitle ? ' · ' + file.taskTitle : ''}{file.version ? ' · Версия ' + file.version : ''}</p></div>
-                <div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => downloadEditorialFile('/editorial/library/files/' + encodeURIComponent(file.id), token, file.name).catch(e => setError(e.message))}>Скачать</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => share(file)}>Общий доступ</button>{!file.source && <button className="rounded-lg border border-red-400/50 px-3 py-2 text-sm" onClick={() => remove(file)}>Удалить</button>}</div>
-            </article>)}
-        </div>
+        {visibleFiles.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-400/40 bg-violet-500/10 p-3"><span className="text-sm font-semibold">Подборка · {selection.length} выбрано</span><input value={collectionTitle} onChange={e => setCollectionTitle(e.target.value)} placeholder="Название подборки" maxLength={160} aria-label="Название подборки" className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent p-2 text-sm" /><button type="button" disabled={!selection.length || !collectionTitle.trim() || sharing} onClick={shareSelection} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Создать общую ссылку</button></div>}
+        <EditorialFileGallery files={visibleFiles} token={token} view={view} selection={selection} setSelection={setSelection} onShare={share} onDelete={remove} onUpdate={() => setRefresh(n => n + 1)} onError={setError} downloadFile={downloadEditorialFile} />
         {folder && !(folder.folders || []).length && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">В проекте пока нет загруженных материалов.</p>}
         {!folder && !files.length && !folders.length && !error && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">Здесь пока нет файлов и проектов.</p>}
     </div>;
