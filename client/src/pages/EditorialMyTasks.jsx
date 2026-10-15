@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../api/client.js';
+import WikiContextLink from '../components/WikiContextLink.jsx';
 import { useAuth } from '../store/auth.jsx';
 import { STATUS_LABELS, STATUS_ORDER, deadlineState, sortPersonalTasks, taskSummary } from './editorialMyTasksUtils.js';
 
@@ -110,6 +111,7 @@ export default function EditorialMyTasks() {
                                 {deadlineLabel(task,now)}
                             </span>
                         </div>
+                        <div className="mt-3"><WikiContextLink topic={task.title || task.name} label="Справочник для задания" /></div>
                         <div className="editorial-personal-task-actions mt-3 flex flex-wrap gap-2">{[['details','Открыть задание'],['materials','Материалы'],['discussion','Обсуждение']].map(([tab,label]) => <Link key={tab} to={`/app/editorial/projects?project=${encodeURIComponent(task.projectId)}&task=${encodeURIComponent(task.id)}&from=my-tasks&status=${encodeURIComponent(filter)}&tab=${tab}`} className="inline-flex min-h-11 items-center rounded-lg border border-violet-300 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-50 dark:border-violet-500 dark:text-violet-200 dark:hover:bg-slate-700">{label}</Link>)}</div>
                     </div>;
                 })}

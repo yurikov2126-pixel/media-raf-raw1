@@ -12,6 +12,8 @@ export default function Wiki() {
     const scrollAfterCategory = useRef(false);
     const [articles, setArticles] = useState([]);
     const [popular, setPopular] = useState([]);
+    const [myArticles, setMyArticles] = useState([]);
+    const [myTab, setMyTab] = useState('bookmarks');
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
@@ -22,6 +24,7 @@ export default function Wiki() {
 
     useEffect(() => {
         if (!token) return;
+        api('/wiki/me', { token }).then(setMyArticles).catch(() => {});
         Promise.all([
             api('/wiki/categories', { token }).catch(() => []),
             api('/wiki/popular', { token }).catch(() => []),
@@ -130,6 +133,26 @@ export default function Wiki() {
                 <button className="btn-primary !px-5">🔍</button>
             </form>
 
+            {/* Персональная подборка */}
+            <section className="card p-4 mb-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <h2 className="font-semibold">Моя ВикиМедиа</h2>
+                    <div className="flex gap-2">
+                        <button className={myTab === 'bookmarks' ? 'btn-primary !px-3 !py-2 text-xs' : 'btn-ghost !px-3 !py-2 text-xs'} onClick={() => setMyTab('bookmarks')}>★ Закладки</button>
+                        <button className={myTab === 'recent' ? 'btn-primary !px-3 !py-2 text-xs' : 'btn-ghost !px-3 !py-2 text-xs'} onClick={() => setMyTab('recent')}>◷ История</button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {myArticles.filter(item => myTab === 'bookmarks' ? item.bookmarked : !!item.lastReadAt).slice(0, 12).map(item => (
+                        <Link key={item.id} to={`/app/wiki/${item.article.slug}`} className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-sm max-w-full break-words">
+                            {item.article.title}
+                        </Link>
+                    ))}
+                    {myArticles.filter(item => myTab === 'bookmarks' ? item.bookmarked : !!item.lastReadAt).length === 0 && (
+                        <p className="text-sm text-white/50">Здесь появятся ваши сохранённые и прочитанные статьи.</p>
+                    )}
+                </div>
+            </section>
             {/* Категории */}
             <div className="grid min-w-0 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
                 <button

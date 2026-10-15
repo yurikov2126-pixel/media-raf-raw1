@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
+import WikiContextLink from '../components/WikiContextLink.jsx';
 import { useAuth } from '../store/auth.jsx';
 import usePageMeta from '../hooks/usePageMeta.js';
 import MarkdownView from '../components/MarkdownView.jsx';
@@ -423,6 +424,8 @@ export default function CourseView() {
                                 onRefresh={refreshCourse}
                             />
                         )}
+
+                        {mode === 'lesson' && activeLesson && <div className="mt-4"><WikiContextLink topic={activeLesson.title || course?.title} label="Найти материалы ВикиМедиа по теме урока" /></div>}
 
                         {mode === 'test' && activeLesson?.test && (
                             <TestRunner

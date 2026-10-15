@@ -16,6 +16,23 @@ export default function ArticleEditor({ token, initial, isNew, categories, onClo
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [preview, setPreview] = useState(false);
+    const [revisions, setRevisions] = useState([]);
+    const [versionsOpen, setVersionsOpen] = useState(false);
+    const loadVersions = async () => {
+        try {
+            setRevisions(await api('/admin/wiki/articles/' + initial.id + '/revisions', { token }));
+            setVersionsOpen(true);
+        } catch (e) { setError(e.message); }
+    };
+    const restoreVersion = async (id) => {
+        if (!window.confirm('Восстановить эту версию? Текущая версия будет сохранена в истории.')) return;
+        setBusy(true);
+        try {
+            await api('/admin/wiki/articles/' + initial.id + '/revisions/' + id + '/restore', { method: 'POST', token });
+            await onSaved();
+        } catch (e) { setError(e.message); }
+        finally { setBusy(false); }
+    };
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
     const addBlock = (value) => setForm((f) => ({
@@ -53,6 +70,7 @@ export default function ArticleEditor({ token, initial, isNew, categories, onClo
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-2xl font-bold">{isNew ? 'Новая статья' : `Статья: ${initial.title}`}</h2>
                     <div className="flex items-center gap-2">
+                        {!isNew && <button onClick={loadVersions} className="btn-ghost !py-1.5 !px-3 text-xs">◷ Версии</button>}
                         <button onClick={() => setPreview((p) => !p)} className="btn-ghost !py-1.5 !px-3 text-xs">
                             {preview ? '✏️ Редактор' : '👁 Превью'}
                         </button>
@@ -103,6 +121,14 @@ export default function ArticleEditor({ token, initial, isNew, categories, onClo
                     </div>
                 )}
 
+                {versionsOpen && <section className="border border-white/10 rounded-xl p-3 mt-4 space-y-2">
+                    <div className="flex justify-between items-center"><h3 className="font-semibold">История версий</h3><button className="btn-ghost text-xs" onClick={() => setVersionsOpen(false)}>Закрыть</button></div>
+                    {!revisions.length && <p className="text-sm text-white/50">Предыдущих версий пока нет.</p>}
+                    {revisions.map(revision => <div key={revision.id} className="flex flex-wrap justify-between gap-3 items-center border-t border-white/10 pt-3">
+                        <span className="text-sm">{new Date(revision.createdAt).toLocaleString('ru-RU')} — {revision.title}</span>
+                        <div className="flex gap-2"><button className="btn-ghost text-xs" onClick={() => { setForm(old => ({ ...old, title: revision.title, excerpt: revision.excerpt || '', content: revision.content, cover: revision.cover || '' })); setVersionsOpen(false); }}>В редактор</button><button className="btn-primary text-xs" disabled={busy} onClick={() => restoreVersion(revision.id)}>Восстановить</button></div>
+                    </div>)}
+                </section>}
                 {error && <p className="text-pink text-sm mt-3">{error}</p>}
 
                 <div className="flex justify-end gap-2 mt-5">

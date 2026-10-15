@@ -13,6 +13,22 @@ export default function WikiArticle() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [tocOpen, setTocOpen] = useState(false);
+    const [personal, setPersonal] = useState({ bookmarked: false, checklist: [] });
+    const [proposalOpen, setProposalOpen] = useState(false);
+    const [proposalContent, setProposalContent] = useState('');
+    const [proposalNote, setProposalNote] = useState('');
+    const [feedback, setFeedback] = useState('');
+    const checklist = useMemo(() => (article?.content || '').split('\n').filter(line => /^- \[ \] /.test(line)).map(line => line.slice(6)), [article]);
+    const savePersonal = async (changes) => {
+        try { setPersonal(await api('/wiki/state/' + slug, { method: 'PATCH', token, body: changes })); }
+        catch (e) { setFeedback(e.message); }
+    };
+    const submitProposal = async () => {
+        try {
+            await api('/wiki/proposals/' + slug, { method: 'POST', token, body: { content: proposalContent, note: proposalNote } });
+            setProposalOpen(false); setFeedback('Предложение отправлено редактору.');
+        } catch (e) { setFeedback(e.message); }
+    };
 
     useEffect(() => {
         setLoading(true);
@@ -21,6 +37,7 @@ export default function WikiArticle() {
             .then(setArticle)
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));
+        api('/wiki/state/' + slug, { token }).then(setPersonal).catch(() => {});
         window.scrollTo({ top: 0 });
     }, [slug, token]);
 
@@ -92,6 +109,15 @@ export default function WikiArticle() {
                 </div>
             </div>
 
+            <div className="mb-4 flex flex-wrap gap-2">
+                <button className="btn-ghost" onClick={() => savePersonal({ bookmarked: !personal.bookmarked })}>
+                    {personal.bookmarked ? '★ В закладках' : '☆ В закладки'}
+                </button>
+                <button className="btn-ghost" onClick={() => { setProposalContent(article.content); setProposalOpen(true); }}>
+                    ✎ Предложить правку
+                </button>
+            </div>
+            {feedback && <p role="status" className="text-sm text-white/70 mb-4">{feedback}</p>}
             {article.cover && (
                 <div className="rounded-2xl overflow-hidden mb-6">
                     <img src={article.cover} alt="" className="w-full max-h-72 object-cover" />
@@ -121,9 +147,32 @@ export default function WikiArticle() {
                 </nav>
             )}
             <article className="card p-5 md:p-7 wiki-article-content">
-                <MarkdownView text={article.content} className="text-white/85 leading-relaxed" />
+                <MarkdownView text={article.content.replace(/^- \[ \] .*$/gm, "")} className="text-white/85 leading-relaxed" />
             </article>
 
+            {checklist.length > 0 && (
+                <section className="card p-5 mt-5" aria-label="Мой чек-лист">
+                    <h2 className="font-bold mb-2">✓ Мой чек-лист</h2>
+                    <p className="text-xs text-white/50 mb-4">Отметки сохраняются только для вашего аккаунта.</p>
+                    <div className="space-y-3">{checklist.map((item, index) => (
+                        <label key={index} className="flex items-start gap-3 text-sm">
+                            <input type="checkbox" checked={(personal.checklist || []).includes(index)}
+                                onChange={() => savePersonal({ checklist: (personal.checklist || []).includes(index)
+                                    ? personal.checklist.filter(i => i !== index) : [...(personal.checklist || []), index] })} />
+                            <span>{item}</span>
+                        </label>
+                    ))}</div>
+                </section>
+            )}
+            {proposalOpen && <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Предложить правку">
+                <div className="card max-w-3xl mx-auto p-5 space-y-3">
+                    <h2 className="font-bold text-lg">Предложить исправление статьи</h2>
+                    <p className="text-xs text-white/60">Предложение проверит администратор. Опубликованный текст не изменится до одобрения.</p>
+                    <textarea className="input w-full font-mono text-sm" rows={14} value={proposalContent} onChange={e => setProposalContent(e.target.value)} />
+                    <input className="input w-full" placeholder="Комментарий редактору (необязательно)" value={proposalNote} onChange={e => setProposalNote(e.target.value)} />
+                    <div className="flex justify-end gap-2"><button className="btn-ghost" onClick={() => setProposalOpen(false)}>Отмена</button><button className="btn-primary" onClick={submitProposal}>Отправить</button></div>
+                </div>
+            </div>}
             {article.related?.length > 0 && (
                 <div className="mt-8">
                     <div className="text-lg font-bold mb-3">📖 Ещё в этой категории</div>
