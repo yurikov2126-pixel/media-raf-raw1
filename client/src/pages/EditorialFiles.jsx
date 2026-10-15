@@ -76,6 +76,9 @@ export default function EditorialFiles() {
             catch { window.prompt('Скопируйте ссылку:', url); }
         } catch (e) { setError(e.message); }
     }
+    const allProjectFiles = folders.flatMap(project => project.files || []);
+    const libraryFiles = files;
+    const totalFiles = [...new Map([...libraryFiles,...allProjectFiles].map(file => [file.id,file])).values()];
     const sourceFiles = folder ? (personFolder ? personFolder.files : []) : files.filter(file => (placements[file.id] || null) === customId);
     const visibleFiles = sourceFiles.filter(file => (smart === 'all' || (smart === 'recent' ? Date.now()-new Date(file.createdAt).getTime() <= 7*86400000 : smart === 'large' ? file.size >= 20*1048576 : smart === 'uncaptioned' ? !String(file.description || file.caption || '').trim() : true)) && (type === 'all' || (type === 'image' ? file.mimeType?.startsWith('image/') : type === 'video' ? file.mimeType?.startsWith('video/') : !file.mimeType?.startsWith('image/') && !file.mimeType?.startsWith('video/'))) && (file.name + ' ' + (file.description || file.caption || '') + ' ' + (file.taskTitle || '')).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name,'ru') : sort === 'size' ? b.size-a.size : new Date(b.createdAt)-new Date(a.createdAt));
     async function shareSelection() {
@@ -177,7 +180,7 @@ export default function EditorialFiles() {
     return <div className="editorial-workspace-content space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Файлы редакции</h2><p className="text-sm opacity-70">Закрытое хранилище для передачи материалов другим подразделениям.</p></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white">+ Загрузить файл<input type="file" multiple className="sr-only" onChange={upload} disabled={busy} /></label></div>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Сводка медиатеки">
-            {[['Всего файлов', files.length], ['Фотографий', files.filter(file=>file.mimeType?.startsWith('image/')).length], ['Видео',files.filter(file=>file.mimeType?.startsWith('video/')).length],['Объём', (files.reduce((sum,file)=>sum+file.size,0)/1073741824).toFixed(2)+' ГБ']].map(([label,value])=><div key={label} className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3"><strong className="block text-xl font-bold text-violet-700 dark:text-violet-200">{value}</strong><span className="text-xs text-slate-600 dark:text-slate-300">{label}</span></div>)}
+            {[['Всего файлов', totalFiles.length], ['Фотографий', totalFiles.filter(file=>file.mimeType?.startsWith('image/')).length], ['Видео',totalFiles.filter(file=>file.mimeType?.startsWith('video/')).length],['Объём', (totalFiles.reduce((sum,file)=>sum+(Number(file.size)||0),0)/1073741824).toFixed(2)+' ГБ']].map(([label,value])=><div key={label} className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3"><strong className="block text-xl font-bold text-violet-700 dark:text-violet-200">{value}</strong><span className="text-xs text-slate-600 dark:text-slate-300">{label}</span></div>)}
         </div>
         {progress !== null && <div role="status" className="space-y-1 text-sm"><span>Загрузка: {progress}%</span><progress max="100" value={progress} className="block w-full" /></div>}
         {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
