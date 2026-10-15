@@ -425,6 +425,8 @@ export default function CourseView() {
                             />
                         )}
 
+                        {mode === 'lesson' && activeLesson && <div className="mt-4"><WikiContextLink topic={activeLesson.title || course?.title} label="Найти материалы ВикиМедиа по теме урока" /></div>}
+
                         {mode === 'test' && activeLesson?.test && (
                             <TestRunner
                                 lesson={activeLesson}
