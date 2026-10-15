@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -8,6 +8,8 @@ export default function Wiki() {
     const { token } = useAuth();
     const [params, setParams] = useSearchParams();
     const [categories, setCategories] = useState([]);
+    const articleListRef = useRef(null);
+    const scrollAfterCategory = useRef(false);
     const [articles, setArticles] = useState([]);
     const [popular, setPopular] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -52,6 +54,22 @@ export default function Wiki() {
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [token, activeCategory, debouncedSearch, page]);
+
+    useEffect(() => {
+        if (!loading && scrollAfterCategory.current) {
+            scrollAfterCategory.current = false;
+            requestAnimationFrame(() => articleListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
+    }, [loading, activeCategory]);
+
+    const selectCategory = (value) => {
+        scrollAfterCategory.current = true;
+        if (activeCategory === value) {
+            articleListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            updateParam('cat', value);
+        }
+    };
 
     const updateParam = (key, value) => {
         const next = new URLSearchParams(params);
@@ -115,7 +133,7 @@ export default function Wiki() {
             {/* Категории */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
                 <button
-                    onClick={() => updateParam('cat', '')}
+                    onClick={() => selectCategory('')}
                     className={`rounded-2xl p-4 text-left border transition ${!activeCategory ? 'bg-violet/20 border-violet' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                 >
                     📖 Все статьи
@@ -123,7 +141,7 @@ export default function Wiki() {
                 {categories.map((c) => (
                     <button
                         key={c.id}
-                        onClick={() => updateParam('cat', c.slug)}
+                        onClick={() => selectCategory(c.slug)}
                         className={`rounded-2xl p-4 text-left border transition ${
                             activeCategory === c.slug
                                 ? 'bg-violet/20 border-violet'
@@ -135,8 +153,9 @@ export default function Wiki() {
                 ))}
             </div>
 
-            <div className="grid lg:grid-cols-4 gap-6">
+            <div ref={articleListRef} className="grid lg:grid-cols-4 gap-6 scroll-mt-6">
                 {/* Основной список */}
+                <div className="lg:col-span-4 text-lg font-semibold">{activeCategory ? (categories.find(c => c.slug === activeCategory)?.title || "Статьи категории") : "Все материалы"}</div>
                 <div className="lg:col-span-3 space-y-4">
                     {loading && (
                         <div className="card p-8 text-center text-white/40">Загрузка…</div>
