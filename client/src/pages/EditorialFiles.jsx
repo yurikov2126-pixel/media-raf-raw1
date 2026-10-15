@@ -28,6 +28,9 @@ export default function EditorialFiles() {
     const [selection, setSelection] = useState([]);
     const [collectionTitle, setCollectionTitle] = useState('');
     const [sharing, setSharing] = useState(false);
+    const [search, setSearch] = useState('');
+    const [type, setType] = useState('all');
+    const [sort, setSort] = useState('newest');
     useEffect(() => { let active = true; api('/editorial/library/folders', { token }).then(data => { if (active) { setFiles(data.files); setFolders(data.folders); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
     async function upload(event) {
         const chosen = Array.from(event.target.files || []);
@@ -63,7 +66,8 @@ export default function EditorialFiles() {
             catch { window.prompt('Скопируйте ссылку:', url); }
         } catch (e) { setError(e.message); }
     }
-    const visibleFiles = folder ? (personFolder ? personFolder.files : []) : files;
+    const sourceFiles = folder ? (personFolder ? personFolder.files : []) : files;
+    const visibleFiles = sourceFiles.filter(file => (type === 'all' || (type === 'image' ? file.mimeType?.startsWith('image/') : type === 'video' ? file.mimeType?.startsWith('video/') : !file.mimeType?.startsWith('image/') && !file.mimeType?.startsWith('video/'))) && (file.name + ' ' + (file.description || file.caption || '') + ' ' + (file.taskTitle || '')).toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru'))).sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name,'ru') : sort === 'size' ? b.size-a.size : new Date(b.createdAt)-new Date(a.createdAt));
     async function shareSelection() {
         if (!selection.length || !collectionTitle.trim()) return;
         setSharing(true); setError('');
@@ -78,9 +82,21 @@ export default function EditorialFiles() {
     }
     function changeView(next) { setView(next); localStorage.setItem('editorial-files-view', next); }
     async function remove(file) {
-        if (!window.confirm('Удалить файл «' + file.name + '»? Он также исчезнет из общих ссылок.')) return;
-        try { await api('/editorial/library/files/' + file.id, { token, method: 'DELETE' }); setRefresh(n => n + 1); }
-        catch (e) { setError(e.message); }
+        if (!window.confirm('Переместить «' + file.name + '» в корзину на 30 дней? Действующие материалы и общие ссылки защищены от удаления.')) return;
+        try {
+            const route = file.source === 'material' ? '/editorial/library/files/materials/' + encodeURIComponent(file.id.slice(9)) : '/editorial/library/files/' + encodeURIComponent(file.id);
+            await api(route,{token,method:'DELETE'});
+            setSelection(items => items.filter(id => id !== file.id));
+            setRefresh(n => n + 1);
+        } catch (error) { setError(error.message); }
+    }
+    async function removeFolder(item) {
+        if (!window.confirm('Убрать пустую завершённую папку «' + item.title + '» из файлового менеджера? Сам проект и его история сохранятся.')) return;
+        try {
+            await api('/editorial/library/folders/projects/' + encodeURIComponent(item.id),{token,method:'DELETE'});
+            setFolder(null); setPersonFolder(null);
+            setRefresh(n => n + 1);
+        } catch (error) { setError(error.message); }
     }
     return <div className="editorial-workspace-content space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Файлы редакции</h2><p className="text-sm opacity-70">Закрытое хранилище для передачи материалов другим подразделениям.</p></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white">+ Загрузить файл<input type="file" multiple className="sr-only" onChange={upload} disabled={busy} /></label></div>
@@ -91,12 +107,18 @@ export default function EditorialFiles() {
             <div className="flex rounded-lg border border-current/20 p-1" role="group" aria-label="Вид файлов"><button aria-pressed={view === 'grid'} className={`rounded px-3 py-2 text-sm ${view === 'grid' ? 'bg-violet-600 text-white' : ''}`} onClick={() => changeView('grid')}>▦ Значки</button><button aria-pressed={view === 'list'} className={`rounded px-3 py-2 text-sm ${view === 'list' ? 'bg-violet-600 text-white' : ''}`} onClick={() => changeView('list')}>☷ Список</button></div>
         </div>
         {!folder && <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
-            {folders.map(item => <article key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => { setFolder(item); setPersonFolder(null); }}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{item.title}</span><span className="block text-xs opacity-60">{item.files.length} файлов</span></button><button disabled={!item.files.length} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40" onClick={() => share(item, item.id)}>Общий доступ</button></article>)}
+            {folders.map(item => <article key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => { setFolder(item); setPersonFolder(null); }}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{item.title}</span><span className="block text-xs opacity-60">{item.files.length} файлов</span></button><div className="flex flex-wrap gap-2"><button disabled={!item.files.length} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40" onClick={() => share(item, item.id)}>Общий доступ</button><button type="button" className="rounded-lg border border-rose-400/60 px-3 py-2 text-sm text-rose-700 dark:text-rose-300" onClick={() => removeFolder(item)}>Удалить папку</button></div></article>)}
         </div>}
         {folder && !personFolder && <div className={view === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2'}>
             {(folder.folders || []).map(group => <article key={group.id} className="flex items-center justify-between gap-3 rounded-xl border border-current/20 p-4"><button className="min-w-0 flex-1 text-left" onClick={() => setPersonFolder(group)}><span className="mr-2 text-xl">📁</span><span className="font-semibold">{group.title}</span><span className="block text-xs opacity-60">{group.files.length} файлов</span></button><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => sharePerson(group)}>Общий доступ</button></article>)}
         </div>}
         {!folder && <h3 className="font-semibold">Общие файлы</h3>}
+        <div className="grid gap-2 rounded-xl border border-current/15 bg-violet-500/5 p-3 sm:grid-cols-[1fr_auto_auto]">
+            <input aria-label="Поиск файлов" placeholder="Поиск по названию, описанию или заданию…" value={search} onChange={event => setSearch(event.target.value)} className="min-w-0 rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm" />
+            <select aria-label="Тип файла" value={type} onChange={event => setType(event.target.value)} className="rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm"><option value="all">Все типы</option><option value="image">Фотографии</option><option value="video">Видео</option><option value="other">Документы</option></select>
+            <select aria-label="Сортировка файлов" value={sort} onChange={event => setSort(event.target.value)} className="rounded-lg border border-current/25 bg-transparent px-3 py-2 text-sm"><option value="newest">Сначала новые</option><option value="name">По имени</option><option value="size">По размеру</option></select>
+            <p className="sm:col-span-3 text-xs opacity-75">Показано: {visibleFiles.length} из {sourceFiles.length} · Объём: {(visibleFiles.reduce((sum,file) => sum + file.size,0) / 1048576).toFixed(1)} МБ · Удалённые файлы доступны для восстановления из корзины администратора в течение 30 дней.</p>
+        </div>
         {visibleFiles.length > 0 && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-400/40 bg-violet-500/10 p-3"><span className="text-sm font-semibold">Подборка · {selection.length} выбрано</span><input value={collectionTitle} onChange={e => setCollectionTitle(e.target.value)} placeholder="Название подборки" maxLength={160} aria-label="Название подборки" className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent p-2 text-sm" /><button type="button" disabled={!selection.length || !collectionTitle.trim() || sharing} onClick={shareSelection} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Создать общую ссылку</button></div>}
         <EditorialFileGallery files={visibleFiles} token={token} view={view} selection={selection} setSelection={setSelection} onShare={share} onDelete={remove} onUpdate={() => setRefresh(n => n + 1)} onError={setError} downloadFile={downloadEditorialFile} />
         {folder && !(folder.folders || []).length && <p className="rounded-xl border border-dashed p-6 text-center text-sm opacity-70">В проекте пока нет загруженных материалов.</p>}
