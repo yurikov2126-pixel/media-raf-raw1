@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import EditorialMaterialViewer from './EditorialMaterialViewer.jsx';
 import { batchUploadProgress, removeUploadedItem, canSubmitReview } from './editorialUploadUtils.js';
+import { uploadEditorialResumable } from './editorialResumableUpload.js';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 
@@ -115,20 +116,15 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
     }
     useEffect(()=>{load();},[base,token]);
     function open(file) { setPreview(file.id); }
-    function uploadOne(file,caption,onProgress) {
-        return new Promise((resolve,reject)=>{
-            if (cancelledRef.current) { reject(new Error('Загрузка отменена')); return; }
-            const xhr=new XMLHttpRequest();
-            xhrRef.current=xhr;
-            xhr.open('POST',API+base);
-            xhr.setRequestHeader('Authorization',`Bearer ${token}`);
-            xhr.upload.onprogress=(event)=>{if(event.lengthComputable){const percent=Math.round(event.loaded/event.total*100);setProgress(percent);onProgress?.(percent);}};
-            xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText);}catch{}if(xhr.status>=200&&xhr.status<300)resolve(data);else reject(new Error(data.error||'Ошибка загрузки'));};
-            xhr.onerror=()=>reject(new Error('Сетевая ошибка при загрузке'));
-            xhr.onabort=()=>reject(new Error('Загрузка отменена'));
-            xhr.onloadend=()=>{ if (xhrRef.current === xhr) xhrRef.current=null; };
-            const body=new FormData();body.append('file',file);body.append('caption',caption);xhr.send(body);
-        });
+    const abortControllerRef = useRef(null);
+    async function uploadOne(file, caption) {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        try {
+            return await uploadEditorialResumable({ path:base, file, caption, token, signal:controller.signal, onProgress:setProgress });
+        } finally {
+            if (abortControllerRef.current === controller) abortControllerRef.current = null;
+        }
     }
     async function uploadSelected() {
         cancelledRef.current=false;
@@ -222,7 +218,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
                 className="sr-only" tabIndex={-1} />
             {selected.length>0&&<div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">Очередь загрузки · {selected.length} файл(ов) · {(selected.reduce((n,item)=>n+item.file.size,0)/1048576).toFixed(1)} МБ</span><button type="button" disabled={busy} onClick={()=>setSelected([])} className="text-xs underline disabled:opacity-50">Очистить список</button></div>}
             {selected.length>0&&<details className="rounded-lg border border-current/10 px-3 py-2"><summary className="cursor-pointer text-xs font-medium opacity-80">Подписи к фотографиям (необязательно)</summary><div className="mt-3 max-h-52 space-y-2 overflow-y-auto">{selected.map((item,i)=><label key={i} className="block space-y-1"><span className="block truncate text-xs">{item.file.name}</span><input value={item.caption} disabled={busy} maxLength={1000} placeholder="Подпись к файлу" onChange={e=>setSelected(v=>v.map((x,j)=>j===i?{...x,caption:e.target.value}:x))} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm disabled:opacity-60" /></label>)}</div></details>}
-            {batchProgress&&<div role="status" className="space-y-3 rounded-xl border border-violet-400/40 bg-violet-500/10 p-4 dark:bg-violet-400/10"><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-violet-950 dark:text-violet-100">Загрузка материалов</span><span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-200">{batchUploadProgress(batchProgress.completed,batchProgress.total,progress)}%</span></div><div className="flex flex-wrap justify-between gap-2 text-xs font-medium text-slate-700 dark:text-slate-200"><span>Загружено {batchProgress.completed} из {batchProgress.total}</span><span>Всего файлов: {batchProgress.total}</span></div><div role="progressbar" aria-label="Общий прогресс загрузки" aria-valuemin={0} aria-valuemax={100} aria-valuenow={batchUploadProgress(batchProgress.completed,batchProgress.total,progress)} className="h-3 overflow-hidden rounded-full bg-violet-950/15 dark:bg-white/20"><div className="h-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 transition-[width] duration-200 ease-out" style={{width:`${batchUploadProgress(batchProgress.completed,batchProgress.total,progress)}%`}} /></div><p className="text-xs text-slate-600 dark:text-slate-300">Обработка файла {Math.min(batchProgress.completed+1,batchProgress.total)} из {batchProgress.total}</p><button type="button" onClick={()=>{cancelledRef.current=true;xhrRef.current?.abort();}} className="min-h-10 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
+            {batchProgress&&<div role="status" className="space-y-3 rounded-xl border border-violet-400/40 bg-violet-500/10 p-4 dark:bg-violet-400/10"><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-violet-950 dark:text-violet-100">Загрузка материалов</span><span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-200">{batchUploadProgress(batchProgress.completed,batchProgress.total,progress)}%</span></div><div className="flex flex-wrap justify-between gap-2 text-xs font-medium text-slate-700 dark:text-slate-200"><span>Загружено {batchProgress.completed} из {batchProgress.total}</span><span>Всего файлов: {batchProgress.total}</span></div><div role="progressbar" aria-label="Общий прогресс загрузки" aria-valuemin={0} aria-valuemax={100} aria-valuenow={batchUploadProgress(batchProgress.completed,batchProgress.total,progress)} className="h-3 overflow-hidden rounded-full bg-violet-950/15 dark:bg-white/20"><div className="h-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 transition-[width] duration-200 ease-out" style={{width:`${batchUploadProgress(batchProgress.completed,batchProgress.total,progress)}%`}} /></div><p className="text-xs text-slate-600 dark:text-slate-300">Обработка файла {Math.min(batchProgress.completed+1,batchProgress.total)} из {batchProgress.total}</p><button type="button" onClick={()=>{cancelledRef.current=true;abortControllerRef.current?.abort();}} className="min-h-10 rounded-lg border border-rose-400 px-3 py-2 text-sm font-semibold text-rose-700 dark:text-rose-200">Отменить загрузку</button></div>}
             {selected.length>0&&<p className="text-xs opacity-65">Файлы загрузятся автоматически при отправке на проверку.</p>}
         </div>}
         {(canSubmit||canReview)&&<div className="space-y-2 rounded-xl border border-violet-300/30 bg-violet-100/20 p-3 dark:bg-violet-300/10"><h4 className="font-semibold">Согласование</h4><textarea rows={3} maxLength={10000} value={note} onChange={e=>{setNote(e.target.value);setReviewError('');}} placeholder={canReview?'Обязательно напишите, что нужно исправить…':'Комментарий к результату…'} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm"/><div className="flex flex-wrap gap-2">{canSubmit&&<><button type="button" disabled={busy||(selected.length===0&&files.length===0)} onClick={submitAll} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Отправляем…' : 'Отправить на проверку'}</button>{selected.length>0&&<button type="button" disabled={busy} onClick={saveDraft} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">Сохранить черновик</button>}</>}{canReview&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Утвердить</button><button type="button" disabled={busy} onClick={()=>review('revise')} className="rounded-lg border border-amber-500 bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30">Вернуть на доработку</button></>}</div>{canReview&&<p className="text-xs text-slate-600 dark:text-slate-200">Для возврата на доработку требуется замечание редактора.</p>}{reviewError&&<p role="alert" className="text-sm font-medium text-rose-700 dark:text-rose-300">{reviewError}</p>}</div>}
