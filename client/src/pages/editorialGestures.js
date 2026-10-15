@@ -6,6 +6,9 @@ export function usePhotoGestures({ onLeft, onRight, onDown, onUp, onLongPress })
     const timer = useRef(null);
     const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
     return {
+        // Touch movement belongs to the photo viewer rather than the page behind it.
+        // Apply touch-action:none to the gesture surface so iOS/Android keep sending
+        // pointermove/pointerup rather than cancelling the gesture to scroll.
         onPointerDown: event => {
             if (event.pointerType === 'mouse' && event.button !== 0) return;
             clear();
