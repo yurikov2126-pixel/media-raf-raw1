@@ -2,6 +2,7 @@ import { mentionTitle, mentionPreview } from './mentionNotification.js';
 
 const editorialLabels = {
  assigned: 'Вам назначено задание', status: 'Изменён статус задания',
+ assignment_accepted: 'Исполнитель принял задание', assignment_declined: 'Исполнитель отказался от задания',
  comment: 'Новый комментарий к заданию', application: 'Новая заявка на задание',
  application_approved: 'Ваша заявка одобрена', application_rejected: 'Решение по вашей заявке',
  deadline_soon: 'Скоро срок задания', deadline_overdue: 'Задание просрочено',
@@ -33,7 +34,7 @@ export function notificationTitle(n) {
 export function notificationPreview(n) {
  const p = n?.payload || {};
  if (n?.type === 'mention') return mentionPreview(p);
- if (n?.type === 'editorial') return [p.projectTitle ? 'Проект: ' + p.projectTitle : null, p.message].filter(Boolean).join(' · ');
+ if (n?.type === 'editorial') return [p.projectTitle ? 'Проект: ' + p.projectTitle : null, p.actorName ? 'Исполнитель: ' + p.actorName : null, p.reason ? 'Причина отказа: ' + p.reason : null, p.message].filter(Boolean).join(' · ');
  if (n?.type === 'certificate') return p.courseTitle || p.message || '';
  if (n?.type === 'message') return p.preview || p.message || '';
  if (n?.type === 'post') return p.preview || '';
