@@ -12,6 +12,7 @@ export default function WikiArticle() {
     const [article, setArticle] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
+    const [tocOpen, setTocOpen] = useState(false);
 
     useEffect(() => {
         setLoading(true);
@@ -98,18 +99,25 @@ export default function WikiArticle() {
             )}
 
             {headings.length > 0 && (
-                <nav aria-label="Содержание статьи" className="card p-5 mb-5">
-                    <div className="font-semibold mb-3">Содержание</div>
-                    <ol className="space-y-2 text-sm">
+                <nav aria-label="Содержание статьи" className="card mb-4 overflow-hidden">
+                    <button type="button" aria-expanded={tocOpen} onClick={() => setTocOpen((v) => !v)}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/5 transition">
+                        <span className="text-sm font-semibold">☰ Содержание <span className="ml-1 text-xs font-normal opacity-50">({headings.length})</span></span>
+                        <span aria-hidden="true" className="text-xs text-white/60">{tocOpen ? '▲' : '▼'}</span>
+                    </button>
+                    {tocOpen && <ol className="border-t border-white/10 px-4 py-3 grid gap-2 text-sm">
                         {headings.map((heading) => (
                             <li key={heading.index}>
                                 <button type="button" className="text-violet-soft text-left hover:underline"
-                                    onClick={() => document.querySelectorAll('.wiki-article-content h2, .wiki-article-content h3')[heading.index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                                    onClick={() => {
+                                        document.querySelectorAll('.wiki-article-content h2, .wiki-article-content h3')[heading.index]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        setTocOpen(false);
+                                    }}>
                                     {heading.title}
                                 </button>
                             </li>
                         ))}
-                    </ol>
+                    </ol>}
                 </nav>
             )}
             <article className="card p-5 md:p-7 wiki-article-content">
