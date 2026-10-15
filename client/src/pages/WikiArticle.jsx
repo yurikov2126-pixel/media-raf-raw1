@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -22,6 +22,8 @@ export default function WikiArticle() {
             .finally(() => setLoading(false));
         window.scrollTo({ top: 0 });
     }, [slug, token]);
+
+    const headings = useMemo(() => (article?.content || '').split('\n').filter(line => /^#{2,3}\s/.test(line)).map((line, index) => ({ title: line.replace(/^#{2,3}\s+/, ''), index })), [article]);
 
     usePageMeta({
         title: article ? article.title : 'База знаний',
@@ -95,7 +97,22 @@ export default function WikiArticle() {
                 </div>
             )}
 
-            <article className="card p-5 md:p-7">
+            {headings.length > 0 && (
+                <nav aria-label="Содержание статьи" className="card p-5 mb-5">
+                    <div className="font-semibold mb-3">Содержание</div>
+                    <ol className="space-y-2 text-sm">
+                        {headings.map((heading) => (
+                            <li key={heading.index}>
+                                <button type="button" className="text-violet-soft text-left hover:underline"
+                                    onClick={() => document.querySelectorAll('.wiki-article-content h2, .wiki-article-content h3')[heading.index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                                    {heading.title}
+                                </button>
+                            </li>
+                        ))}
+                    </ol>
+                </nav>
+            )}
+            <article className="card p-5 md:p-7 wiki-article-content">
                 <MarkdownView text={article.content} className="text-white/85 leading-relaxed" />
             </article>
 
@@ -129,7 +146,7 @@ export default function WikiArticle() {
 
             {user?.role === 'ADMIN' && (
                 <div className="mt-6 text-center text-xs text-white/40">
-                    <Link to="/app/admin" className="hover:text-white transition">
+                    <Link to="/app/admin?tab=wiki" className="hover:text-white transition">
                         ⚙️ Редактировать статью в админ-панели
                     </Link>
                 </div>
