@@ -73,7 +73,7 @@ const sharedFolderPaths = async files => {
     if (!materialIdsInShare.length) return new Map();
     const materials = await prisma.editorialMaterialFile.findMany({
         where: { id: { in: materialIdsInShare } },
-        select: { id: true, uploaderId: true, task: { select: { id: true, title: true, workDate: true, assigneeId: true, projectId: true, project: { select: { title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
+        select: { id: true, uploaderId: true, task: { select: { id: true, title: true, workDate: true, assigneeId: true, projectId: true, project: { select: { title: true, eventDate:true, eventEndDate:true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
     });
     const paths = new Map();
     for (const material of materials) {
