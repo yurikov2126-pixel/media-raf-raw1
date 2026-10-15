@@ -44,7 +44,7 @@ const archive = (res, files, filename) => {
 };
 const sendFile = (res, next, file, download = false) => {
     const previewSafe = file.mimeType.startsWith('image/') && file.mimeType !== 'image/svg+xml' || file.mimeType.startsWith('video/') || file.mimeType === 'application/pdf';
-    if (!previewSafe) download = true;
+    if (!previewSafe || file.mimeType.startsWith('image/')) download = true;
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(file.name)}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
