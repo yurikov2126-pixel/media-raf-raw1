@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import sharp from 'sharp';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import multer from 'multer';
@@ -333,6 +335,46 @@ router.post('/files/archive', async (req,res,next) => {
         if (files.length !== ids.length) return res.status(404).json({error:'Часть файлов больше недоступна'});
         res.setHeader('Cache-Control','private, no-store');
         return archive(res,files,'editorial-selected.zip');
+    } catch(error) { next(error); }
+});
+const hashFile = file => new Promise((resolve,reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(file);
+    stream.on('error',reject);
+    stream.on('data',chunk => hash.update(chunk));
+    stream.on('end',() => resolve(hash.digest('hex')));
+});
+router.get('/files/duplicates', async (_req,res,next) => {
+    try {
+        // Explicit user action only; do not hash large libraries on page load.
+        const files = await prisma.editorialLibraryFile.findMany({orderBy:{createdAt:'desc'},take:300});
+        const bySize = new Map();
+        for (const file of files) bySize.set(file.size,[...(bySize.get(file.size)||[]),file]);
+        const byHash = new Map();
+        for (const candidates of bySize.values()) {
+            if (candidates.length < 2) continue;
+            for (const file of candidates) {
+                const hash = await hashFile(path.join(root,file.storageName));
+                byHash.set(hash,[...(byHash.get(hash)||[]),publicFile(file)]);
+            }
+        }
+        res.json({ groups:[...byHash.entries()].filter(([,items])=>items.length>1).map(([sha256,files])=>({sha256,files})),scanned:files.length,limited:files.length===300 });
+    } catch(error) { next(error); }
+});
+router.get('/files/:fileId/metadata', async (req,res,next) => {
+    try {
+        const file = (await resolveFiles([req.params.fileId]))[0];
+        if (!file) return res.status(404).json({error:'Файл не найден'});
+        const result = {name:file.name,mimeType:file.mimeType,size:file.size,createdAt:file.createdAt};
+        if (thumbnailSupported(file.mimeType)) {
+            const dir = file.id.startsWith('material:') ? materialRoot : root;
+            const info = await sharp(path.join(dir,file.storageName),{limitInputPixels:80_000_000}).metadata();
+            result.width = info.width; result.height = info.height;
+            result.format = info.format; result.orientation = info.orientation;
+            if (info.density) result.density = info.density;
+            // Deliberately do not transmit raw EXIF: GPS/location and serial numbers are private.
+        }
+        res.json({metadata:result});
     } catch(error) { next(error); }
 });
 router.get('/files', async (_req, res, next) => {
