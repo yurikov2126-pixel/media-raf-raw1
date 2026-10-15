@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { safe } from './_shared.js';
+import { awardXp } from '../../lib/gamification.js';
+import { getSettings } from '../../lib/gamificationSettings.js';
 const router = Router();
 const snapshot = (article, editorId) => ({
   articleId: article.id, editorId, title: article.title, excerpt: article.excerpt,
@@ -23,9 +25,17 @@ router.post('/wiki/proposals/:id/review', safe(async (req,res) => {
       await tx.wikiRevision.create({ data: snapshot(article, req.user.id) });
       await tx.wikiArticle.update({ where: { id: p.articleId }, data: { content: p.content } });
     }
-    return tx.wikiProposal.update({ where: { id: p.id }, data: { status: req.body.status, reviewedBy: req.user.id, reviewedAt: new Date() } });
+    const changed = await tx.wikiProposal.updateMany({ where: { id: p.id, status: 'PENDING' }, data: { status: req.body.status, reviewedBy: req.user.id, reviewedAt: new Date() } });
+    return changed.count ? { ...p, status: req.body.status } : null;
   });
   if (!result) return res.status(409).json({ error: 'Предложение уже обработано или статья удалена' });
+  if (result.status === 'APPROVED' && result.authorId !== req.user.id) {
+    try {
+      const settings = await getSettings();
+      const xp = settings.enabled ? settings.xp.wiki_contribution_approved || 0 : 0;
+      if (xp > 0) await awardXp({ userId: result.authorId, amount: xp, reason: 'wiki_contribution_approved', meta: { proposalId: result.id, articleId: result.articleId } });
+    } catch (e) { console.error('[wiki] XP award failed', e); }
+  }
   if (result.authorId) {
     const article = await prisma.wikiArticle.findUnique({ where: { id: result.articleId }, select: { title: true, slug: true } });
     await prisma.notification.create({ data: { userId: result.authorId, type: 'system', payload: JSON.stringify({ title: result.status === 'APPROVED' ? 'Правка статьи одобрена' : 'Правка статьи отклонена', preview: `ВикиМедиа: «${article?.title || 'Статья'}». ${result.status === 'APPROVED' ? 'Предложенные изменения опубликованы.' : 'Предложенные изменения не приняты.'}`, url: article ? `/app/wiki/${article.slug}` : '/app/wiki' }) } });
