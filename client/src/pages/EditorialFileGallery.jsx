@@ -49,6 +49,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl = '';
+        setUrl('');
         const supported = file.mimeType?.startsWith('image/') || file.mimeType?.startsWith('video/') || file.mimeType === 'application/pdf';
         if (supported) fetch(BASE + filePath(file.id) + (file.mimeType?.startsWith('image/') ? '/preview' : ''), { headers: { Authorization: 'Bearer ' + token }, signal: controller.signal })
             .then(res => { if (!res.ok) throw new Error('Не удалось открыть файл'); return res.blob(); })
@@ -74,7 +75,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
         } catch (error) { onError(error.message); }
         finally { setSaving(false); }
     }
-    return <div role="dialog" aria-modal="true" aria-label={'Просмотр ' + file.name} className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-3 text-white sm:p-6">
+    return <motion.div key="private-viewer" initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} exit={{opacity:0,y:100}} transition={{duration:.2}} role="dialog" aria-modal="true" aria-label={'Просмотр ' + file.name} className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-3 text-white sm:p-6">
         <header className="flex items-center justify-between gap-2"><span className="min-w-0 truncate font-semibold">{file.name} · {index + 1} / {files.length}</span><button type="button" className="rounded-lg border border-white/40 px-3 py-2" onClick={onClose}>Закрыть ✕</button></header>
         <div {...gestures} className="my-3 flex min-h-0 flex-1 touch-pan-y items-center justify-center overflow-auto rounded-xl bg-black/30">
             {url && file.mimeType?.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.div key={file.id} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} className={compareUrl?'grid h-full w-full grid-cols-2 gap-2':'flex h-full w-full items-center justify-center'}><img src={url} alt={file.name} className="max-h-full max-w-full object-contain" />{compareUrl && <img src={compareUrl} alt="Сравниваемый кадр" className="max-h-full max-w-full object-contain" />}</motion.div></AnimatePresence> :
@@ -86,7 +87,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
         {file.mimeType?.startsWith('image/') && <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-200">Сравнить с <select value={compareId} onChange={event=>setCompareId(event.target.value)} className="min-w-0 max-w-full rounded-lg border border-white/30 bg-slate-800 p-2 text-white"><option value="">Не сравнивать</option>{files.filter(item=>item.id!==file.id&&item.mimeType?.startsWith('image/')).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         {metadata && <p className="mt-2 text-xs text-slate-300">{[metadata.width && metadata.height ? metadata.width + " × " + metadata.height + " пикс." : null,metadata.format?.toUpperCase(),(metadata.size/1048576).toFixed(2) + " МБ",metadata.density ? metadata.density + " DPI" : null].filter(Boolean).join(" · ")}</p>}
         {!file.source && <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_2fr_auto]"><input aria-label="Название файла" value={name} onChange={e => setName(e.target.value)} maxLength={255} className="min-w-0 rounded-lg border border-white/30 bg-slate-800 p-2 text-white" /><input aria-label="Описание файла" value={description} onChange={e => setDescription(e.target.value)} maxLength={2000} placeholder="Добавить описание" className="min-w-0 rounded-lg border border-white/30 bg-slate-800 p-2 text-white" /><button type="button" disabled={saving || !name.trim()} onClick={save} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold disabled:opacity-50">{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}
-    </div>;
+    </motion.div>;
 }
 
 export default function EditorialFileGallery({ files, folders = [], currentFolder, onMove, token, view, selection, setSelection, onShare, onDelete, onUpdate, onError, downloadFile }) {
@@ -112,6 +113,6 @@ export default function EditorialFileGallery({ files, folders = [], currentFolde
             </article>)}
         </div>
         {menu && <><button type="button" aria-label="Закрыть контекстное меню" className="fixed inset-0 z-[110] cursor-default" onClick={()=>setMenu(null)} /><div role="menu" className="fixed z-[111] w-52 space-y-1 rounded-xl border border-violet-400/30 bg-slate-900 p-2 text-sm text-white shadow-2xl" style={{left:Math.max(8,menu.x),top:Math.max(8,menu.y)}}>{[['Просмотр',()=>setIndex(files.findIndex(item=>item.id===menu.file.id))],['Скачать',()=>downloadFile(filePath(menu.file.id),token,menu.file.name).catch(error=>onError(error.message))],['Общий доступ',()=>onShare(menu.file)],['В корзину',()=>onDelete(menu.file)],['Выбрать',()=>setSelection(items=>items.includes(menu.file.id)?items.filter(id=>id!==menu.file.id):[...items,menu.file.id])]].map(([label,run])=><button type="button" role="menuitem" key={label} onClick={()=>{setMenu(null);run();}} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-violet-600/40">{label}</button>)}{!menu.file.source && <label className="block px-2 text-xs">Переместить<select className="mt-1 w-full rounded-lg bg-slate-700 p-2 text-white" value={currentFolder||''} onChange={event=>{onMove(menu.file,event.target.value||null);setMenu(null);}}><option value="">Корень</option>{folders.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}</div></>}
-        {index !== null && files[index] && <Viewer files={files} index={index} token={token} onClose={() => setIndex(null)} onNavigate={navigate} onUpdate={onUpdate} onError={onError} downloadFile={downloadFile} />}
+        <AnimatePresence>{index !== null && files[index] && <Viewer files={files} index={index} token={token} onClose={() => setIndex(null)} onNavigate={navigate} onUpdate={onUpdate} onError={onError} downloadFile={downloadFile} />}</AnimatePresence>
     </>;
 }
