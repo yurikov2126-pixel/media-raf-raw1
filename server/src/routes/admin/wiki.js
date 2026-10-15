@@ -159,14 +159,23 @@ router.patch(
         }
         if (data.published !== undefined) data.published = !!data.published;
 
-        const article = await prisma.wikiArticle.update({
+        const article = await prisma.$transaction(async (tx) => {
+            const before = await tx.wikiArticle.findUnique({ where: { id: req.params.id } });
+            if (!before) return null;
+            await tx.wikiRevision.create({ data: {
+                articleId: before.id, editorId: req.user.id, title: before.title,
+                excerpt: before.excerpt, content: before.content, cover: before.cover, tags: before.tags,
+            } });
+            return tx.wikiArticle.update({
             where: { id: req.params.id },
             data,
             include: {
                 category: { select: { id: true, slug: true, title: true, icon: true } },
                 author: { select: { id: true, fullName: true, username: true } },
             },
+            });
         });
+        if (!article) return res.status(404).json({ error: 'Статья не найдена' });
         res.json(parseArticle(article));
     })
 );
