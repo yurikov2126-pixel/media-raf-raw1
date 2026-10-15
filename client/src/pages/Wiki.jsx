@@ -107,7 +107,7 @@ export default function Wiki() {
     });
 
     return (
-        <div className="p-4 md:p-10 max-w-7xl mx-auto">
+        <div className="w-full min-w-0 max-w-7xl mx-auto overflow-x-clip px-4 py-4 md:p-10">
             {/* Заголовок */}
             <div className="mb-6">
                 <div className="flex items-center gap-3 mb-2">
@@ -153,10 +153,10 @@ export default function Wiki() {
                 ))}
             </div>
 
-            <div ref={articleListRef} className="grid lg:grid-cols-4 gap-6 scroll-mt-6">
+            <div ref={articleListRef} className="grid min-w-0 grid-cols-1 lg:grid-cols-4 gap-6 scroll-mt-6">
                 {/* Основной список */}
                 <div className="lg:col-span-4 text-lg font-semibold">{activeCategory ? (categories.find(c => c.slug === activeCategory)?.title || "Статьи категории") : "Все материалы"}</div>
-                <div className="lg:col-span-3 space-y-4">
+                <div className="min-w-0 lg:col-span-3 space-y-4">
                     {loading && (
                         <div className="card p-8 text-center text-white/40">Загрузка…</div>
                     )}
@@ -168,7 +168,7 @@ export default function Wiki() {
                     )}
 
                     {!loading && activeCategory && (
-                        <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-3">
                             {articles.map((a) => (
                                 <ArticleCard key={a.id} article={a} />
                             ))}
@@ -176,7 +176,7 @@ export default function Wiki() {
                     )}
 
                     {!loading && !activeCategory && groupedArticles && (
-                        <div className="space-y-8">
+                        <div className="min-w-0 space-y-8">
                             {groupedArticles.map((g) => (
                                 <div key={g.slug}>
                                     <div className="flex items-center gap-2 mb-3">
@@ -195,7 +195,7 @@ export default function Wiki() {
                 </div>
 
                 {/* Сайдбар: популярное */}
-                <aside className="lg:col-span-1 space-y-4">
+                <aside className="min-w-0 lg:col-span-1 space-y-4">
                     <div className="card p-5">
                         <div className="font-bold mb-3 flex items-center gap-2">
                             🔥 Популярное
@@ -237,34 +237,34 @@ function ArticleCard({ article }) {
     return (
         <Link
             to={`/app/wiki/${article.slug}`}
-            className="card overflow-hidden block hover:-translate-y-0.5 transition group"
+            className="card min-w-0 max-w-full overflow-hidden block hover:-translate-y-0.5 transition group"
         >
             {article.cover && <img src={article.cover} alt="" loading="lazy" className="w-full h-36 object-cover" />}
             <div className="flex items-start gap-3 p-5">
                 <div className="text-2xl shrink-0">
                     {article.category?.icon || '📄'}
                 </div>
-                <div className="flex-1 min-w-0">
-                    <div className="font-bold text-lg mb-1 group-hover:text-violet-soft transition">
+                <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="font-bold text-lg mb-1 break-words [overflow-wrap:anywhere] group-hover:text-violet-soft transition">
                         {article.title}
                     </div>
                     {article.excerpt && (
-                        <div className="text-sm text-white/60 line-clamp-2 mb-2">
+                        <div className="text-sm text-white/60 line-clamp-2 mb-2 break-words">
                             {article.excerpt}
                         </div>
                     )}
-                    <div className="flex flex-wrap gap-2 items-center text-xs text-white/40">
+                    <div className="flex min-w-0 flex-wrap gap-2 items-center text-xs text-white/40">
                         {article.category && (
-                            <span className="chip bg-white/5 text-white/60">
+                            <span className="chip max-w-full break-all bg-white/5 text-white/60">
                 {article.category.title}
               </span>
                         )}
                         {(article.tags || []).slice(0, 3).map((t) => (
-                            <span key={t} className="chip bg-white/5 text-white/50">
+                            <span key={t} className="chip max-w-full break-all bg-white/5 text-white/50">
                 #{t}
               </span>
                         ))}
-                        <span className="ml-auto">
+                        <span className="w-full min-w-0 text-right break-words sm:w-auto sm:ml-auto">
               👁 {article.views} · {new Date(article.updatedAt).toLocaleDateString('ru-RU')}
             </span>
                     </div>
