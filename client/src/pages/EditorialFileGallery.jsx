@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { usePhotoGestures } from './editorialGestures.js';
+import { useEditorialViewerScrollLock } from './editorialViewerScrollLock.js';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BASE = import.meta.env.VITE_API || 'http://localhost:4000/api';
@@ -24,6 +25,7 @@ function Preview({ file, token, onOpen }) {
 }
 
 function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, downloadFile }) {
+    useEditorialViewerScrollLock(true);
     const file = files[index];
     const [url, setUrl] = useState('');
     const [name, setName] = useState(file.name);
@@ -77,8 +79,8 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     }
     return <motion.div key="private-viewer" initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} exit={{opacity:0,y:100}} transition={{duration:.2}} role="dialog" aria-modal="true" aria-label={'Просмотр ' + file.name} className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-3 text-white sm:p-6">
         <header className="flex items-center justify-between gap-2"><span className="min-w-0 truncate font-semibold">{file.name} · {index + 1} / {files.length}</span><button type="button" className="rounded-lg border border-white/40 px-3 py-2" onClick={onClose}>Закрыть ✕</button></header>
-        <div {...gestures} className="my-3 flex min-h-0 flex-1 touch-pan-y items-center justify-center overflow-auto rounded-xl bg-black/30">
-            {url && file.mimeType?.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.div key={file.id} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} className={compareUrl?'grid h-full w-full grid-cols-2 gap-2':'flex h-full w-full items-center justify-center'}><img src={url} alt={file.name} className="max-h-full max-w-full object-contain" />{compareUrl && <img src={compareUrl} alt="Сравниваемый кадр" className="max-h-full max-w-full object-contain" />}</motion.div></AnimatePresence> :
+        <div {...gestures} className="my-3 flex min-h-0 flex-1 touch-none select-none items-center justify-center overflow-hidden overscroll-none rounded-xl bg-black/30">
+            {url && file.mimeType?.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.div key={file.id} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} className={compareUrl?'grid h-full w-full grid-cols-2 gap-2':'flex h-full w-full items-center justify-center'}><img src={url} alt={file.name} draggable={false} className="max-h-full max-w-full select-none object-contain" />{compareUrl && <img src={compareUrl} alt="Сравниваемый кадр" className="max-h-full max-w-full object-contain" />}</motion.div></AnimatePresence> :
                 url && file.mimeType?.startsWith('video/') ? <video controls src={url} className="max-h-full max-w-full" /> :
                 url && file.mimeType === 'application/pdf' ? <iframe title={file.name} src={url} className="h-full w-full bg-white" /> :
                 <p className="p-6 text-center text-sm">{file.mimeType?.startsWith('image/') || file.mimeType?.startsWith('video/') || file.mimeType === 'application/pdf' ? 'Загрузка предпросмотра…' : 'Предпросмотр этого формата недоступен'}</p>}
