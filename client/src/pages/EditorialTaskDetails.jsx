@@ -13,6 +13,19 @@ const STATUSES = [
 
 export default function EditorialTaskDetails({ task, tasks, stages, project, token, user, canEdit, initialTab, refresh, onError, onClose }) {
     const [title, setTitle] = useState(task.title);
+    const [decisionBusy,setDecisionBusy]=useState(false);
+    const [declineOpen,setDeclineOpen]=useState(false);
+    const [declineReason,setDeclineReason]=useState('');
+    const decide=async(decision)=>{
+        if(decision==='DECLINED' && declineReason.trim().length<10){ onError('Укажите причину отказа не короче 10 символов');return; }
+        setDecisionBusy(true);
+        try {
+            await api('/editorial/workflow/projects/'+project.id+'/tasks/'+task.id+'/assignment-decision',{
+              method:'POST',token,body:{decision,reason:decision==='DECLINED'?declineReason.trim():undefined}
+            });
+            setDeclineOpen(false); await refresh();
+        } catch(e){onError(e.message)}finally{setDecisionBusy(false)}
+    };
     const [description, setDescription] = useState(task.description || project.description || '');
     const [location, setLocation] = useState(task.location || '');
     const readChecklist = raw => {try {const value=JSON.parse(raw||'[]');return Array.isArray(value)?value:[];}catch{return [];}};
@@ -90,6 +103,22 @@ export default function EditorialTaskDetails({ task, tasks, stages, project, tok
             {task.durationMinutes&&<span>⏱ Продолжительность: {task.durationMinutes} мин.</span>}
         </div>}
         <div hidden={tab !== 'details'} className="space-y-4">
+        {task.assigneeId===user?.id && task.status==='TODO' && task.assignmentDecision==='PENDING' &&
+          <section className="rounded-xl border border-violet-400 p-4 space-y-3">
+            <div className="font-bold">Подтвердите участие в задании</div>
+            <p className="text-sm opacity-75">Вы можете принять задание или отказаться, указав причину. Редактор получит уведомление.</p>
+            <div className="flex flex-wrap gap-2">
+              <button disabled={decisionBusy} onClick={()=>decide('ACCEPTED')} className="btn-primary">✓ Принять задание</button>
+              <button disabled={decisionBusy} onClick={()=>setDeclineOpen(true)} className="btn-ghost">✕ Отклонить</button>
+            </div>
+            {declineOpen && <div className="space-y-2">
+              <label htmlFor="editorial-decline-reason" className="text-sm font-semibold">Причина отказа (обязательно)</label>
+              <textarea id="editorial-decline-reason" maxLength={1000} rows={3} value={declineReason} onChange={e=>setDeclineReason(e.target.value)} className="input w-full" placeholder="Объясните, почему не сможете выполнить задание..." />
+              <button disabled={decisionBusy||declineReason.trim().length<10} onClick={()=>decide('DECLINED')} className="btn-primary">Подтвердить отказ</button>
+            </div>}
+          </section>}
+        {task.assignmentDecision==='DECLINED' && <p className="rounded-xl border border-rose-400 p-3 text-sm">Исполнитель отказался. Причина: {task.assignmentDeclineReason}</p>}
+        {task.assignmentDecision==='ACCEPTED' && <p className="rounded-xl border border-emerald-400/40 p-3 text-sm">✓ Задание принято исполнителем.</p>}
         <EditorialWikiRecommendations task={task} project={project} token={token} canEdit={canEdit} />
         {task.assigneeId === user?.id && ['TODO', 'IN_PROGRESS', 'REVISION'].includes(task.status) && <div className="rounded-xl border border-violet-300 bg-violet-50 p-3 dark:border-violet-500 dark:bg-slate-800">
             <button type="button" onClick={() => setTab('materials')} className="min-h-11 w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700">Загрузить файлы на проверку</button>
