@@ -243,6 +243,30 @@ router.delete('/files/:fileId', async (req, res, next) => {
         res.json({ ok: true, quarantined: true, restoreUntil: quarantined.expiresAt });
     } catch (error) { next(error); }
 });
+router.patch('/files/:fileId', async (req, res, next) => {
+    try {
+        const file = await prisma.editorialLibraryFile.findUnique({ where: { id: req.params.fileId } });
+        if (!file) return res.status(404).json({ error: 'Файл не найден или относится к заданию' });
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : null;
+        const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
+        if ((name === null && description === null) || (name !== null && (!name || name.length > 255)) || (description !== null && description.length > 2000)) return res.status(400).json({ error: 'Некорректное название или описание' });
+        const updated = await prisma.editorialLibraryFile.update({ where: { id: file.id }, data: { ...(name !== null ? { name } : {}), ...(description !== null ? { description } : {}) } });
+        res.json({ file: publicFile(updated) });
+    } catch (error) { next(error); }
+});
+router.get('/files/:fileId/thumbnail', async (req, res, next) => {
+    try {
+        const file = (await resolveFiles([req.params.fileId]))[0];
+        if (!file) return res.status(404).json({ error: 'Файл не найден' });
+        if (!thumbnailSupported(file.mimeType)) return res.status(415).json({ error: 'Превью недоступно' });
+        const directory = file.id.startsWith('material:') ? materialRoot : root;
+        const preview = await ensureEditorialThumbnail(directory, file);
+        res.setHeader('Content-Type', 'image/webp');
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.sendFile(preview, error => { if (error && !res.headersSent) next(error); });
+    } catch (error) { next(error); }
+});
 router.get('/files/:fileId', async (req, res, next) => {
     try {
         const file = (await resolveFiles([req.params.fileId]))[0];
@@ -251,7 +275,7 @@ router.get('/files/:fileId', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 router.get('/shares', async (_req, res, next) => {
-    try { res.json({ shares: await prisma.editorialFileShare.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }) }); }
+    try { res.json({ shares: await prisma.editorialFileShare.findMany({ where: { revokedAt: null }, orderBy: { createdAt: 'desc' }, take: 200 }) }); }
     catch (error) { next(error); }
 });
 router.post('/shares', async (req, res, next) => {
@@ -270,7 +294,7 @@ router.post('/shares', async (req, res, next) => {
 });
 router.post('/shares/:id/revoke', async (req, res, next) => {
     try {
-        const result = await prisma.editorialFileShare.updateMany({ where: { id: req.params.id, revokedAt: null }, data: { revokedAt: new Date() } });
+        const result = await prisma.editorialFileShare.deleteMany({ where: { id: req.params.id } });
         if (!result.count) return res.status(404).json({ error: 'Ссылка не найдена' });
         res.json({ ok: true });
     } catch (error) { next(error); }
