@@ -9,7 +9,7 @@ import { auth } from '../middleware/auth.js';
 import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
-import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
+import { ensureEditorialThumbnail, ensureEditorialPreview, thumbnailSupported } from '../lib/editorialThumbnails.js';
 import { quarantineLibraryFile, quarantineTaskMaterialFile, restoreRegisteredLibraryFile } from '../lib/storageQuarantine.js';
 import { canRemoveEditorialMaterial, canRemoveEditorialProjectFolder } from '../lib/editorialFileDeletion.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
@@ -133,6 +133,21 @@ router.get('/public/:token/files/:fileId', async (req, res, next) => {
 });
 
 // The share token authorizes thumbnails only for files explicitly included in the share.
+router.get('/public/:token/files/:fileId/preview', async (req,res,next) => {
+    try {
+        const share = await getShare(req.params.token);
+        if (!share || !Array.isArray(share.fileIds) || !share.fileIds.includes(req.params.fileId)) return res.status(404).json({error:'Файл не найден'});
+        const file = (await resolveFiles([req.params.fileId]))[0];
+        if (!file) return res.status(404).json({error:'Файл не найден'});
+        if (!thumbnailSupported(file.mimeType)) return res.status(415).json({error:'Предпросмотр недоступен'});
+        const directory = file.id.startsWith('material:') ? materialRoot : root;
+        const preview = await ensureEditorialPreview(directory,file);
+        res.setHeader('Content-Type','image/webp');
+        res.setHeader('Cache-Control','private, max-age=300');
+        res.setHeader('X-Content-Type-Options','nosniff');
+        res.sendFile(preview,error=>{if(error&&!res.headersSent)next(error);});
+    } catch(error) { next(error); }
+});
 router.get('/public/:token/files/:fileId/thumbnail', async (req, res, next) => {
     try {
         const share = await getShare(req.params.token);
@@ -418,6 +433,19 @@ router.patch('/files/:fileId', async (req, res, next) => {
         const updated = await prisma.editorialLibraryFile.update({ where: { id: file.id }, data: { ...(name !== null ? { name } : {}), ...(description !== null ? { description } : {}) } });
         res.json({ file: publicFile(updated) });
     } catch (error) { next(error); }
+});
+router.get('/files/:fileId/preview', async (req,res,next) => {
+    try {
+        const file = (await resolveFiles([req.params.fileId]))[0];
+        if (!file) return res.status(404).json({error:'Файл не найден'});
+        if (!thumbnailSupported(file.mimeType)) return res.status(415).json({error:'Предпросмотр недоступен'});
+        const directory = file.id.startsWith('material:') ? materialRoot : root;
+        const preview = await ensureEditorialPreview(directory,file);
+        res.setHeader('Content-Type','image/webp');
+        res.setHeader('Cache-Control','private, max-age=300');
+        res.setHeader('X-Content-Type-Options','nosniff');
+        res.sendFile(preview,error=>{if(error&&!res.headersSent)next(error);});
+    } catch(error) { next(error); }
 });
 router.get('/files/:fileId/thumbnail', async (req, res, next) => {
     try {
