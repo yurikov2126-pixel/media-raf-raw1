@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
+import { createNotification } from '../lib/notify.js';
 
 const router = Router();
 router.use(auth);
@@ -55,13 +56,13 @@ router.post('/proposals/:slug', async (req,res) => {
     const content = String(req.body.content || '').trim();
     const note = String(req.body.note || '').trim().slice(0,500);
     if (content.length < 20 || content.length > 150000) return res.status(400).json({ error: 'Текст правки должен содержать от 20 до 150000 символов' });
-    const article = await prisma.wikiArticle.findUnique({ where: { slug: req.params.slug }, select: { id: true, published: true } });
+    const article = await prisma.wikiArticle.findUnique({ where: { slug: req.params.slug }, select: { id: true, title: true, published: true } });
     if (!article?.published) return res.status(404).json({ error: 'Статья не найдена' });
     const pending = await prisma.wikiProposal.count({ where: { articleId: article.id, authorId: req.user.id, status: 'PENDING' } });
     if (pending > 2) return res.status(429).json({ error: 'Сначала дождитесь рассмотрения предыдущих предложений' });
     const proposal = await prisma.wikiProposal.create({ data: { articleId: article.id, authorId: req.user.id, content, note } });
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
-    await prisma.notification.createMany({ data: admins.filter(a => a.id !== req.user.id).map(a => ({ userId: a.id, type: 'system', payload: JSON.stringify({ title: 'Новая правка ВикиМедиа на согласовании', preview: `Предложены изменения статьи «${article.title}». ${note || 'Комментарий не указан.'}`, url: '/app/admin?tab=wiki' }) })) });
+    await Promise.allSettled(admins.filter(a => a.id !== req.user.id).map(a => createNotification(a.id, 'system', { title: 'Новая правка ВикиМедиа на согласовании', preview: `Предложены изменения статьи «${article.title}». ${note || 'Комментарий не указан.'}`, url: '/app/admin?tab=wiki' })));
     res.status(201).json({ id: proposal.id, status: proposal.status });
   } catch (e) { fail(res,e); }
 });
