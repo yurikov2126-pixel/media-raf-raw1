@@ -103,3 +103,41 @@ export async function quarantineDetachedMaterials(files,userId,context={}){
    affected:result.quarantined.length}}).catch(error=>console.error('[storage] failed to log detached materials',error));
  return result;
 }
+
+/**
+ * Quarantine an individual task material while preserving the task/project.
+ * Refuse files in active public shares. The caller must validate project/task status.
+ */
+export async function quarantineTaskMaterialFile(file,userId,context={}){
+ const fileKey='material:'+file.id;
+ const shares=await prisma.editorialFileShare.findMany({where:{revokedAt:null},select:{fileIds:true,expiresAt:true}});
+ if(shares.some(share=>active(share)&&Array.isArray(share.fileIds)&&share.fileIds.includes(fileKey))){
+   throw Object.assign(new Error('Материал используется в активной общей ссылке. Сначала отзовите её.'),{status:409});
+ }
+ const folder=path.join(materialRoot,'.quarantine');
+ await fs.mkdir(folder,{recursive:true,mode:0o700});
+ const id=randomUUID();
+ const source=path.join(materialRoot,file.storageName),destination=path.join(folder,id);
+ const sourceThumb=path.join(materialRoot,'thumbnails',file.storageName+'.webp');
+ const destThumb=path.join(folder,id+'.webp');
+ await fs.rename(source,destination);
+ let thumbMoved=false;
+ try{
+   try{await fs.rename(sourceThumb,destThumb);thumbMoved=true;}catch(error){if(error.code!=='ENOENT')throw error;}
+   const item={id,type:'materials',filename:file.storageName,name:file.name,size:file.size,mimeType:file.mimeType,
+     sourceId:file.id,taskId:file.taskId,projectId:context.projectId,
+     version:file.version,caption:file.caption,uploaderId:file.uploaderId,originalCreatedAt:file.createdAt,
+     originalDeleted:true,thumbnailMoved:thumbMoved,by:userId,createdAt:new Date().toISOString(),
+     expiresAt:new Date(Date.now()+30*86400000).toISOString()};
+   await prisma.$transaction([
+     prisma.setting.create({data:{key:settingKey(id),value:JSON.stringify(item)}}),
+     prisma.editorialMaterialFile.delete({where:{id:file.id}}),
+   ]);
+   await prisma.adminAction.create({data:{adminId:userId,action:'storage_quarantine_material',payload:JSON.stringify(item),affected:1}}).catch(error=>console.error('[storage] audit failed',error));
+   return item;
+ }catch(error){
+   await fs.rename(destination,source).catch(e=>console.error('[storage] rollback original failed',e));
+   if(thumbMoved)await fs.rename(destThumb,sourceThumb).catch(e=>console.error('[storage] rollback thumbnail failed',e));
+   throw error;
+ }
+}
