@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { safe } from './_shared.js';
+import { getSettings as getGamificationSettings } from '../../lib/gamificationSettings.js';
+import { levelFromXp } from '../../lib/gamificationCatalog.js';
+import { createNotification } from '../../lib/notify.js';
 const router = Router();
 const snapshot = (article, editorId) => ({
   articleId: article.id, editorId, title: article.title, excerpt: article.excerpt,
@@ -14,6 +17,7 @@ router.get('/wiki/proposals', safe(async (_req,res) => {
 }));
 router.post('/wiki/proposals/:id/review', safe(async (req,res) => {
   if (!['APPROVED','REJECTED'].includes(req.body.status)) return res.status(400).json({ error: 'Некорректное решение' });
+  const settings = await getGamificationSettings();
   const result = await prisma.$transaction(async tx => {
     const p = await tx.wikiProposal.findUnique({ where: { id: req.params.id } });
     if (!p || p.status !== 'PENDING') return null;
@@ -23,9 +27,19 @@ router.post('/wiki/proposals/:id/review', safe(async (req,res) => {
       await tx.wikiRevision.create({ data: snapshot(article, req.user.id) });
       await tx.wikiArticle.update({ where: { id: p.articleId }, data: { content: p.content } });
     }
-    return tx.wikiProposal.update({ where: { id: p.id }, data: { status: req.body.status, reviewedBy: req.user.id, reviewedAt: new Date() } });
+    const result = await tx.wikiProposal.update({ where: { id: p.id }, data: { status: req.body.status, reviewedBy: req.user.id, reviewedAt: new Date() } });
+    const amount = Math.max(0,Math.min(1000,Number(settings.xp.wiki_approved_edit ?? 25)||0));
+    if (p.authorId && req.body.status === 'APPROVED' && settings.enabled && amount) {
+      await tx.userStats.upsert({ where:{userId:p.authorId}, create:{userId:p.authorId,xp:0,level:1}, update:{} });
+      const stats = await tx.userStats.update({ where:{userId:p.authorId}, data:{xp:{increment:amount}} });
+      await tx.userStats.update({where:{userId:p.authorId},data:{level:levelFromXp(stats.xp,settings.levelThresholds)}});
+      await tx.xpLog.create({data:{userId:p.authorId,amount,reason:'wiki_approved_edit',meta:JSON.stringify({proposalId:p.id,articleId:p.articleId})}});
+    }
+    return result;
   });
   if (!result) return res.status(409).json({ error: 'Предложение уже обработано или статья удалена' });
+  const article = await prisma.wikiArticle.findUnique({where:{id:result.articleId},select:{title:true,slug:true}});
+  await createNotification(result.authorId,'system',{title:result.status === 'APPROVED'?'Правка ВикиМедиа принята':'Правка ВикиМедиа отклонена',message:'Статья «'+(article?.title||'ВикиМедиа')+'»: '+(result.status === 'APPROVED'?'предложенная правка одобрена.':'предложенная правка отклонена.'),url:'/app/wiki/'+(article?.slug||'')});
   res.json({ ok: true, status: result.status });
 }));
 router.get('/wiki/articles/:id/revisions', safe(async (req,res) => {
