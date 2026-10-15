@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../../../api/client.js';
-import { renderMarkdownSimple } from '../../utils.js';
+import MarkdownView from '../../../../components/MarkdownView.jsx';
 
 export default function ArticleEditor({ token, initial, isNew, categories, onClose, onSaved }) {
     const [form, setForm] = useState({
@@ -18,6 +18,10 @@ export default function ArticleEditor({ token, initial, isNew, categories, onClo
     const [preview, setPreview] = useState(false);
 
     const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+    const addBlock = (value) => setForm((f) => ({
+        ...f,
+        content: f.content + (f.content ? '\n\n' : '') + value,
+    }));
 
     const save = async () => {
         if (!form.title.trim() || !form.content.trim()) { setError('Заполните название и текст'); return; }
@@ -71,6 +75,18 @@ export default function ArticleEditor({ token, initial, isNew, categories, onClo
                             <input className="input" value={form.tags} onChange={set('tags')} placeholder="Теги через запятую" />
                             <input className="input" value={form.cover} onChange={set('cover')} placeholder="Обложка (URL)" />
                         </div>
+                        <div className="flex flex-wrap gap-2 mb-3" role="toolbar" aria-label="Вставка блоков статьи">
+                            {[
+                                ['Заголовок', '## Новый раздел'],
+                                ['Список', '- Пункт 1'],
+                                ['Цитата', '> Важная информация'],
+                                ['Изображение', '![Описание](/uploads/course-assets/image.webp)'],
+                                ['Ссылка', '[Название](https://example.com)'],
+                                ['Таблица', '| Параметр | Значение |'],
+                            ].map(([label, markdown]) => (
+                                <button key={label} type="button" onClick={() => addBlock(markdown)} className="btn-ghost !px-3 !py-2 text-xs">{label}</button>
+                            ))}
+                        </div>
                         <textarea rows={16} className="input resize-none font-mono text-sm" value={form.content} onChange={set('content')} placeholder="# Заголовок…" />
                         <label className="flex items-center gap-2 mt-3">
                             <input type="checkbox" checked={form.published} onChange={(e) => setForm((f) => ({ ...f, published: e.target.checked }))} />
@@ -83,7 +99,7 @@ export default function ArticleEditor({ token, initial, isNew, categories, onClo
                     <div className="card p-5 bg-ink-700/50">
                         <h1 className="text-2xl font-bold mb-3">{form.title || 'Без названия'}</h1>
                         {form.excerpt && <p className="text-white/60 mb-4">{form.excerpt}</p>}
-                        <div className="wiki-content" dangerouslySetInnerHTML={{ __html: renderMarkdownSimple(form.content) }} />
+                        <MarkdownView text={form.content} />
                     </div>
                 )}
 
