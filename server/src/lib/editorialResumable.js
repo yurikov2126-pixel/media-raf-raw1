@@ -21,7 +21,7 @@ async function load(root, id, userId, scope) {
 }
 
 export function editorialResumableRouter({ root, scope, authorize, complete, allowed }) {
-    const router = express.Router();
+    const router = express.Router({ mergeParams:true });
     async function permitted(req, res) {
         const result = await authorize(req, res);
         return !!result;
