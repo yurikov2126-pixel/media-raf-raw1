@@ -587,7 +587,7 @@ router.patch('/projects/:projectId/tasks/:taskId/applications/:applicationId', a
 
 const WIKI_RULES = [
   { test: /фото|фоторепортаж|портрет|снимк|photograph/i, slugs: ['canon-eos-m50','tripods-monopods'] },
-  { test: /видео|видеосъём|видеосъем|репортаж|интервью|монтаж|съёмк/i, slugs: ['sony-fdr-ax700','tripods-monopods'] },
+  { test: /видео|видеосъём|видеосъем|видеорепортаж|видеомонтаж|видеокамера/i, slugs: ['sony-fdr-ax700','tripods-monopods'] },
   { test: /интервью|подкаст|диктор|озвуч|звук|микрофон/i, slugs: ['dji-mic-2','shure-reporter-microphone'] },
   { test: /стабилиза|проходк|gimbal|телефон/i, slugs: ['feiyutech-scorp-mini'] },
 ];
