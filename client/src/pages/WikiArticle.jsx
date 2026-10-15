@@ -147,7 +147,7 @@ export default function WikiArticle() {
                 </nav>
             )}
             <article className="card p-5 md:p-7 wiki-article-content">
-                <MarkdownView text={article.content} className="text-white/85 leading-relaxed" />
+                <MarkdownView text={article.content.replace(/^- \[ \] .*$/gm, "")} className="text-white/85 leading-relaxed" />
             </article>
 
             {checklist.length > 0 && (
