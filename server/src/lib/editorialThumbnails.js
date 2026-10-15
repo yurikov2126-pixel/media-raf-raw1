@@ -25,3 +25,19 @@ export async function ensureEditorialThumbnail(directory, file) {
     }
     return destination;
 }
+
+/** Screen-size WebP previews. Originals are never used by image viewers. */
+export async function ensureEditorialPreview(directory, file) {
+    if (!thumbnailSupported(file.mimeType)) return null;
+    const destination = path.join(directory, 'previews', file.storageName + '.webp');
+    await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+    try { await fs.access(destination); return destination; } catch { /* generate on demand */ }
+    const temporary = destination + '.' + randomUUID() + '.tmp';
+    try {
+        await sharp(path.join(directory, file.storageName), { limitInputPixels: 80_000_000 })
+            .rotate().resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 78, effort: 4 }).toFile(temporary);
+        await fs.rename(temporary, destination);
+    } finally { await fs.unlink(temporary).catch(() => {}); }
+    return destination;
+}
