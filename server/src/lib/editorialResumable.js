@@ -6,6 +6,7 @@ import express from 'express';
 const CHUNK_SIZE = 2 * 1024 * 1024;
 const MAX_SIZE = 200 * 1024 * 1024;
 const validateId = id => /^[a-f0-9-]{36}$/.test(id || '');
+const scopeFor = (scope, req) => typeof scope === 'function' ? scope(req) : scope;
 const sessionsPath = root => path.join(root, '.resumable');
 const metadataPath = (root, id) => path.join(sessionsPath(root), id + '.json');
 const partPath = (root, id) => path.join(sessionsPath(root), id + '.part');
@@ -32,7 +33,7 @@ export function editorialResumableRouter({ root, scope, authorize, complete, all
             if (typeof name !== 'string' || !name.trim() || name.length > 255 || typeof mimeType !== 'string' || !allowed(mimeType) || !Number.isSafeInteger(size) || size < 1 || size > MAX_SIZE || typeof caption !== 'string' || caption.length > 1000) return res.status(400).json({ error:'Недопустимые параметры файла' });
             await fs.mkdir(sessionsPath(root), { recursive:true, mode:0o700 });
             const id = randomUUID();
-            const session = { id, userId:req.user.id, scope, name:path.basename(name.replace(/\\/g,'/')), mimeType, size, caption, createdAt:Date.now(), state:'uploading', result:null };
+            const session = { id, userId:req.user.id, scope:scopeFor(scope,req), name:path.basename(name.replace(/\\/g,'/')), mimeType, size, caption, createdAt:Date.now(), state:'uploading', result:null };
             await fs.writeFile(partPath(root,id), Buffer.alloc(0), { flag:'wx', mode:0o600 });
             await fs.writeFile(metadataPath(root,id), JSON.stringify(session), { flag:'wx', mode:0o600 });
             res.status(201).json({ id, offset:0, chunkSize:CHUNK_SIZE });
@@ -41,7 +42,7 @@ export function editorialResumableRouter({ root, scope, authorize, complete, all
     router.get('/:id', async (req, res, next) => {
         try {
             if (!await permitted(req,res)) return;
-            const session = await load(root,req.params.id,req.user.id,scope);
+            const session = await load(root,req.params.id,req.user.id,scopeFor(scope,req));
             if (!session) return res.status(404).json({ error:'Загрузка не найдена' });
             const stat = session.state === 'done' ? { size:session.size } : await fs.stat(partPath(root,session.id)).catch(() => ({ size:0 }));
             res.json({ id:session.id, offset:stat.size, size:session.size, chunkSize:CHUNK_SIZE, state:session.state, result:session.result });
@@ -50,7 +51,7 @@ export function editorialResumableRouter({ root, scope, authorize, complete, all
     router.patch('/:id', express.raw({ type:'application/octet-stream', limit:CHUNK_SIZE + 1024 }), async (req,res,next) => {
         try {
             if (!await permitted(req,res)) return;
-            const session = await load(root,req.params.id,req.user.id,scope);
+            const session = await load(root,req.params.id,req.user.id,scopeFor(scope,req));
             if (!session) return res.status(404).json({ error:'Загрузка не найдена' });
             if (session.state !== 'uploading') return res.status(409).json({ error:'Загрузка уже завершена' });
             const data = req.body;
@@ -75,7 +76,7 @@ export function editorialResumableRouter({ root, scope, authorize, complete, all
     router.post('/:id/finish', async (req,res,next) => {
         try {
             if (!await permitted(req,res)) return;
-            const session = await load(root,req.params.id,req.user.id,scope);
+            const session = await load(root,req.params.id,req.user.id,scopeFor(scope,req));
             if (!session) return res.status(404).json({ error:'Загрузка не найдена' });
             if (session.state === 'done') return res.json({ file:session.result });
             const stat = await fs.stat(partPath(root,session.id));
@@ -97,7 +98,7 @@ export function editorialResumableRouter({ root, scope, authorize, complete, all
     router.delete('/:id', async (req,res,next) => {
         try {
             if (!await permitted(req,res)) return;
-            const session = await load(root,req.params.id,req.user.id,scope);
+            const session = await load(root,req.params.id,req.user.id,scopeFor(scope,req));
             if (!session) return res.status(404).json({ error:'Загрузка не найдена' });
             if (session.state !== 'done') await fs.unlink(partPath(root,session.id)).catch(() => {});
             await fs.unlink(metadataPath(root,session.id)).catch(() => {});
