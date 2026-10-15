@@ -363,6 +363,7 @@ router.patch('/projects/:projectId/tasks/:taskId', async (req, res, next) => {
             if (req.body.assigneeId !== undefined) {
                 if (req.body.assigneeId !== null && !project.members.some((m) => m.userId === req.body.assigneeId)) return res.status(400).json({ error: 'Исполнитель должен быть участником проекта' });
                 data.assigneeId = req.body.assigneeId;
+                if (data.assigneeId !== task.assigneeId) { data.assignmentDecision = 'PENDING'; data.assignmentDeclineReason = null; data.assignmentRespondedAt = null; }
             }
             if (req.body.stageId !== undefined) {
                 if (req.body.stageId !== null && !(await prisma.editorialStage.findFirst({ where: { id: req.body.stageId, projectId: project.id } }))) return res.status(400).json({ error: 'Этап не найден' });
@@ -632,6 +633,38 @@ router.put('/projects/:projectId/tasks/:taskId/wiki',async(req,res,next)=>{
   if(mode==='remove')await prisma.editorialTaskWikiLink.deleteMany({where:key});
   else await prisma.editorialTaskWikiLink.upsert({where:{taskId_articleId:key},create:{...key,excluded:mode==='exclude'},update:{excluded:mode==='exclude'}});
   res.json({ok:true});
+ }catch(e){next(e)}
+});
+
+
+router.post('/projects/:projectId/tasks/:taskId/assignment-decision',async(req,res,next)=>{
+ try {
+  const project=await getProject(req.params.projectId);
+  if(!project||!canSee(project,req.user))return notFound(res);
+  const task=await prisma.editorialTask.findFirst({where:{id:req.params.taskId,projectId:project.id}});
+  if(!task)return res.status(404).json({error:'Задание не найдено'});
+  if(task.assigneeId!==req.user.id)return res.status(403).json({error:'Решение может принять только исполнитель'});
+  const decision=req.body.decision;
+  const reason=String(req.body.reason||'').trim();
+  if(!['ACCEPTED','DECLINED'].includes(decision))return res.status(400).json({error:'Некорректное решение'});
+  if(decision==='DECLINED'&&(reason.length<10||reason.length>1000))return res.status(400).json({error:'Укажите причину отказа (от 10 до 1000 символов)'});
+  const updated=await prisma.$transaction(async tx=>{
+   const result=await tx.editorialTask.updateMany({where:{id:task.id,assigneeId:req.user.id,assignmentDecision:'PENDING',status:'TODO'},data:{assignmentDecision:decision,assignmentDeclineReason:decision==='DECLINED'?reason:null,assignmentRespondedAt:new Date()}});
+   if(!result.count)return null;
+   await tx.editorialTaskEvent.create({data:{taskId:task.id,actorId:req.user.id,action:decision==='DECLINED'?'ASSIGNMENT_DECLINED':'ASSIGNMENT_ACCEPTED',details:JSON.stringify({reason:decision==='DECLINED'?reason:null})}});
+   return tx.editorialTask.findUnique({where:{id:task.id}});
+  });
+  if(!updated)return res.status(409).json({error:'Решение уже принято или статус задания изменился'});
+  const recipientIds=new Set([task.createdById,...project.members.filter(m=>['MANAGER','EDITOR'].includes(m.role)).map(m=>m.userId)]);
+  const actor=await prisma.user.findUnique({where:{id:req.user.id},select:{fullName:true,username:true}});
+  const actorName=actor?.fullName||actor?.username||'Исполнитель';
+  const {createNotification}=await import('../lib/notify.js');
+  await Promise.all([...recipientIds].filter(id=>id&&id!==req.user.id).map(id=>createNotification(id,'editorial',{
+   event:decision==='ACCEPTED'?'assignment_accepted':'assignment_declined',
+   projectId:project.id,projectTitle:project.title,taskId:task.id,taskTitle:task.title,
+   actorName,reason:decision==='DECLINED'?reason:null
+  })));
+  res.json({ok:true,decision,reason:decision==='DECLINED'?reason:null});
  }catch(e){next(e)}
 });
 
