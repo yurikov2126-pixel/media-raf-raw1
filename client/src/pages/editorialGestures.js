@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 
 // Pointer Events work with mouse, touch and pen; avoid interfering with zoom/scroll.
-export function usePhotoGestures({ onLeft, onRight, onDown, onLongPress }) {
+export function usePhotoGestures({ onLeft, onRight, onDown, onUp, onLongPress }) {
     const start = useRef(null);
     const timer = useRef(null);
     const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
@@ -23,7 +23,7 @@ export function usePhotoGestures({ onLeft, onRight, onDown, onLongPress }) {
             if (!origin || origin.locked || origin.id !== event.pointerId || origin.type === 'mouse') return;
             const dx = event.clientX-origin.x, dy = event.clientY-origin.y;
             if (Math.abs(dx)>65 && Math.abs(dx)>Math.abs(dy)*1.3) (dx<0?onLeft:onRight)?.();
-            else if (dy>110 && Math.abs(dy)>Math.abs(dx)*1.4) onDown?.();
+            else if (Math.abs(dy)>110 && Math.abs(dy)>Math.abs(dx)*1.4) (dy>0?onDown:onUp)?.();
         },
         onPointerCancel: () => {clear();start.current=null;},
         onContextMenu: event => { if (!onLongPress) return; event.preventDefault(); onLongPress(event.clientX,event.clientY); },
