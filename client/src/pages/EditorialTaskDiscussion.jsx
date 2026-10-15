@@ -45,7 +45,7 @@ export default function EditorialTaskDiscussion({ projectId, task, token, canEdi
                 {a.note && <p className="mt-1 whitespace-pre-wrap break-words opacity-70">{a.note}</p>}
                 {a.status === 'PENDING' && <div className="mt-2 flex gap-2">
                     <button disabled={busy} onClick={() => perform(() => api(base + '/applications/' + a.id, { method: 'PATCH', token, body: { status: 'APPROVED' } }))} className="rounded-lg border border-current/30 px-3 py-1">Принять</button>
-                    <button disabled={busy} onClick={() => perform(() => api(base + '/applications/' + a.id, { method: 'PATCH', token, body: { status: 'REJECTED' } }))} className="rounded-lg border border-current/30 px-3 py-1">Отклонить</button>
+                    <button disabled={busy} onClick={() => { const reason = window.prompt('Укажите причину отказа в назначении задания (обязательно):'); if (reason?.trim()) perform(() => api(base + '/applications/' + a.id, { method: 'PATCH', token, body: { status: 'REJECTED', reason: reason.trim() } })); else if (reason !== null) setError('Причина отказа обязательна'); }} className="rounded-lg border border-current/30 px-3 py-1">Отклонить</button>
                 </div>}
             </div>)}
         </div>}
