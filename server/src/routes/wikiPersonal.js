@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { auth } from '../middleware/auth.js';
+import { createNotification } from '../lib/notify.js';
 
 const router = Router();
 router.use(auth);
@@ -60,6 +61,14 @@ router.post('/proposals/:slug', async (req,res) => {
     const pending = await prisma.wikiProposal.count({ where: { articleId: article.id, authorId: req.user.id, status: 'PENDING' } });
     if (pending > 2) return res.status(429).json({ error: 'Сначала дождитесь рассмотрения предыдущих предложений' });
     const proposal = await prisma.wikiProposal.create({ data: { articleId: article.id, authorId: req.user.id, content, note } });
+    const admins = await prisma.user.findMany({where:{role:'ADMIN'},select:{id:true}});
+    const articleName = await prisma.wikiArticle.findUnique({where:{id:article.id},select:{title:true}});
+    const author = await prisma.user.findUnique({where:{id:req.user.id},select:{fullName:true,username:true}});
+    await Promise.all(admins.filter(a=>a.id!==req.user.id).map(a=>createNotification(a.id,'system',{
+      title:'Предложена правка ВикиМедиа',
+      message:(author?.fullName || author?.username || 'Участник')+' предложил исправление статьи «'+(articleName?.title || req.params.slug)+'».',
+      url:'/app/admin?tab=wiki'
+    })));
     res.status(201).json({ id: proposal.id, status: proposal.status });
   } catch (e) { fail(res,e); }
 });
