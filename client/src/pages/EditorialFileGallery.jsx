@@ -27,7 +27,8 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
     const [name, setName] = useState(file.name);
     const [description, setDescription] = useState(file.description || file.caption || '');
     const [saving, setSaving] = useState(false);
-    useEffect(() => { setName(file.name); setDescription(file.description || file.caption || ''); }, [file.id, file.name, file.description, file.caption]);
+    const [metadata,setMetadata] = useState(null);
+    useEffect(() => { setName(file.name); setDescription(file.description || file.caption || ''); setMetadata(null); api(filePath(file.id) + '/metadata',{token}).then(result=>setMetadata(result.metadata)).catch(()=>{}); }, [file.id, file.name, file.description, file.caption, token]);
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl = '';
@@ -65,6 +66,7 @@ function Viewer({ files, index, token, onClose, onNavigate, onUpdate, onError, d
                 <p className="p-6 text-center text-sm">{file.mimeType?.startsWith('image/') || file.mimeType?.startsWith('video/') || file.mimeType === 'application/pdf' ? 'Загрузка предпросмотра…' : 'Предпросмотр этого формата недоступен'}</p>}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-2"><button type="button" className="rounded-lg border border-white/40 px-4 py-2" onClick={() => onNavigate(-1)}>←</button><button type="button" className="rounded-lg border border-white/40 px-4 py-2" onClick={() => onNavigate(1)}>→</button></div><button type="button" className="rounded-lg bg-violet-600 px-4 py-2 font-semibold" onClick={() => downloadFile(filePath(file.id), token, file.name).catch(e => onError(e.message))}>Скачать оригинал</button></div>
+        {metadata && <p className="mt-2 text-xs text-slate-300">{[metadata.width && metadata.height ? metadata.width + " × " + metadata.height + " пикс." : null,metadata.format?.toUpperCase(),(metadata.size/1048576).toFixed(2) + " МБ",metadata.density ? metadata.density + " DPI" : null].filter(Boolean).join(" · ")}</p>}
         {!file.source && <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_2fr_auto]"><input aria-label="Название файла" value={name} onChange={e => setName(e.target.value)} maxLength={255} className="min-w-0 rounded-lg border border-white/30 bg-slate-800 p-2 text-white" /><input aria-label="Описание файла" value={description} onChange={e => setDescription(e.target.value)} maxLength={2000} placeholder="Добавить описание" className="min-w-0 rounded-lg border border-white/30 bg-slate-800 p-2 text-white" /><button type="button" disabled={saving || !name.trim()} onClick={save} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold disabled:opacity-50">{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>}
     </div>;
 }
