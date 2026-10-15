@@ -175,6 +175,9 @@ export default function EditorialFiles() {
     }
     return <div className="editorial-workspace-content space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Файлы редакции</h2><p className="text-sm opacity-70">Закрытое хранилище для передачи материалов другим подразделениям.</p></div><label className="cursor-pointer rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white">+ Загрузить файл<input type="file" multiple className="sr-only" onChange={upload} disabled={busy} /></label></div>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Сводка медиатеки">
+            {[['Всего файлов', files.length], ['Фотографий', files.filter(file=>file.mimeType?.startsWith('image/')).length], ['Видео',files.filter(file=>file.mimeType?.startsWith('video/')).length],['Объём', (files.reduce((sum,file)=>sum+file.size,0)/1073741824).toFixed(2)+' ГБ']].map(([label,value])=><div key={label} className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3"><strong className="block text-xl font-bold text-violet-700 dark:text-violet-200">{value}</strong><span className="text-xs text-slate-600 dark:text-slate-300">{label}</span></div>)}
+        </div>
         {progress !== null && <div role="status" className="space-y-1 text-sm"><span>Загрузка: {progress}%</span><progress max="100" value={progress} className="block w-full" /></div>}
         {error && <p role="alert" className="rounded-lg border border-red-500 p-3">{error}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
