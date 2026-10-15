@@ -1,6 +1,7 @@
 /* ─── XP-награды по умолчанию ─── */
 export const XP_DEFAULTS = {
     post_created: 15,
+    wiki_contribution_approved: 20,
     comment_created: 5,
     lesson_completed: 20,
     test_passed: 30,
