@@ -73,7 +73,7 @@ const sharedFolderPaths = async files => {
     if (!materialIdsInShare.length) return new Map();
     const materials = await prisma.editorialMaterialFile.findMany({
         where: { id: { in: materialIdsInShare } },
-        select: { id: true, uploaderId: true, task: { select: { id: true, title: true, workDate: true, assigneeId: true, projectId: true, project: { select: { title: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
+        select: { id: true, uploaderId: true, task: { select: { id: true, title: true, workDate: true, assigneeId: true, projectId: true, project: { select: { title: true, eventDate:true, eventEndDate:true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } } } } } } },
     });
     const paths = new Map();
     for (const material of materials) {
@@ -87,12 +87,12 @@ const sharedFolderPaths = async files => {
         const taskFolder = material.task.title + ' · ' + dayLabel + ' · ' + assigneeName;
         paths.set(materialKey(material.id), {
             projectId: material.task.projectId,
-            projectTitle: project.title,
+            projectTitle: project.title + (project.eventDate ? ' · ' + new Date(project.eventDate).toISOString().slice(0,10).split('-').reverse().join('.') + (project.eventEndDate && +new Date(project.eventEndDate) !== +new Date(project.eventDate) ? ' – ' + new Date(project.eventEndDate).toISOString().slice(0,10).split('-').reverse().join('.') : '') : ' · Без даты'),
             taskId: material.task.id,
             taskTitle: material.task.title,
             workDate,
             assigneeName,
-            taskFolder,
+            taskFolder: material.task.title + ' — ' + shareFolderName(member,name),
             personId,
             folder: shareFolderName(member, name),
         });
@@ -158,7 +158,7 @@ router.use(async (req, res, next) => {
 router.get('/folders', async (_req, res, next) => {
     try {
         const [projects, files] = await Promise.all([
-            prisma.editorialProject.findMany({ select: { id: true, title: true, completedAt: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } }, tasks: { select: { id: true, title: true, assigneeId: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true, uploaderId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
+            prisma.editorialProject.findMany({ select: { id: true, title: true, eventDate: true, eventEndDate: true, completedAt: true, members: { select: { userId: true, crewPosition: true, role: true, user: { select: { fullName: true, username: true } } } }, tasks: { select: { id: true, title: true, assigneeId: true, materialFiles: { select: { id: true, name: true, mimeType: true, size: true, createdAt: true, version: true, caption: true, taskId: true, uploaderId: true } } } } }, orderBy: { updatedAt: 'desc' } }),
             prisma.editorialLibraryFile.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
         ]);
         const roles = {
@@ -171,24 +171,18 @@ router.get('/folders', async (_req, res, next) => {
         const hiddenIds = new Set(hidden.map(item => item.key.slice('editorial_files_hidden_project_'.length)));
         const projectFolders = projects.filter(p => !hiddenIds.has(p.id) || !p.completedAt || p.tasks.some(task => task.materialFiles.length > 0)).map(p => {
             const members = new Map(p.members.map(m => [m.userId, m]));
-            const grouped = new Map();
-            for (const task of p.tasks) {
-                for (const file of task.materialFiles) {
-                    const personId = task.assigneeId || file.uploaderId;
-                    const member = members.get(personId) || members.get(task.assigneeId);
-                    const role = member?.role === 'MANAGER' ? 'Руководитель' : (roles[member?.crewPosition] || 'Участник команды');
-                    const fullName = member?.user?.fullName?.trim() || member?.user?.username || 'Неизвестный участник';
-                    const nameParts = fullName.split(/\\s+/);
-                    const personName = nameParts.length > 1 ? fullName : fullName;
-                    const name = role + ' - ' + personName;
-                    const key = personId || 'unassigned';
-                    if (!grouped.has(key)) grouped.set(key, { id: key, title: name, files: [] });
-                    grouped.get(key).files.push({ ...fileView(file), taskTitle: task.title, projectId: p.id });
-                }
-            }
-            return { id: p.id, title: p.title, folders: [...grouped.values()].sort((a,b) => a.title.localeCompare(b.title, 'ru')), files: [...grouped.values()].flatMap(g => g.files) };
+            const groups = p.tasks.map(task => {
+                const assignee = members.get(task.assigneeId);
+                const person = assignee?.user?.fullName?.trim() || assignee?.user?.username || 'Не назначен';
+                const role = assignee?.role === 'MANAGER' ? 'Руководитель' : (roles[assignee?.crewPosition] || 'Участник команды');
+                const files = task.materialFiles.map(file => ({ ...fileView(file), taskTitle:task.title,projectId:p.id }));
+                return { id:task.id,title:task.title+' — '+role+' '+person,files };
+            });
+            const date = value => value ? new Date(value).toISOString().slice(0,10).split('-').reverse().join('.') : '';
+            const range = p.eventDate ? date(p.eventDate) + (p.eventEndDate && date(p.eventEndDate)!==date(p.eventDate) ? ' – '+date(p.eventEndDate) : '') : 'Без даты';
+            return { id:p.id,title:p.title+' · '+range,folders:groups,files:groups.flatMap(group=>group.files) };
         });
-        res.json({ folders: projectFolders, files: files.map(publicFile) });
+        res.json({ folders: projectFolders, files: files.map(publicFile), stats:{ count:files.length+projectFolders.reduce((sum,p)=>sum+p.files.length,0), size:files.reduce((sum,f)=>sum+f.size,0)+projectFolders.reduce((sum,p)=>sum+p.files.reduce((s,f)=>s+f.size,0),0), photos:files.filter(f=>f.mimeType.startsWith('image/')).length+projectFolders.reduce((sum,p)=>sum+p.files.filter(f=>f.mimeType.startsWith('image/')).length,0), videos:files.filter(f=>f.mimeType.startsWith('video/')).length+projectFolders.reduce((sum,p)=>sum+p.files.filter(f=>f.mimeType.startsWith('video/')).length,0) } });
     } catch (error) { next(error); }
 });
 // Project folders in this view are virtual. Hiding an empty, completed folder
