@@ -37,6 +37,8 @@ export default function EditorialFiles() {
     const [customId,setCustomId] = useState(null);
     const [showTrash,setShowTrash] = useState(false);
     const [trash,setTrash] = useState([]);
+    const [duplicateGroups,setDuplicateGroups] = useState(null);
+    const [duplicatesBusy,setDuplicatesBusy] = useState(false);
     useEffect(() => { let active = true; Promise.all([api('/editorial/library/folders',{token}),api('/editorial/library/custom-folders',{token}),api('/editorial/library/trash',{token})]).then(([data,custom,deleted]) => { if (active) { setFiles(data.files||[]); setFolders(data.folders||[]); setCustomFolders(custom.folders||[]); setPlacements(custom.placements||{}); setTrash(deleted.entries||[]); } }).catch(e => { if (active) setError(e.message); }); return () => { active = false; }; }, [token, refresh]);
     async function upload(event) {
         const chosen = Array.from(event.target.files || []);
@@ -85,6 +87,14 @@ export default function EditorialFiles() {
             catch { window.prompt('Скопируйте ссылку:', url); }
         } catch (e) { setError(e.message); }
         finally { setSharing(false); }
+    }
+    async function findDuplicates() {
+        setDuplicatesBusy(true);setError('');
+        try {
+            const result = await api('/editorial/library/files/duplicates',{token});
+            setDuplicateGroups(result);
+        } catch(error) { setError(error.message); }
+        finally { setDuplicatesBusy(false); }
     }
     async function createCustomFolder() {
         const title = window.prompt('Название новой папки');
@@ -173,8 +183,10 @@ export default function EditorialFiles() {
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-current/15 bg-violet-500/5 p-3">
             <button type="button" aria-pressed={!showTrash} onClick={()=>setShowTrash(false)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${!showTrash?'bg-violet-600 text-white':'border border-current/20'}`}>Библиотека</button>
             <button type="button" aria-pressed={showTrash} onClick={()=>setShowTrash(true)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${showTrash?'bg-violet-600 text-white':'border border-current/20'}`}>Корзина · {trash.length}</button>
+<button type="button" disabled={duplicatesBusy} onClick={findDuplicates} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">{duplicatesBusy ? "Ищем…" : "Найти дубликаты"}</button>
             {!showTrash && !folder && <button type="button" onClick={createCustomFolder} className="rounded-lg border border-violet-400 px-3 py-2 text-sm font-semibold">+ Создать папку</button>}
         </div>
+        {duplicateGroups && <div className="rounded-xl border border-amber-400/40 bg-amber-500/5 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>Проверка одинаковых файлов · {duplicateGroups.groups.length} групп</strong><button type="button" className="rounded-lg border px-2 py-1" onClick={()=>setDuplicateGroups(null)}>Закрыть</button></div><p className="mt-1 text-xs opacity-75">Проверено {duplicateGroups.scanned} последних файлов библиотеки. Сравнивается SHA-256 содержимого, ничего автоматически не удаляется.</p>{duplicateGroups.groups.map(group=><p key={group.sha256} className="mt-2 break-words text-xs">{group.files.map(file=>file.name).join(" · ")}</p>)}</div>}
         {showTrash ? <div className="space-y-2"><h3 className="font-semibold">Корзина · восстановление до 30 дней</h3>{trash.map(item=><article key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-current/20 p-3"><div className="min-w-0"><p className="break-all font-semibold">{item.name}</p><p className="text-xs opacity-75">{item.type==='library'?'Библиотека':'Материал задания'} · До {new Date(item.expiresAt).toLocaleDateString('ru-RU')}</p></div>{item.type==='library' && item.originalId ? <button type="button" onClick={()=>restoreTrash(item)} className="rounded-lg border border-violet-400 px-3 py-2 text-sm">Восстановить</button> : <span className="text-xs opacity-75">Восстановление через админку</span>}</article>)}{!trash.length&&<p className="p-4 text-sm opacity-75">Корзина пуста.</p>}</div> : <>
         {!folder && <div className="flex flex-wrap items-center gap-2 text-sm"><button type="button" onClick={()=>setCustomId(null)} className="underline">Корень библиотеки</button>{customId && <span> / {customFolders.find(item=>item.id===customId)?.title}</span>}</div>}
         {!folder && <div className={view==='grid'?'grid gap-3 sm:grid-cols-2 lg:grid-cols-3':'space-y-2'}>{customFolders.filter(item=>(item.parentId||null)===customId).map(item=><article key={item.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-current/20 p-3"><button type="button" onClick={()=>setCustomId(item.id)} className="min-w-0 flex-1 break-words text-left font-semibold">📁 {item.title}</button><button type="button" onClick={()=>renameCustomFolder(item)} className="rounded-lg border px-2 py-1 text-xs">Переименовать</button><button type="button" onClick={()=>deleteCustomFolder(item)} className="rounded-lg border border-rose-400/50 px-2 py-1 text-xs">Удалить</button></article>)}</div>}
