@@ -24,11 +24,22 @@ registerRoute(
 );
 
 registerRoute(
-    ({ request, url, sameOrigin }) => request.method === 'GET' && sameOrigin && url.pathname.startsWith('/uploads/'),
+    ({ request, url, sameOrigin }) => request.method === 'GET' && sameOrigin && url.pathname.startsWith('/uploads/') && !url.pathname.startsWith('/uploads/wiki-assets/'),
     new CacheFirst({
         cacheName: 'uploads-v5',
         plugins: [new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 })],
     })
+);
+
+// Images deliberately saved with an offline Wiki article.
+registerRoute(
+    ({ request, url, sameOrigin }) => request.method === 'GET' && sameOrigin && url.pathname.startsWith('/uploads/wiki-assets/'),
+    async ({ request }) => {
+        const manual = await caches.open('wiki-explicit-assets-v1');
+        const saved = await manual.match(request);
+        if (saved) return saved;
+        return fetch(request);
+    }
 );
 
 /* ─────────── SPA-навигация ───────────
