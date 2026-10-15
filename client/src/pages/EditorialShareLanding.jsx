@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import './editorialShareLanding.css';
 import { usePhotoGestures } from './editorialGestures.js';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const BASE = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const media = file => file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.mimeType === 'application/pdf';
@@ -48,6 +49,7 @@ export default function EditorialShareLanding() {
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const [preview, setPreview] = useState(null);
+    const [slideDirection,setSlideDirection] = useState(1);
     const [projectId, setProjectId] = useState(null);
     const [taskId, setTaskId] = useState(null);
     const [query, setQuery] = useState('');
@@ -86,14 +88,15 @@ export default function EditorialShareLanding() {
     const fileUrl = file => BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/files/' + encodeURIComponent(file.id);
     const archiveUrl = BASE + '/editorial/library/public/' + encodeURIComponent(token) + '/archive';
     const thumbnailUrl = file => fileUrl(file) + '/thumbnail';
+    const previewUrl = file => fileUrl(file) + '/preview';
     const folderBytes = files => files.reduce((sum, file) => sum + (file.size || 0), 0);
     const previewFiles = listedFiles || data?.files || [];
-    const stepPreview = direction => setPreview(current => {
+    const stepPreview = direction => { setSlideDirection(direction); setPreview(current => {
         if (!current || !previewFiles.length) return current;
         const currentIndex = previewFiles.findIndex(file=>file.id===current.id);
         return previewFiles[(currentIndex+direction+previewFiles.length)%previewFiles.length];
-    });
-    const gestures = usePhotoGestures({onLeft:()=>stepPreview(1),onRight:()=>stepPreview(-1),onDown:()=>setPreview(null)});
+    }); };
+    const gestures = usePhotoGestures({onLeft:()=>stepPreview(1),onRight:()=>stepPreview(-1),onDown:()=>setPreview(null),onUp:()=>setPreview(null)});
 
     return <main className="editorial-share-landing min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-8 sm:py-10">
         <div className="mx-auto max-w-6xl space-y-7">
@@ -147,8 +150,8 @@ export default function EditorialShareLanding() {
             </>}
             {preview && <div role="dialog" aria-modal="true" aria-label={'Просмотр: ' + preview.name} {...gestures} className="fixed inset-0 z-50 flex touch-pan-y flex-col bg-black/95 p-4">
                 <div className="mb-4 flex items-center justify-between gap-3"><h2 className="min-w-0 break-all text-sm">{preview.name}</h2><div className="flex shrink-0 gap-2"><a href={fileUrl(preview) + '?download=1'} className="rounded-lg border border-white/40 px-3 py-2 text-sm">Скачать</a><button type="button" onClick={() => setPreview(null)} className="rounded-lg border border-white/40 px-3 py-2 text-sm">Закрыть ✕</button></div></div>
-                <div className="mb-2 flex justify-center gap-3 text-xs text-slate-400"><button type="button" onClick={()=>stepPreview(-1)} className="rounded-lg border border-white/30 px-4 py-2 text-white">←</button><span>{Math.max(0,previewFiles.findIndex(file=>file.id===preview.id))+1} / {previewFiles.length} · Свайп ← → для листания, ↓ для закрытия</span><button type="button" onClick={()=>stepPreview(1)} className="rounded-lg border border-white/30 px-4 py-2 text-white">→</button></div>
-                {preview.mimeType.startsWith('image/') ? <img src={fileUrl(preview)} alt={preview.name} className="min-h-0 flex-1 object-contain" /> : preview.mimeType.startsWith('video/') ? <video controls autoPlay src={fileUrl(preview)} className="min-h-0 flex-1" /> : <iframe title={preview.name} src={fileUrl(preview)} className="min-h-0 flex-1 bg-white" />}
+                <div className="mb-2 flex justify-center gap-3 text-xs text-slate-400"><button type="button" onClick={()=>stepPreview(-1)} className="hidden rounded-lg border border-white/30 px-4 py-2 text-white sm:block">←</button><span>{Math.max(0,previewFiles.findIndex(file=>file.id===preview.id))+1} / {previewFiles.length} · Свайп ← → для листания, ↑ ↓ для закрытия</span><button type="button" onClick={()=>stepPreview(1)} className="hidden rounded-lg border border-white/30 px-4 py-2 text-white sm:block">→</button></div>
+                {preview.mimeType.startsWith('image/') ? <AnimatePresence mode="wait" initial={false}><motion.img key={preview.id} src={previewUrl(preview)} alt={preview.name} initial={{opacity:0,x:slideDirection*75,scale:.98}} animate={{opacity:1,x:0,scale:1}} exit={{opacity:0,x:-slideDirection*75,scale:.98}} transition={{duration:.22,ease:'easeOut'}} className="min-h-0 flex-1 object-contain" /></AnimatePresence> : : preview.mimeType.startsWith('video/') ? <video controls autoPlay src={fileUrl(preview)} className="min-h-0 flex-1" /> : <iframe title={preview.name} src={fileUrl(preview)} className="min-h-0 flex-1 bg-white" />}
             </div>}
         </div>
     </main>;
