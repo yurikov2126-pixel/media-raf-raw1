@@ -8,7 +8,7 @@ import { hasPermission } from '../lib/roles.js';
 import { prisma } from '../lib/prisma.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
-import { quarantineLibraryFile, quarantineTaskMaterialFile } from '../lib/storageQuarantine.js';
+import { quarantineLibraryFile, quarantineTaskMaterialFile, restoreRegisteredLibraryFile } from '../lib/storageQuarantine.js';
 import { canRemoveEditorialMaterial, canRemoveEditorialProjectFolder } from '../lib/editorialFileDeletion.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
 
@@ -220,6 +220,22 @@ router.delete('/files/materials/:materialId', async (req,res,next) => {
 const folderKey = id => 'editorial_custom_folder_' + id;
 const placementKey = id => 'editorial_custom_file_' + id;
 const decodeSetting = row => { try { return JSON.parse(row.value); } catch { return null; } };
+router.get('/trash', async (_req,res,next) => {
+    try {
+        const rows = await prisma.setting.findMany({where:{key:{startsWith:'storage_quarantine_'}}});
+        const entries = rows.map(row => decodeSetting(row)).filter(item => item && ['library','materials'].includes(item.type));
+        res.json({ entries:entries.sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)) });
+    } catch(error) { next(error); }
+});
+router.post('/trash/:id/restore', async (req,res,next) => {
+    try {
+        const row = await prisma.setting.findUnique({where:{key:'storage_quarantine_' + req.params.id}});
+        const item = row && decodeSetting(row);
+        if (!item || item.type !== 'library' || !item.originalId) return res.status(409).json({error:'Восстановление этого материала доступно в центре хранения администратора'});
+        await restoreRegisteredLibraryFile(item);
+        res.json({ok:true});
+    } catch(error) { next(error); }
+});
 router.get('/custom-folders', async (_req,res,next) => {
     try {
         const rows = await prisma.setting.findMany({ where:{ OR:[{ key:{ startsWith:'editorial_custom_folder_' } },{ key:{ startsWith:'editorial_custom_file_' } }] } });
