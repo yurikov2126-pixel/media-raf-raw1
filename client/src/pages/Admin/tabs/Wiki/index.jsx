@@ -48,6 +48,21 @@ export default function Wiki({ token }) {
         }
     };
 
+    const seedEquipment = async () => {
+        if (!confirm('Создать карточки оборудования редакции? Существующие статьи не изменятся.')) return;
+        setBusy(true);
+        setError('');
+        try {
+            const result = await api('/admin/wiki/seed-equipment', { method: 'POST', token });
+            toast.success(`Добавлено карточек оборудования: ${result.created}`);
+            await reload();
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const removeCategory = async (id) => {
         if (!confirm('Удалить категорию?')) return;
         try {
@@ -83,6 +98,7 @@ export default function Wiki({ token }) {
                         <div className="text-sm text-white/50 mt-1">Категории и статьи для раздела у студентов.</div>
                     </div>
                     <div className="flex gap-2 shrink-0">
+                        <button onClick={seedEquipment} disabled={busy} className="btn-ghost">🎥 Оборудование редакции</button>
                         <button onClick={seedDefaults} disabled={busy} className="btn-ghost">{busy ? '⏳…' : '🌱 Стартовые'}</button>
                         <button onClick={() => setEditingCat({ mode: 'create' })} className="btn-ghost">＋ Категория</button>
                         <button onClick={() => setEditing({ mode: 'create' })} className="btn-primary">＋ Статья</button>
