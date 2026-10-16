@@ -101,6 +101,7 @@ export default function Messenger() {
     const [search, setSearch] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
     const [v2MobileSearch, setV2MobileSearch] = useState(false);
+    const [visibleViewport, setVisibleViewport] = useState(null);
     const [chatFilter, setChatFilter] = useState('all');
     const [messageSearchOpen, setMessageSearchOpen] = useState(false);
     const [messageQuery, setMessageQuery] = useState('');
@@ -155,6 +156,38 @@ export default function Messenger() {
         field.style.height = 'auto';
         field.style.height = Math.min(field.scrollHeight, 160) + 'px';
     }, [isMessengerV2, chatId, text]);
+
+    // iOS Safari/WebView keeps the layout viewport tall while the keyboard shrinks
+    // the visual viewport. Constrain only the opt-in chat to the visible region.
+    useEffect(() => {
+        if (!isMessengerV2 || !chatId || !window.matchMedia('(max-width: 767px)').matches) {
+            setVisibleViewport(null);
+            return;
+        }
+        const viewport = window.visualViewport;
+        if (!viewport) return;
+        let frame = 0;
+        const update = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                setVisibleViewport({
+                    top: Math.max(0, viewport.offsetTop),
+                    height: Math.max(240, viewport.height),
+                    keyboard: window.innerHeight - (viewport.offsetTop + viewport.height) > 120,
+                });
+            });
+        };
+        update();
+        viewport.addEventListener('resize', update);
+        viewport.addEventListener('scroll', update);
+        window.addEventListener('orientationchange', update);
+        return () => {
+            cancelAnimationFrame(frame);
+            viewport.removeEventListener('resize', update);
+            viewport.removeEventListener('scroll', update);
+            window.removeEventListener('orientationchange', update);
+        };
+    }, [isMessengerV2, chatId]);
 
     const activeChat = chats.find((c) => c.id === chatId);
     const chatTitle = useMemo(() => {
@@ -670,10 +703,15 @@ export default function Messenger() {
 
     return (
         <div
-            className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''}`}
+            className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''} ${isMessengerV2 && isChatRoom ? 'mrr-v2-chat-room' : ''} ${visibleViewport?.keyboard ? 'mrr-v2-keyboard-open' : ''}`}
             style={isChatRoom ? {
-                paddingTop: 'env(safe-area-inset-top, 0px)',
-                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                paddingTop: visibleViewport?.keyboard ? 0 : 'env(safe-area-inset-top, 0px)',
+                paddingBottom: visibleViewport?.keyboard ? 0 : 'env(safe-area-inset-bottom, 0px)',
+                ...(isMessengerV2 && visibleViewport ? {
+                    top: visibleViewport.top,
+                    bottom: 'auto',
+                    height: visibleViewport.height,
+                } : {}),
             } : undefined}
             onClick={() => {
                 if (contextMenu) setContextMenu(null);
@@ -1172,10 +1210,10 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <button type="button" className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[3px] md:bg-transparent md:backdrop-blur-none cursor-default"
+                        <button type="button" className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[3px] md:bg-transparent md:backdrop-blur-none cursor-default mrr-v2-message-menu-scrim"
                             onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
                         {/* Telegram-inspired contextual popover with a selected-message preview. */}
-                        <div className="mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2"
+                        <div className="mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2 mrr-v2-message-menu"
                             style={{ left, top, width: mobileWidth, maxHeight: 'calc(100dvh - 24px)' }}
                             role="dialog" aria-modal="true" aria-label="Действия с сообщением">
                             {!selected.deletedAt && (
