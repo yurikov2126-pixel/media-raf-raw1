@@ -101,7 +101,7 @@ export default function Messenger() {
                     return;
                 }
                 // VisualViewport reflects the actual usable space above the iOS keyboard.
-                setMobileViewport({ top: viewport.offsetTop, height: viewport.height });
+                setMobileViewport({ top: viewport.offsetTop, height: viewport.height, keyboardOpen: window.innerHeight - viewport.height - viewport.offsetTop > 120 });
             });
         };
         updateViewport();
@@ -700,7 +700,7 @@ export default function Messenger() {
 
     return (
         <div
-            className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''}`}
+            className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''} ${isMessengerV2 && mobileViewport?.keyboardOpen ? 'mrr-v2-keyboard-open' : ''}`}
             style={isChatRoom ? {
                 ...(isMessengerV2 && mobileViewport ? {
                     top: mobileViewport.top,
