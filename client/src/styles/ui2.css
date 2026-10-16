@@ -2210,3 +2210,21 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
  .mrr-messenger-v2 .mrr-v2-attachment-grid { grid-template-columns:minmax(0,1fr); }
  .mrr-messenger-v2 .mrr-v2-attachment-thumb { width:76px; height:76px; }
 }
+
+/* Messenger 2.0 pointer/touch sorting and desktop file drop. */
+.mrr-messenger-v2 .mrr-v2-attachment-handle {
+  display:inline-flex; align-items:center; justify-content:center; width:44px; min-height:40px;
+  font-size:24px; border-radius:10px; border:1px solid var(--border-strong); background:var(--bg-elev-2);
+  color:var(--text-primary); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none;
+}
+.mrr-messenger-v2 .mrr-v2-attachment-handle:active { cursor:grabbing; background:rgba(124,58,237,.16); }
+.mrr-messenger-v2 .mrr-v2-attachment-handle:focus-visible { outline:2px solid var(--brand-accent-1); outline-offset:2px; }
+.mrr-messenger-v2 .mrr-v2-attachment-dragging { border-color:var(--brand-accent-1); box-shadow:0 0 0 2px rgba(124,58,237,.18); }
+.mrr-messenger-v2 .mrr-v2-drop-overlay {
+  position:absolute; inset:0; z-index:60; display:grid; place-items:center; pointer-events:none;
+  background:rgba(30,16,60,.72); border:3px dashed var(--brand-accent-1); backdrop-filter:blur(4px);
+}
+.mrr-messenger-v2 .mrr-v2-drop-overlay-label {
+  color:white; background:rgba(124,58,237,.75); padding:16px 22px; border-radius:18px;
+  font-weight:700; text-align:center;
+}
