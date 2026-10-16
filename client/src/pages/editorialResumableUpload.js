@@ -51,7 +51,7 @@ export async function uploadEditorialResumable({ path, file, token, caption = ''
                 catch (error) { if (error.status !== 404) throw error; localStorage.removeItem(key); id = null; }
             }
             if (!id) {
-                state = await jsonRequest(path + '/uploads',token,{ method:'POST',body:JSON.stringify({ name:file.name,mimeType:file.type || 'application/octet-stream',size:file.size,caption }) });
+                state = await jsonRequest(path + '/uploads',token,{ method:'POST',body:JSON.stringify({ name:file.name,mimeType:/\.m4v$/i.test(file.name) ? 'video/mp4' : (file.type || 'application/octet-stream'),size:file.size,caption }) });
                 id = state.id;
                 localStorage.setItem(key,id);
             }

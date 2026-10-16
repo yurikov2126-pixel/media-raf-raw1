@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { ensureEditorialThumbnail, thumbnailSupported } from '../lib/editorialThumbnails.js';
 import { zipEntries, streamZip } from '../lib/editorialZip.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
+import { editorialUploadPolicy } from '../lib/editorialUploadPolicy.js';
 import { auth } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -56,7 +57,9 @@ router.post('/projects/:projectId/tasks/:taskId/materials', upload.single('file'
         const ctx = await context(req,res); if (!ctx) return;
         if (!manager(ctx.project,req.user) && ctx.task.assigneeId !== req.user.id) return res.status(403).json({ error: 'Нет прав на загрузку' });
         if (!['TODO','IN_PROGRESS','REVISION'].includes(ctx.task.status)) return res.status(409).json({ error: 'Для загрузки верните задание в работу' });
-        if (!req.file || !allowed.has(req.file.mimetype)) return res.status(400).json({ error: 'Недопустимый тип файла' });
+        if (!req.file) return res.status(400).json({error:'Файл не передан'});
+        const policy = editorialUploadPolicy({user:req.user,name:req.file.originalname,mimeType:req.file.mimetype,size:req.file.size,allowed:mime=>allowed.has(mime)});
+        if (!policy.allowed) return res.status(400).json({error:policy.error});
         const caption = String(req.body.caption || '').trim();
         if (caption.length > 1000) return res.status(400).json({ error: 'Подпись слишком длинная' });
         const version = (await prisma.editorialTaskEvent.count({ where: { taskId: ctx.task.id, action: 'REVIEW_SUBMITTED' } })) + 1;

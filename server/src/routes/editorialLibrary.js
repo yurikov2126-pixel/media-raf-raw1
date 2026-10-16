@@ -13,6 +13,7 @@ import { ensureEditorialThumbnail, ensureEditorialPreview, thumbnailSupported } 
 import { quarantineLibraryFile, quarantineTaskMaterialFile, restoreRegisteredLibraryFile } from '../lib/storageQuarantine.js';
 import { canRemoveEditorialMaterial, canRemoveEditorialProjectFolder } from '../lib/editorialFileDeletion.js';
 import { editorialResumableRouter } from '../lib/editorialResumable.js';
+import { editorialUploadPolicy } from '../lib/editorialUploadPolicy.js';
 
 const router = Router();
 const root = path.resolve(process.env.EDITORIAL_LIBRARY_DIR || 'uploads/editorial');
@@ -400,6 +401,8 @@ router.post('/files', upload.single('file'), async (req, res, next) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Выберите файл' });
         const name = path.basename(req.file.originalname.replace(/\\/g, '/')).slice(0, 255);
+        const policy = editorialUploadPolicy({user:req.user,name,mimeType:req.file.mimetype,size:req.file.size,allowed:mime=>typeof mime==='string'&&mime.length<=200});
+        if (!policy.allowed) return res.status(400).json({error:policy.error});
         const storageName = randomUUID();
         await fs.mkdir(root, { recursive: true, mode: 0o700 });
         await fs.writeFile(path.join(root, storageName), req.file.buffer, { flag: 'wx', mode: 0o600 });

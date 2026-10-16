@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
+import { editorialUploadPolicy } from './editorialUploadPolicy.js';
 
 const CHUNK_SIZE = 2 * 1024 * 1024;
-const MAX_SIZE = 200 * 1024 * 1024;
 const validateId = id => /^[a-f0-9-]{36}$/.test(id || '');
 const scopeFor = (scope, req) => typeof scope === 'function' ? scope(req) : scope;
 const sessionsPath = root => path.join(root, '.resumable');
@@ -30,7 +30,9 @@ export function editorialResumableRouter({ root, scope, authorize, complete, all
         try {
             if (!await permitted(req,res)) return;
             const { name, mimeType, size, caption = '' } = req.body || {};
-            if (typeof name !== 'string' || !name.trim() || name.length > 255 || typeof mimeType !== 'string' || !allowed(mimeType) || !Number.isSafeInteger(size) || size < 1 || size > MAX_SIZE || typeof caption !== 'string' || caption.length > 1000) return res.status(400).json({ error:'Недопустимые параметры файла' });
+            if (typeof name !== 'string' || !name.trim() || name.length > 255 || typeof mimeType !== 'string' || !Number.isSafeInteger(size) || size < 1 || typeof caption !== 'string' || caption.length > 1000) return res.status(400).json({ error:'Недопустимые параметры файла' });
+            const policy = editorialUploadPolicy({ user:req.user, name, mimeType, size, allowed });
+            if (!policy.allowed) return res.status(400).json({ error:policy.error });
             await fs.mkdir(sessionsPath(root), { recursive:true, mode:0o700 });
             const id = randomUUID();
             const session = { id, userId:req.user.id, scope:scopeFor(scope,req), name:path.basename(name.replace(/\\/g,'/')), mimeType, size, caption, createdAt:Date.now(), state:'uploading', result:null };

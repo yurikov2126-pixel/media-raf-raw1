@@ -212,7 +212,7 @@ export default function EditorialMaterials({ project, task, token, user, canEdit
                 <span className="text-xs opacity-75">Фотографии, видео и документы · можно выбрать несколько</span>
             </div>
             <input ref={fileInputRef} type="file" multiple
-                accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.doc,.docx"
+                accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.m4v,video/x-m4v,application/pdf,text/plain,.doc,.docx"
                 disabled={busy} aria-label="Выбрать файлы для загрузки"
                 onChange={event => { setSelected(previous => [...previous, ...Array.from(event.target.files || []).map(file => ({ file, caption:'' }))]); event.target.value = ''; }}
                 className="sr-only" tabIndex={-1} />
