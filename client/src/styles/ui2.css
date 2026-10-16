@@ -2181,3 +2181,16 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @media (prefers-reduced-motion: reduce) {
   .mrr-messenger-v2 .mrr-v2-message-surface { animation: none !important; transition: none !important; }
 }
+
+/* iPhone: reserve the home-indicator inset once, inside the message composer.
+   The fixed chat room itself must not add another safe-area bottom padding. */
+@media (max-width: 767px) {
+  .mrr-messenger-v2.mrr-v2-chat-room { padding-bottom: 0 !important; }
+  .mrr-messenger-v2.mrr-v2-chat-room > section { min-height: 0; height: 100%; }
+  .mrr-messenger-v2.mrr-v2-chat-room .mrr-v2-composer {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .mrr-messenger-v2.mrr-v2-keyboard-open .mrr-v2-composer {
+    padding-bottom: 8px !important;
+  }
+}
