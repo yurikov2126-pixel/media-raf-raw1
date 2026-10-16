@@ -32,7 +32,8 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
         pressTimer.current = setTimeout(() => {
             if (!gesture.current || gesture.current.id !== item.id) return;
             gesture.current.fired = true;
-            setSelected((current) => current.includes(item.id) ? current : [...current, item.id]);
+            if (selected.length) setSelected((current) => current.includes(item.id) ? current : [...current, item.id]);
+            else onContext(item, { clientX: gesture.current.x, clientY: gesture.current.y });
         }, 480);
     };
     const movePress = (event) => {
@@ -105,7 +106,7 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
                         gesture.current = null;
                         if (selected.length) toggle(item.id); else onOpen(item.id);
                     }}
-                    onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
+                    onContextMenu={(event) => { event.preventDefault(); if (gesture.current?.fired) return; onContext(item, event); }}
                     aria-pressed={selected.includes(item.id)}
                     aria-label={`${selected.includes(item.id) ? 'Выбрано' : 'Открыть'} фото ${index + 1} из ${items.length}`}>
                     <img src={resolveUrl(item.content)} alt={item.caption || `Фото ${index + 1}`} loading="lazy" />
