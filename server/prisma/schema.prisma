@@ -180,6 +180,7 @@ model Message {
   content       String
   caption       String?
   clientMessageId String?
+  albumId       String?
   replyToId     String?
   forwardedFrom String?
   editedAt      DateTime?
@@ -193,6 +194,7 @@ model Message {
   reactions Reaction[]
 
   @@unique([senderId, clientMessageId])
+  @@index([albumId])
 }
 
 model Reaction {

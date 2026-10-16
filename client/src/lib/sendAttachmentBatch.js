@@ -8,6 +8,10 @@ export async function sendAttachmentBatch({
     makeId = () => crypto.randomUUID(),
 }) {
     let completed = 0;
+    const isAlbum = files.filter((file) => file.type.startsWith('image/')).length > 1;
+    const albumKey = `album:${chatId}`;
+    const albumId = isAlbum ? (retryCache.get(albumKey) || makeId()) : retryCache.get(albumKey) || null;
+    if (albumId) retryCache.set(albumKey, albumId);
     try {
         for (const file of files) {
             const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
@@ -20,6 +24,7 @@ export async function sendAttachmentBatch({
             await new Promise((resolve, reject) => {
                 socket.timeout(15000).emit('message:send', {
                     chatId, content: result.url, type, clientMessageId: requestId,
+                    ...(type === 'image' && albumId ? { albumId } : {}),
                     caption: (captions[completed] || '').trim() || undefined,
                     replyToId: completed === 0 ? replyToId : undefined,
                 }, (error, response) => {
@@ -32,6 +37,7 @@ export async function sendAttachmentBatch({
             onFileSent(completed);
             onProgress(Math.round(completed / files.length * 100));
         }
+        retryCache.delete(albumKey);
         return { completed, remaining: [], captions: {} };
     } catch (error) {
         return {

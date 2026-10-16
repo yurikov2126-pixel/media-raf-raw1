@@ -14,6 +14,7 @@ import PinnedBar from '../components/PinnedBar.jsx';
 import MediaGalleryModal from '../components/MediaGalleryModal.jsx';
 import ImageViewer from '../components/ImageViewer.jsx';
 import MessageBubble from '../components/messenger/MessageBubble.jsx';
+import PhotoAlbum from '../components/messenger/PhotoAlbum.jsx';
 import GroupAvatar from '../components/messenger/GroupAvatar.jsx';
 import NewChatButton from '../components/messenger/NewChatButton.jsx';
 import ReportButton from '../components/ReportButton.jsx';
@@ -222,6 +223,19 @@ export default function Messenger() {
         if (a.sender?.id !== b.sender?.id || messageDayKey(a.createdAt) !== messageDayKey(b.createdAt)) return false;
         const distance = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         return Number.isFinite(distance) && distance >= 0 && distance <= 5 * 60 * 1000;
+    };
+
+    const albumAt = (index) => {
+        const first = messages[index];
+        if (!isMessengerV2 || !first?.albumId || first.type !== 'image' || first.deletedAt) return null;
+        if (index > 0 && messages[index - 1]?.albumId === first.albumId && messages[index - 1]?.sender?.id === first.sender?.id && messages[index - 1]?.type === 'image' && !messages[index - 1]?.deletedAt && firstUnreadId !== first.id) return 'continuation';
+        const items = [];
+        for (let pos = index; pos < messages.length; pos++) {
+            const current = messages[pos];
+            if (current.albumId !== first.albumId || current.sender?.id !== first.sender?.id || current.type !== 'image' || current.deletedAt || (pos > index && firstUnreadId === current.id)) break;
+            items.push(current);
+        }
+        return items.length > 1 ? items : null;
     };
 
     const activeChat = chats.find((c) => c.id === chatId);
@@ -960,7 +974,7 @@ export default function Messenger() {
                             setShowJumpToLatest(!nearBottom);
                             if (nearBottom) setUnseenCount(0);
                         }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 md:px-6 py-4 space-y-2">
-                            {messages.map((m, index) => (
+                            {messages.map((m, index) => { const album = albumAt(index); return album === 'continuation' ? null : (
                                 <div key={m.id} className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
                                         <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
@@ -980,7 +994,14 @@ export default function Messenger() {
                                             <span className="h-px flex-1" style={{ backgroundColor: 'var(--border-strong)' }} />
                                         </div>
                                     )}
-                                    <MessageBubble
+                                    {Array.isArray(album) && album.length > 1 ? <PhotoAlbum
+                                        items={album}
+                                        own={m.sender.id === user.id}
+                                        onlineSet={onlineUsers}
+                                        onOpen={openViewer}
+                                        onProfile={() => goProfile(m.sender.username)}
+                                        onContext={(item, event) => setContextMenu({ x: event.clientX, y: event.clientY, message: item })}
+                                    /> : <MessageBubble
                                     compact={isMessengerV2 && canGroupMessages(messages[index - 1], m) && firstUnreadId !== m.id}
                                     groupEnd={isMessengerV2 && !canGroupMessages(m, messages[index + 1])}
                                     v2={isMessengerV2}
@@ -997,9 +1018,9 @@ export default function Messenger() {
                                         const { clientX, clientY } = e.touches?.[0] || e;
                                         setContextMenu({ x: clientX, y: clientY, message: m });
                                     }}
-                                />
+                                />}
                                 </div>
-                            ))}
+                            ); })}
                         </div>
                         {showJumpToLatest && (
                             <button type="button"

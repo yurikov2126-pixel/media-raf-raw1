@@ -68,7 +68,7 @@ export function initSocket(io) {
 
         socket.on('message:send', async (payload, cb) => {
             try {
-                const { chatId, content, type = 'text', replyToId, forwardedFrom, caption, clientMessageId } = payload;
+                const { chatId, content, type = 'text', replyToId, forwardedFrom, caption, clientMessageId, albumId } = payload;
                 const member = await prisma.chatMember.findUnique({
                     where: { chatId_userId: { chatId, userId } },
                 });
@@ -93,6 +93,7 @@ export function initSocket(io) {
                     message = await prisma.message.create({
                     data: {
                         chatId, senderId: userId, content, type, clientMessageId: requestId,
+                        albumId: type === 'image' && typeof albumId === 'string' && /^[0-9a-f-]{36}$/i.test(albumId) ? albumId : null,
                         caption: ['image', 'video', 'file'].includes(type) && typeof caption === 'string' ? caption.trim().slice(0, 2000) || null : null,
                         replyToId: replyToId || null,
                         forwardedFrom: forwardedFrom ? JSON.stringify(forwardedFrom) : null,
