@@ -129,7 +129,7 @@ export default function MessageBubble({
                     onContextMenu={onCtx}
                     className={`relative rounded-2xl px-3 py-2 select-none ${bubbleClass} ${v2 ? "mrr-v2-message-surface" : ""}`}
                     style={
-                        isOwn && !isMediaOnly
+                        isOwn && !isMediaOnly && !v2
                             ? { background: 'var(--brand-gradient)' }
                             : undefined
                     }

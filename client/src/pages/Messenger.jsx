@@ -168,6 +168,25 @@ export default function Messenger() {
     const [showMembers, setShowMembers] = useState(false);
     const [showGallery, setShowGallery] = useState(false);
     const [contextMenu, setContextMenu] = useState(null);
+    const [contextMenuClosing, setContextMenuClosing] = useState(false);
+    const contextCloseTimer = useRef(null);
+    const openMessageMenu = (menu) => {
+        clearTimeout(contextCloseTimer.current);
+        setContextMenuClosing(false);
+        setContextMenu(menu);
+    };
+    const closeMessageMenu = () => {
+        if (!contextMenu || contextMenuClosing) return;
+        if (!isMessengerV2 || window.innerWidth >= 768 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            setContextMenu(null);
+            return;
+        }
+        setContextMenuClosing(true);
+        clearTimeout(contextCloseTimer.current);
+        contextCloseTimer.current = setTimeout(() => { setContextMenu(null); setContextMenuClosing(false); }, 180);
+    };
+    useEffect(() => () => clearTimeout(contextCloseTimer.current), []);
+
     const [highlightId, setHighlightId] = useState(null);
     const [mentionQuery, setMentionQuery] = useState(null);
     const [chatMenu, setChatMenu] = useState(null);
@@ -934,7 +953,7 @@ export default function Messenger() {
         ].filter((a) => a.only === undefined || a.only);
 
         const handler = (id) => {
-            setContextMenu(null);
+            closeMessageMenu();
             switch (id) {
                 case 'react': toggleReaction(m.id, '❤️'); break;
                 case 'reply': setReplyTo(m); break;
@@ -1234,7 +1253,7 @@ export default function Messenger() {
                                         onlineSet={onlineUsers}
                                         onOpen={openViewer}
                                         onProfile={() => goProfile(m.sender.username)}
-                                        onContext={(item, event) => setContextMenu({ x: event.clientX, y: event.clientY, message: item })}
+                                        onContext={(item, event) => openMessageMenu({ x: event.clientX, y: event.clientY, message: item })}
                                     /> : <MessageBubble
                                     compact={isMessengerV2 && canGroupMessages(messages[index - 1], m) && firstUnreadId !== m.id}
                                     groupEnd={isMessengerV2 && !canGroupMessages(m, messages[index + 1])}
@@ -1251,7 +1270,7 @@ export default function Messenger() {
                                     onScrollToReply={(id) => scrollToMessage(id)}
                                     onLongPress={(e) => {
                                         const { clientX, clientY } = e.touches?.[0] || e;
-                                        setContextMenu({ x: clientX, y: clientY, message: m });
+                                        openMessageMenu({ x: clientX, y: clientY, message: m });
                                     }}
                                 />}
                                 </div>
@@ -1569,13 +1588,13 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <button type="button" className="fixed inset-0 z-[70] mrr-v2-telegram-menu-scrim" onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
-                        <div className="mrr-message-actions fixed z-[80] md:hidden mrr-v2-telegram-menu"
+                        <button type="button" className={`fixed inset-0 z-[70] mrr-v2-telegram-menu-scrim ${contextMenuClosing ? "is-closing" : ""}`} onClick={closeMessageMenu} aria-label="Закрыть действия с сообщением" />
+                        <div className={`mrr-message-actions fixed z-[80] md:hidden mrr-v2-telegram-menu ${contextMenuClosing ? "is-closing" : ""}`}
                             style={{left, top, width:mobileWidth, maxHeight:'calc(100dvh - 24px)'}}
                             role="dialog" aria-modal="true" aria-label="Действия с сообщением">
                             {!selected.deletedAt && <div className="mrr-v2-telegram-reactions" aria-label="Быстрые реакции">
                                 {quickReactions.map((emoji) => <button type="button" key={emoji}
-                                    onClick={() => { toggleReaction(selected.id,emoji); setContextMenu(null); }}
+                                    onClick={() => { toggleReaction(selected.id,emoji); closeMessageMenu(); }}
                                     aria-label={`Реакция ${emoji}`}>{emoji}</button>)}
                             </div>}
                             <div className={`mrr-v2-telegram-selected ${selected.sender.id === user.id ? 'is-own' : ''}`}>
@@ -1585,11 +1604,15 @@ export default function Messenger() {
                             </div>
                             <div className="mrr-v2-telegram-actions" style={{maxHeight:menuHeight}}>
                                 {actions.filter((a) => a.id !== 'react').map((a) => {
-                                    const icon = {'reply':'↶','copy':'▢','edit':'✎','pin':'♧','forward':'➜','delete':'♲','report':'⚑','album-select':'☑','album-download':'↓'}[a.id] || '•';
+                                    const icon = {'reply':'↶','edit':'✎','forward':'➜','delete':'♲','report':'⚑','album-select':'☑','album-download':'↓'}[a.id] || '•';
                                     const label = a.label.replace(/^[^А-Яа-яA-Za-z]+/u,'');
                                     return <button type="button" key={a.id} onClick={() => handler(a.id)}
                                         className={`mrr-v2-telegram-action ${a.danger ? 'is-danger' : ''} ${a.id === 'album-select' ? 'is-divider' : ''}`}>
-                                        <span className="mrr-v2-telegram-action-icon" aria-hidden="true">{icon}</span>
+                                        <span className="mrr-v2-telegram-action-icon" aria-hidden="true">{a.id === 'copy' ? (
+                                            <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+                                        ) : a.id === 'pin' ? (
+                                            <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m16 3 5 5-3.5 1.5v4L20 16l-4 4-3-3H9L3 21l4-6v-4l-3-3 4-4 2.5 2.5h4L16 3Z"/></svg>
+                                        ) : icon}</span>
                                         <span>{label}</span>
                                     </button>;
                                 })}
