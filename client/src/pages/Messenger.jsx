@@ -553,6 +553,13 @@ export default function Messenger() {
                 return [...prev.filter((x) => x.userId !== reader), newer];
             });
         };
+        const onUserOffline = ({ userId: uid, lastSeen }) => {
+            if (!lastSeen) return;
+            setChats((prev) => prev.map((chat) => ({
+                ...chat, members: chat.members.map((member) => member.id === uid ? { ...member, lastSeen } : member),
+            })));
+        };
+        socket.on('user:offline', onUserOffline);
         socket.on('chat:receipt', onReceipt);
         socket.on('message:new', onNew);
         socket.on('message:edited', onEdited);
@@ -564,6 +571,7 @@ export default function Messenger() {
         socket.on('chat:updated', onChatUpdated);
 
         return () => {
+            socket.off('user:offline', onUserOffline);
             socket.off('chat:receipt', onReceipt);
             socket.off('message:new', onNew);
             socket.off('message:edited', onEdited);
