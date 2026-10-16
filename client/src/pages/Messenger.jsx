@@ -1020,6 +1020,7 @@ export default function Messenger() {
                                     groupEnd={isMessengerV2 && !canGroupMessages(m, messages[index + 1])}
                                     v2={isMessengerV2}
                                     m={m}
+                                    replyAlbumImages={m.replyTo?.albumId ? messages.filter((x) => x.albumId === m.replyTo.albumId && x.type === 'image' && !x.deletedAt).slice(0, 4) : []}
                                     isOwn={m.sender.id === user.id}
                                     highlight={highlightId === m.id}
                                     onlineSet={onlineUsers}
@@ -1062,6 +1063,9 @@ export default function Messenger() {
                             {replyTo && (
                                 <div className="flex items-center gap-2 bg-ink-700/60 rounded-2xl px-3 py-2 text-sm">
                                     <div className="w-1 h-8 rounded bg-violet" />
+                                    {replyTo.type === 'image' && <div className="mrr-v2-reply-preview">
+                                        {(replyTo.albumId ? messages.filter((x) => x.albumId === replyTo.albumId && x.type === 'image' && !x.deletedAt).slice(0, 4) : [replyTo]).map((item) => <img key={item.id} src={resolveUrl(item.content)} alt="" />)}
+                                    </div>}
                                     <div className="flex-1 min-w-0">
                                         <div className="text-violet-soft text-xs font-bold">Ответ {replyTo.sender.fullName}</div>
                                         <div className="text-white/60 truncate">
