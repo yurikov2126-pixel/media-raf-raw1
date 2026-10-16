@@ -2362,3 +2362,12 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
   -webkit-touch-callout: none !important;
 }
 .mrr-v2-recording-no-selection button { touch-action: manipulation; }
+
+/* Messenger 2.0 — responsive live recording waveform. */
+.mrr-v2-recording-panel {display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid rgba(220,70,160,.35);border-radius:20px;background:rgba(215,53,135,.09);color:var(--text-primary);min-width:0;}
+.mrr-v2-recording-dot {width:9px;height:9px;flex:none;border-radius:50%;background:#e1498d;animation:mrr-v2-rec-pulse 1.2s ease-in-out infinite;}
+.mrr-v2-live-voice-waveform {display:block;width:100%;height:42px;max-width:100%;object-fit:fill;}
+.mrr-v2-live-voice-placeholder {height:42px;}
+@keyframes mrr-v2-rec-pulse {50%{opacity:.35;transform:scale(.8)}}
+@media(max-width:390px){.mrr-v2-recording-panel{gap:5px;padding:8px}.mrr-v2-recording-panel button{padding-left:7px!important;padding-right:7px!important}}
+@media(prefers-reduced-motion:reduce){.mrr-v2-recording-dot{animation:none}}
