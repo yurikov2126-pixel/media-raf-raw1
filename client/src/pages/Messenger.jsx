@@ -772,7 +772,7 @@ export default function Messenger() {
         recordGestureRef.current = null;
         setRecordGesture('');
         if (gesture === 'cancel') stopRecording(true);
-        // Swipe up locks recording: it keeps running until Stop is tapped.
+        // Recording is already hands-free; upward swipe confirms that it stays active.
     };
 
     const handleChange = (e) => {
@@ -1310,8 +1310,8 @@ export default function Messenger() {
                                 <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2" onTouchStart={onVoiceTouchStart} onTouchMove={onVoiceTouchMove} onTouchEnd={onVoiceTouchEnd}>
                                     <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
                                     <div className="flex-1">
-                                        <div className="text-sm text-pink">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись закреплена' : 'Запись голосового…'}</div>
-                                        <div className="text-xs text-white/50">{recordingSec} сек {isMessengerV2 ? '· ← отменить · ↑ закрепить' : ''}</div>
+                                        <div className="text-sm text-pink">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись продолжается' : 'Запись голосового…'}</div>
+                                        <div className="text-xs text-white/50">{recordingSec} сек {isMessengerV2 ? '· ← отмена · ↑ продолжить' : ''}</div>
                                     </div>
                                     <button onClick={() => stopRecording(true)} className="btn-ghost !py-1.5 !px-3 text-xs text-white/70">Отмена</button>
                                     <button onClick={() => stopRecording(false)} className="btn-primary !py-1.5 !px-3 text-xs">{isMessengerV2 ? 'Готово ✓' : 'Отправить ➤'}</button>
