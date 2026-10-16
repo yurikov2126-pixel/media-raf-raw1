@@ -7,7 +7,7 @@ import { chatImagePreviewUrl } from '../../lib/chatImagePreview.js';
 import { Sticker } from '../../stickers/pack.jsx';
 
 export default function MessageBubble({
-                                          m, isOwn, highlight, onlineSet, compact = false, groupEnd = true, v2 = false, replyAlbumImages = [],
+                                          m, isOwn, highlight, onlineSet, compact = false, groupEnd = true, v2 = false, receiptStatus = null, replyAlbumImages = [],
                                           onOpenImage, onOpenProfile, onScrollToReply, onLongPress, onReact, onSwipeReply,
                                       }) {
     const longPressTimer = useRef(null);
@@ -240,6 +240,11 @@ export default function MessageBubble({
                         hour: '2-digit',
                         minute: '2-digit',
                     })}
+                    {v2 && isOwn && receiptStatus && <span className={`mrr-v2-receipt ${receiptStatus === 'read' ? 'is-read' : ''}`}
+                        title={receiptStatus === 'read' ? 'Прочитано' : receiptStatus === 'delivered' ? 'Доставлено' : 'Отправлено'}
+                        aria-label={receiptStatus === 'read' ? 'Прочитано' : receiptStatus === 'delivered' ? 'Доставлено' : 'Отправлено'}>
+                        {receiptStatus === 'sent' ? '✓' : '✓✓'}
+                    </span>}
                 </div>}
             </div>
         </div>
