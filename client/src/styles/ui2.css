@@ -2371,3 +2371,13 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @keyframes mrr-v2-rec-pulse {50%{opacity:.35;transform:scale(.8)}}
 @media(max-width:390px){.mrr-v2-recording-panel{gap:5px;padding:8px}.mrr-v2-recording-panel button{padding-left:7px!important;padding-right:7px!important}}
 @media(prefers-reduced-motion:reduce){.mrr-v2-recording-dot{animation:none}}
+
+/* Voice recording gesture: the microphone rises toward the lock as the finger moves. */
+.mrr-v2-recording-panel {position:relative;overflow:visible;}
+.mrr-v2-voice-lock-track {position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;align-self:stretch;width:28px;min-width:28px;pointer-events:none;}
+.mrr-v2-voice-lock-target {position:absolute;bottom:48px;font-size:15px;opacity:.75;transition:transform .15s ease,opacity .15s ease;}
+.mrr-v2-voice-lock-mic {position:relative;z-index:1;font-size:19px;line-height:26px;will-change:transform;transition:filter .15s ease;}
+.mrr-v2-recording-is-locked {border-color:var(--brand-accent-1,#bd4acb);box-shadow:0 0 0 1px rgba(183,75,199,.2);}
+.mrr-v2-recording-is-locked .mrr-v2-voice-lock-mic {filter:drop-shadow(0 0 7px rgba(197,91,226,.6));}
+@media(max-width:390px){.mrr-v2-voice-lock-track{width:23px;min-width:23px}.mrr-v2-voice-lock-mic{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.mrr-v2-voice-lock-mic,.mrr-v2-voice-lock-target{transition:none}}
