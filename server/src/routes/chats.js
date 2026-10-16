@@ -161,6 +161,8 @@ router.get('/:id/messages', auth, async (req, res) => {
         where: { chatId_userId: { chatId: req.params.id, userId: req.user.id } },
         data: { lastRead: new Date() },
     });
+    const receiptIo = getIo();
+    receiptIo?.to(`chat:${req.params.id}`).emit('chat:receipt', { chatId: req.params.id, userId: req.user.id, readAt: new Date().toISOString() });
 
     const chat = await prisma.chat.findUnique({ where: { id: req.params.id } });
     let pinned = null;
@@ -176,6 +178,7 @@ router.get('/:id/messages', auth, async (req, res) => {
         pinned,
         myRole: member.role,
         firstUnreadId: firstUnread?.id || null,
+        receipts: await prisma.chatMember.findMany({ where: { chatId: req.params.id }, select: { userId: true, lastRead: true, lastDelivered: true } }),
     });
 });
 
