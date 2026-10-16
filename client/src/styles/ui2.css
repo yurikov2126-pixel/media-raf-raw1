@@ -2399,3 +2399,25 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 .mrr-v2-voice-compose-locked .mrr-v2-voice-capsule {border-color:var(--brand-accent-1,#b85bdd)}
 @media(max-width:390px){.mrr-v2-voice-compose{gap:5px}.mrr-v2-voice-capsule{gap:6px;padding:0 9px}.mrr-v2-voice-floating-wrap,.mrr-v2-voice-floating-button{width:58px;height:58px}.mrr-v2-voice-hint{font-size:11px}.mrr-v2-voice-lock-guide{left:9px}}
 @media(prefers-reduced-motion:reduce){.mrr-v2-voice-floating-button,.mrr-v2-voice-lock-guide{transition:none}}
+
+/* Telegram-inspired mobile message actions — scoped to Messenger 2.0 only. */
+@media(max-width:767px){
+.mrr-v2-telegram-menu-scrim{background:rgba(12,14,25,.34);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+.mrr-v2-telegram-menu{display:flex;flex-direction:column;gap:9px;animation:mrr-tg-pop .19s cubic-bezier(.2,.9,.2,1);transform-origin:50% 12%;min-height:0;pointer-events:auto}
+.mrr-v2-telegram-reactions{display:flex;align-items:center;justify-content:space-around;gap:0;padding:5px 6px;border-radius:26px;background:var(--bg-elev-1);border:1px solid var(--border-strong);box-shadow:0 8px 22px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.mrr-v2-telegram-reactions button{flex:1;min-width:0;min-height:39px;font-size:22px;display:grid;place-items:center;transition:transform .14s}
+.mrr-v2-telegram-reactions button:active{transform:scale(1.24)}
+.mrr-v2-telegram-selected{align-self:stretch;max-height:132px;overflow:hidden;border-radius:18px;padding:10px 14px;background:var(--bg-elev-2);color:var(--text-primary);box-shadow:0 5px 16px rgba(0,0,0,.14);border:1px solid var(--border-strong)}
+.mrr-v2-telegram-selected.is-own{background:var(--bg-elev-3)}
+.mrr-v2-telegram-selected-author{font-weight:600;font-size:11px;opacity:.7;margin-bottom:3px}
+.mrr-v2-telegram-selected-text{font-size:14px;line-height:1.38;max-height:70px;overflow:hidden;overflow-wrap:anywhere}
+.mrr-v2-telegram-selected-image{max-height:84px;width:100%;object-fit:cover;border-radius:10px;margin-bottom:3px}
+.mrr-v2-telegram-actions{display:flex;flex-direction:column;min-height:0;overflow:auto;padding:5px;border:1px solid var(--border-strong);border-radius:22px;background:var(--bg-elev-1);color:var(--text-primary);box-shadow:0 16px 40px rgba(0,0,0,.28);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.mrr-v2-telegram-action{display:flex;align-items:center;gap:13px;flex-shrink:0;width:100%;min-height:47px;padding:9px 15px;border-radius:12px;text-align:left;font-size:15px;font-weight:500;transition:background .15s}
+.mrr-v2-telegram-action:active{background:var(--bg-elev-3)}
+.mrr-v2-telegram-action-icon{width:25px;min-width:25px;text-align:center;font-size:21px;line-height:1;font-weight:400}
+.mrr-v2-telegram-action.is-danger{color:#ee6470}
+.mrr-v2-telegram-action.is-divider{border-top:1px solid var(--border-strong);border-radius:0;margin-top:3px;padding-top:12px}
+@keyframes mrr-tg-pop{from{opacity:0;transform:translateY(7px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+}
+@media(prefers-reduced-motion:reduce){.mrr-v2-telegram-menu{animation:none}}
