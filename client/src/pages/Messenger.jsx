@@ -189,6 +189,13 @@ export default function Messenger() {
         };
     }, [isMessengerV2, chatId]);
 
+    const canGroupMessages = (a, b) => {
+        if (!a || !b || a.deletedAt || b.deletedAt) return false;
+        if (a.sender?.id !== b.sender?.id || messageDayKey(a.createdAt) !== messageDayKey(b.createdAt)) return false;
+        const distance = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return Number.isFinite(distance) && distance >= 0 && distance <= 5 * 60 * 1000;
+    };
+
     const activeChat = chats.find((c) => c.id === chatId);
     const chatTitle = useMemo(() => {
         if (!activeChat) return '';
@@ -917,7 +924,7 @@ export default function Messenger() {
                             if (nearBottom) setUnseenCount(0);
                         }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 md:px-6 py-4 space-y-2">
                             {messages.map((m, index) => (
-                                <div key={m.id} className="space-y-2">
+                                <div key={m.id} className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
                                         <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
                                             <span className="rounded-full border px-3 py-1 text-xs font-semibold shadow-sm" style={{ backgroundColor: "var(--bg-elev-2)", color: "var(--text-secondary)", borderColor: "var(--border-strong)" }}>
@@ -937,6 +944,9 @@ export default function Messenger() {
                                         </div>
                                     )}
                                     <MessageBubble
+                                    compact={isMessengerV2 && canGroupMessages(messages[index - 1], m) && firstUnreadId !== m.id}
+                                    groupEnd={isMessengerV2 && !canGroupMessages(m, messages[index + 1])}
+                                    v2={isMessengerV2}
                                     m={m}
                                     isOwn={m.sender.id === user.id}
                                     highlight={highlightId === m.id}

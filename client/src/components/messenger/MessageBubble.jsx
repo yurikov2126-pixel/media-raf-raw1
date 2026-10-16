@@ -6,7 +6,7 @@ import { resolveUrl } from '../../api/client.js';
 import { Sticker } from '../../stickers/pack.jsx';
 
 export default function MessageBubble({
-                                          m, isOwn, highlight, onlineSet,
+                                          m, isOwn, highlight, onlineSet, compact = false, groupEnd = true, v2 = false,
                                           onOpenImage, onOpenProfile, onScrollToReply, onLongPress, onReact, onSwipeReply,
                                       }) {
     const longPressTimer = useRef(null);
@@ -92,25 +92,25 @@ export default function MessageBubble({
     return (
         <div
             id={`msg-${m.id}`}
-            className={`group relative flex gap-2 ${isOwn ? 'flex-row-reverse' : ''} rounded-2xl transition ${
+            className={`group relative flex gap-2 ${isOwn ? 'flex-row-reverse' : ''} rounded-2xl transition ${v2 ? 'mrr-v2-bubble-row' : ''} ${compact ? 'mrr-v2-compact' : ''} ${groupEnd ? 'mrr-v2-group-end' : ''} ${
                 highlight ? 'bg-violet/20 ring-2 ring-violet/60' : ''
             }`}
         >
             {swipeX > 12 && (
                 <span className="absolute left-3 self-center text-violet-soft pointer-events-none text-xl" aria-hidden="true">↩</span>
             )}
-            {!isOwn && (
+            {!isOwn && !(v2 && compact) && (
                 <button onClick={onOpenProfile} className="shrink-0 hover:opacity-80 transition">
                     <Avatar user={m.sender} size={34} online={onlineSet?.has(m.sender.id)} />
                 </button>
             )}
             <div
                 style={{ transform: `translateX(${swipeX}px)`, transition: swipeX ? 'none' : 'transform 180ms ease-out' }}
-                className={`max-w-[80%] md:max-w-[65%] ${
+                className={`max-w-[80%] md:max-w-[65%] ${v2 && compact && !isOwn ? 'mrr-v2-indent' : ''} ${
                     isOwn ? 'items-end' : 'items-start'
                 } flex flex-col`}
             >
-                {!isOwn && (
+                {!isOwn && !(v2 && compact) && (
                     <button
                         onClick={onOpenProfile}
                         className="text-xs text-white/40 px-2 mb-1 hover:text-white/70 transition text-left"
@@ -126,7 +126,7 @@ export default function MessageBubble({
                     onTouchEnd={endLongPress}
                     onTouchCancel={endLongPress}
                     onContextMenu={onCtx}
-                    className={`relative rounded-2xl px-3 py-2 select-none ${bubbleClass}`}
+                    className={`relative rounded-2xl px-3 py-2 select-none ${bubbleClass} ${v2 ? "mrr-v2-message-surface" : ""}`}
                     style={
                         isOwn && !isMediaOnly
                             ? { background: 'var(--brand-gradient)' }
@@ -231,12 +231,12 @@ export default function MessageBubble({
                     )}
                 </div>
 
-                <div className="text-[10px] text-white/30 px-2 mt-1">
+                {(!v2 || groupEnd) && <div className="text-[10px] text-white/30 px-2 mt-1 mrr-v2-message-time">
                     {new Date(m.createdAt).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
                     })}
-                </div>
+                </div>}
             </div>
         </div>
     );
