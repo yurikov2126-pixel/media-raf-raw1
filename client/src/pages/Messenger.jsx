@@ -1,3 +1,4 @@
+import { presenceLabel } from '../lib/presence.js';
 import RecordingWaveform from '../components/messenger/RecordingWaveform.jsx';
 import VoicePlayer from '../components/VoicePlayer.jsx';
 import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
@@ -93,6 +94,7 @@ export default function Messenger() {
 
     const [chats, setChats] = useState([]);
     const [messages, setMessages] = useState([]);
+    const [chatReceipts, setChatReceipts] = useState([]);
     const [pinned, setPinned] = useState(null);
     const [myRole, setMyRole] = useState('member');
     const [firstUnreadId, setFirstUnreadId] = useState(null);
@@ -437,6 +439,7 @@ export default function Messenger() {
                 while (start > 0 && r[start]?.albumId && r[start - 1]?.albumId === r[start].albumId) start--;
                 setHistoryEnd(null);
                 setHistoryStart(start);
+                setChatReceipts([]);
                 setMessages(r); setPinned(null); setMyRole('member');
             } else {
                 const incoming = r.messages || [];
@@ -446,6 +449,11 @@ export default function Messenger() {
                 while (start > 0 && incoming[start]?.albumId && incoming[start - 1]?.albumId === incoming[start].albumId) start--;
                 setHistoryEnd(focusIndex >= 0 && isMessengerV2 ? Math.min(incoming.length, start + historyCount * 2) : null);
                 setHistoryStart(start);
+                setChatReceipts(r.receipts || []);
+                if (socket && isMessengerV2) {
+                    const recentIncoming = [...incoming].reverse().find((m) => m.senderId !== user.id && m.sender?.id !== user.id);
+                    if (recentIncoming) socket.emit('message:received', { chatId, messageId: recentIncoming.id });
+                }
                 setMessages(incoming);
                 setPinned(r.pinned || null);
                 setMyRole(r.myRole || 'member');
@@ -460,6 +468,10 @@ export default function Messenger() {
         if (!socket) return;
         const onNew = (m) => {
             if (m.chatId === chatId) {
+                if (isMessengerV2 && m.senderId !== user.id && m.sender?.id !== user.id) {
+                    socket.emit('message:received', { chatId, messageId: m.id });
+                    if (nearBottomRef.current && document.visibilityState === 'visible') socket.emit('chat:read', { chatId });
+                }
                 if (!nearBottomRef.current && m.senderId !== user.id && m.sender?.id !== user.id) setUnseenCount((n) => n + 1);
                 setMessages((prev) => prev.some((item) => item.id === m.id) ? prev : [...prev, m]);
             }
@@ -536,6 +548,22 @@ export default function Messenger() {
         };
         const onChatUpdated = () => reloadChats();
 
+        const onReceipt = ({ chatId: cid, userId: reader, readAt, deliveredAt }) => {
+            if (cid !== chatId) return;
+            setChatReceipts((prev) => {
+                const item = prev.find((x) => x.userId === reader) || { userId: reader };
+                const newer = { ...item, ...(readAt ? { lastRead: readAt } : {}), ...(deliveredAt ? { lastDelivered: deliveredAt } : {}) };
+                return [...prev.filter((x) => x.userId !== reader), newer];
+            });
+        };
+        const onUserOffline = ({ userId: uid, lastSeen }) => {
+            if (!lastSeen) return;
+            setChats((prev) => prev.map((chat) => ({
+                ...chat, members: chat.members.map((member) => member.id === uid ? { ...member, lastSeen } : member),
+            })));
+        };
+        socket.on('user:offline', onUserOffline);
+        socket.on('chat:receipt', onReceipt);
         socket.on('message:new', onNew);
         socket.on('message:edited', onEdited);
         socket.on('message:deleted', onDeleted);
@@ -546,6 +574,8 @@ export default function Messenger() {
         socket.on('chat:updated', onChatUpdated);
 
         return () => {
+            socket.off('user:offline', onUserOffline);
+            socket.off('chat:receipt', onReceipt);
             socket.off('message:new', onNew);
             socket.off('message:edited', onEdited);
             socket.off('message:deleted', onDeleted);
@@ -973,6 +1003,16 @@ export default function Messenger() {
         return { actions, handler };
     };
 
+    const receiptStatusFor = (message) => {
+        if (!isMessengerV2 || activeChat?.type !== 'DIRECT' || message.sender?.id !== user.id) return null;
+        const other = activeChat.members.find((member) => member.id !== user.id);
+        const cursor = chatReceipts.find((entry) => entry.userId === other?.id);
+        const sentAt = new Date(message.createdAt).getTime();
+        if (cursor?.lastRead && new Date(cursor.lastRead).getTime() >= sentAt) return 'read';
+        if (cursor?.lastDelivered && new Date(cursor.lastDelivered).getTime() >= sentAt) return 'delivered';
+        return 'sent';
+    };
+
     const unreadChatCount = chats.filter((c) => Number(c.unread) > 0).length;
     const filteredChats = chats.filter((c) => {
         if (chatFilter === 'unread' && !(Number(c.unread) > 0)) return false;
@@ -1169,7 +1209,7 @@ export default function Messenger() {
                                             : activeChat?.type === 'GROUP'
                                                 ? `${activeChat.members.length} участников · ${activeChat.members.filter((m) => onlineUsers.has(m.id)).length} в сети`
                                                 : onlineUsers.has(activeChat?.members.find((m) => m.id !== user.id)?.id)
-                                                    ? 'в сети' : 'не в сети'}
+                                                    ? 'в сети' : presenceLabel(activeChat?.members.find((m) => m.id !== user.id)?.lastSeen)}
                                     </div>
                                 </div>
                             </button>
@@ -1220,7 +1260,9 @@ export default function Messenger() {
                         <div ref={scrollRef} onScroll={(event) => {
                             const el = event.currentTarget;
                             const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                            const wasNearBottom = nearBottomRef.current;
                             nearBottomRef.current = nearBottom;
+                            if (isMessengerV2 && nearBottom && !wasNearBottom && document.visibilityState === 'visible') socket?.emit('chat:read', { chatId });
                             setShowJumpToLatest(!nearBottom);
                             if (nearBottom) setUnseenCount(0);
                         }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 md:px-6 py-4 space-y-2">
@@ -1259,6 +1301,7 @@ export default function Messenger() {
                                     groupEnd={isMessengerV2 && !canGroupMessages(m, messages[index + 1])}
                                     v2={isMessengerV2}
                                     m={m}
+                                    receiptStatus={receiptStatusFor(m)}
                                     replyAlbumImages={m.replyTo?.albumId ? messages.filter((x) => x.albumId === m.replyTo.albumId && x.type === 'image' && !x.deletedAt).slice(0, 4) : []}
                                     isOwn={m.sender.id === user.id}
                                     highlight={highlightId === m.id}
@@ -1548,7 +1591,7 @@ export default function Messenger() {
                                                     </div>
                                                     <div className="text-xs text-white/40 truncate">
                                                         @{m.username}
-                                                        {onlineUsers.has(m.id) && <span className="text-lime ml-2">в сети</span>}
+                                                        <span className="ml-2">{presenceLabel(m.lastSeen, onlineUsers.has(m.id))}</span>
                                                     </div>
                                                 </div>
                                             </button>

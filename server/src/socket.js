@@ -66,6 +66,37 @@ export function initSocket(io) {
             if (member) socket.join(`chat:${chatId}`);
         });
 
+        // An explicit client acknowledgement; online presence alone is not delivery.
+        socket.on('chat:read', async ({ chatId } = {}, cb) => {
+            try {
+                if (typeof chatId !== 'string') return;
+                const member = await prisma.chatMember.findUnique({ where: { chatId_userId: { chatId, userId } } });
+                if (!member) return;
+                const lastRead = new Date();
+                await prisma.chatMember.update({ where: { chatId_userId: { chatId, userId } }, data: { lastRead } });
+                io.to(`chat:${chatId}`).emit('chat:receipt', { chatId, userId, readAt: lastRead.toISOString() });
+                cb?.({ ok: true });
+            } catch (e) { console.error('chat:read', e); }
+        });
+
+        socket.on('message:received', async ({ chatId, messageId } = {}, cb) => {
+            try {
+                if (typeof chatId !== 'string' || typeof messageId !== 'string') return;
+                const member = await prisma.chatMember.findUnique({ where: { chatId_userId: { chatId, userId } } });
+                if (!member) return;
+                const message = await prisma.message.findFirst({ where: { id: messageId, chatId } });
+                if (!message || message.senderId === userId) return;
+                const deliveredAt = message.createdAt;
+                if (member.lastDelivered && member.lastDelivered >= deliveredAt) return cb?.({ ok: true });
+                await prisma.chatMember.update({
+                    where: { chatId_userId: { chatId, userId } },
+                    data: { lastDelivered: deliveredAt },
+                });
+                io.to(`chat:${chatId}`).emit('chat:receipt', { chatId, userId, deliveredAt: deliveredAt.toISOString() });
+                cb?.({ ok: true });
+            } catch (e) { console.error('message:received', e); }
+        });
+
         socket.on('message:send', async (payload, cb) => {
             try {
                 const { chatId, content, type = 'text', replyToId, forwardedFrom, caption, clientMessageId, albumId } = payload;
@@ -219,7 +250,7 @@ export function initSocket(io) {
                         data: { lastSeen: new Date() },
                     });
                 } catch {}
-                io.emit('user:offline', { userId });
+                io.emit('user:offline', { userId, lastSeen: new Date().toISOString() });
             }
         });
     });

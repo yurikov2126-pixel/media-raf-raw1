@@ -2446,3 +2446,7 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
  .mrr-v2-telegram-menu-scrim,.mrr-v2-telegram-menu-scrim.is-closing,
  .mrr-v2-telegram-menu.is-closing { animation:none !important; }
 }
+
+/* Telegram-like delivery indicators, only for outgoing direct messages in Messenger 2.0. */
+.mrr-v2-receipt { display:inline-flex;align-items:center;margin-left:5px;letter-spacing:-3px;font-size:13px;font-weight:700;color:var(--text-muted);vertical-align:middle;white-space:nowrap;padding-right:3px; }
+.mrr-v2-receipt.is-read { color:var(--brand-accent-1,#9d5be8); }
