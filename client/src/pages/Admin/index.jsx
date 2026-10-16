@@ -235,9 +235,9 @@ export default function Admin() {
                             <Broadcast token={token} users={users} courses={courses} />
                         )}
                         {tab === 'push' && (
-                        {tab === 'messenger-ui' && <MessengerUI token={token} />}
                             <Push token={token} users={users} courses={courses} />
                         )}
+                        {tab === 'messenger-ui' && <MessengerUI token={token} />}
                         {tab === 'bulk' && (
                             <BulkRoot
                                 token={token}
