@@ -766,6 +766,7 @@ export default function Messenger() {
         if (!isMessengerV2 || voicePressRef.current || recording) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         event.preventDefault();
+        try { window.getSelection()?.removeAllRanges(); } catch {}
         const gesture = { x: event.clientX, y: event.clientY, finished: false, action: '' };
         voicePressRef.current = gesture;
         const move = (e) => {
@@ -788,10 +789,15 @@ export default function Messenger() {
                 else gesture.stopWhenReady = gesture.action === 'cancel' ? 'cancel' : 'preview';
             }
         };
+        const preventSelection = (e) => e.preventDefault();
+        document.addEventListener('selectstart', preventSelection, true);
+        document.addEventListener('contextmenu', preventSelection, true);
         document.addEventListener('pointermove', move, { passive: true });
         document.addEventListener('pointerup', finish);
         document.addEventListener('pointercancel', finish);
         voicePressCleanupRef.current = () => {
+            document.removeEventListener('selectstart', preventSelection, true);
+            document.removeEventListener('contextmenu', preventSelection, true);
             document.removeEventListener('pointermove', move);
             document.removeEventListener('pointerup', finish);
             document.removeEventListener('pointercancel', finish);
@@ -1333,7 +1339,7 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             ) : recording ? (
-                                <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
+                                <div className={`flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2 ${isMessengerV2 ? "mrr-v2-recording-no-selection" : ""}`}>
                                     <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
                                     <div className="flex-1">
                                         <div className="text-sm text-pink">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись продолжается' : 'Запись голосового…'}</div>
