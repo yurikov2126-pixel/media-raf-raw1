@@ -55,13 +55,13 @@ export default function AttachmentEditorV2({
                 {files.map((file, index) => (
                     <div key={index + ':' + file.name + ':' + file.size} className={`mrr-v2-attachment-card ${dragging === index ? "mrr-v2-attachment-dragging" : ""}`} data-attachment-index={index}>
                         <div className="mrr-v2-attachment-thumb"><AttachmentPreview file={file}/></div>
-                        <div className="min-w-0 flex-1">
-                            <div className="font-semibold text-sm truncate" title={file.name}>{file.name}</div>
+                        <div className="min-w-0 flex-1 mrr-v2-attachment-details">
+                            <div className="font-semibold text-xs truncate" title={file.name}>{file.name}</div>
                             <div className="text-xs opacity-60">{(file.size / 1048576).toFixed(1)} МБ</div>
-                            <textarea rows={2} value={captions[index] || ''} disabled={uploading} maxLength={2000}
+                            <textarea rows={1} value={captions[index] || ''} disabled={uploading} maxLength={2000}
                                 onChange={(e) => onCaptionsChange((current) => ({ ...current, [index]: e.target.value }))}
                                 className="mrr-v2-attachment-caption" placeholder="Подпись к файлу…" aria-label={`Подпись для ${file.name}`}/>
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-center gap-2 mt-1">
                                 <span className="mrr-v2-attachment-handle" role="button" tabIndex={uploading ? -1 : 0} aria-disabled={uploading}
                                     aria-label={`Перетащить ${file.name}, позиция ${index + 1} из ${files.length}`}
                                     onPointerDown={(event) => startPointer(event, index)}
