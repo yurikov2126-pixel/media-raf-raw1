@@ -6,6 +6,7 @@ export const XP_DEFAULTS = {
     test_passed: 30,
     certificate_earned: 100,
     daily_login: 5,
+    wiki_approved_edit: 25,
     quest_completed_bonus: 0,
 };
 

@@ -15,6 +15,7 @@ const XP_LABELS = {
     test_passed: 'Сданный тест',
     certificate_earned: 'Полученный сертификат',
     daily_login: 'Ежедневный вход',
+    wiki_approved_edit: 'Одобренная правка ВикиМедиа',
     quest_completed_bonus: 'Бонус за квест',
 };
 
