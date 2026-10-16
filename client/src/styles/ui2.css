@@ -2162,3 +2162,22 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
   .mrr-messenger-v2 .mrr-v2-message-menu,
   .mrr-messenger-v2 .mrr-v2-message-menu-scrim { animation: none !important; }
 }
+
+/* Messenger 2.0 message grouping. Classic message layout is intentionally unchanged. */
+.mrr-messenger-v2 .mrr-v2-message-row { margin-block: 2px; }
+.mrr-messenger-v2 .mrr-v2-message-row:has(.mrr-v2-group-end) { margin-bottom: 12px; }
+.mrr-messenger-v2 .mrr-v2-message-row .mrr-v2-bubble-row { min-width: 0; }
+.mrr-messenger-v2 .mrr-v2-compact .mrr-v2-indent { margin-left: 42px; }
+.mrr-messenger-v2 .mrr-v2-compact .mrr-v2-message-surface { border-radius: 16px; }
+.mrr-messenger-v2 .mrr-v2-message-surface { transition: box-shadow 160ms ease, border-radius 160ms ease; }
+.mrr-messenger-v2 .mrr-v2-bubble-row:active .mrr-v2-message-surface { box-shadow: 0 3px 16px rgba(124,58,237,.12); }
+.mrr-messenger-v2 .mrr-v2-message-time { color: var(--text-secondary); opacity: .85; font-variant-numeric: tabular-nums; }
+@media (max-width: 767px) {
+  .mrr-messenger-v2 .mrr-v2-message-row { margin-block: 1px; }
+  .mrr-messenger-v2 .mrr-v2-message-row:has(.mrr-v2-group-end) { margin-bottom: 10px; }
+  .mrr-messenger-v2 .mrr-v2-message-surface { animation: mrr-v2-bubble-appear 180ms ease-out both; }
+}
+@keyframes mrr-v2-bubble-appear { from { opacity: .5; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .mrr-messenger-v2 .mrr-v2-message-surface { animation: none !important; transition: none !important; }
+}
