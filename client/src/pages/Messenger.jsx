@@ -650,8 +650,17 @@ export default function Messenger() {
     };
 
     const doForward = (target) => {
+        const forwardedAlbum = isMessengerV2 && forwarding?.albumId ? messages.filter((m) => m.albumId === forwarding.albumId && m.type === 'image' && !m.deletedAt) : [];
+        if (forwardedAlbum.length > 1) {
+            const albumId = crypto.randomUUID();
+            forwardedAlbum.forEach((m) => socket.emit('message:send', { chatId: target, content: m.content, type: 'image', caption: m.caption, albumId, forwardedFrom: { userId: m.sender.id, fullName: m.sender.fullName } }));
+            setForwarding(null);
+            nav(`/app/chats/${target}`);
+            return;
+        }
         socket.emit('message:send', {
             chatId: target, content: forwarding.content, type: forwarding.type,
+            caption: forwarding.caption,
             forwardedFrom: { userId: forwarding.sender.id, fullName: forwarding.sender.fullName },
         });
         setForwarding(null);
@@ -693,11 +702,14 @@ export default function Messenger() {
             ? activeChat.members.find((x) => x.id === user.id)?.role === 'admin' ||
             !activeChat.members.find((x) => x.id === user.id)?.role
             : true;
+        const albumItems = isMessengerV2 && m.albumId ? messages.filter((x) => x.albumId === m.albumId && x.type === 'image' && !x.deletedAt) : [];
         const actions = [
             { id: 'react', label: '❤️ Реакция' },
             { id: 'reply', label: '↩ Ответить' },
             { id: 'copy', label: '📋 Копировать', only: m.type === 'text' },
-            { id: 'forward', label: '↪ Переслать' },
+            { id: 'forward', label: albumItems.length > 1 ? '↪ Переслать альбом' : '↪ Переслать' },
+            { id: 'album-select', label: '☑ Выбрать фото', only: albumItems.length > 1 },
+            { id: 'album-download', label: '⬇ Скачать альбом ZIP', only: albumItems.length > 1 },
             { id: 'pin', label: '📌 Закрепить', only: !m.deletedAt && canPin },
             { id: 'report', label: '🚩 Пожаловаться', only: !isOwn && !m.deletedAt, danger: true },
             { id: 'edit', label: '✏️ Изменить', only: isOwn && m.type === 'text' && !m.deletedAt },
@@ -711,6 +723,8 @@ export default function Messenger() {
                 case 'reply': setReplyTo(m); break;
                 case 'copy': navigator.clipboard?.writeText(m.content); break;
                 case 'forward': setForwarding(m); break;
+                case 'album-select': window.dispatchEvent(new CustomEvent('mrr:album-action', { detail: { albumId: m.albumId, action: 'select' } })); break;
+                case 'album-download': window.dispatchEvent(new CustomEvent('mrr:album-action', { detail: { albumId: m.albumId, action: 'download' } })); break;
                 case 'pin': pinMessage(m); break;
                 case 'report': setReportTarget({ type: 'message', id: m.id }); break;
                 case 'edit': setEditing(m); setText(m.content); break;
@@ -1006,6 +1020,7 @@ export default function Messenger() {
                                     groupEnd={isMessengerV2 && !canGroupMessages(m, messages[index + 1])}
                                     v2={isMessengerV2}
                                     m={m}
+                                    replyAlbumImages={m.replyTo?.albumId ? messages.filter((x) => x.albumId === m.replyTo.albumId && x.type === 'image' && !x.deletedAt).slice(0, 4) : []}
                                     isOwn={m.sender.id === user.id}
                                     highlight={highlightId === m.id}
                                     onlineSet={onlineUsers}
@@ -1048,10 +1063,13 @@ export default function Messenger() {
                             {replyTo && (
                                 <div className="flex items-center gap-2 bg-ink-700/60 rounded-2xl px-3 py-2 text-sm">
                                     <div className="w-1 h-8 rounded bg-violet" />
+                                    {replyTo.type === 'image' && <div className="mrr-v2-reply-preview">
+                                        {(replyTo.albumId ? messages.filter((x) => x.albumId === replyTo.albumId && x.type === 'image' && !x.deletedAt).slice(0, 4) : [replyTo]).map((item) => <img key={item.id} src={resolveUrl(item.content)} alt="" />)}
+                                    </div>}
                                     <div className="flex-1 min-w-0">
                                         <div className="text-violet-soft text-xs font-bold">Ответ {replyTo.sender.fullName}</div>
                                         <div className="text-white/60 truncate">
-                                            {replyTo.type === 'image' ? '🖼️ Изображение'
+                                            {replyTo.type === 'image' ? (replyTo.albumId ? '🖼️ Фотоальбом' : '🖼️ Изображение')
                                                 : replyTo.type === 'video' ? '🎥 Видео'
                                                     : replyTo.type === 'voice' ? '🎤 Голосовое'
                                                         : replyTo.type === 'file' ? '📎 Файл'
