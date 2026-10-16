@@ -86,6 +86,36 @@ export default function Messenger() {
     const notifications = useNotifications();
 
     const isChatRoom = !!chatId;
+    const [mobileViewport, setMobileViewport] = useState(null);
+    useEffect(() => {
+        if (!isMessengerV2 || !isChatRoom || !window.visualViewport) {
+            return;
+        }
+        const viewport = window.visualViewport;
+        let frame = 0;
+        const updateViewport = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                if (window.innerWidth >= 768) {
+                    setMobileViewport(null);
+                    return;
+                }
+                // VisualViewport reflects the actual usable space above the iOS keyboard.
+                setMobileViewport({ top: viewport.offsetTop, height: viewport.height });
+            });
+        };
+        updateViewport();
+        viewport.addEventListener('resize', updateViewport);
+        viewport.addEventListener('scroll', updateViewport);
+        window.addEventListener('orientationchange', updateViewport);
+        return () => {
+            cancelAnimationFrame(frame);
+            viewport.removeEventListener('resize', updateViewport);
+            viewport.removeEventListener('scroll', updateViewport);
+            window.removeEventListener('orientationchange', updateViewport);
+            setMobileViewport(null);
+        };
+    }, [isMessengerV2, isChatRoom]);
 
     const [chats, setChats] = useState([]);
     const [messages, setMessages] = useState([]);
@@ -672,8 +702,16 @@ export default function Messenger() {
         <div
             className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''}`}
             style={isChatRoom ? {
-                paddingTop: 'env(safe-area-inset-top, 0px)',
-                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                ...(isMessengerV2 && mobileViewport ? {
+                    top: mobileViewport.top,
+                    bottom: 'auto',
+                    height: mobileViewport.height,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                } : {
+                    paddingTop: 'env(safe-area-inset-top, 0px)',
+                    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                }),
             } : undefined}
             onClick={() => {
                 if (contextMenu) setContextMenu(null);
@@ -1175,7 +1213,7 @@ export default function Messenger() {
                         <button type="button" className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[3px] md:bg-transparent md:backdrop-blur-none cursor-default"
                             onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
                         {/* Telegram-inspired contextual popover with a selected-message preview. */}
-                        <div className="mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2"
+                        <div className={`mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2 ${isMessengerV2 ? "mrr-v2-message-actions" : ""}`}
                             style={{ left, top, width: mobileWidth, maxHeight: 'calc(100dvh - 24px)' }}
                             role="dialog" aria-modal="true" aria-label="Действия с сообщением">
                             {!selected.deletedAt && (
