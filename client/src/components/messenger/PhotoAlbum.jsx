@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Avatar from '../Avatar.jsx';
 import { resolveUrl } from '../../api/client.js';
+import { buildAlbumZip } from '../../lib/albumZip.js';
 
 export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, onProfile }) {
     const sender = items[0].sender;
     const [selected, setSelected] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
     const pressTimer = useRef(null);
@@ -43,26 +45,40 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
     const download = async () => {
         if (busy) return;
         setBusy(true);
+        setDownloadProgress(0);
         try {
             const targets = selected.length ? items.filter((item) => selected.includes(item.id)) : items;
+            const entries = [];
+            let total = 0;
+            const maxBytes = 150 * 1024 * 1024;
             for (let i = 0; i < targets.length; i++) {
                 const item = targets[i];
                 const response = await fetch(resolveUrl(item.content), { credentials: 'include' });
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                const extension = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
-                link.download = `album-${items[0].albumId || 'photos'}-${i + 1}.${extension}`;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                URL.revokeObjectURL(url);
+                if (!response.ok) throw new Error('Ошибка загрузки фото: HTTP ' + response.status);
+                const data = new Uint8Array(await response.arrayBuffer());
+                total += data.length;
+                if (total > maxBytes) throw new Error('Альбом больше 150 МБ. Скачайте фотографии частями.');
+                const mime = response.headers.get('content-type') || '';
+                const path = new URL(resolveUrl(item.content), window.location.href).pathname;
+                const extFromPath = path.split('.').pop()?.toLowerCase();
+                const ext = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'avif'].includes(extFromPath) ? extFromPath
+                    : mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp'
+                    : mime.includes('gif') ? 'gif' : mime.includes('heic') ? 'heic' : 'jpg';
+                entries.push({ name: `photo-${String(i + 1).padStart(2, '0')}.${ext}`, data });
+                setDownloadProgress(Math.round(((i + 1) / targets.length) * 100));
             }
+            const blob = buildAlbumZip(entries);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `album-${items[0].albumId || 'photos'}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
         } catch (error) {
-            window.alert('Не удалось скачать фотографии: ' + error.message);
-        } finally { setBusy(false); }
+            window.alert('Не удалось скачать альбом: ' + error.message);
+        } finally { setBusy(false); setDownloadProgress(null); }
     };
     return <div className={`mrr-v2-album-row ${own ? 'mrr-v2-album-own' : ''} ${selected.length ? 'mrr-v2-album-selecting' : ''}`} aria-label={`Альбом: ${items.length} фотографий`}>
         {!own && <button type="button" onClick={onProfile} aria-label={sender.fullName}><Avatar user={sender} size={34} online={onlineSet?.has(sender.id)}/></button>}
