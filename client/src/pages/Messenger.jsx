@@ -211,6 +211,9 @@ export default function Messenger() {
         setHistoryStart(start);
     };
     const revealNewer = () => {
+        const el = scrollRef.current;
+        const anchor = el?.querySelector('[data-message-row="true"]');
+        if (anchor) prependAnchorRef.current = { nodeId: anchor.id, top: anchor.getBoundingClientRect().top };
         const nextEnd = Math.min(messages.length, (historyEnd ?? messages.length) + historyCount);
         let end = nextEnd;
         while (end < messages.length && messages[end - 1]?.albumId && messages[end]?.albumId === messages[end - 1].albumId) end++;
@@ -233,7 +236,11 @@ export default function Messenger() {
         const anchor = prependAnchorRef.current;
         prependAnchorRef.current = null;
         const el = scrollRef.current;
-        if (el) el.scrollTop = anchor.top + el.scrollHeight - anchor.height;
+        if (!el) return;
+        if (anchor.nodeId) {
+            const node = document.getElementById(anchor.nodeId);
+            if (node) el.scrollTop += node.getBoundingClientRect().top - anchor.top;
+        } else el.scrollTop = anchor.top + el.scrollHeight - anchor.height;
     }, [historyStart]);
 
 
@@ -1088,7 +1095,7 @@ export default function Messenger() {
                                 ↑ Показать предыдущие сообщения ({historyStart})
                             </button>}
                             {messages.map((m, index) => { if (isMessengerV2 && (index < historyStart || (historyEnd !== null && index >= historyEnd))) return null; const album = albumAt(index); return album === 'continuation' ? null : (
-                                <div key={m.id} className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
+                                <div key={m.id} id={`message-row-${m.id}`} data-message-row="true" className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
                                         <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
                                             <span className="rounded-full border px-3 py-1 text-xs font-semibold shadow-sm" style={{ backgroundColor: "var(--bg-elev-2)", color: "var(--text-secondary)", borderColor: "var(--border-strong)" }}>
