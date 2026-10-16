@@ -470,7 +470,7 @@ export default function Messenger() {
         const observer = new ResizeObserver(followBottom);
         observer.observe(el.firstElementChild || el);
         // Only watch recent messages: observing every image-heavy history row is expensive.
-        const tail = Array.from(el.children).slice(-10);
+        const tail = Array.from(el.children).slice(isMessengerV2 ? -10 : undefined);
         tail.forEach((node) => observer.observe(node));
         const onMediaLoad = () => followBottom();
         el.addEventListener('load', onMediaLoad, true);
@@ -512,7 +512,7 @@ export default function Messenger() {
         if (messages.length > 0 && nearBottomRef.current && !linkedMessageId) {
             const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
             const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-            el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion || distance > el.clientHeight * 2 ? 'instant' : 'smooth' });
+            el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion || (isMessengerV2 && distance > el.clientHeight * 2) ? 'instant' : 'smooth' });
         }
     }, [messages.length, firstUnreadId, linkedMessageId]);
 
@@ -1077,7 +1077,7 @@ export default function Messenger() {
                                     setUnseenCount(0);
                                     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
                                     const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced || distance > el.clientHeight * 2 ? 'instant' : 'smooth' });
+                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced || (isMessengerV2 && distance > el.clientHeight * 2) ? 'instant' : 'smooth' });
                                 }}
                                 className="absolute bottom-4 right-4 md:right-6 z-20 flex items-center gap-2 rounded-full border px-3 py-2.5 shadow-lg backdrop-blur-md transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet"
                                 style={{ backgroundColor: 'var(--bg-elev-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}>
