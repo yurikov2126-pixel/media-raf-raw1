@@ -18,6 +18,34 @@ const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } });
 
 const router = Router();
 
+// Small cached thumbnails for public chat images. Never access editorial/private uploads.
+router.get('/thumb/:filename', async (req, res) => {
+    const filename = req.params.filename;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,180}\.(?:jpg|jpeg|png|webp|gif)$/i.test(filename) || filename.includes('..')) {
+        return res.status(400).end();
+    }
+    const original = path.resolve('uploads', filename);
+    const thumbsDir = path.resolve('uploads', '.chat-thumbs');
+    const thumb = path.join(thumbsDir, filename + '.webp');
+    try {
+        await fs.stat(original);
+        await fs.mkdir(thumbsDir, { recursive: true });
+        try {
+            await fs.stat(thumb);
+        } catch {
+            const bytes = await sharp(original).rotate().resize({ width: 360, height: 360, fit: 'inside', withoutEnlargement: true }).webp({ quality: 72 }).toBuffer();
+            await fs.writeFile(thumb, bytes);
+        }
+        res.type('webp');
+        res.set('Cache-Control', 'public, max-age=86400, immutable');
+        return res.sendFile(thumb);
+    } catch (error) {
+        if (error.code === 'ENOENT') return res.status(404).end();
+        console.error('[chat-thumb]', error);
+        return res.status(500).end();
+    }
+});
+
 router.post('/', auth, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
