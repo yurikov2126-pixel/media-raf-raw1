@@ -2423,11 +2423,18 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @media(prefers-reduced-motion:reduce){.mrr-v2-telegram-menu{animation:none}}
 
 /* Messenger 2.0: outgoing and incoming text bubbles share the neutral themed surface. */
-.mrr-v2-message-surface.mrr-v2-neutral-bubble {
+/* Identical neutral surface for both message directions in both themes. */
+.mrr-messenger-v2 .mrr-v2-message-surface.mrr-v2-neutral-bubble {
   background:var(--bg-elev-2) !important;
+  background-image:none !important;
   color:var(--text-primary) !important;
   border:1px solid var(--border-strong);
-  background-image:none !important;
+}
+.mrr-messenger-v2 .mrr-v2-message-surface.mrr-v2-neutral-bubble .text-white {
+  color:var(--text-primary) !important;
+}
+.mrr-messenger-v2 .mrr-v2-message-surface.mrr-v2-neutral-bubble .border-white\\/40 {
+  border-color:var(--border-strong) !important;
 }
 .mrr-v2-telegram-menu-scrim { animation:mrr-v2-tg-backdrop-in 190ms ease-out both; }
 .mrr-v2-telegram-menu-scrim.is-closing { animation:mrr-v2-tg-backdrop-out 180ms ease-in both; pointer-events:none; }

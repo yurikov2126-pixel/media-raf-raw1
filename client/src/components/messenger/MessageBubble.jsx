@@ -87,8 +87,8 @@ export default function MessageBubble({
     const bubbleClass = isMediaOnly
         ? 'bg-transparent !p-0'
         : isOwn
-            ? 'text-white mrr-own-bubble'
-            : 'bg-ink-700 text-white mrr-other-bubble';
+            ? (v2 ? 'mrr-other-bubble mrr-v2-neutral-bubble' : 'text-white mrr-own-bubble')
+            : (v2 ? 'mrr-other-bubble mrr-v2-neutral-bubble' : 'bg-ink-700 text-white mrr-other-bubble');
 
     return (
         <div
