@@ -2111,3 +2111,26 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
   .mrr-messenger-v2 > section > .border-t { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { .mrr-messenger-v2 *, .mrr-messenger-v2 *::before, .mrr-messenger-v2 *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Messenger 2.0 mobile refinement. Scoped to the opt-in version only. */
+.mrr-messenger-v2 .mrr-v2-search-toggle { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; background: var(--bg-elev-2); color: var(--text-primary); font-size: 25px; }
+.mrr-messenger-v2 .mrr-v2-search-wrap { margin-top: 12px; }
+.mrr-messenger-v2 .mrr-v2-search-input { width: 100%; min-height: 44px; border-radius: 14px; padding: 0 14px; border: 1px solid var(--border-strong); background: var(--bg-elev-2); color: var(--text-primary); outline-offset: 2px; }
+.mrr-messenger-v2 .mrr-v2-search-input:focus-visible { outline: 2px solid var(--brand-accent-1); }
+.mrr-messenger-v2 .mrr-v2-composer .mrr-v2-message-field { transition: height 90ms ease; line-height: 1.45; overflow-y: auto; }
+@media (max-width: 767px) {
+  .mrr-messenger-v2 > aside { background: var(--bg-elev-1); }
+  .mrr-messenger-v2 > aside > div:first-child { padding: 17px 16px 13px; border-bottom: 1px solid var(--border-strong); }
+  .mrr-messenger-v2 > aside .mrr-v2-chat-item > button:first-of-type { margin: 2px 6px; width: calc(100% - 12px); padding: 12px 11px; border-radius: 17px; min-height: 76px; }
+  .mrr-messenger-v2 > aside .mrr-v2-chat-item > button:first-of-type:active { background: var(--bg-elev-2); transform: scale(.992); }
+  .mrr-messenger-v2 .mrr-v2-chat-header { padding-inline: 12px; min-height: 65px; box-shadow: 0 1px 8px rgba(0,0,0,.06); }
+  .mrr-messenger-v2 .mrr-v2-chat-header > button:first-child { flex-shrink: 0; }
+  .mrr-messenger-v2 .mrr-v2-composer { padding: 10px 10px max(10px, env(safe-area-inset-bottom)) !important; }
+  .mrr-messenger-v2 .mrr-v2-composer .mrr-v2-message-field { min-height: 44px; }
+  .mrr-messenger-v2 .mrr-v2-chat-menu-scrim { background: rgba(0,0,0,.45); backdrop-filter: blur(3px); }
+  .mrr-messenger-v2 .mrr-v2-chat-menu { position: fixed; inset: auto 10px max(12px, env(safe-area-inset-bottom)) 10px; width: auto; z-index: 80; border-radius: 20px; padding: 7px; background: var(--bg-elev-1); color: var(--text-primary); border: 1px solid var(--border-strong); box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+  .mrr-messenger-v2 .mrr-v2-chat-menu button { width: 100%; min-height: 48px; text-align: left; border-radius: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mrr-messenger-v2 .mrr-v2-composer .mrr-v2-message-field { transition: none; }
+}

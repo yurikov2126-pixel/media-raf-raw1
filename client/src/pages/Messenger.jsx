@@ -100,6 +100,7 @@ export default function Messenger() {
     const [typingByChat, setTypingByChat] = useState({});     // для списка чатов
     const [search, setSearch] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
+    const [v2MobileSearch, setV2MobileSearch] = useState(false);
     const [chatFilter, setChatFilter] = useState('all');
     const [messageSearchOpen, setMessageSearchOpen] = useState(false);
     const [messageQuery, setMessageQuery] = useState('');
@@ -139,8 +140,21 @@ export default function Messenger() {
     const fileRef = useRef(null);
     const mediaFileRef = useRef(null);
     const textareaRef = useRef(null);
+    const v2SearchRef = useRef(null);
     const needsInitialScroll = useRef(false);
     const mediaFollowChatRef = useRef(null);
+
+    useEffect(() => {
+        if (!isMessengerV2 || !v2MobileSearch) return;
+        v2SearchRef.current?.focus();
+    }, [isMessengerV2, v2MobileSearch]);
+
+    useEffect(() => {
+        if (!isMessengerV2 || !chatId || !textareaRef.current) return;
+        const field = textareaRef.current;
+        field.style.height = 'auto';
+        field.style.height = Math.min(field.scrollHeight, 160) + 'px';
+    }, [isMessengerV2, chatId, text]);
 
     const activeChat = chats.find((c) => c.id === chatId);
     const chatTitle = useMemo(() => {
@@ -674,8 +688,14 @@ export default function Messenger() {
                     <div className="flex items-center gap-1">
                         <h2 className="text-xl font-bold">Чаты</h2>
                         {isMessengerV2 && <span className="mrr-v2-label" aria-label="Новый интерфейс">2.0</span>}
-                        <div className="ml-auto"><NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} /></div>
+                        <div className="ml-auto flex items-center gap-1">
+                            {isMessengerV2 && <button type="button" className="mrr-v2-search-toggle md:hidden" aria-label={v2MobileSearch ? 'Закрыть поиск чатов' : 'Найти чат'} aria-expanded={v2MobileSearch} onClick={() => { setV2MobileSearch((value) => !value); setSearch(''); }}>{v2MobileSearch ? '✕' : '⌕'}</button>}
+                            <NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} />
+                        </div>
                     </div>
+                    {isMessengerV2 && v2MobileSearch && <div className="mrr-v2-search-wrap md:hidden">
+                        <input ref={v2SearchRef} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Имя или сообщение…" className="mrr-v2-search-input" aria-label="Поиск по списку чатов" />
+                    </div>}
                     <div className="flex items-center gap-2 mt-3" role="group" aria-label="Фильтр чатов">
                         <button type="button" onClick={() => setChatFilter('all')} aria-pressed={chatFilter === 'all'}
                             className={`rounded-full px-3 py-1.5 text-sm transition ${chatFilter === 'all' ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/40' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
@@ -705,7 +725,7 @@ export default function Messenger() {
                         return (
                             <div
                                 key={c.id}
-                                className="relative group"
+                                className="relative group mrr-v2-chat-item"
                                 onContextMenu={(e) => {
                                     e.preventDefault();
                                     setChatMenu({ x: e.clientX, y: e.clientY, chat: c });
@@ -771,7 +791,7 @@ export default function Messenger() {
                     </div>
                 ) : (
                     <>
-                        <header className="relative z-30 px-3 py-2.5 md:px-4 border-b border-white/10 bg-ink-800/80 backdrop-blur flex items-center gap-2 shrink-0">
+                        <header className="relative z-30 px-3 py-2.5 md:px-4 border-b border-white/10 bg-ink-800/80 backdrop-blur flex items-center gap-2 shrink-0 mrr-v2-chat-header">
                             <button
                                 className="md:hidden btn-ghost !p-2 min-w-10 min-h-10 rounded-xl"
                                 onClick={() => nav('/app/chats')}
@@ -918,7 +938,7 @@ export default function Messenger() {
                         </div>
 
                         {/* Панель ввода */}
-                        <div className="border-t border-white/10 p-2.5 md:p-3 space-y-2 shrink-0 bg-ink-900/95 backdrop-blur relative">
+                        <div className="border-t border-white/10 p-2.5 md:p-3 space-y-2 shrink-0 bg-ink-900/95 backdrop-blur relative mrr-v2-composer">
                             {replyTo && (
                                 <div className="flex items-center gap-2 bg-ink-700/60 rounded-2xl px-3 py-2 text-sm">
                                     <div className="w-1 h-8 rounded bg-violet" />
@@ -1040,7 +1060,7 @@ export default function Messenger() {
                                             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing && window.matchMedia('(min-width: 768px)').matches) { e.preventDefault(); send(); }
                                         }}
                                         placeholder="Написать сообщение…"
-                                        className="input flex-1 min-w-0 resize-none max-h-40 !py-2.5 md:!py-3 text-base rounded-2xl" aria-label="Текст сообщения"
+                                        className="input flex-1 min-w-0 resize-none max-h-40 !py-2.5 md:!py-3 text-base rounded-2xl mrr-v2-message-field" aria-label="Текст сообщения"
                                         autoComplete="off"
                                     />
 
@@ -1213,8 +1233,8 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <div className="fixed inset-0 z-[70]" onClick={() => setChatMenu(null)} />
-                        <div className="card p-1 w-52 animate-pop" style={style}>
+                        <div className="fixed inset-0 z-[70] mrr-v2-chat-menu-scrim" onClick={() => setChatMenu(null)} />
+                        <div className={`card p-1 w-52 animate-pop ${isMessengerV2 ? 'mrr-v2-chat-menu' : ''}`} style={isMessengerV2 && window.innerWidth < 768 ? undefined : style}>
                             <button
                                 onClick={() => { setChatMenu(null); deleteChat(c); }}
                                 className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 text-pink"
