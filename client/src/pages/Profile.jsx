@@ -1,3 +1,5 @@
+import { useOnlineUsers } from '../store/socket.jsx';
+import { presenceLabel } from '../lib/presence.js';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client.js';
@@ -88,6 +90,7 @@ export default function Profile() {
     const { username } = useParams();
     const location = useLocation();
     const { user: me, token } = useAuth();
+    const onlineUsers = useOnlineUsers();
     const gamifStore = useGamification();
 
     const [profile, setProfile] = useState(null);
@@ -224,6 +227,7 @@ export default function Profile() {
                     <div className="text-2xl md:text-3xl font-bold break-words leading-tight">
                         {profile.fullName}
                     </div>
+                    {!isMe && <div className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }} aria-label="Последнее посещение">{presenceLabel(profile.lastSeen, onlineUsers.has(profile.id))}</div>}
                     {gamif?.stats && gamifStore.enabled && (
                         <div className="mt-2">
                             <LevelBadge level={gamif.stats.level} size="md" />
