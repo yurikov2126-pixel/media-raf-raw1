@@ -241,7 +241,7 @@ export default function Messenger() {
             const node = document.getElementById(anchor.nodeId);
             if (node) el.scrollTop += node.getBoundingClientRect().top - anchor.top;
         } else el.scrollTop = anchor.top + el.scrollHeight - anchor.height;
-    }, [historyStart]);
+    }, [historyStart, historyEnd]);
 
 
     useEffect(() => {
@@ -584,7 +584,7 @@ export default function Messenger() {
             return;
         }
         // Do not yank the reader away from older messages when a new message arrives.
-        if (messages.length > 0 && nearBottomRef.current && !linkedMessageId) {
+        if (messages.length > 0 && nearBottomRef.current && !linkedMessageId && (!isMessengerV2 || historyEnd === null)) {
             const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
             const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
             el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion || (isMessengerV2 && distance > el.clientHeight * 2) ? 'instant' : 'smooth' });
