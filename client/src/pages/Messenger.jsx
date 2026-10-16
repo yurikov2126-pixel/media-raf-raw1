@@ -777,6 +777,7 @@ export default function Messenger() {
         const finish = (e) => {
             if (e.pointerId !== event.pointerId || gesture.finished) return;
             gesture.finished = true;
+            if (e.type === 'pointercancel') gesture.action = 'cancel';
             clearVoicePress();
             voicePressRef.current = null;
             setRecordGesture('');
