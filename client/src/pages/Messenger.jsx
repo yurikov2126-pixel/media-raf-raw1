@@ -176,6 +176,20 @@ export default function Messenger() {
 
     const [recording, setRecording] = useState(false);
     const [recordingSec, setRecordingSec] = useState(0);
+    const [voiceDraft, setVoiceDraft] = useState(null);
+    const voiceDraftUrlRef = useRef(null);
+    const recordGestureRef = useRef(null);
+    const recordCancelRef = useRef(false);
+    const [recordGesture, setRecordGesture] = useState('');
+    const clearVoiceDraft = () => {
+        if (voiceDraftUrlRef.current) URL.revokeObjectURL(voiceDraftUrlRef.current);
+        voiceDraftUrlRef.current = null;
+        setVoiceDraft(null);
+    };
+    useEffect(() => () => {
+        if (voiceDraftUrlRef.current) URL.revokeObjectURL(voiceDraftUrlRef.current);
+    }, []);
+
     const mediaRecorderRef = useRef(null);
     const recChunksRef = useRef([]);
     const recMimeRef = useRef('audio/webm');
@@ -703,11 +717,17 @@ export default function Messenger() {
             mr.onstop = async () => {
                 stream.getTracks().forEach((t) => t.stop());
                 const blob = new Blob(recChunksRef.current, { type: recMimeRef.current });
-                if (blob.size < 1000) return;
+                if (recordCancelRef.current || blob.size < 1000) return;
                 const ext = extFromMime(recMimeRef.current);
                 const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: recMimeRef.current });
-                await sendFile(file, 'voice');
+                if (!isMessengerV2) { await sendFile(file, 'voice'); return; }
+                if (voiceDraftUrlRef.current) URL.revokeObjectURL(voiceDraftUrlRef.current);
+                const url = URL.createObjectURL(blob);
+                voiceDraftUrlRef.current = url;
+                setVoiceDraft({ file, url });
             };
+            recordCancelRef.current = false;
+            clearVoiceDraft();
             mr.start(1000);
             setRecording(true); setRecordingSec(0);
             recTimerRef.current = setInterval(() => setRecordingSec((s) => s + 1), 1000);
@@ -719,8 +739,40 @@ export default function Messenger() {
         if (!mr) return;
         clearInterval(recTimerRef.current);
         setRecording(false);
-        if (cancel) { mr.ondataavailable = null; mr.onstop = null; }
-        mr.stop();
+        recordCancelRef.current = cancel;
+        setRecordGesture('');
+        recordGestureRef.current = null;
+        if (mr.state !== 'inactive') mr.stop();
+        mediaRecorderRef.current = null;
+    };
+
+    const sendVoiceDraft = async () => {
+        if (!voiceDraft || uploading) return;
+        const file = voiceDraft.file;
+        clearVoiceDraft();
+        await sendFile(file, 'voice');
+    };
+    const onVoiceTouchStart = (e) => {
+        if (!isMessengerV2) return;
+        const t = e.touches?.[0];
+        if (!t) return;
+        recordGestureRef.current = { x: t.clientX, y: t.clientY };
+    };
+    const onVoiceTouchMove = (e) => {
+        if (!recordGestureRef.current || !recording) return;
+        const t = e.touches?.[0];
+        if (!t) return;
+        const dx = t.clientX - recordGestureRef.current.x;
+        const dy = t.clientY - recordGestureRef.current.y;
+        setRecordGesture(dx < -75 ? 'cancel' : dy < -75 ? 'lock' : '');
+    };
+    const onVoiceTouchEnd = () => {
+        if (!recordGestureRef.current || !recording) return;
+        const gesture = recordGesture;
+        recordGestureRef.current = null;
+        setRecordGesture('');
+        if (gesture === 'cancel') stopRecording(true);
+        // Swipe up locks recording: it keeps running until Stop is tapped.
     };
 
     const handleChange = (e) => {
@@ -1245,15 +1297,24 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {pendingFiles.length > 0 ? null : recording ? (
-                                <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
+                            {pendingFiles.length > 0 ? null : voiceDraft && isMessengerV2 ? (
+                                <div className="flex flex-col gap-2 rounded-2xl border p-3" style={{background:'var(--bg-elev-2)', borderColor:'var(--border-strong)'}}>
+                                    <div className="flex items-center gap-2 text-sm"><span>🎤</span><span>Прослушайте запись перед отправкой</span></div>
+                                    <audio controls preload="metadata" src={voiceDraft.url} className="w-full" aria-label="Предпрослушивание голосового сообщения" />
+                                    <div className="flex items-center justify-end gap-2">
+                                        <button type="button" onClick={clearVoiceDraft} className="btn-ghost !py-2 !px-3 text-sm">Удалить</button>
+                                        <button type="button" disabled={uploading} onClick={sendVoiceDraft} className="btn-primary !py-2 !px-3 text-sm">Отправить ➤</button>
+                                    </div>
+                                </div>
+                            ) : recording ? (
+                                <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2" onTouchStart={onVoiceTouchStart} onTouchMove={onVoiceTouchMove} onTouchEnd={onVoiceTouchEnd}>
                                     <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
                                     <div className="flex-1">
-                                        <div className="text-sm text-pink">Запись голосового…</div>
-                                        <div className="text-xs text-white/50">{recordingSec} сек</div>
+                                        <div className="text-sm text-pink">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись закреплена' : 'Запись голосового…'}</div>
+                                        <div className="text-xs text-white/50">{recordingSec} сек {isMessengerV2 ? '· ← отменить · ↑ закрепить' : ''}</div>
                                     </div>
                                     <button onClick={() => stopRecording(true)} className="btn-ghost !py-1.5 !px-3 text-xs text-white/70">Отмена</button>
-                                    <button onClick={() => stopRecording(false)} className="btn-primary !py-1.5 !px-3 text-xs">Отправить ➤</button>
+                                    <button onClick={() => stopRecording(false)} className="btn-primary !py-1.5 !px-3 text-xs">{isMessengerV2 ? 'Готово ✓' : 'Отправить ➤'}</button>
                                 </div>
                             ) : (
                                 <div className="flex items-end gap-1.5 md:gap-2">
