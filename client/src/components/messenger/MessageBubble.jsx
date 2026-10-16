@@ -144,9 +144,10 @@ export default function MessageBubble({
                             className="block w-full text-left border-l-2 border-white/40 pl-2 mb-1 text-xs opacity-80 hover:opacity-100"
                         >
                             <div className="font-bold">{m.replyTo.sender?.fullName}</div>
+                            {m.replyTo.type === 'image' && v2 && <img src={resolveUrl(m.replyTo.content)} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover float-left mr-2" />}
                             <div className="truncate max-w-[200px]">
                                 {m.replyTo.type === 'image'
-                                    ? '🖼️ Изображение'
+                                    ? (m.replyTo.albumId ? '🖼️ Фотоальбом' : '🖼️ Фотография')
                                     : m.replyTo.type === 'video'
                                         ? '🎥 Видео'
                                         : m.replyTo.type === 'voice'
