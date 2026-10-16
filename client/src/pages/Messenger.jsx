@@ -2,7 +2,7 @@ import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
 import AttachmentEditorV2 from '../components/messenger/AttachmentEditorV2.jsx';
 import { uploadFileWithProgress } from '../api/client.js';
 import { sendAttachmentBatch } from '../lib/sendAttachmentBatch.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useLayoutEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -194,6 +194,25 @@ export default function Messenger() {
     const v2SearchRef = useRef(null);
     const needsInitialScroll = useRef(false);
     const mediaFollowChatRef = useRef(null);
+    // Bounded history rendering (first phase of virtualization). Keep an anchor
+    // when prepending older rows, including rows with images of variable height.
+    const [historyStart, setHistoryStart] = useState(0);
+    const prependAnchorRef = useRef(null);
+    const historyCount = 120;
+    const revealOlder = () => {
+        const el = scrollRef.current;
+        if (!el || historyStart === 0) return;
+        prependAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+        setHistoryStart((value) => Math.max(0, value - historyCount));
+    };
+    useLayoutEffect(() => {
+        if (!prependAnchorRef.current) return;
+        const anchor = prependAnchorRef.current;
+        prependAnchorRef.current = null;
+        const el = scrollRef.current;
+        if (el) el.scrollTop = anchor.top + el.scrollHeight - anchor.height;
+    }, [historyStart]);
+
 
     useEffect(() => {
         if (!isMessengerV2 || !v2MobileSearch) return;
@@ -330,9 +349,14 @@ export default function Messenger() {
         setUnseenCount(0);
         api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
             if (Array.isArray(r)) {
+                setHistoryStart(isMessengerV2 ? Math.max(0, r.length - historyCount) : 0);
                 setMessages(r); setPinned(null); setMyRole('member');
             } else {
-                setMessages(r.messages || []);
+                const incoming = r.messages || [];
+                const focus = linkedMessageId || r.firstUnreadId;
+                const focusIndex = focus ? incoming.findIndex((m) => m.id === focus) : -1;
+                setHistoryStart(isMessengerV2 ? Math.max(0, focusIndex >= 0 ? focusIndex - 30 : incoming.length - historyCount) : 0);
+                setMessages(incoming);
                 setPinned(r.pinned || null);
                 setMyRole(r.myRole || 'member');
                 setFirstUnreadId(r.firstUnreadId || null);
@@ -1016,7 +1040,10 @@ export default function Messenger() {
                             setShowJumpToLatest(!nearBottom);
                             if (nearBottom) setUnseenCount(0);
                         }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 md:px-6 py-4 space-y-2">
-                            {messages.map((m, index) => { const album = albumAt(index); return album === 'continuation' ? null : (
+                            {isMessengerV2 && historyStart > 0 && <button type="button" className="mrr-v2-load-history" onClick={revealOlder}>
+                                ↑ Показать предыдущие сообщения ({historyStart})
+                            </button>}
+                            {messages.map((m, index) => { if (isMessengerV2 && index < historyStart) return null; const album = albumAt(index); return album === 'continuation' ? null : (
                                 <div key={m.id} className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
                                         <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
