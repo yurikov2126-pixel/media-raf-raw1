@@ -109,6 +109,33 @@ export default function Messenger() {
     const [messageMatchIndex, setMessageMatchIndex] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [pendingFiles, setPendingFiles] = useState([]);
+    const [dragFilesOver, setDragFilesOver] = useState(false);
+    const dragDepth = useRef(0);
+    const acceptsFiles = (event) => Array.from(event.dataTransfer?.types || []).includes('Files');
+    const handleDragEnter = (event) => {
+        if (!isMessengerV2 || !chatId || uploading || !acceptsFiles(event)) return;
+        event.preventDefault();
+        dragDepth.current += 1;
+        setDragFilesOver(true);
+    };
+    const handleDragOver = (event) => {
+        if (!isMessengerV2 || !chatId || uploading || !acceptsFiles(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+    };
+    const handleDragLeave = (event) => {
+        if (!acceptsFiles(event)) return;
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragFilesOver(false);
+    };
+    const handleFileDrop = (event) => {
+        if (!isMessengerV2 || !chatId || uploading || !acceptsFiles(event)) return;
+        event.preventDefault();
+        dragDepth.current = 0;
+        setDragFilesOver(false);
+        const incoming = Array.from(event.dataTransfer.files || []);
+        if (incoming.length) setPendingFiles((current) => [...current, ...incoming].slice(0, 20));
+    };
     const [attachmentCaptions, setAttachmentCaptions] = useState({});
     const [attachmentProgress, setAttachmentProgress] = useState(0);
     const [attachmentIndex, setAttachmentIndex] = useState(0);
@@ -721,6 +748,10 @@ export default function Messenger() {
                     height: visibleViewport.height,
                 } : {}),
             } : undefined}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleFileDrop}
             onClick={() => {
                 if (contextMenu) setContextMenu(null);
                 if (chatMenu) setChatMenu(null);
@@ -728,6 +759,11 @@ export default function Messenger() {
                 if (attachMenu) setAttachMenu(false);
             }}
         >
+            {dragFilesOver && isMessengerV2 && chatId && (
+                <div className="mrr-v2-drop-overlay" aria-hidden="true">
+                    <div className="mrr-v2-drop-overlay-label">📎 Отпустите файлы для добавления</div>
+                </div>
+            )}
             {/* Список чатов */}
             <aside className={`${chatId ? 'hidden md:flex' : 'flex'} md:w-80 w-full flex-col border-r border-white/5 bg-ink-800/50 min-h-0`}>
                 <div className="p-4 border-b border-white/5 shrink-0">
