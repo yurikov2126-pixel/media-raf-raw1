@@ -8,6 +8,8 @@ export async function sendAttachmentBatch({
     makeId = () => crypto.randomUUID(),
 }) {
     let completed = 0;
+    const isAlbum = files.filter((file) => file.type.startsWith('image/')).length > 1;
+    const albumId = isAlbum ? makeId() : null;
     try {
         for (const file of files) {
             const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
@@ -20,6 +22,7 @@ export async function sendAttachmentBatch({
             await new Promise((resolve, reject) => {
                 socket.timeout(15000).emit('message:send', {
                     chatId, content: result.url, type, clientMessageId: requestId,
+                    ...(type === 'image' && albumId ? { albumId } : {}),
                     caption: (captions[completed] || '').trim() || undefined,
                     replyToId: completed === 0 ? replyToId : undefined,
                 }, (error, response) => {
