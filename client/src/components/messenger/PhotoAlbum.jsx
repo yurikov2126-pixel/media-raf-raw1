@@ -8,22 +8,19 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
     const [selected, setSelected] = useState([]);
     const [busy, setBusy] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(null);
-    const [menuOpen, setMenuOpen] = useState(false);
-    const menuRef = useRef(null);
+
     const pressTimer = useRef(null);
     const gesture = useRef(null);
     useEffect(() => () => clearTimeout(pressTimer.current), []);
     useEffect(() => {
-        if (!menuOpen) return undefined;
-        const closeOutside = (event) => { if (!menuRef.current?.contains(event.target)) setMenuOpen(false); };
-        const closeOnEscape = (event) => { if (event.key === 'Escape') setMenuOpen(false); };
-        document.addEventListener('pointerdown', closeOutside);
-        document.addEventListener('keydown', closeOnEscape);
-        return () => {
-            document.removeEventListener('pointerdown', closeOutside);
-            document.removeEventListener('keydown', closeOnEscape);
+        const onAction = (event) => {
+            if (event.detail?.albumId !== items[0]?.albumId) return;
+            if (event.detail.action === 'select') setSelected((current) => current.length ? [] : items.map((item) => item.id));
+            if (event.detail.action === 'download') download();
         };
-    }, [menuOpen]);
+        window.addEventListener('mrr:album-action', onAction);
+        return () => window.removeEventListener('mrr:album-action', onAction);
+    });
     const toggle = (id) => setSelected((current) => current.includes(id) ? current.filter((key) => key !== id) : [...current, id]);
     const startPress = (event, item) => {
         if (event.pointerType !== 'touch') return;
@@ -86,13 +83,6 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
         <div className="mrr-v2-album-body">
             {!own && <div className="mrr-v2-album-author">{sender.fullName}</div>}
             <div className="mrr-v2-album-grid-wrap">
-                <div className="mrr-v2-album-menu" ref={menuRef}>
-                    <button type="button" className="mrr-v2-album-menu-trigger" aria-label="Действия с альбомом" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((value) => !value)}>⋯</button>
-                    {menuOpen && <div role="menu" className="mrr-v2-album-dropdown">
-                        <button role="menuitem" type="button" onClick={() => { setSelected(selected.length ? [] : items.map((item) => item.id)); setMenuOpen(false); }}>{selected.length ? 'Отменить выбор' : 'Выбрать фото'}</button>
-                        <button role="menuitem" type="button" disabled={busy} onClick={() => { setMenuOpen(false); download(); }}>{selected.length ? `Скачать выбранные (${selected.length})` : 'Скачать альбом'}</button>
-                    </div>}
-                </div>
             <div className="mrr-v2-album-grid">
                 {items.map((item, index) => <button
                     type="button" key={item.id} id={`msg-${item.id}`}
