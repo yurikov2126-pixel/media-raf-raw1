@@ -1411,6 +1411,7 @@ export default function Messenger() {
 
             {viewerIndex !== null && imageMessages.length > 0 && (
                 <ImageViewer
+                    messengerOptimized={isMessengerV2}
                     images={imageMessages}
                     startIndex={viewerIndex}
                     onClose={() => setViewerIndex(null)}

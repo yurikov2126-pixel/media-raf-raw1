@@ -18,13 +18,15 @@ const SLIDE_MS = 200;                // длительность анимаци�
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
+export default function ImageViewer({ images = [], startIndex = 0, onClose, messengerOptimized = false }) {
     const total = images.length;
     const [index, setIndex] = useState(startIndex);
     const [imgLoaded, setImgLoaded] = useState(false);
     const [chromeVisible, setChromeVisible] = useState(true);
     const [zoom, setZoom] = useState(1);
     const zoomRef = useRef(1);
+    const decodedImages = useRef(new Set());
+    const navigationTimer = useRef(null);
 
     const stageRef = useRef(null);       // контейнер, который трансформируется при свайпе
     const backdropRef = useRef(null);    // затемнение, гаснет при свайпе вниз
@@ -46,6 +48,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
 
     /* Синхронизация с внешним startIndex */
     useEffect(() => { setIndex(startIndex); }, [startIndex]);
+    useEffect(() => () => { clearTimeout(navigationTimer.current); }, []);
 
     /* Блокируем скролл body + регистрируемся в стеке модалок */
     useEffect(() => {
@@ -60,7 +63,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
 
     /* Обработка смены index: сброс зума, слайд-анимация */
     useEffect(() => {
-        setImgLoaded(false);
+        setImgLoaded(messengerOptimized && decodedImages.current.has(images[index]?.url));
         setZoom(1);
         zoomRef.current = 1;
         drag.current.panX = 0;
@@ -92,17 +95,24 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
             bd.style.transition = 'none';
             bd.style.opacity = '1';
         }
-    }, [index]);
+    }, [index, messengerOptimized, images]);
 
     /* Предзагрузка соседних изображений */
     useEffect(() => {
-        [index - 1, index + 1].forEach((i) => {
-            if (i >= 0 && i < total) {
-                const im = new Image();
-                im.src = images[i].url;
+        const nearby = [index - 1, index + 1].filter((i) => i >= 0 && i < total);
+        const previews = nearby.map((i) => {
+            const im = new Image();
+            const url = images[i].url;
+            if (messengerOptimized) {
+                im.onload = () => decodedImages.current.add(url);
             }
+            im.src = url;
+            if (messengerOptimized && im.decode) im.decode().then(() => decodedImages.current.add(url)).catch(() => {});
+            if (messengerOptimized && im.complete && im.naturalWidth) decodedImages.current.add(url);
+            return im;
         });
-    }, [index, total, images]);
+        return () => { previews.forEach((im) => { im.onload = null; im.onerror = null; }); };
+    }, [index, total, images, messengerOptimized]);
 
     /* ───── Навигация ───── */
     const goPrev = useCallback(() => {
@@ -264,9 +274,9 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
             }
             setStage(tx, 0, 1);
         } else if (drag.current.axis === 'y') {
-            const ty = Math.max(0, dy);
+            const ty = messengerOptimized ? dy : Math.max(0, dy);
             const scale = 1 - Math.min(0.35, ty / 1200);
-            const opacity = 1 - Math.min(0.85, ty / 450);
+            const opacity = 1 - Math.min(0.85, Math.abs(ty) / 450);
             setStage(0, ty, scale);
             setBackdrop(opacity);
         }
@@ -333,7 +343,8 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
 
             if (wantNext) {
                 setStage(-window.innerWidth, 0, 1, true, SLIDE_MS);
-                setTimeout(() => {
+                clearTimeout(navigationTimer.current);
+                navigationTimer.current = setTimeout(() => {
                     pendingSlideRef.current = 1;
                     setIndex((i) => i + 1);
                 }, SLIDE_MS - 20);
@@ -341,7 +352,8 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
             }
             if (wantPrev) {
                 setStage(window.innerWidth, 0, 1, true, SLIDE_MS);
-                setTimeout(() => {
+                clearTimeout(navigationTimer.current);
+                navigationTimer.current = setTimeout(() => {
                     pendingSlideRef.current = -1;
                     setIndex((i) => i - 1);
                 }, SLIDE_MS - 20);
@@ -354,12 +366,13 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
 
         /* Вертикальный свайп вниз — закрыть */
         if (drag.current.axis === 'y') {
-            const vFast = vy > SWIPE_DOWN_VELOCITY;
-            const far = dy > SWIPE_DOWN_THRESHOLD;
+            const vFast = messengerOptimized ? Math.abs(vy) > SWIPE_DOWN_VELOCITY : vy > SWIPE_DOWN_VELOCITY;
+            const far = messengerOptimized ? Math.abs(dy) > SWIPE_DOWN_THRESHOLD : dy > SWIPE_DOWN_THRESHOLD;
             if ((far || vFast) && zoom === 1) {
-                setStage(0, window.innerHeight, 0.6, true);
+                setStage(0, dy < 0 && messengerOptimized ? -window.innerHeight : window.innerHeight, 0.6, true);
                 setBackdrop(0, true);
-                setTimeout(() => onClose?.(), SLIDE_MS);
+                clearTimeout(navigationTimer.current);
+                navigationTimer.current = setTimeout(() => onClose?.(), SLIDE_MS);
                 return;
             }
             setStage(0, 0, 1, true);
@@ -465,7 +478,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose }) {
                             opacity: imgLoaded ? 1 : 0,
                             transition: 'opacity 0.15s ease',
                         }}
-                        onLoad={() => setImgLoaded(true)}
+                        onLoad={() => { if (messengerOptimized) decodedImages.current.add(current.url); setImgLoaded(true); }}
                         onError={() => setImgLoaded(true)}
                     />
                 </div>
