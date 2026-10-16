@@ -6,7 +6,7 @@ import { resolveUrl } from '../../api/client.js';
 import { Sticker } from '../../stickers/pack.jsx';
 
 export default function MessageBubble({
-                                          m, isOwn, highlight, onlineSet, compact = false, groupEnd = true, v2 = false,
+                                          m, isOwn, highlight, onlineSet, compact = false, groupEnd = true, v2 = false, replyAlbumImages = [],
                                           onOpenImage, onOpenProfile, onScrollToReply, onLongPress, onReact, onSwipeReply,
                                       }) {
     const longPressTimer = useRef(null);
@@ -144,7 +144,7 @@ export default function MessageBubble({
                             className="block w-full text-left border-l-2 border-white/40 pl-2 mb-1 text-xs opacity-80 hover:opacity-100"
                         >
                             <div className="font-bold">{m.replyTo.sender?.fullName}</div>
-                            {m.replyTo.type === 'image' && v2 && <img src={resolveUrl(m.replyTo.content)} alt="" loading="lazy" className="w-12 h-12 rounded-lg object-cover float-left mr-2" />}
+                            {m.replyTo.type === 'image' && v2 && <div className="mrr-v2-reply-preview">{(replyAlbumImages.length ? replyAlbumImages : [m.replyTo]).slice(0,4).map((item) => <img key={item.id} src={resolveUrl(item.content)} alt="" loading="lazy" />)}</div>}
                             <div className="truncate max-w-[200px]">
                                 {m.replyTo.type === 'image'
                                     ? (m.replyTo.albumId ? '🖼️ Фотоальбом' : '🖼️ Фотография')
