@@ -22,6 +22,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
     const total = images.length;
     const [index, setIndex] = useState(startIndex);
     const [imgLoaded, setImgLoaded] = useState(false);
+    const [viewerClosing, setViewerClosing] = useState(false);
     const [chromeVisible, setChromeVisible] = useState(true);
     const [zoom, setZoom] = useState(1);
     const zoomRef = useRef(1);
@@ -29,6 +30,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
     const navigationTimer = useRef(null);
     const carouselStride = () => Math.min(window.innerWidth * 0.9, 760) + 12;
 
+    const rootRef = useRef(null);
     const stageRef = useRef(null);       // контейнер, который трансформируется при свайпе
     const backdropRef = useRef(null);    // затемнение, гаснет при свайпе вниз
     const imgRef = useRef(null);         // само изображение — для зума и пана
@@ -138,10 +140,18 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
         setIndex(i);
     }, [index, total]);
 
+    const closeViewer = useCallback(() => {
+        if (!messengerOptimized) { onClose?.(); return; }
+        if (viewerClosing) return;
+        setViewerClosing(true);
+        clearTimeout(navigationTimer.current);
+        navigationTimer.current = setTimeout(() => onClose?.(), 200);
+    }, [messengerOptimized, onClose, viewerClosing]);
+
     /* Клавиатура */
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'Escape') onClose?.();
+            if (e.key === 'Escape') closeViewer();
             else if (e.key === 'ArrowLeft') goPrev();
             else if (e.key === 'ArrowRight') goNext();
             else if (e.key === '0') {
@@ -158,7 +168,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [onClose, goPrev, goNext]);
+    }, [closeViewer, goPrev, goNext]);
 
     /* ───── Хелперы для inline-стилей ───── */
     const setStage = (x, y, scale, transition = false, ms = SLIDE_MS) => {
@@ -282,7 +292,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
             const ty = messengerOptimized ? dy : Math.max(0, dy);
             const scale = 1 - Math.min(0.35, ty / 1200);
             const opacity = 1 - Math.min(0.85, Math.abs(ty) / 450);
-            setStage(0, ty, scale);
+            setStage(0, messengerOptimized ? 0 : ty, messengerOptimized ? 1 : scale);
             setBackdrop(opacity);
         }
     };
@@ -374,10 +384,15 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
             const vFast = messengerOptimized ? Math.abs(vy) > SWIPE_DOWN_VELOCITY : vy > SWIPE_DOWN_VELOCITY;
             const far = messengerOptimized ? Math.abs(dy) > SWIPE_DOWN_THRESHOLD : dy > SWIPE_DOWN_THRESHOLD;
             if ((far || vFast) && zoom === 1) {
-                setStage(0, dy < 0 && messengerOptimized ? -window.innerHeight : window.innerHeight, 0.6, true);
-                setBackdrop(0, true);
-                clearTimeout(navigationTimer.current);
-                navigationTimer.current = setTimeout(() => onClose?.(), SLIDE_MS);
+                if (messengerOptimized) {
+                    setStage(0, 0, 1);
+                    closeViewer();
+                } else {
+                    setStage(0, window.innerHeight, 0.6, true);
+                    setBackdrop(0, true);
+                    clearTimeout(navigationTimer.current);
+                    navigationTimer.current = setTimeout(() => onClose?.(), SLIDE_MS);
+                }
                 return;
             }
             setStage(0, 0, 1, true);
@@ -444,7 +459,8 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[200] select-none overflow-hidden"
+            ref={rootRef}
+            className={`fixed inset-0 z-[200] select-none overflow-hidden ${messengerOptimized ? `mrr-v2-viewer-fade ${viewerClosing ? 'mrr-v2-viewer-closing' : ''}` : ''}`}
             style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
             onContextMenu={(e) => e.preventDefault()}
             role="dialog"
@@ -569,7 +585,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
                         </button>
                     )}
                     <button
-                        onClick={onClose}
+                        onClick={closeViewer}
                         className="w-10 h-10 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10 text-xl transition"
                         aria-label="Закрыть"
                         title="Закрыть (Esc)"
