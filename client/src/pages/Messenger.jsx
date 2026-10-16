@@ -752,27 +752,51 @@ export default function Messenger() {
         clearVoiceDraft();
         await sendFile(file, 'voice');
     };
-    const onVoiceTouchStart = (e) => {
-        if (!isMessengerV2) return;
-        const t = e.touches?.[0];
-        if (!t) return;
-        recordGestureRef.current = { x: t.clientX, y: t.clientY };
+    // Pointer listeners stay on document: the microphone button is replaced by
+    // the recording UI immediately, so button-level pointerup would be lost.
+    const voicePressRef = useRef(null);
+    const voicePressCleanupRef = useRef(null);
+    const clearVoicePress = () => {
+        voicePressCleanupRef.current?.();
+        voicePressCleanupRef.current = null;
     };
-    const onVoiceTouchMove = (e) => {
-        if (!recordGestureRef.current || !recording) return;
-        const t = e.touches?.[0];
-        if (!t) return;
-        const dx = t.clientX - recordGestureRef.current.x;
-        const dy = t.clientY - recordGestureRef.current.y;
-        setRecordGesture(dx < -75 ? 'cancel' : dy < -75 ? 'lock' : '');
-    };
-    const onVoiceTouchEnd = () => {
-        if (!recordGestureRef.current || !recording) return;
-        const gesture = recordGesture;
-        recordGestureRef.current = null;
-        setRecordGesture('');
-        if (gesture === 'cancel') stopRecording(true);
-        // Recording is already hands-free; upward swipe confirms that it stays active.
+    useEffect(() => () => clearVoicePress(), []);
+    const onVoicePress = (event) => {
+        if (!isMessengerV2 || voicePressRef.current || recording) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        event.preventDefault();
+        const gesture = { x: event.clientX, y: event.clientY, finished: false, action: '' };
+        voicePressRef.current = gesture;
+        const move = (e) => {
+            if (gesture.finished || e.pointerId !== event.pointerId) return;
+            const dx = e.clientX - gesture.x;
+            const dy = e.clientY - gesture.y;
+            gesture.action = dx < -75 ? 'cancel' : dy < -75 ? 'lock' : '';
+            setRecordGesture(gesture.action);
+        };
+        const finish = (e) => {
+            if (e.pointerId !== event.pointerId || gesture.finished) return;
+            gesture.finished = true;
+            clearVoicePress();
+            voicePressRef.current = null;
+            setRecordGesture('');
+            // Upward swipe locks the recording; release otherwise stops into preview.
+            if (gesture.action !== 'lock') {
+                if (mediaRecorderRef.current) stopRecording(gesture.action === 'cancel');
+                else gesture.stopWhenReady = gesture.action === 'cancel' ? 'cancel' : 'preview';
+            }
+        };
+        document.addEventListener('pointermove', move, { passive: true });
+        document.addEventListener('pointerup', finish);
+        document.addEventListener('pointercancel', finish);
+        voicePressCleanupRef.current = () => {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', finish);
+            document.removeEventListener('pointercancel', finish);
+        };
+        startRecording().then(() => {
+            if (gesture.stopWhenReady && mediaRecorderRef.current) stopRecording(gesture.stopWhenReady === 'cancel');
+        });
     };
 
     const handleChange = (e) => {
@@ -1307,7 +1331,7 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             ) : recording ? (
-                                <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2" onTouchStart={onVoiceTouchStart} onTouchMove={onVoiceTouchMove} onTouchEnd={onVoiceTouchEnd}>
+                                <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
                                     <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
                                     <div className="flex-1">
                                         <div className="text-sm text-pink">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись продолжается' : 'Запись голосового…'}</div>
@@ -1377,7 +1401,7 @@ export default function Messenger() {
                                     {text.trim() ? (
                                         <button onClick={send} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 min-w-11 min-h-11 rounded-2xl" aria-label="Отправить сообщение">➤</button>
                                     ) : (
-                                        <button onClick={startRecording} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 min-w-11 min-h-11 rounded-2xl" title="Голосовое сообщение" aria-label="Записать голосовое сообщение">🎤</button>
+                                        <button onPointerDown={isMessengerV2 ? onVoicePress : undefined} onClick={isMessengerV2 ? (e) => e.preventDefault() : startRecording} onContextMenu={(e) => e.preventDefault()} className="btn-primary !p-2.5 md:!p-3 text-lg md:text-xl shrink-0 min-w-11 min-h-11 rounded-2xl select-none" style={{ touchAction: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }} title="Удерживайте для записи; вверх — закрепить, влево — отменить" aria-label="Удерживайте для записи голосового сообщения">🎤</button>
                                     )}
                                 </div>
                             )}
