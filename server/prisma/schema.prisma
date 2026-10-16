@@ -194,6 +194,7 @@ model Message {
   reactions Reaction[]
 
   @@unique([senderId, clientMessageId])
+  @@index([albumId])
 }
 
 model Reaction {
