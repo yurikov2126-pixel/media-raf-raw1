@@ -1383,7 +1383,7 @@ export default function Messenger() {
                                         </div>
                                         <div className="mrr-v2-voice-floating-wrap">
                                             {!recordLocked && <div className={`mrr-v2-voice-lock-guide ${recordGesture === 'lock' ? 'is-ready' : ''}`} aria-hidden="true">
-                                                <span>♙</span><span>⌃</span>
+                                                <span>🔒</span><span>⌃</span>
                                             </div>}
                                             <button type="button"
                                                 className={`mrr-v2-voice-floating-button ${recordLocked ? 'is-locked' : ''}`}
