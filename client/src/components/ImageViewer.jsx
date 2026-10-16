@@ -27,6 +27,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
     const zoomRef = useRef(1);
     const decodedImages = useRef(new Set());
     const navigationTimer = useRef(null);
+    const carouselStride = () => Math.min(window.innerWidth * 0.9, 760) + 12;
 
     const stageRef = useRef(null);       // контейнер, который трансформируется при свайпе
     const backdropRef = useRef(null);    // затемнение, гаснет при свайпе вниз
@@ -77,7 +78,11 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
         }
 
         const el = stageRef.current;
-        if (el && pendingSlideRef.current != null) {
+        if (messengerOptimized && el) {
+            pendingSlideRef.current = null;
+            el.style.transition = 'none';
+            el.style.transform = 'translate3d(0,0,0)';
+        } else if (el && pendingSlideRef.current != null) {
             const dir = pendingSlideRef.current;
             pendingSlideRef.current = null;
             el.style.transition = 'none';
@@ -342,7 +347,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
             const wantPrev = (dx > 0 && (far || (vFast && vx > 0))) && index > 0;
 
             if (wantNext) {
-                setStage(-window.innerWidth, 0, 1, true, SLIDE_MS);
+                setStage(-(messengerOptimized ? carouselStride() : window.innerWidth), 0, 1, true, SLIDE_MS);
                 clearTimeout(navigationTimer.current);
                 navigationTimer.current = setTimeout(() => {
                     pendingSlideRef.current = 1;
@@ -351,7 +356,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
                 return;
             }
             if (wantPrev) {
-                setStage(window.innerWidth, 0, 1, true, SLIDE_MS);
+                setStage(messengerOptimized ? carouselStride() : window.innerWidth, 0, 1, true, SLIDE_MS);
                 clearTimeout(navigationTimer.current);
                 navigationTimer.current = setTimeout(() => {
                     pendingSlideRef.current = -1;
@@ -448,7 +453,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
             {/* Затемнение */}
             <div
                 ref={backdropRef}
-                className="absolute inset-0 bg-black/95 backdrop-blur-sm"
+                className={messengerOptimized ? "absolute inset-0 bg-slate-950/60 backdrop-blur-xl" : "absolute inset-0 bg-black/95 backdrop-blur-sm"}
             />
 
             {/* Сцена — трансформируется при свайпе */}
@@ -460,7 +465,31 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
                 onTouchEnd={onTouchEnd}
                 onTouchCancel={onTouchEnd}
             >
-                <div className="absolute inset-0 flex items-center justify-center p-4 md:p-12">
+                {messengerOptimized ? (
+                    <>
+                        {[index - 1, index, index + 1].filter((i) => i >= 0 && i < total).map((i) => {
+                            const image = images[i];
+                            const active = i === index;
+                            return <div key={image.id} className="absolute top-0 bottom-0 flex items-center justify-center"
+                                style={{
+                                    width: 'min(90vw, 760px)',
+                                    left: `calc(50% + ${(i - index) * carouselStride()}px)`,
+                                    transform: 'translateX(-50%)',
+                                    padding: '12px 0',
+                                }}>
+                                {active && !imgLoaded && <div className="absolute inset-0 grid place-items-center pointer-events-none">
+                                    <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
+                                </div>}
+                                <img ref={active ? imgRef : null} src={image.url} alt="" draggable={false}
+                                    decoding="async" className="max-w-full max-h-full object-contain"
+                                    style={{ opacity: active && !imgLoaded ? 0 : 1, transition: 'opacity 150ms ease', transformOrigin: '50% 50%' }}
+                                    onLoad={() => { decodedImages.current.add(image.url); if (active) setImgLoaded(true); }}
+                                    onError={() => { if (active) setImgLoaded(true); }} />
+                            </div>;
+                        })}
+                    </>
+                ) : (
+                    <div className="absolute inset-0 flex items-center justify-center p-4 md:p-12">
                     {!imgLoaded && (
                         <div className="absolute inset-0 grid place-items-center pointer-events-none">
                             <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
@@ -482,6 +511,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
                         onError={() => setImgLoaded(true)}
                     />
                 </div>
+                )}
             </div>
 
             {/* Верхняя панель */}
