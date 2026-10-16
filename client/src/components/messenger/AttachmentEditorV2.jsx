@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import AttachmentPreview from './AttachmentPreview.jsx';
 
 /** Presentation-only editor: existing batch sender keeps upload/retry semantics. */
@@ -5,6 +6,30 @@ export default function AttachmentEditorV2({
     files, captions, onFilesChange, onCaptionsChange, onCancel,
     onSend, uploading, progress, sentCount,
 }) {
+    const [dragging, setDragging] = useState(-1);
+    const gesture = useRef(null);
+    const finishDrag = (to) => {
+        const from = gesture.current?.from;
+        gesture.current = null;
+        setDragging(-1);
+        if (typeof from === 'number' && to !== null && from !== to) move(from, to);
+    };
+    const startPointer = (event, index) => {
+        if (uploading || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        gesture.current = { from: index, pointerId: event.pointerId };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setDragging(index);
+    };
+    const updatePointer = (event) => {
+        if (!gesture.current || event.pointerId !== gesture.current.pointerId) return;
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-attachment-index]');
+        if (target) gesture.current.to = Number(target.dataset.attachmentIndex);
+    };
+    const endPointer = (event) => {
+        if (!gesture.current || event.pointerId !== gesture.current.pointerId) return;
+        updatePointer(event);
+        finishDrag(gesture.current.to ?? gesture.current.from);
+    };
     const move = (from, to) => {
         if (uploading || to < 0 || to >= files.length) return;
         const indices = files.map((_, i) => i);
@@ -28,7 +53,7 @@ export default function AttachmentEditorV2({
             </div>
             <div className="mrr-v2-attachment-grid">
                 {files.map((file, index) => (
-                    <div key={index + ':' + file.name + ':' + file.size} className="mrr-v2-attachment-card">
+                    <div key={index + ':' + file.name + ':' + file.size} className={`mrr-v2-attachment-card ${dragging === index ? "mrr-v2-attachment-dragging" : ""}`} data-attachment-index={index}>
                         <div className="mrr-v2-attachment-thumb"><AttachmentPreview file={file}/></div>
                         <div className="min-w-0 flex-1">
                             <div className="font-semibold text-sm truncate" title={file.name}>{file.name}</div>
@@ -37,8 +62,17 @@ export default function AttachmentEditorV2({
                                 onChange={(e) => onCaptionsChange((current) => ({ ...current, [index]: e.target.value }))}
                                 className="mrr-v2-attachment-caption" placeholder="Подпись к файлу…" aria-label={`Подпись для ${file.name}`}/>
                             <div className="flex items-center gap-2 mt-2">
-                                <button type="button" disabled={uploading || index === 0} onClick={() => move(index, index - 1)} className="mrr-v2-attachment-action" aria-label={`Переместить ${file.name} назад`}>←</button>
-                                <button type="button" disabled={uploading || index === files.length - 1} onClick={() => move(index, index + 1)} className="mrr-v2-attachment-action" aria-label={`Переместить ${file.name} вперёд`}>→</button>
+                                <span className="mrr-v2-attachment-handle" role="button" tabIndex={uploading ? -1 : 0} aria-disabled={uploading}
+                                    aria-label={`Перетащить ${file.name}, позиция ${index + 1} из ${files.length}`}
+                                    onPointerDown={(event) => startPointer(event, index)}
+                                    onPointerMove={updatePointer}
+                                    onPointerUp={endPointer}
+                                    onPointerCancel={() => finishDrag(null)}
+                                    onKeyDown={(event) => {
+                                        if (uploading) return;
+                                        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') { event.preventDefault(); move(index, index - 1); }
+                                        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') { event.preventDefault(); move(index, index + 1); }
+                                    }}>⠿ <span className="sr-only">Переместить</span></span>
                                 <span className="text-xs opacity-60">{index + 1} / {files.length}</span>
                                 <button type="button" disabled={uploading} onClick={() => remove(index)} className="mrr-v2-attachment-action ml-auto" aria-label={`Удалить ${file.name}`}>Удалить</button>
                             </div>
