@@ -2320,11 +2320,23 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 .mrr-messenger-v2 .mrr-v2-album-grid-wrap .mrr-v2-album-menu-trigger { transition:opacity .16s ease, transform .16s ease; }
 .mrr-messenger-v2 .mrr-v2-album-grid-wrap .mrr-v2-album-menu-trigger:active { transform:scale(.93); }
 
-/* Messenger 2.0 viewer entrance and dismissal: no vertical slide on close. */
-.mrr-v2-viewer-fade { animation:mrr-v2-viewer-enter 220ms cubic-bezier(.2,.8,.2,1) both; }
-.mrr-v2-viewer-fade.mrr-v2-viewer-closing { animation:mrr-v2-viewer-exit 200ms ease-in both; pointer-events:none; }
-@keyframes mrr-v2-viewer-enter { from { opacity:0; transform:scale(.985); } to { opacity:1; transform:scale(1); } }
-@keyframes mrr-v2-viewer-exit { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(.985); } }
+/* Messenger viewer: keep the full-screen backdrop fixed at every animation frame.
+   Applying blur to the same surface that fades prevents images appearing ahead of blur.
+   Never scale the fullscreen root: it reveals the underlying page at the edges on iOS. */
+.mrr-v2-viewer-fade {
+  background:rgba(5,8,22,.64);
+  -webkit-backdrop-filter:blur(22px);
+  backdrop-filter:blur(22px);
+  animation:mrr-v2-viewer-enter 220ms ease-out both;
+  transform:none !important;
+  isolation:isolate;
+}
+.mrr-v2-viewer-fade.mrr-v2-viewer-closing {
+  animation:mrr-v2-viewer-exit 200ms ease-in both;
+  pointer-events:none;
+}
+@keyframes mrr-v2-viewer-enter { from { opacity:0; } to { opacity:1; } }
+@keyframes mrr-v2-viewer-exit { from { opacity:1; } to { opacity:0; } }
 @media(prefers-reduced-motion:reduce) {
- .mrr-v2-viewer-fade,.mrr-v2-viewer-fade.mrr-v2-viewer-closing { animation:none !important; }
+  .mrr-v2-viewer-fade,.mrr-v2-viewer-fade.mrr-v2-viewer-closing { animation:none !important; opacity:1; }
 }
