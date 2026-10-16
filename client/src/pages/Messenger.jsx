@@ -325,7 +325,19 @@ export default function Messenger() {
     };
     const goProfile = (username) => { if (username) nav(`/app/u/${username}`); };
     const scrollToMessage = (id) => {
-        const el = document.getElementById(`msg-${id}`);
+        let el = document.getElementById(`msg-${id}`);
+        if (!el && isMessengerV2) {
+            const targetIndex = messages.findIndex((message) => message.id === id);
+            if (targetIndex >= 0 && targetIndex < historyStart) {
+                setHistoryStart(0);
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'instant', block: 'center' });
+                    setHighlightId(id);
+                    setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1800);
+                }));
+            }
+            return;
+        }
         if (!el) return;
         const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
         el.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' });
@@ -349,13 +361,17 @@ export default function Messenger() {
         setUnseenCount(0);
         api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
             if (Array.isArray(r)) {
-                setHistoryStart(isMessengerV2 ? Math.max(0, r.length - historyCount) : 0);
+                let start = isMessengerV2 ? Math.max(0, r.length - historyCount) : 0;
+                while (start > 0 && r[start]?.albumId && r[start - 1]?.albumId === r[start].albumId) start--;
+                setHistoryStart(start);
                 setMessages(r); setPinned(null); setMyRole('member');
             } else {
                 const incoming = r.messages || [];
                 const focus = linkedMessageId || r.firstUnreadId;
                 const focusIndex = focus ? incoming.findIndex((m) => m.id === focus) : -1;
-                setHistoryStart(isMessengerV2 ? Math.max(0, focusIndex >= 0 ? focusIndex - 30 : incoming.length - historyCount) : 0);
+                let start = isMessengerV2 ? Math.max(0, focusIndex >= 0 ? focusIndex - 30 : incoming.length - historyCount) : 0;
+                while (start > 0 && incoming[start]?.albumId && incoming[start - 1]?.albumId === incoming[start].albumId) start--;
+                setHistoryStart(start);
                 setMessages(incoming);
                 setPinned(r.pinned || null);
                 setMyRole(r.myRole || 'member');
