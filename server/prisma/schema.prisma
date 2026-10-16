@@ -166,6 +166,7 @@ model ChatMember {
   role     String   @default("member")
   joinedAt DateTime @default(now())
   lastRead DateTime @default(now())
+  lastDelivered DateTime?
   chat     Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
