@@ -74,10 +74,11 @@ export function initSocket(io) {
                 if (!member) return;
                 const message = await prisma.message.findFirst({ where: { id: messageId, chatId } });
                 if (!message || message.senderId === userId) return;
-                const deliveredAt = new Date();
+                const deliveredAt = message.createdAt;
+                if (member.lastDelivered && member.lastDelivered >= deliveredAt) return cb?.({ ok: true });
                 await prisma.chatMember.update({
                     where: { chatId_userId: { chatId, userId } },
-                    data: { lastDelivered: member.lastDelivered && member.lastDelivered > deliveredAt ? member.lastDelivered : deliveredAt },
+                    data: { lastDelivered: deliveredAt },
                 });
                 io.to(`chat:${chatId}`).emit('chat:receipt', { chatId, userId, deliveredAt: deliveredAt.toISOString() });
                 cb?.({ ok: true });
