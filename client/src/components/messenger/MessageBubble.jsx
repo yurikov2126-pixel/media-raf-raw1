@@ -166,12 +166,12 @@ export default function MessageBubble({
                         <button
                             type="button"
                             onClick={onOpenImage}
-                            className="block rounded-2xl overflow-hidden hover:opacity-95 transition max-w-[240px] md:max-w-[300px]"
+                            className={`block rounded-2xl overflow-hidden hover:opacity-95 transition ${v2 ? "mrr-v2-chat-image" : "max-w-[240px] md:max-w-[300px]"}`}
                         >
                             <img
                                 src={resolveUrl(m.content)}
                                 alt=""
-                                className="block w-full h-auto object-cover"
+                                className={`block w-full h-auto object-cover ${v2 ? "mrr-v2-chat-image-preview" : ""}`}
                                 loading="lazy"
                             />
                         </button>
