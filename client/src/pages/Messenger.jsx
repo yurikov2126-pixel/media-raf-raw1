@@ -95,6 +95,9 @@ export default function Messenger() {
     const [myRole, setMyRole] = useState('member');
     const [firstUnreadId, setFirstUnreadId] = useState(null);
     const [text, setText] = useState('');
+    const [replyTo, setReplyTo] = useState(null);
+    const [forwarding, setForwarding] = useState(null);
+    const [editing, setEditing] = useState(null);
     // A draft belongs to the signed-in user and to one chat, never to another.
     const draftStorageKey = chatId && user?.id ? `mrr:chat-draft:v2:${user.id}:${chatId}` : null;
     const [draftReadyFor, setDraftReadyFor] = useState(null);
@@ -115,9 +118,7 @@ export default function Messenger() {
         } catch { /* storage may be disabled */ }
     }, [text, draftStorageKey, isMessengerV2, editing, draftReadyFor]);
 
-    const [replyTo, setReplyTo] = useState(null);
-    const [forwarding, setForwarding] = useState(null);
-    const [editing, setEditing] = useState(null);
+
     const [typingUsers, setTypingUsers] = useState([]);       // для открытого чата
     const [typingByChat, setTypingByChat] = useState({});     // для списка чатов
     const [search, setSearch] = useState('');
