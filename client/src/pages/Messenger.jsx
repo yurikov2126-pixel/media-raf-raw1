@@ -197,13 +197,36 @@ export default function Messenger() {
     // Bounded history rendering (first phase of virtualization). Keep an anchor
     // when prepending older rows, including rows with images of variable height.
     const [historyStart, setHistoryStart] = useState(0);
+    const [historyEnd, setHistoryEnd] = useState(null); // null follows newest messages
     const prependAnchorRef = useRef(null);
     const historyCount = 120;
     const revealOlder = () => {
         const el = scrollRef.current;
         if (!el || historyStart === 0) return;
         prependAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
-        setHistoryStart((value) => Math.max(0, value - historyCount));
+        const nextStart = Math.max(0, historyStart - historyCount);
+        let start = nextStart;
+        while (start > 0 && messages[start]?.albumId && messages[start - 1]?.albumId === messages[start].albumId) start--;
+        setHistoryEnd(Math.min(messages.length, start + historyCount * 2));
+        setHistoryStart(start);
+    };
+    const revealNewer = () => {
+        const nextEnd = Math.min(messages.length, (historyEnd ?? messages.length) + historyCount);
+        let end = nextEnd;
+        while (end < messages.length && messages[end - 1]?.albumId && messages[end]?.albumId === messages[end - 1].albumId) end++;
+        setHistoryEnd(end === messages.length ? null : end);
+        setHistoryStart(Math.max(0, end - historyCount * 2));
+    };
+    const jumpToLatest = () => {
+        setHistoryStart(Math.max(0, messages.length - historyCount));
+        setHistoryEnd(null);
+        nearBottomRef.current = true;
+        setShowJumpToLatest(false);
+        setUnseenCount(0);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const el = scrollRef.current;
+            if (el) el.scrollTop = el.scrollHeight;
+        }));
     };
     useLayoutEffect(() => {
         if (!prependAnchorRef.current) return;
@@ -328,8 +351,11 @@ export default function Messenger() {
         let el = document.getElementById(`msg-${id}`);
         if (!el && isMessengerV2) {
             const targetIndex = messages.findIndex((message) => message.id === id);
-            if (targetIndex >= 0 && targetIndex < historyStart) {
-                setHistoryStart(0);
+            if (targetIndex >= 0) {
+                let start = Math.max(0, targetIndex - 40);
+                while (start > 0 && messages[start]?.albumId && messages[start - 1]?.albumId === messages[start].albumId) start--;
+                setHistoryStart(start);
+                setHistoryEnd(Math.min(messages.length, start + historyCount * 2));
                 requestAnimationFrame(() => requestAnimationFrame(() => {
                     document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'instant', block: 'center' });
                     setHighlightId(id);
@@ -363,6 +389,7 @@ export default function Messenger() {
             if (Array.isArray(r)) {
                 let start = isMessengerV2 ? Math.max(0, r.length - historyCount) : 0;
                 while (start > 0 && r[start]?.albumId && r[start - 1]?.albumId === r[start].albumId) start--;
+                setHistoryEnd(null);
                 setHistoryStart(start);
                 setMessages(r); setPinned(null); setMyRole('member');
             } else {
@@ -371,6 +398,7 @@ export default function Messenger() {
                 const focusIndex = focus ? incoming.findIndex((m) => m.id === focus) : -1;
                 let start = isMessengerV2 ? Math.max(0, focusIndex >= 0 ? focusIndex - 30 : incoming.length - historyCount) : 0;
                 while (start > 0 && incoming[start]?.albumId && incoming[start - 1]?.albumId === incoming[start].albumId) start--;
+                setHistoryEnd(focusIndex >= 0 && isMessengerV2 ? Math.min(incoming.length, start + historyCount * 2) : null);
                 setHistoryStart(start);
                 setMessages(incoming);
                 setPinned(r.pinned || null);
@@ -1059,7 +1087,7 @@ export default function Messenger() {
                             {isMessengerV2 && historyStart > 0 && <button type="button" className="mrr-v2-load-history" onClick={revealOlder}>
                                 ↑ Показать предыдущие сообщения ({historyStart})
                             </button>}
-                            {messages.map((m, index) => { if (isMessengerV2 && index < historyStart) return null; const album = albumAt(index); return album === 'continuation' ? null : (
+                            {messages.map((m, index) => { if (isMessengerV2 && (index < historyStart || (historyEnd !== null && index >= historyEnd))) return null; const album = albumAt(index); return album === 'continuation' ? null : (
                                 <div key={m.id} className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
                                     {(index === 0 || messageDayKey(messages[index - 1].createdAt) !== messageDayKey(m.createdAt)) && (
                                         <div className="flex items-center justify-center py-3" role="separator" aria-label={messageDayLabel(m.createdAt)}>
@@ -1107,20 +1135,25 @@ export default function Messenger() {
                                 />}
                                 </div>
                             ); })}
+                            {isMessengerV2 && historyEnd !== null && historyEnd < messages.length && (
+                                <button type="button" className="mrr-v2-load-history" onClick={revealNewer}>
+                                    ↓ Показать следующие сообщения ({messages.length - historyEnd})
+                                </button>
+                            )}
                         </div>
                         {showJumpToLatest && (
                             <button type="button"
                                 aria-label={unseenCount ? `К последним сообщениям, новых: ${unseenCount}` : 'К последним сообщениям'}
                                 title="К последним сообщениям"
                                 onClick={() => {
+                                    if (isMessengerV2) { jumpToLatest(); return; }
                                     const el = scrollRef.current;
                                     if (!el) return;
                                     nearBottomRef.current = true;
                                     setShowJumpToLatest(false);
                                     setUnseenCount(0);
                                     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-                                    const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced || (isMessengerV2 && distance > el.clientHeight * 2) ? 'instant' : 'smooth' });
+                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? 'instant' : 'smooth' });
                                 }}
                                 className="absolute bottom-4 right-4 md:right-6 z-20 flex items-center gap-2 rounded-full border px-3 py-2.5 shadow-lg backdrop-blur-md transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet"
                                 style={{ backgroundColor: 'var(--bg-elev-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}>
