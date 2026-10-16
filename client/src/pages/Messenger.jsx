@@ -95,6 +95,26 @@ export default function Messenger() {
     const [myRole, setMyRole] = useState('member');
     const [firstUnreadId, setFirstUnreadId] = useState(null);
     const [text, setText] = useState('');
+    // A draft belongs to the signed-in user and to one chat, never to another.
+    const draftStorageKey = chatId && user?.id ? `mrr:chat-draft:v2:${user.id}:${chatId}` : null;
+    const draftReadyFor = useRef(null);
+    useEffect(() => {
+        draftReadyFor.current = null;
+        if (!isMessengerV2 || !draftStorageKey) return;
+        try { setText(window.localStorage.getItem(draftStorageKey) || ''); }
+        catch { setText(''); }
+        setEditing(null);
+        setReplyTo(null);
+        draftReadyFor.current = draftStorageKey;
+    }, [draftStorageKey, isMessengerV2]);
+    useEffect(() => {
+        if (!isMessengerV2 || !draftStorageKey || draftReadyFor.current !== draftStorageKey || editing) return;
+        try {
+            if (text) window.localStorage.setItem(draftStorageKey, text);
+            else window.localStorage.removeItem(draftStorageKey);
+        } catch { /* storage may be disabled */ }
+    }, [text, draftStorageKey, isMessengerV2, editing]);
+
     const [replyTo, setReplyTo] = useState(null);
     const [forwarding, setForwarding] = useState(null);
     const [editing, setEditing] = useState(null);
@@ -529,6 +549,9 @@ export default function Messenger() {
             setEditing(null);
         } else {
             socket.emit('message:send', { chatId, content: text, type: 'text', replyToId: replyTo?.id });
+        }
+        if (isMessengerV2 && draftStorageKey) {
+            try { window.localStorage.removeItem(draftStorageKey); } catch {}
         }
         setText(''); setReplyTo(null); setPanel(null); setMentionQuery(null);
     };
