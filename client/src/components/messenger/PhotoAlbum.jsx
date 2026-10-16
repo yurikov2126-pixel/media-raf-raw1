@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Avatar from '../Avatar.jsx';
 import { resolveUrl } from '../../api/client.js';
+import { chatImagePreviewUrl } from '../../lib/chatImagePreview.js';
 import { buildAlbumZip } from '../../lib/albumZip.js';
 
 export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, onProfile }) {
@@ -102,7 +103,7 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
                     onContextMenu={(event) => { event.preventDefault(); if (gesture.current?.fired) return; onContext(item, event); }}
                     aria-pressed={selected.includes(item.id)}
                     aria-label={`${selected.includes(item.id) ? 'Выбрано' : 'Открыть'} фото ${index + 1} из ${items.length}`}>
-                    <img src={resolveUrl(item.content)} alt={item.caption || `Фото ${index + 1}`} loading="lazy" />
+                    <img src={chatImagePreviewUrl(item.content)} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = resolveUrl(item.content); }} decoding="async" alt={item.caption || `Фото ${index + 1}`} loading="lazy" />
                     {selected.includes(item.id) && <span className="mrr-v2-album-check" aria-hidden="true">✓</span>}
                 </button>)}
             </div>
