@@ -1,3 +1,4 @@
+import RecordingWaveform from '../components/messenger/RecordingWaveform.jsx';
 import VoicePlayer from '../components/VoicePlayer.jsx';
 import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
 import AttachmentEditorV2 from '../components/messenger/AttachmentEditorV2.jsx';
@@ -177,6 +178,8 @@ export default function Messenger() {
 
     const [recording, setRecording] = useState(false);
     const [recordingSec, setRecordingSec] = useState(0);
+    const [recordAnalyser, setRecordAnalyser] = useState(null);
+    const recordAudioContextRef = useRef(null);
     const [voiceDraft, setVoiceDraft] = useState(null);
     const voiceDraftUrlRef = useRef(null);
     const recordGestureRef = useRef(null);
@@ -705,6 +708,20 @@ export default function Messenger() {
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true,
                     channelCount: 1, sampleRate: 48000, sampleSize: 16 },
             });
+            if (isMessengerV2) {
+                try {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContextClass) {
+                        const context = new AudioContextClass();
+                        const source = context.createMediaStreamSource(stream);
+                        const analyser = context.createAnalyser();
+                        analyser.fftSize = 1024;
+                        source.connect(analyser);
+                        recordAudioContextRef.current = context;
+                        setRecordAnalyser(analyser);
+                    }
+                } catch (error) { console.warn('[voice] Live waveform unavailable', error); }
+            }
             const mimeType = pickAudioMime();
             const opts = { audioBitsPerSecond: 128000 };
             if (mimeType) opts.mimeType = mimeType;
@@ -717,6 +734,10 @@ export default function Messenger() {
             mr.ondataavailable = (e) => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
             mr.onstop = async () => {
                 stream.getTracks().forEach((t) => t.stop());
+                setRecordAnalyser(null);
+                const context = recordAudioContextRef.current;
+                recordAudioContextRef.current = null;
+                if (context) context.close().catch(() => {});
                 const blob = new Blob(recChunksRef.current, { type: recMimeRef.current });
                 if (recordCancelRef.current || blob.size < 1000) return;
                 const ext = extFromMime(recMimeRef.current);
@@ -1339,15 +1360,27 @@ export default function Messenger() {
                                     </div>
                                 </div>
                             ) : recording ? (
-                                <div className={`flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2 ${isMessengerV2 ? "mrr-v2-recording-no-selection" : ""}`}>
-                                    <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
-                                    <div className="flex-1">
-                                        <div className="text-sm text-pink">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись продолжается' : 'Запись голосового…'}</div>
-                                        <div className="text-xs text-white/50">{recordingSec} сек {isMessengerV2 ? '· ← отмена · ↑ продолжить' : ''}</div>
+                                isMessengerV2 ? (
+                                    <div className="mrr-v2-recording-no-selection mrr-v2-recording-panel">
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <span className="mrr-v2-recording-dot" />
+                                            <span className="text-xs font-semibold tabular-nums">{String(Math.floor(recordingSec / 60)).padStart(2, '0')}:{String(recordingSec % 60).padStart(2, '0')}</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            {recordAnalyser ? <RecordingWaveform analyser={recordAnalyser} /> : <div className="mrr-v2-live-voice-placeholder" />}
+                                            <div className="text-[10px] opacity-65 truncate">{recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? 'Запись закреплена' : '← Отменить · ↑ Закрепить'}</div>
+                                        </div>
+                                        <button type="button" onClick={() => stopRecording(true)} className="btn-ghost !px-2 !py-2 text-xs shrink-0">Отмена</button>
+                                        <button type="button" onClick={() => stopRecording(false)} className="btn-primary !px-3 !py-2 text-xs shrink-0">Готово ✓</button>
                                     </div>
-                                    <button onClick={() => stopRecording(true)} className="btn-ghost !py-1.5 !px-3 text-xs text-white/70">Отмена</button>
-                                    <button onClick={() => stopRecording(false)} className="btn-primary !py-1.5 !px-3 text-xs">{isMessengerV2 ? 'Готово ✓' : 'Отправить ➤'}</button>
-                                </div>
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-pink animate-pulse" />
+                                        <div className="flex-1"><div className="text-sm text-pink">Запись голосового…</div><div className="text-xs text-white/50">{recordingSec} сек</div></div>
+                                        <button onClick={() => stopRecording(true)} className="btn-ghost !py-1.5 !px-3 text-xs">Отмена</button>
+                                        <button onClick={() => stopRecording(false)} className="btn-primary !py-1.5 !px-3 text-xs">Отправить ➤</button>
+                                    </div>
+                                )
                             ) : (
                                 <div className="flex items-end gap-1.5 md:gap-2">
                                     <div className="relative shrink-0">
