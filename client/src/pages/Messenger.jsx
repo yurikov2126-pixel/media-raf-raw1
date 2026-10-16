@@ -98,6 +98,27 @@ export default function Messenger() {
     const [replyTo, setReplyTo] = useState(null);
     const [forwarding, setForwarding] = useState(null);
     const [editing, setEditing] = useState(null);
+    // A draft belongs to the signed-in user and to one chat, never to another.
+    const draftStorageKey = chatId && user?.id ? `mrr:chat-draft:v2:${user.id}:${chatId}` : null;
+    const [draftReadyFor, setDraftReadyFor] = useState(null);
+    useEffect(() => {
+        setDraftReadyFor(null);
+        if (!isMessengerV2 || !draftStorageKey) return;
+        try { setText(window.localStorage.getItem(draftStorageKey) || ''); }
+        catch { setText(''); }
+        setEditing(null);
+        setReplyTo(null);
+        setDraftReadyFor(draftStorageKey);
+    }, [draftStorageKey, isMessengerV2]);
+    useEffect(() => {
+        if (!isMessengerV2 || !draftStorageKey || draftReadyFor !== draftStorageKey || editing) return;
+        try {
+            if (text) window.localStorage.setItem(draftStorageKey, text);
+            else window.localStorage.removeItem(draftStorageKey);
+        } catch { /* storage may be disabled */ }
+    }, [text, draftStorageKey, isMessengerV2, editing, draftReadyFor]);
+
+
     const [typingUsers, setTypingUsers] = useState([]);       // для открытого чата
     const [typingByChat, setTypingByChat] = useState({});     // для списка чатов
     const [search, setSearch] = useState('');
@@ -529,6 +550,9 @@ export default function Messenger() {
             setEditing(null);
         } else {
             socket.emit('message:send', { chatId, content: text, type: 'text', replyToId: replyTo?.id });
+        }
+        if (isMessengerV2 && draftStorageKey) {
+            try { window.localStorage.removeItem(draftStorageKey); } catch {}
         }
         setText(''); setReplyTo(null); setPanel(null); setMentionQuery(null);
     };
