@@ -95,6 +95,22 @@ export default function Messenger() {
     const [myRole, setMyRole] = useState('member');
     const [firstUnreadId, setFirstUnreadId] = useState(null);
     const [text, setText] = useState('');
+    const draftPrefix = `mrr_messenger_draft_${user?.id || 'anonymous'}_`;
+    const draftChatRef = useRef(chatId);
+    const draftTextRef = useRef('');
+    const draftHydratingRef = useRef(false);
+    const readDraft = (id) => {
+        if (!id) return '';
+        try { return window.localStorage.getItem(draftPrefix + id) || ''; } catch { return ''; }
+    };
+    const writeDraft = (id, value) => {
+        if (!id) return;
+        try {
+            if (value.trim()) window.localStorage.setItem(draftPrefix + id, value.slice(0, 10000));
+            else window.localStorage.removeItem(draftPrefix + id);
+        } catch { /* private mode / quota */ }
+    };
+
     const [replyTo, setReplyTo] = useState(null);
     const [forwarding, setForwarding] = useState(null);
     const [editing, setEditing] = useState(null);
@@ -507,6 +523,31 @@ export default function Messenger() {
         setShowJumpToLatest(false); setUnseenCount(0);
     }, [chatId]);
 
+    // Messenger 2.0 keeps independent drafts for each chat, including reloads.
+    useEffect(() => {
+        if (!isMessengerV2) return;
+        if (draftChatRef.current !== chatId) {
+            writeDraft(draftChatRef.current, draftTextRef.current);
+            draftChatRef.current = chatId;
+        }
+        draftHydratingRef.current = true;
+        const saved = readDraft(chatId);
+        draftTextRef.current = saved;
+        setText(saved);
+        setEditing(null);
+        setReplyTo(null);
+    }, [chatId, isMessengerV2, draftPrefix]);
+
+    useEffect(() => {
+        if (!isMessengerV2 || !chatId) return;
+        if (draftHydratingRef.current) {
+            draftHydratingRef.current = false;
+            return;
+        }
+        draftTextRef.current = editing ? readDraft(chatId) : text;
+        if (!editing) writeDraft(chatId, text);
+    }, [text, chatId, isMessengerV2, editing, draftPrefix]);
+
     /* Pull-to-refresh на списке чатов */
     const { pull: chatPull, refreshing: chatRefreshing, threshold: chatThreshold } =
         usePullToRefresh({
@@ -530,6 +571,7 @@ export default function Messenger() {
         } else {
             socket.emit('message:send', { chatId, content: text, type: 'text', replyToId: replyTo?.id });
         }
+        if (isMessengerV2) { draftTextRef.current = ''; writeDraft(chatId, ''); }
         setText(''); setReplyTo(null); setPanel(null); setMentionQuery(null);
     };
 
