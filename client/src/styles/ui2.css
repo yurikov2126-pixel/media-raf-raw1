@@ -2194,3 +2194,19 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
     padding-bottom: 8px !important;
   }
 }
+
+/* Messenger 2.0 attachment preparation; old composer and batch API unchanged. */
+.mrr-messenger-v2 .mrr-v2-attachment-editor { display:flex; flex-direction:column; gap:12px; padding:14px; border:1px solid var(--border-strong); border-radius:20px; background:var(--bg-elev-2); color:var(--text-primary); min-width:0; max-height:min(70dvh,650px); }
+.mrr-messenger-v2 .mrr-v2-attachment-heading { display:flex; justify-content:space-between; align-items:start; gap:12px; flex-shrink:0; }
+.mrr-messenger-v2 .mrr-v2-attachment-close, .mrr-messenger-v2 .mrr-v2-attachment-action { border:1px solid var(--border-strong); border-radius:10px; padding:6px 10px; background:var(--bg-elev-1); color:var(--text-primary); min-height:34px; }
+.mrr-messenger-v2 .mrr-v2-attachment-action:disabled { opacity:.35; cursor:not-allowed; }
+.mrr-messenger-v2 .mrr-v2-attachment-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr)); gap:10px; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+.mrr-messenger-v2 .mrr-v2-attachment-card { display:flex; gap:12px; padding:10px; border:1px solid var(--border-strong); border-radius:15px; min-width:0; background:var(--bg-elev-1); }
+.mrr-messenger-v2 .mrr-v2-attachment-thumb { width:92px; height:92px; flex-shrink:0; overflow:hidden; border-radius:12px; }
+.mrr-messenger-v2 .mrr-v2-attachment-thumb img { width:100%; height:100%; object-fit:cover; }
+.mrr-messenger-v2 .mrr-v2-attachment-caption { display:block; width:100%; min-height:55px; margin-top:8px; padding:8px; background:var(--bg-elev-2); color:var(--text-primary); border:1px solid var(--border-strong); border-radius:10px; resize:vertical; font-size:14px; }
+@media(max-width:767px) {
+ .mrr-messenger-v2 .mrr-v2-attachment-editor { padding:10px; max-height:min(64dvh,540px); }
+ .mrr-messenger-v2 .mrr-v2-attachment-grid { grid-template-columns:minmax(0,1fr); }
+ .mrr-messenger-v2 .mrr-v2-attachment-thumb { width:76px; height:76px; }
+}
