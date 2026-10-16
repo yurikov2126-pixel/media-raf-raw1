@@ -5,6 +5,7 @@ import { buildAlbumZip } from '../../lib/albumZip.js';
 
 export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, onProfile }) {
     const sender = items[0].sender;
+    const forwarded = items[0].forwardedFrom ? (() => { try { return JSON.parse(items[0].forwardedFrom); } catch { return null; } })() : null;
     const [selected, setSelected] = useState([]);
     const [busy, setBusy] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(null);
@@ -82,7 +83,9 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
         {!own && <button type="button" onClick={onProfile} aria-label={sender.fullName}><Avatar user={sender} size={34} online={onlineSet?.has(sender.id)}/></button>}
         <div className="mrr-v2-album-body">
             {!own && <div className="mrr-v2-album-author">{sender.fullName}</div>}
+            {forwarded && <div className="mrr-v2-album-author">↪ Переслано от {forwarded.fullName}</div>}
             <div className="mrr-v2-album-grid-wrap">
+                <button type="button" className="mrr-v2-album-menu-trigger mrr-v2-album-unified-trigger" aria-label="Действия с альбомом" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onContext(items[0], { clientX: rect.left, clientY: rect.bottom }); }}>⋯</button>
             <div className="mrr-v2-album-grid">
                 {items.map((item, index) => <button
                     type="button" key={item.id} id={`msg-${item.id}`}
