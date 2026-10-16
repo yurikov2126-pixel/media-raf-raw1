@@ -79,6 +79,9 @@ app.use(publicMetaRouter);
 
 /* ─────────── Публичные настройки ─────────── */
 const PUBLIC_SETTING_KEYS = [
+    'messenger_ui_default',
+    'messenger_ui_access',
+    'messenger_ui_user_choice',
     'site_name',
     'site_description',
     'brand_logo_text',

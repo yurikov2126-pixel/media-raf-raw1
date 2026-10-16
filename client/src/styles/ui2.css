@@ -2087,3 +2087,27 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @media (max-width: 640px) {
   .mrr-role-dialog { max-height: calc(100dvh - 24px); }
 }
+
+/* Messenger 2.0 — opt-in presentation layer; the classic markup remains untouched. */
+.mrr-messenger-v2 { --mrr-v2-surface: var(--bg-elev-1); --mrr-v2-border: var(--border-strong); }
+.mrr-messenger-v2 > aside { background: var(--mrr-v2-surface); border-color: var(--mrr-v2-border); }
+.mrr-messenger-v2 > aside > div:first-child { padding: 19px 17px 15px; }
+.mrr-messenger-v2 > aside .group > button:first-of-type { margin: 2px 8px; width: calc(100% - 16px); border-radius: 14px; padding: 11px 12px; }
+.mrr-messenger-v2 > aside .group > button:first-of-type:focus-visible { outline: 2px solid var(--brand-accent-1); outline-offset: -2px; }
+.mrr-messenger-v2 > aside .group > button:first-of-type:hover { background: var(--bg-elev-2); }
+.mrr-messenger-v2 > section > header { background: var(--bg-elev-1); border-color: var(--mrr-v2-border); }
+.mrr-messenger-v2 > section > .relative.z-0 { background: var(--bg-base, transparent); }
+.mrr-messenger-v2 > section > .border-t { background: var(--bg-elev-1); border-color: var(--mrr-v2-border); }
+.mrr-messenger-v2 .mrr-other-bubble { border-radius: 17px; }
+.mrr-v2-label { font-size: 10px; font-weight: 800; letter-spacing: .06em; border-radius: 7px; padding: 3px 6px; background: var(--bg-elev-2); color: var(--text-secondary); }
+.mrr-chat-time { flex-shrink: 0; font-size: 10px; font-weight: 500; color: var(--text-secondary); }
+@media (min-width: 1280px) {
+  .mrr-messenger-v2 > aside { width: 360px; }
+  .mrr-messenger-v2 > section > .relative.z-0 > div:first-child { padding-left: clamp(28px, 5vw, 90px); padding-right: clamp(28px, 5vw, 90px); }
+}
+@media (max-width: 767px) {
+  .mrr-messenger-v2 > aside .group > button:first-of-type { min-height: 68px; }
+  .mrr-messenger-v2 > section > header { min-height: 64px; }
+  .mrr-messenger-v2 > section > .border-t { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) { .mrr-messenger-v2 *, .mrr-messenger-v2 *::before, .mrr-messenger-v2 *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

@@ -19,6 +19,7 @@ import ReportButton from '../components/ReportButton.jsx';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator.jsx';
 import usePullToRefresh from '../hooks/usePullToRefresh.js';
 import usePageMeta from '../hooks/usePageMeta.js';
+import { useSettings } from '../store/settings.jsx';
 import { STICKERS, Sticker, QUICK_EMOJI } from '../stickers/pack.jsx';
 
 function pickAudioMime() {
@@ -66,6 +67,19 @@ export default function Messenger() {
     const [urlParams] = useSearchParams();
     const linkedMessageId = urlParams.get('message');
     const { user, token } = useAuth();
+    const { raw: messengerSettings } = useSettings();
+    const canUseNewUI = messengerSettings.messenger_ui_access === 'all' || (user?.role === 'admin' || user?.role === 'ADMIN');
+    const allowUIChoice = messengerSettings.messenger_ui_user_choice === 'true' && canUseNewUI;
+    const preferredUI = canUseNewUI && messengerSettings.messenger_ui_default === 'new' ? 'new' : 'classic';
+    const [uiOverride, setUIOverride] = useState(() => {
+        try { return window.localStorage.getItem('mrr_messenger_ui') || ''; } catch { return ''; }
+    });
+    const messengerVersion = canUseNewUI && allowUIChoice && ['classic', 'new'].includes(uiOverride) ? uiOverride : preferredUI;
+    const isMessengerV2 = messengerVersion === 'new';
+    const changeMessengerUI = (version) => {
+        setUIOverride(version);
+        try { window.localStorage.setItem('mrr_messenger_ui', version); } catch { /* storage unavailable */ }
+    };
     const socket = useSocket();
     const onlineUsers = useOnlineUsers();
     const nav = useNavigate();
@@ -642,7 +656,7 @@ export default function Messenger() {
 
     return (
         <div
-            className={isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'}
+            className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''}`}
             style={isChatRoom ? {
                 paddingTop: 'env(safe-area-inset-top, 0px)',
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -659,6 +673,7 @@ export default function Messenger() {
                 <div className="p-4 border-b border-white/5 shrink-0">
                     <div className="flex items-center gap-1">
                         <h2 className="text-xl font-bold">Чаты</h2>
+                        {isMessengerV2 && <span className="mrr-v2-label" aria-label="Новый интерфейс">2.0</span>}
                         <div className="ml-auto"><NewChatButton onCreated={(id) => nav(`/app/chats/${id}`)} /></div>
                     </div>
                     <div className="flex items-center gap-2 mt-3" role="group" aria-label="Фильтр чатов">
@@ -704,7 +719,7 @@ export default function Messenger() {
                                         ? <GroupAvatar members={c.members} onlineSet={onlineUsers} />
                                         : <Avatar user={other} size={46} online={otherOnline} />}
                                     <div className="flex-1 min-w-0 text-left">
-                                        <div className="font-semibold truncate">{title}</div>
+                                        <div className="flex items-center gap-2 min-w-0"><div className="font-semibold truncate flex-1">{title}</div>{isMessengerV2 && c.lastMessage?.createdAt && <time className="mrr-chat-time" dateTime={c.lastMessage.createdAt}>{new Date(c.lastMessage.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</time>}</div>
                                         <div className={`text-xs truncate ${typingText ? 'text-violet-soft italic' : 'text-white/40'}`}>
                                             {typingText ? (
                                                 <span className="inline-flex items-center gap-1">
@@ -806,6 +821,7 @@ export default function Messenger() {
                                             onClick={() => { setHeaderMenuOpen(false); setShowGallery(true); }}
                                             className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5 flex items-center gap-2"
                                         >🖼️ Медиа и файлы</button>
+                                        {allowUIChoice && <button type="button" onClick={() => { setHeaderMenuOpen(false); changeMessengerUI(isMessengerV2 ? "classic" : "new"); }} className="w-full text-left px-3 py-2 text-sm rounded-xl hover:bg-white/5">{isMessengerV2 ? "↩ Классический интерфейс" : "✨ Новый интерфейс 2.0"}</button>}
                                         {activeChat?.type === 'GROUP' && (
                                             <button type="button"
                                                 onClick={() => { setHeaderMenuOpen(false); setShowMembers(true); }}
@@ -1021,7 +1037,7 @@ export default function Messenger() {
                                         onChange={handleChange}
                                         onKeyDown={(e) => {
                                             if (mentionQuery) return;
-                                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+                                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing && window.matchMedia('(min-width: 768px)').matches) { e.preventDefault(); send(); }
                                         }}
                                         placeholder="Написать сообщение…"
                                         className="input flex-1 min-w-0 resize-none max-h-40 !py-2.5 md:!py-3 text-base rounded-2xl" aria-label="Текст сообщения"
