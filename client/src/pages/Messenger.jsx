@@ -713,7 +713,7 @@ export default function Messenger() {
             className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''} ${isMessengerV2 && isChatRoom ? 'mrr-v2-chat-room' : ''} ${visibleViewport?.keyboard ? 'mrr-v2-keyboard-open' : ''}`}
             style={isChatRoom ? {
                 paddingTop: visibleViewport?.keyboard ? 0 : 'env(safe-area-inset-top, 0px)',
-                paddingBottom: visibleViewport?.keyboard ? 0 : 'env(safe-area-inset-bottom, 0px)',
+                paddingBottom: isMessengerV2 ? 0 : (visibleViewport?.keyboard ? 0 : 'env(safe-area-inset-bottom, 0px)'),
                 ...(isMessengerV2 && visibleViewport ? {
                     top: visibleViewport.top,
                     bottom: 'auto',
