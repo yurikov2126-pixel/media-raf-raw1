@@ -469,7 +469,7 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
             {/* Затемнение */}
             <div
                 ref={backdropRef}
-                className={messengerOptimized ? "absolute inset-0 bg-slate-950/60 backdrop-blur-xl" : "absolute inset-0 bg-black/95 backdrop-blur-sm"}
+                className={messengerOptimized ? "absolute inset-0 pointer-events-none" : "absolute inset-0 bg-black/95 backdrop-blur-sm"}
             />
 
             {/* Сцена — трансформируется при свайпе */}
