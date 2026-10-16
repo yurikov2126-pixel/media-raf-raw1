@@ -62,7 +62,7 @@ function readStoredRate() {
     }
 }
 
-export default function VoicePlayer({ src, isOwn }) {
+export default function VoicePlayer({ src, isOwn, preview = false }) {
     const audioRef = useRef(null);
     const waveformRef = useRef(null);
 
@@ -87,11 +87,12 @@ export default function VoicePlayer({ src, isOwn }) {
 
     useEffect(() => {
         let cancelled = false;
+        if (preview || url.startsWith('blob:')) { setRealPeaks(null); return; }
         loadPeaks(url).then((peaks) => {
             if (!cancelled && peaks) setRealPeaks(peaks);
         });
         return () => { cancelled = true; };
-    }, [url]);
+    }, [url, preview]);
 
     const bars = useMemo(() => {
         if (realPeaks && realPeaks.length > 0) {
