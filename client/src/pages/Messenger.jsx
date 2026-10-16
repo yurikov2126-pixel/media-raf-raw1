@@ -1,3 +1,4 @@
+import VoicePlayer from '../components/VoicePlayer.jsx';
 import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
 import AttachmentEditorV2 from '../components/messenger/AttachmentEditorV2.jsx';
 import { uploadFileWithProgress } from '../api/client.js';
@@ -1323,12 +1324,12 @@ export default function Messenger() {
                             )}
 
                             {pendingFiles.length > 0 ? null : voiceDraft && isMessengerV2 ? (
-                                <div className="flex flex-col gap-2 rounded-2xl border p-3" style={{background:'var(--bg-elev-2)', borderColor:'var(--border-strong)'}}>
+                                <div className="flex flex-col gap-2 rounded-2xl border p-3 select-none" style={{WebkitUserSelect: "none", WebkitTouchCallout: "none", background:'var(--bg-elev-2)', borderColor:'var(--border-strong)'}}>
                                     <div className="flex items-center gap-2 text-sm"><span>🎤</span><span>Прослушайте запись перед отправкой</span></div>
-                                    <audio controls preload="metadata" src={voiceDraft.url} className="w-full" aria-label="Предпрослушивание голосового сообщения" />
+                                    <div className="w-full flex justify-center"><VoicePlayer src={voiceDraft.url} isOwn={false} preview /></div>
                                     <div className="flex items-center justify-end gap-2">
-                                        <button type="button" onClick={clearVoiceDraft} className="btn-ghost !py-2 !px-3 text-sm">Удалить</button>
-                                        <button type="button" disabled={uploading} onClick={sendVoiceDraft} className="btn-primary !py-2 !px-3 text-sm">Отправить ➤</button>
+                                        <button type="button" onClick={clearVoiceDraft} className="btn-ghost !py-2 !px-3 text-sm select-none" style={{WebkitUserSelect: "none", WebkitTouchCallout: "none"}}>Удалить</button>
+                                        <button type="button" disabled={uploading} onClick={sendVoiceDraft} className="btn-primary !py-2 !px-3 text-sm select-none" style={{WebkitUserSelect: "none", WebkitTouchCallout: "none"}}>Отправить ➤</button>
                                     </div>
                                 </div>
                             ) : recording ? (
