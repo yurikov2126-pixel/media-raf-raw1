@@ -2421,3 +2421,22 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @keyframes mrr-tg-pop{from{opacity:0;transform:translateY(7px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 }
 @media(prefers-reduced-motion:reduce){.mrr-v2-telegram-menu{animation:none}}
+
+/* Messenger 2.0: outgoing and incoming text bubbles share the neutral themed surface. */
+.mrr-v2-message-surface.mrr-v2-neutral-bubble {
+  background:var(--bg-elev-2) !important;
+  color:var(--text-primary) !important;
+  border:1px solid var(--border-strong);
+  background-image:none !important;
+}
+.mrr-v2-message-surface.mrr-v2-neutral-bubble * { color:inherit; }
+.mrr-v2-telegram-menu-scrim { animation:mrr-v2-tg-backdrop-in 190ms ease-out both; }
+.mrr-v2-telegram-menu-scrim.is-closing { animation:mrr-v2-tg-backdrop-out 180ms ease-in both; pointer-events:none; }
+.mrr-v2-telegram-menu.is-closing { animation:mrr-v2-tg-close 180ms cubic-bezier(.4,0,1,1) both; pointer-events:none; }
+@keyframes mrr-v2-tg-backdrop-in { from {opacity:0} to {opacity:1} }
+@keyframes mrr-v2-tg-backdrop-out { from {opacity:1} to {opacity:0} }
+@keyframes mrr-v2-tg-close { from {opacity:1;transform:translateY(0) scale(1)} to {opacity:0;transform:translateY(9px) scale(.97)} }
+@media(prefers-reduced-motion:reduce) {
+ .mrr-v2-telegram-menu-scrim,.mrr-v2-telegram-menu-scrim.is-closing,
+ .mrr-v2-telegram-menu.is-closing { animation:none !important; }
+}
