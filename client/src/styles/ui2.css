@@ -2134,3 +2134,28 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @media (prefers-reduced-motion: reduce) {
   .mrr-messenger-v2 .mrr-v2-composer .mrr-v2-message-field { transition: none; }
 }
+
+/* iOS keyboard: the root uses VisualViewport dimensions, so no additional
+   safe-area spacer should remain between the composer and software keyboard. */
+@media (max-width: 767px) {
+  .mrr-messenger-v2.mrr-v2-keyboard-open .mrr-v2-composer { padding-bottom: 8px !important; }
+  .mrr-messenger-v2.mrr-v2-keyboard-open { overscroll-behavior: none; }
+  .mrr-messenger-v2 .mrr-v2-chat-menu { animation: mrr-v2-sheet-enter 230ms cubic-bezier(.2,.85,.25,1) both; transform-origin: bottom center; }
+  .mrr-messenger-v2 .mrr-v2-chat-menu-scrim { animation: mrr-v2-backdrop-enter 190ms ease-out both; }
+  .mrr-messenger-v2 .mrr-v2-message-actions { animation: mrr-v2-actions-enter 210ms cubic-bezier(.2,.85,.25,1) both; }
+  .mrr-messenger-v2 .mrr-v2-chat-item > button:first-of-type { transition: background-color 160ms ease, transform 160ms ease; }
+}
+@keyframes mrr-v2-sheet-enter {
+  from { opacity: 0; transform: translateY(22px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes mrr-v2-actions-enter {
+  from { opacity: 0; transform: translateY(12px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes mrr-v2-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .mrr-messenger-v2 .mrr-v2-chat-menu,
+  .mrr-messenger-v2 .mrr-v2-chat-menu-scrim,
+  .mrr-messenger-v2 .mrr-v2-message-actions { animation: none !important; }
+}
