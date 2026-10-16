@@ -145,7 +145,7 @@ export default function MessageBubble({
                             className="block w-full text-left border-l-2 border-white/40 pl-2 mb-1 text-xs opacity-80 hover:opacity-100"
                         >
                             <div className="font-bold">{m.replyTo.sender?.fullName}</div>
-                            {m.replyTo.type === 'image' && v2 && <div className="mrr-v2-reply-preview">{(replyAlbumImages.length ? replyAlbumImages : [m.replyTo]).slice(0,4).map((item) => <img key={item.id} src={chatImagePreviewUrl(item.content)} alt="" loading="lazy" decoding="async" />)}</div>}
+                            {m.replyTo.type === 'image' && v2 && <div className="mrr-v2-reply-preview">{(replyAlbumImages.length ? replyAlbumImages : [m.replyTo]).slice(0,4).map((item) => <img key={item.id} src={chatImagePreviewUrl(item.content)} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = resolveUrl(item.content); }} alt="" loading="lazy" decoding="async" />)}</div>}
                             <div className="truncate max-w-[200px]">
                                 {m.replyTo.type === 'image'
                                     ? (m.replyTo.albumId ? '🖼️ Фотоальбом' : '🖼️ Фотография')
@@ -172,6 +172,7 @@ export default function MessageBubble({
                         >
                             <img
                                 src={v2 ? chatImagePreviewUrl(m.content) : resolveUrl(m.content)}
+                                onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = resolveUrl(m.content); }}
                                 alt=""
                                 decoding="async"
                                 className={`block w-full h-auto object-cover ${v2 ? "mrr-v2-chat-image-preview" : ""}`}
