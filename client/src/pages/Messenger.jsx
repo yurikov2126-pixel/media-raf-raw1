@@ -97,23 +97,23 @@ export default function Messenger() {
     const [text, setText] = useState('');
     // A draft belongs to the signed-in user and to one chat, never to another.
     const draftStorageKey = chatId && user?.id ? `mrr:chat-draft:v2:${user.id}:${chatId}` : null;
-    const draftReadyFor = useRef(null);
+    const [draftReadyFor, setDraftReadyFor] = useState(null);
     useEffect(() => {
-        draftReadyFor.current = null;
+        setDraftReadyFor(null);
         if (!isMessengerV2 || !draftStorageKey) return;
         try { setText(window.localStorage.getItem(draftStorageKey) || ''); }
         catch { setText(''); }
         setEditing(null);
         setReplyTo(null);
-        draftReadyFor.current = draftStorageKey;
+        setDraftReadyFor(draftStorageKey);
     }, [draftStorageKey, isMessengerV2]);
     useEffect(() => {
-        if (!isMessengerV2 || !draftStorageKey || draftReadyFor.current !== draftStorageKey || editing) return;
+        if (!isMessengerV2 || !draftStorageKey || draftReadyFor !== draftStorageKey || editing) return;
         try {
             if (text) window.localStorage.setItem(draftStorageKey, text);
             else window.localStorage.removeItem(draftStorageKey);
         } catch { /* storage may be disabled */ }
-    }, [text, draftStorageKey, isMessengerV2, editing]);
+    }, [text, draftStorageKey, isMessengerV2, editing, draftReadyFor]);
 
     const [replyTo, setReplyTo] = useState(null);
     const [forwarding, setForwarding] = useState(null);
