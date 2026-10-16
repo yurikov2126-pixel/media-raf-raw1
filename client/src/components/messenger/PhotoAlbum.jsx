@@ -6,9 +6,22 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
     const sender = items[0].sender;
     const [selected, setSelected] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef(null);
     const pressTimer = useRef(null);
     const gesture = useRef(null);
     useEffect(() => () => clearTimeout(pressTimer.current), []);
+    useEffect(() => {
+        if (!menuOpen) return undefined;
+        const closeOutside = (event) => { if (!menuRef.current?.contains(event.target)) setMenuOpen(false); };
+        const closeOnEscape = (event) => { if (event.key === 'Escape') setMenuOpen(false); };
+        document.addEventListener('pointerdown', closeOutside);
+        document.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOutside);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [menuOpen]);
     const toggle = (id) => setSelected((current) => current.includes(id) ? current.filter((key) => key !== id) : [...current, id]);
     const startPress = (event, item) => {
         if (event.pointerType !== 'touch') return;
@@ -51,10 +64,18 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
             window.alert('Не удалось скачать фотографии: ' + error.message);
         } finally { setBusy(false); }
     };
-    return <div className={`mrr-v2-album-row ${own ? 'mrr-v2-album-own' : ''}`} aria-label={`Альбом: ${items.length} фотографий`}>
+    return <div className={`mrr-v2-album-row ${own ? 'mrr-v2-album-own' : ''} ${selected.length ? 'mrr-v2-album-selecting' : ''}`} aria-label={`Альбом: ${items.length} фотографий`}>
         {!own && <button type="button" onClick={onProfile} aria-label={sender.fullName}><Avatar user={sender} size={34} online={onlineSet?.has(sender.id)}/></button>}
         <div className="mrr-v2-album-body">
             {!own && <div className="mrr-v2-album-author">{sender.fullName}</div>}
+            <div className="mrr-v2-album-grid-wrap">
+                <div className="mrr-v2-album-menu" ref={menuRef}>
+                    <button type="button" className="mrr-v2-album-menu-trigger" aria-label="Действия с альбомом" aria-expanded={menuOpen} aria-haspopup="menu" onClick={() => setMenuOpen((value) => !value)}>⋯</button>
+                    {menuOpen && <div role="menu" className="mrr-v2-album-dropdown">
+                        <button role="menuitem" type="button" onClick={() => { setSelected(selected.length ? [] : items.map((item) => item.id)); setMenuOpen(false); }}>{selected.length ? 'Отменить выбор' : 'Выбрать фото'}</button>
+                        <button role="menuitem" type="button" disabled={busy} onClick={() => { setMenuOpen(false); download(); }}>{selected.length ? `Скачать выбранные (${selected.length})` : 'Скачать альбом'}</button>
+                    </div>}
+                </div>
             <div className="mrr-v2-album-grid">
                 {items.map((item, index) => <button
                     type="button" key={item.id} id={`msg-${item.id}`}
@@ -68,20 +89,17 @@ export default function PhotoAlbum({ items, own, onlineSet, onOpen, onContext, o
                         gesture.current = null;
                         if (selected.length) toggle(item.id); else onOpen(item.id);
                     }}
-                    onContextMenu={(event) => { event.preventDefault(); onContext(item, event); }}
+                    onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
                     aria-pressed={selected.includes(item.id)}
                     aria-label={`${selected.includes(item.id) ? 'Выбрано' : 'Открыть'} фото ${index + 1} из ${items.length}`}>
                     <img src={resolveUrl(item.content)} alt={item.caption || `Фото ${index + 1}`} loading="lazy" />
                     {selected.includes(item.id) && <span className="mrr-v2-album-check" aria-hidden="true">✓</span>}
                 </button>)}
             </div>
+            </div>
             {items.some(item => item.caption) && <div className="mrr-v2-album-captions">
                 {items.map((item, i) => item.caption && <div key={item.id}><b>{i + 1}.</b> {item.caption}</div>)}
             </div>}
-            <div className="mrr-v2-album-actions">
-                <button type="button" onClick={() => setSelected(selected.length ? [] : items.map((item) => item.id))}>{selected.length ? `Сбросить выбор (${selected.length})` : 'Выбрать фото'}</button>
-                <button type="button" onClick={download} disabled={busy}>{busy ? 'Скачивание…' : selected.length ? `Скачать выбранные (${selected.length})` : 'Скачать альбом'}</button>
-            </div>
             <div className="mrr-v2-album-time">{new Date(items[items.length - 1].createdAt).toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}</div>
         </div>
     </div>;
