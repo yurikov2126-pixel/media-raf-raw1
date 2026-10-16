@@ -1,4 +1,5 @@
 import AttachmentPreview from '../components/messenger/AttachmentPreview.jsx';
+import AttachmentEditorV2 from '../components/messenger/AttachmentEditorV2.jsx';
 import { uploadFileWithProgress } from '../api/client.js';
 import { sendAttachmentBatch } from '../lib/sendAttachmentBatch.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -1011,7 +1012,20 @@ export default function Messenger() {
                                 </div>
                             )}
 
-                            {pendingFiles.length > 0 && (
+                            {isMessengerV2 && pendingFiles.length > 0 && (
+                                <AttachmentEditorV2
+                                    files={pendingFiles}
+                                    captions={attachmentCaptions}
+                                    onFilesChange={setPendingFiles}
+                                    onCaptionsChange={setAttachmentCaptions}
+                                    onCancel={() => { setPendingFiles([]); setAttachmentCaptions({}); }}
+                                    onSend={sendPendingFiles}
+                                    uploading={uploading}
+                                    progress={attachmentProgress}
+                                    sentCount={attachmentIndex}
+                                />
+                            )}
+                            {!isMessengerV2 && pendingFiles.length > 0 && (
                                 <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: 'var(--border-strong)', backgroundColor: 'var(--bg-elev-2)' }}>
                                     <div className="flex items-center justify-between gap-2">
                                         <span className="text-sm font-semibold">Вложения: {pendingFiles.length} из 20</span>
