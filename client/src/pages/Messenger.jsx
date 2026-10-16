@@ -812,7 +812,7 @@ export default function Messenger() {
             voicePressRef.current = null;
             setRecordGesture('');
             setRecordLift(0);
-            if (gesture.action === 'lock') setRecordLocked(true);
+            if (gesture.action === 'lock') { setRecordLocked(true); try { navigator.vibrate?.(25); } catch {} }
             // Upward swipe locks the recording; release otherwise stops into preview.
             if (gesture.action !== 'lock') {
                 if (mediaRecorderRef.current) stopRecording(gesture.action === 'cancel');
@@ -1370,21 +1370,30 @@ export default function Messenger() {
                                 </div>
                             ) : recording ? (
                                 isMessengerV2 ? (
-                                    <div className={`mrr-v2-recording-no-selection mrr-v2-recording-panel ${recordLocked ? "mrr-v2-recording-is-locked" : ""}`}>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <span className="mrr-v2-recording-dot" />
-                                            <span className="text-xs font-semibold tabular-nums">{String(Math.floor(recordingSec / 60)).padStart(2, '0')}:{String(recordingSec % 60).padStart(2, '0')}</span>
+                                    <div className={`mrr-v2-recording-no-selection mrr-v2-voice-compose ${recordLocked ? 'mrr-v2-voice-compose-locked' : ''}`}>
+                                        <div className="mrr-v2-voice-capsule">
+                                            <span className="mrr-v2-recording-dot" aria-label="Идёт запись" />
+                                            <span className="mrr-v2-voice-clock tabular-nums">{String(Math.floor(recordingSec / 60)).padStart(2, '0')}:{String(recordingSec % 60).padStart(2, '0')}</span>
+                                            {recordLocked ? (
+                                                <button type="button" className="mrr-v2-voice-cancel" onClick={() => stopRecording(true)}>Отмена</button>
+                                            ) : (
+                                                <span className="mrr-v2-voice-hint">{recordGesture === 'cancel' ? 'Отпустите для отмены' : '‹ Влево — отмена'}</span>
+                                            )}
+                                            {recordLocked && <div className="mrr-v2-voice-mini-wave">{recordAnalyser && <RecordingWaveform analyser={recordAnalyser} />}</div>}
                                         </div>
-                                        <div className="min-w-0 flex-1">
-                                            {recordAnalyser ? <RecordingWaveform analyser={recordAnalyser} /> : <div className="mrr-v2-live-voice-placeholder" />}
-                                            <div className="text-[10px] opacity-65 truncate">{recordLocked ? '🔒 Запись закреплена — можно отпустить' : recordGesture === 'cancel' ? 'Отпустите для отмены' : recordGesture === 'lock' ? '🔒 Отпустите — запись продолжится' : '← Отмена · ↑ Закрепить'}</div>
+                                        <div className="mrr-v2-voice-floating-wrap">
+                                            {!recordLocked && <div className={`mrr-v2-voice-lock-guide ${recordGesture === 'lock' ? 'is-ready' : ''}`} aria-hidden="true">
+                                                <span>♙</span><span>⌃</span>
+                                            </div>}
+                                            <button type="button"
+                                                className={`mrr-v2-voice-floating-button ${recordLocked ? 'is-locked' : ''}`}
+                                                style={recordLocked ? undefined : { transform: `translateY(-${recordLift}px)` }}
+                                                onClick={recordLocked ? () => stopRecording(false) : undefined}
+                                                aria-label={recordLocked ? 'Завершить запись и прослушать' : 'Запись голосового — поднимите палец для фиксации'}>
+                                                {recordLocked ? '➤' : '🎤'}
+                                            </button>
                                         </div>
-                                        <div className="mrr-v2-voice-lock-track" aria-hidden="true">
-                                            <span className="mrr-v2-voice-lock-target">{recordLocked || recordGesture === 'lock' ? '🔒' : '🔓'}</span>
-                                            <span className="mrr-v2-voice-lock-mic" style={{ transform: `translateY(-${recordLift}px)` }}>🎤</span>
-                                        </div>
-                                        <button type="button" onClick={() => stopRecording(true)} className="btn-ghost !px-2 !py-2 text-xs shrink-0">Отмена</button>
-                                        <button type="button" onClick={() => stopRecording(false)} className="btn-primary !px-3 !py-2 text-xs shrink-0">Готово ✓</button>
+                                        {recordGesture === 'lock' && !recordLocked && <div className="mrr-v2-voice-lock-toast">Отпустите — запись продолжится</div>}
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-3 bg-pink/10 border border-pink/30 rounded-2xl px-3 py-2">
