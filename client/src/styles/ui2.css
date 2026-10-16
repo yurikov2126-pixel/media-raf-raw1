@@ -2271,3 +2271,16 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
  .mrr-messenger-v2 .mrr-v2-chat-image { width:min(100%,180px); max-width:180px; }
  .mrr-messenger-v2 .mrr-v2-chat-image-preview { max-height:225px; }
 }
+
+/* Messenger 2.0 photo albums: persisted groups of individually addressable images. */
+.mrr-messenger-v2 .mrr-v2-album-row { display:flex; gap:8px; align-items:flex-start; margin:10px 0; max-width:100%; }
+.mrr-messenger-v2 .mrr-v2-album-own { justify-content:flex-start; flex-direction:row-reverse; }
+.mrr-messenger-v2 .mrr-v2-album-body { width:min(100%,360px); min-width:0; }
+.mrr-messenger-v2 .mrr-v2-album-author { font-size:12px; color:var(--text-secondary); margin:0 0 5px 4px; }
+.mrr-messenger-v2 .mrr-v2-album-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px; overflow:hidden; border-radius:16px; }
+.mrr-messenger-v2 .mrr-v2-album-tile { display:block; overflow:hidden; aspect-ratio:1; border:0; padding:0; min-width:0; background:var(--bg-elev-2); }
+.mrr-messenger-v2 .mrr-v2-album-tile img { width:100%; height:100%; object-fit:cover; }
+.mrr-messenger-v2 .mrr-v2-album-tile:focus-visible { outline:3px solid var(--brand-accent-1); outline-offset:-3px; }
+.mrr-messenger-v2 .mrr-v2-album-captions { margin-top:5px; padding:8px 10px; border-radius:12px; background:var(--bg-elev-2); color:var(--text-primary); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.mrr-messenger-v2 .mrr-v2-album-time { margin:4px 6px 0; color:var(--text-secondary); font-size:11px; text-align:right; }
+@media (max-width:767px) { .mrr-messenger-v2 .mrr-v2-album-body { width:min(72vw,280px); } }
