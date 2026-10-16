@@ -2134,3 +2134,31 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @media (prefers-reduced-motion: reduce) {
   .mrr-messenger-v2 .mrr-v2-composer .mrr-v2-message-field { transition: none; }
 }
+
+/* Messenger 2.0: fixed room aligns with the actual desktop shell, not md:left-64.
+   The parent sidebar is 272px wide at >=901px; 768-900px has no sidebar. */
+@media (min-width: 901px) {
+  .mrr-messenger-v2.mrr-v2-chat-room { left: 272px !important; right: 0; width: calc(100% - 272px); max-width: none; }
+}
+@media (min-width: 768px) and (max-width: 900px) {
+  .mrr-messenger-v2.mrr-v2-chat-room { left: 0 !important; right: 0; width: 100%; }
+}
+@media (max-width: 767px) {
+  /* VisualViewport height is applied inline while the keyboard is visible. */
+  .mrr-messenger-v2.mrr-v2-chat-room { left: 0; right: 0; width: 100%; max-height: none; }
+  .mrr-messenger-v2.mrr-v2-keyboard-open .mrr-v2-composer { padding-bottom: 8px !important; }
+  .mrr-messenger-v2.mrr-v2-keyboard-open > section > .relative.z-0 { min-height: 0; }
+  .mrr-messenger-v2 .mrr-v2-chat-menu { animation: mrr-v2-sheet-in 230ms cubic-bezier(.22,1,.36,1) both; transform-origin: center bottom; }
+  .mrr-messenger-v2 .mrr-v2-chat-menu-scrim,
+  .mrr-messenger-v2 .mrr-v2-message-menu-scrim { animation: mrr-v2-scrim-in 200ms ease-out both; }
+  .mrr-messenger-v2 .mrr-v2-message-menu { animation: mrr-v2-pop-in 200ms cubic-bezier(.22,1,.36,1) both; transform-origin: 50% 85%; }
+}
+@keyframes mrr-v2-sheet-in { from { opacity: 0; transform: translateY(30px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes mrr-v2-pop-in { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes mrr-v2-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .mrr-messenger-v2 .mrr-v2-chat-menu,
+  .mrr-messenger-v2 .mrr-v2-chat-menu-scrim,
+  .mrr-messenger-v2 .mrr-v2-message-menu,
+  .mrr-messenger-v2 .mrr-v2-message-menu-scrim { animation: none !important; }
+}
