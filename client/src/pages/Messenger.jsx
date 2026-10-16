@@ -1548,9 +1548,9 @@ export default function Messenger() {
                 const selected = contextMenu.message;
                 const rect = document.getElementById(`msg-${selected.id}`)?.getBoundingClientRect();
                 const mobileWidth = Math.min(320, window.innerWidth - 24);
-                const menuHeight = Math.min(350, actions.length * 43 + 16);
-                const previewHeight = 72;
-                const totalHeight = 54 + previewHeight + menuHeight + 18;
+                const menuHeight = Math.min(400, actions.length * 48 + 12);
+                const previewHeight = selected.type === 'image' ? 132 : 78;
+                const totalHeight = (selected.deletedAt ? 0 : 56) + previewHeight + menuHeight + 22;
                 const top = Math.max(12, Math.min((rect?.top ?? contextMenu.y) - 54, window.innerHeight - totalHeight - 12));
                 const left = Math.max(12, Math.min(rect?.left ?? contextMenu.x - mobileWidth / 2, window.innerWidth - mobileWidth - 12));
                 const previewText = selected.deletedAt ? 'Сообщение удалено'
@@ -1569,36 +1569,30 @@ export default function Messenger() {
                 };
                 return (
                     <>
-                        <button type="button" className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[3px] md:bg-transparent md:backdrop-blur-none cursor-default mrr-v2-message-menu-scrim"
-                            onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
-                        {/* Telegram-inspired contextual popover with a selected-message preview. */}
-                        <div className="mrr-message-actions fixed z-[80] md:hidden flex flex-col gap-2 mrr-v2-message-menu"
-                            style={{ left, top, width: mobileWidth, maxHeight: 'calc(100dvh - 24px)' }}
+                        <button type="button" className="fixed inset-0 z-[70] mrr-v2-telegram-menu-scrim" onClick={() => setContextMenu(null)} aria-label="Закрыть действия с сообщением" />
+                        <div className="mrr-message-actions fixed z-[80] md:hidden mrr-v2-telegram-menu"
+                            style={{left, top, width:mobileWidth, maxHeight:'calc(100dvh - 24px)'}}
                             role="dialog" aria-modal="true" aria-label="Действия с сообщением">
-                            {!selected.deletedAt && (
-                                <div className="flex items-center justify-between gap-1 rounded-full px-2 py-1 shadow-xl border"
-                                    style={{ backgroundColor: 'var(--bg-elev-1)', borderColor: 'var(--border-strong)' }}>
-                                    {quickReactions.map((emoji) => (
-                                        <button type="button" key={emoji} onClick={() => { toggleReaction(selected.id, emoji); setContextMenu(null); }}
-                                            className="text-xl flex-1 min-w-0 h-10 rounded-full active:scale-110 transition-transform"
-                                            aria-label={`Реакция ${emoji}`}>{emoji}</button>
-                                    ))}
-                                </div>
-                            )}
-                            <div className="rounded-2xl px-3 py-3 shadow-lg border max-h-[72px] overflow-hidden"
-                                style={{ backgroundColor: selected.sender.id === user.id ? 'var(--bg-elev-3)' : 'var(--bg-elev-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}>
-                                <div className="text-xs font-semibold opacity-60 mb-1">{selected.sender.fullName}</div>
-                                <div className="text-sm line-clamp-2 break-words">{previewText}</div>
+                            {!selected.deletedAt && <div className="mrr-v2-telegram-reactions" aria-label="Быстрые реакции">
+                                {quickReactions.map((emoji) => <button type="button" key={emoji}
+                                    onClick={() => { toggleReaction(selected.id,emoji); setContextMenu(null); }}
+                                    aria-label={`Реакция ${emoji}`}>{emoji}</button>)}
+                            </div>}
+                            <div className={`mrr-v2-telegram-selected ${selected.sender.id === user.id ? 'is-own' : ''}`}>
+                                {selected.type === 'image' && !selected.deletedAt ? <img className="mrr-v2-telegram-selected-image" src={resolveUrl(selected.content)} alt="Выбранное фото" /> : null}
+                                <div className="mrr-v2-telegram-selected-author">{selected.sender.fullName}</div>
+                                {selected.type !== 'image' && <div className="mrr-v2-telegram-selected-text">{previewText}</div>}
                             </div>
-                            <div className="rounded-2xl border shadow-2xl p-1 overflow-y-auto min-h-0"
-                                style={{ backgroundColor: 'var(--bg-elev-1)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)', maxHeight: menuHeight }}>
-                                {actions.filter((a) => a.id !== 'react').map((a) => (
-                                    <button type="button" key={a.id} onClick={() => handler(a.id)}
-                                        className="w-full min-h-10 text-left px-3 py-2 text-sm rounded-xl hover:bg-white/10 active:bg-white/15"
-                                        style={a.danger ? { color: '#e94b78' } : undefined}>
-                                        {a.label}
-                                    </button>
-                                ))}
+                            <div className="mrr-v2-telegram-actions" style={{maxHeight:menuHeight}}>
+                                {actions.filter((a) => a.id !== 'react').map((a) => {
+                                    const icon = {'reply':'↶','copy':'▢','edit':'✎','pin':'♧','forward':'➜','delete':'♲','report':'⚑','album-select':'☑','album-download':'↓'}[a.id] || '•';
+                                    const label = a.label.replace(/^[^А-Яа-яA-Za-z]+/u,'');
+                                    return <button type="button" key={a.id} onClick={() => handler(a.id)}
+                                        className={`mrr-v2-telegram-action ${a.danger ? 'is-danger' : ''} ${a.id === 'album-select' ? 'is-divider' : ''}`}>
+                                        <span className="mrr-v2-telegram-action-icon" aria-hidden="true">{icon}</span>
+                                        <span>{label}</span>
+                                    </button>;
+                                })}
                             </div>
                         </div>
                         {/* На компьютере оставляем контекстное меню у курсора. */}
