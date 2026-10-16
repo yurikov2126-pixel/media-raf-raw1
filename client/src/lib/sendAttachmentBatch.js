@@ -9,7 +9,9 @@ export async function sendAttachmentBatch({
 }) {
     let completed = 0;
     const isAlbum = files.filter((file) => file.type.startsWith('image/')).length > 1;
-    const albumId = isAlbum ? makeId() : null;
+    const albumKey = `album:${chatId}`;
+    const albumId = isAlbum ? (retryCache.get(albumKey) || makeId()) : retryCache.get(albumKey) || null;
+    if (albumId) retryCache.set(albumKey, albumId);
     try {
         for (const file of files) {
             const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
@@ -35,6 +37,7 @@ export async function sendAttachmentBatch({
             onFileSent(completed);
             onProgress(Math.round(completed / files.length * 100));
         }
+        retryCache.delete(albumKey);
         return { completed, remaining: [], captions: {} };
     } catch (error) {
         return {
