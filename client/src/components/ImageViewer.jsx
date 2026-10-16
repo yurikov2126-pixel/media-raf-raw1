@@ -105,9 +105,9 @@ export default function ImageViewer({ images = [], startIndex = 0, onClose, mess
             const url = images[i].url;
             if (messengerOptimized) {
                 im.onload = () => decodedImages.current.add(url);
-                im.decode?.().then(() => decodedImages.current.add(url)).catch(() => {});
             }
             im.src = url;
+            if (messengerOptimized && im.decode) im.decode().then(() => decodedImages.current.add(url)).catch(() => {});
             if (messengerOptimized && im.complete && im.naturalWidth) decodedImages.current.add(url);
             return im;
         });
