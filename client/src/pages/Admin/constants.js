@@ -36,6 +36,7 @@ export const TAB_GROUPS = [
         tabs: [
             ['broadcast', 'Рассылки', '📢'],
             ['push', 'Push-уведомления', '🔔'],
+            ['messenger-ui', 'Интерфейс мессенджера', '💬'],
         ],
     },
     {
