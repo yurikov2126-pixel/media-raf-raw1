@@ -469,7 +469,9 @@ export default function Messenger() {
         const stopFollowing = () => { userScrolled = true; };
         const observer = new ResizeObserver(followBottom);
         observer.observe(el.firstElementChild || el);
-        Array.from(el.children).forEach((node) => observer.observe(node));
+        // Only watch recent messages: observing every image-heavy history row is expensive.
+        const tail = Array.from(el.children).slice(isMessengerV2 ? -10 : undefined);
+        tail.forEach((node) => observer.observe(node));
         const onMediaLoad = () => followBottom();
         el.addEventListener('load', onMediaLoad, true);
         el.addEventListener('loadedmetadata', onMediaLoad, true);
@@ -496,7 +498,8 @@ export default function Messenger() {
                 if (firstUnreadId) {
                     const target = document.getElementById(`msg-${firstUnreadId}`);
                     if (target) {
-                        el.scrollTop = Math.max(0, target.offsetTop - 40);
+                        // offsetTop is relative to an offset parent, not necessarily the scroll container.
+                        el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top - 40;
                         setHighlightId(firstUnreadId);
                         setTimeout(() => setHighlightId((cur) => (cur === firstUnreadId ? null : cur)), 1800);
                     } else el.scrollTop = el.scrollHeight;
@@ -508,7 +511,8 @@ export default function Messenger() {
         // Do not yank the reader away from older messages when a new message arrives.
         if (messages.length > 0 && nearBottomRef.current && !linkedMessageId) {
             const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-            el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? 'instant' : 'smooth' });
+            const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
+            el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion || (isMessengerV2 && distance > el.clientHeight * 2) ? 'instant' : 'smooth' });
         }
     }, [messages.length, firstUnreadId, linkedMessageId]);
 
@@ -1072,7 +1076,8 @@ export default function Messenger() {
                                     setShowJumpToLatest(false);
                                     setUnseenCount(0);
                                     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? 'instant' : 'smooth' });
+                                    const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
+                                    el.scrollTo({ top: el.scrollHeight, behavior: reduced || (isMessengerV2 && distance > el.clientHeight * 2) ? 'instant' : 'smooth' });
                                 }}
                                 className="absolute bottom-4 right-4 md:right-6 z-20 flex items-center gap-2 rounded-full border px-3 py-2.5 shadow-lg backdrop-blur-md transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet"
                                 style={{ backgroundColor: 'var(--bg-elev-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' }}>
