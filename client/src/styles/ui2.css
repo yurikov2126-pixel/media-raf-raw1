@@ -2381,3 +2381,21 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 .mrr-v2-recording-is-locked .mrr-v2-voice-lock-mic {filter:drop-shadow(0 0 7px rgba(197,91,226,.6));}
 @media(max-width:390px){.mrr-v2-voice-lock-track{width:23px;min-width:23px}.mrr-v2-voice-lock-mic{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.mrr-v2-voice-lock-mic,.mrr-v2-voice-lock-target{transition:none}}
+
+/* Messenger 2.0: compact, Telegram-inspired voice recording surface. */
+.mrr-v2-voice-compose {position:relative;display:flex;align-items:flex-end;gap:8px;min-width:0;min-height:66px;isolation:isolate}
+.mrr-v2-voice-capsule {display:flex;align-items:center;gap:8px;flex:1;min-width:0;height:51px;padding:0 12px;border:1px solid var(--border-strong);border-radius:26px;background:var(--bg-elev-2);box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.mrr-v2-voice-clock {font-size:14px;font-weight:700;white-space:nowrap;color:var(--text-primary)}
+.mrr-v2-voice-hint {flex:1;text-align:center;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrr-v2-voice-cancel {color:var(--brand-accent-1,#b85bdd);font-weight:600;font-size:13px;white-space:nowrap;min-height:42px;padding:0 7px}
+.mrr-v2-voice-mini-wave {flex:1;min-width:0;max-width:120px;opacity:.85}
+.mrr-v2-voice-mini-wave .mrr-v2-live-voice-waveform {height:26px}
+.mrr-v2-voice-floating-wrap {width:64px;height:64px;flex:none;position:relative;z-index:2}
+.mrr-v2-voice-floating-button {display:grid;place-items:center;width:64px;height:64px;border:0;border-radius:50%;color:white;font-size:29px;background:linear-gradient(135deg,#a02bde,#ed4fa5);box-shadow:0 5px 18px rgba(156,46,205,.35),0 0 0 5px rgba(163,68,220,.12);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;will-change:transform}
+.mrr-v2-voice-floating-button.is-locked {background:linear-gradient(135deg,#8035ed,#258de9);font-size:29px;box-shadow:0 5px 18px rgba(60,109,215,.3)}
+.mrr-v2-voice-lock-guide {position:absolute;bottom:73px;left:12px;width:40px;height:69px;border-radius:23px;background:var(--bg-elev-2);border:1px solid var(--border-strong);display:flex;flex-direction:column;align-items:center;justify-content:space-around;color:var(--text-secondary);font-size:21px;pointer-events:none;opacity:.92;transition:background .15s,color .15s}
+.mrr-v2-voice-lock-guide.is-ready {color:var(--brand-accent-1,#b85bdd);background:var(--bg-elev-3)}
+.mrr-v2-voice-lock-toast {position:absolute;right:3px;bottom:145px;max-width:200px;padding:7px 11px;border-radius:12px;background:var(--bg-elev-2);color:var(--text-primary);font-size:12px;box-shadow:0 4px 18px rgba(0,0,0,.2);pointer-events:none}
+.mrr-v2-voice-compose-locked .mrr-v2-voice-capsule {border-color:var(--brand-accent-1,#b85bdd)}
+@media(max-width:390px){.mrr-v2-voice-compose{gap:5px}.mrr-v2-voice-capsule{gap:6px;padding:0 9px}.mrr-v2-voice-floating-wrap,.mrr-v2-voice-floating-button{width:58px;height:58px}.mrr-v2-voice-hint{font-size:11px}.mrr-v2-voice-lock-guide{left:9px}}
+@media(prefers-reduced-motion:reduce){.mrr-v2-voice-floating-button,.mrr-v2-voice-lock-guide{transition:none}}
