@@ -2210,3 +2210,26 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
  .mrr-messenger-v2 .mrr-v2-attachment-grid { grid-template-columns:minmax(0,1fr); }
  .mrr-messenger-v2 .mrr-v2-attachment-thumb { width:76px; height:76px; }
 }
+
+/* Messenger 2.0 mobile: tighter composer without compromising the iPhone home indicator. */
+@media (max-width: 767px) {
+  .mrr-messenger-v2.mrr-v2-chat-room .mrr-v2-composer {
+    padding: 5px 8px calc(5px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .mrr-messenger-v2.mrr-v2-keyboard-open .mrr-v2-composer {
+    padding-bottom: 5px !important;
+  }
+  .mrr-messenger-v2 .mrr-v2-composer > .flex.items-end { gap: 4px; align-items: center; }
+  .mrr-messenger-v2 .mrr-v2-composer > .flex.items-end > button,
+  .mrr-messenger-v2 .mrr-v2-composer > .flex.items-end > .relative > button {
+    min-width: 40px !important;
+    min-height: 44px !important;
+    padding: 8px !important;
+    border-radius: 13px;
+  }
+  .mrr-messenger-v2 .mrr-v2-composer .mrr-v2-message-field {
+    min-height: 42px;
+    padding: 8px 11px !important;
+    border-radius: 18px;
+  }
+}
