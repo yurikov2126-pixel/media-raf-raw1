@@ -468,7 +468,10 @@ export default function Messenger() {
         if (!socket) return;
         const onNew = (m) => {
             if (m.chatId === chatId) {
-                if (isMessengerV2 && m.senderId !== user.id && m.sender?.id !== user.id) socket.emit('message:received', { chatId, messageId: m.id });
+                if (isMessengerV2 && m.senderId !== user.id && m.sender?.id !== user.id) {
+                    socket.emit('message:received', { chatId, messageId: m.id });
+                    if (nearBottomRef.current && document.visibilityState === 'visible') socket.emit('chat:read', { chatId });
+                }
                 if (!nearBottomRef.current && m.senderId !== user.id && m.sender?.id !== user.id) setUnseenCount((n) => n + 1);
                 setMessages((prev) => prev.some((item) => item.id === m.id) ? prev : [...prev, m]);
             }
@@ -1257,7 +1260,9 @@ export default function Messenger() {
                         <div ref={scrollRef} onScroll={(event) => {
                             const el = event.currentTarget;
                             const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                            const wasNearBottom = nearBottomRef.current;
                             nearBottomRef.current = nearBottom;
+                            if (isMessengerV2 && nearBottom && !wasNearBottom && document.visibilityState === 'visible') socket?.emit('chat:read', { chatId });
                             setShowJumpToLatest(!nearBottom);
                             if (nearBottom) setUnseenCount(0);
                         }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 md:px-6 py-4 space-y-2">
