@@ -2284,3 +2284,12 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 .mrr-messenger-v2 .mrr-v2-album-captions { margin-top:5px; padding:8px 10px; border-radius:12px; background:var(--bg-elev-2); color:var(--text-primary); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .mrr-messenger-v2 .mrr-v2-album-time { margin:4px 6px 0; color:var(--text-secondary); font-size:11px; text-align:right; }
 @media (max-width:767px) { .mrr-messenger-v2 .mrr-v2-album-body { width:min(72vw,280px); } }
+
+/* Messenger 2.0 album actions and touch selection */
+.mrr-messenger-v2 .mrr-v2-album-tile { position:relative; -webkit-touch-callout:none; }
+.mrr-messenger-v2 .mrr-v2-album-selected { outline:3px solid var(--brand-accent-1); outline-offset:-3px; }
+.mrr-messenger-v2 .mrr-v2-album-check { position:absolute; top:6px; right:6px; display:grid; place-items:center; width:25px; height:25px; border-radius:50%; color:white; background:var(--brand-accent-1); font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,.3); }
+.mrr-messenger-v2 .mrr-v2-album-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+.mrr-messenger-v2 .mrr-v2-album-actions button { padding:7px 10px; border-radius:11px; border:1px solid var(--border-strong); background:var(--bg-elev-2); color:var(--text-primary); font-size:12px; font-weight:600; min-height:36px; }
+.mrr-messenger-v2 .mrr-v2-album-actions button:disabled { opacity:.5; }
+.mrr-messenger-v2 .mrr-v2-album-actions button:focus-visible { outline:2px solid var(--brand-accent-1); outline-offset:2px; }
