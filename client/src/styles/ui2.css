@@ -2340,3 +2340,13 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 @media(prefers-reduced-motion:reduce) {
   .mrr-v2-viewer-fade,.mrr-v2-viewer-fade.mrr-v2-viewer-closing { animation:none !important; opacity:1; }
 }
+
+/* Messenger 2.0: progressive history as first stage of bounded rendering. */
+.mrr-messenger-v2 .mrr-v2-load-history {
+  display:block; margin:2px auto 14px; min-height:40px; max-width:100%;
+  padding:8px 15px; border:1px solid var(--border-strong); border-radius:999px;
+  background:var(--bg-elev-2); color:var(--text-primary);
+  font-size:12px; font-weight:600; transition:background 160ms ease;
+}
+.mrr-messenger-v2 .mrr-v2-load-history:active { background:var(--bg-elev-3); }
+.mrr-messenger-v2 .mrr-v2-load-history:focus-visible { outline:2px solid var(--brand-accent-1); outline-offset:2px; }
