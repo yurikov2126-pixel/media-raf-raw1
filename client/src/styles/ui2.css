@@ -2350,3 +2350,15 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 }
 .mrr-messenger-v2 .mrr-v2-load-history:active { background:var(--bg-elev-3); }
 .mrr-messenger-v2 .mrr-v2-load-history:focus-visible { outline:2px solid var(--brand-accent-1); outline-offset:2px; }
+
+/* Prevent native iOS text selection during long-press voice recording.
+   Scope strictly to the recorder; chat messages remain selectable. */
+.mrr-v2-recording-no-selection,
+.mrr-v2-recording-no-selection *,
+.mrr-v2-recording-no-selection *::before,
+.mrr-v2-recording-no-selection *::after {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+.mrr-v2-recording-no-selection button { touch-action: manipulation; }
