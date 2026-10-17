@@ -11,6 +11,9 @@ export default function Radio() {
   const [tab, setTab] = useState('home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [openFolders, setOpenFolders] = useState({});
+  const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -39,11 +42,12 @@ export default function Radio() {
   const refresh = useCallback(async () => {
     const from = new Date(date + 'T00:00:00');
     const to = new Date(from.getTime() + 7 * 86400000);
-    const [a, p, s] = await Promise.all([
+    const [a, p, s, f] = await Promise.all([
       call('/assets'), call('/playlists'),
       call('/schedule?from=' + encodeURIComponent(from.toISOString()) + '&to=' + encodeURIComponent(to.toISOString())),
+      call('/folders'),
     ]);
-    setAssets(a.assets); setPlaylists(p.playlists); setSlots(s.slots);
+    setAssets(a.assets); setPlaylists(p.playlists); setSlots(s.slots); setFolders(f.folders);
   }, [call, date]);
   useEffect(() => { refresh().catch(e => setError(e.message)); }, [refresh]);
   const action = async fn => {
@@ -88,6 +92,28 @@ export default function Radio() {
     setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]);
   });
   const reset = () => { setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]); };
+  const createFolder = () => {
+    const name = window.prompt('Название новой папки');
+    if (name?.trim()) action(() => call('/folders', { method: 'POST', body: { name: name.trim() } }));
+  };
+  const renameFolder = folder => {
+    const name = window.prompt('Название папки', folder.name);
+    if (name?.trim() && name.trim() !== folder.name)
+      action(() => call('/folders/' + folder.id, { method: 'PATCH', body: { name: name.trim() } }));
+  };
+  const removeFolder = folder => {
+    if (window.confirm('Удалить папку «' + folder.name + '»? Плейлисты останутся в разделе «Без папки».'))
+      action(() => call('/folders/' + folder.id, { method: 'DELETE' }));
+  };
+  const movePlaylist = (id, folderId) => {
+    if (!id) return;
+    setDragPlaylistId(null);
+    action(() => call('/playlists/' + id + '/folder', { method: 'PATCH', body: { folderId } }));
+  };
+  const deletePlaylist = playlist => {
+    if (window.confirm('Удалить плейлист «' + playlist.name + '»? Это невозможно, если он используется в сетке вещания.'))
+      action(() => call('/playlists/' + playlist.id, { method: 'DELETE' }));
+  };
   const renameAsset = asset => {
     const name = window.prompt('Новое название записи', asset.name);
     if (name !== null && name.trim() && name.trim() !== asset.name) {
@@ -242,14 +268,52 @@ export default function Radio() {
           <button type="button" className="rounded-xl border px-4 py-2" onClick={reset}>Отмена</button>
         </div>
       </form>}
-      {playlists.map(p => <article key={p.id} className="rounded-2xl border border-current/10 p-4 space-y-2">
-        <div className="flex gap-3 justify-between flex-wrap"><h3 className="font-semibold">{p.name}</h3><span className="text-xs opacity-70">{p.status==='APPROVED'?'Утверждён':'Черновик'}</span></div>
-        <p className="text-sm opacity-70">{p.description}</p>
-        <p className="text-xs opacity-60">{p.items.length} записей · {fmt(p.items.reduce((sum,i)=>sum+i.asset.durationMs,0))}</p>
-        <div className="flex gap-2 flex-wrap">
-          <button className={btn} onClick={()=>startEdit(p)}>Редактировать</button>{p.status!=='APPROVED' && <button className={btn} disabled={!p.items.length} onClick={()=>action(()=>call('/playlists/'+p.id+'/approve',{method:'POST'}))}>Утвердить</button>}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="text-lg font-semibold">Плейлисты <span className="text-sm opacity-50">({playlists.length})</span></h3>
+          <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={createFolder}>+ Новая папка</button>
         </div>
-      </article>)}
+        {[{ id: null, name: 'Без папки' }, ...folders].map(folder => {
+          const content = playlists.filter(p => (p.folderId || null) === folder.id);
+          const expanded = folder.id === null || openFolders[folder.id] !== false;
+          return <section key={folder.id || 'root'} className="rounded-xl border border-current/15 overflow-hidden"
+            onDragOver={e => { if (dragPlaylistId) e.preventDefault(); }}
+            onDrop={e => { e.preventDefault(); if (dragPlaylistId) movePlaylist(dragPlaylistId, folder.id); }}>
+            <div className="flex items-center justify-between gap-2 bg-white/5 px-3 py-2">
+              <button type="button" className="flex-1 text-left text-sm font-semibold" onClick={() => folder.id && setOpenFolders(o=>({...o,[folder.id]:!expanded}))}>
+                {expanded ? '▾' : '▸'} 📁 {folder.name} <span className="opacity-50">({content.length})</span>
+              </button>
+              {folder.id && <div className="flex items-center gap-2">
+                <button type="button" className="text-xs opacity-70" onClick={()=>renameFolder(folder)}>Переименовать</button>
+                <button type="button" className="text-xs text-red-500" onClick={()=>removeFolder(folder)}>Удалить папку</button>
+              </div>}
+            </div>
+            {expanded && <div className="divide-y divide-current/10 min-h-10">
+              {content.length===0 && <p className="px-3 py-3 text-xs opacity-50">Перетащите плейлист в эту папку</p>}
+              {content.map(p => <div key={p.id} draggable
+                onDragStart={e => { setDragPlaylistId(p.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id); }}
+                onDragEnd={() => setDragPlaylistId(null)}
+                className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-white/5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex gap-2 items-center"><span className="cursor-grab opacity-50" title="Перетащить">⠿</span>
+                    <span className="font-medium text-sm truncate">{p.name}</span>
+                    <span className="shrink-0 text-xs opacity-50">{p.status==='APPROVED'?'Утверждён':'Черновик'}</span></div>
+                  <p className="ml-5 text-xs opacity-60 truncate">{p.items.length} записей · {fmt(p.items.reduce((sum,i)=>sum+i.asset.durationMs,0))}{p.description ? ' · ' + p.description : ''}</p>
+                </div>
+                <div className="flex gap-2 items-center shrink-0">
+                  <select aria-label={'Папка для ' + p.name} className="max-w-28 text-xs bg-transparent border border-current/20 rounded-lg px-1 py-2"
+                    value={p.folderId || ''} onChange={e=>movePlaylist(p.id,e.target.value || null)}>
+                    <option value="">Без папки</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                  <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" onClick={()=>startEdit(p)}>Изменить</button>
+                  {p.status!=='APPROVED' && <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" disabled={!p.items.length} onClick={()=>action(()=>call('/playlists/'+p.id+'/approve',{method:'POST'}))}>Утвердить</button>}
+                  <button type="button" className="text-xs rounded-lg border border-red-500/30 text-red-500 px-2 py-2" onClick={()=>deletePlaylist(p)}>Удалить</button>
+                </div>
+              </div>)}
+            </div>}
+          </section>;
+        })}
+      </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Сетка вещания</h2>
