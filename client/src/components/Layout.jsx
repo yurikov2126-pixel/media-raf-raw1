@@ -63,6 +63,7 @@ export default function Layout() {
         ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
         ...(analyticsAccess && !isAdmin ? [{ to: '/app/analytics', label: 'Аналитика', icon: 'chart' }] : []),
         ...(isAdmin ? [{ to: '/app/radio', label: 'Радио', icon: 'radio' }] : []),
+        ...(user?.role === 'STUDENT' ? [{ to: '/app/radio/playlists/my', label: 'Мои плейлисты', icon: 'radio' }] : []),
         ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
     ];
     const configured = siteSettings.nav_desktop_customized === 'true';
