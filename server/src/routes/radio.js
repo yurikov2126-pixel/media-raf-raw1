@@ -159,6 +159,15 @@ router.delete('/playlists/:id', safe(async (req, res) => {
 router.get('/playlists', safe(async (_req, res) => {
     res.json({ playlists: await prisma.radioPlaylist.findMany({ include: playlistInclude, orderBy: { updatedAt: 'desc' }, take: 250 }) });
 }));
+// Always resolve editor state from a unique playlist ID, not a cached list or name.
+router.get('/playlists/:id', safe(async (req, res) => {
+    const playlist = await prisma.radioPlaylist.findUnique({
+        where: { id: req.params.id }, include: playlistInclude,
+    });
+    if (!playlist) return res.status(404).json({ error: 'Плейлист не найден' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ playlist });
+}));
 router.post('/playlists', safe(async (req, res) => {
     const { name, description = '', assetIds = [] } = req.body || {};
     if (!validTitle(name) || typeof description !== 'string' || description.length > 2000 ||

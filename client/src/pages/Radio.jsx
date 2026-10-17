@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
+import { useToast } from '../store/toast.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -8,6 +9,7 @@ const dateLocal = value => new Date(value).toLocaleString('ru-RU', { dateStyle: 
 
 export default function Radio() {
   const { token } = useAuth();
+  const toast = useToast();
   const [tab, setTab] = useState('home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -36,8 +38,7 @@ export default function Radio() {
   const [slotTime, setSlotTime] = useState('');
   const [dragging, setDragging] = useState(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const editRequestId = useRef(0);
   const call = useCallback((path, options) => api('/radio' + path, { token, ...options }), [token]);
   const refresh = useCallback(async () => {
     const from = new Date(date + 'T00:00:00');
@@ -49,11 +50,13 @@ export default function Radio() {
     ]);
     setAssets(a.assets); setPlaylists(p.playlists); setSlots(s.slots); setFolders(f.folders);
   }, [call, date]);
-  useEffect(() => { refresh().catch(e => setError(e.message)); }, [refresh]);
-  const action = async fn => {
-    setError(''); setNotice('');
-    try { await fn(); await refresh(); setNotice('Изменения сохранены'); }
-    catch (e) { setError(e.message); }
+  useEffect(() => { refresh().catch(e => toast.error(e.message)); }, [refresh]);
+  const action = async (fn, successMessage = 'Изменения сохранены') => {
+    try {
+      await fn();
+      await refresh();
+      toast.success(successMessage);
+    } catch (e) { toast.error(e.message || 'Не удалось выполнить действие'); }
   };
   const queueFiles = incoming => {
     const audio = [...incoming].filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f.name));
@@ -64,7 +67,7 @@ export default function Radio() {
   };
   const upload = async () => {
     if (!files.length || uploading) return;
-    setUploading(true); setError(''); setNotice('');
+    setUploading(true);
     const failures = []; let done = 0;
     setUploadProgress({ completed: 0, total: files.length, failed: [] });
     for (const file of files) {
@@ -81,9 +84,9 @@ export default function Radio() {
       setUploadProgress({ completed: done, total: files.length, failed: [...failures] });
     }
     setFiles([]); setUploading(false);
-    try { await refresh(); } catch (e) { setError(e.message); }
-    setNotice('Обработано файлов: ' + done + '. Успешно: ' + (done - failures.length));
-    if (failures.length) setError(failures.join(' · '));
+    try { await refresh(); } catch (e) { toast.error(e.message); }
+    if (done > failures.length) toast.success('Загружено файлов: ' + (done - failures.length));
+    if (failures.length) toast.error('Ошибки загрузки: ' + failures.join(' · '));
   };
   const savePlaylist = () => action(async () => {
     await call(editing ? '/playlists/' + editing : '/playlists', {
@@ -91,7 +94,7 @@ export default function Radio() {
     });
     setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]);
   });
-  const reset = () => { setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]); };
+  const reset = () => { editRequestId.current += 1; setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]); };
   const createFolder = () => {
     const name = window.prompt('Название новой папки');
     if (name?.trim()) action(() => call('/folders', { method: 'POST', body: { name: name.trim() } }));
@@ -135,13 +138,25 @@ export default function Radio() {
     });
     setDragging(null);
   };
-  const startEdit = p => {
-    setEditing(p.id); setName(p.name); setDescription(p.description);
-    setSelected(p.items.map(i => i.assetId)); setWizard(1); setPickIds([]); setTab('playlists');
+  const startEdit = async p => {
+    const requestId = ++editRequestId.current;
+    // Clear all old draft state before loading the selected playlist.
+    setEditing(null); setSelected([]); setPickIds([]); setPickSearch('');
+    setName(''); setDescription(''); setWizard(0);
+    try {
+      const { playlist } = await call('/playlists/' + encodeURIComponent(p.id));
+      if (requestId !== editRequestId.current) return;
+      if (playlist.id !== p.id) throw Error('Получены данные другого плейлиста');
+      setEditing(playlist.id);
+      setName(playlist.name);
+      setDescription(playlist.description || '');
+      setSelected(playlist.items.map(item => item.assetId));
+      setWizard(1);
+      setTab('playlists');
+    } catch (e) { if (requestId === editRequestId.current) toast.error(e.message || 'Не удалось загрузить плейлист'); }
   };
   useEffect(() => () => { if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current); }, []);
   const preview = async asset => {
-    setError('');
     try {
       const response = await fetch(API + '/radio/assets/' + asset.id + '/audio',
         { headers: { Authorization: 'Bearer ' + token } });
@@ -153,7 +168,7 @@ export default function Radio() {
       setAudioUrl(url); setPlayingId(asset.id);
       // The shared player persists across track changes.
       requestAnimationFrame(() => playerRef.current?.play().catch(() => {}));
-    } catch (e) { setError(e.message); }
+    } catch (e) { toast.error(e.message); }
   };
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
@@ -188,8 +203,6 @@ export default function Radio() {
       </div>
       <button type="button" onClick={() => setTab('assets')} className="rounded-xl border border-current/15 px-4 py-2 text-sm">Аудиотека →</button>
     </> : <button type="button" onClick={() => setTab('home')} className="rounded-xl border border-current/15 px-4 py-2 text-sm">← Назад к Радио</button>}
-    {error && <p role="alert" className="text-red-500">{error}</p>}
-    {notice && <p role="status" className="text-green-600 dark:text-green-400">{notice}</p>}
     {tab === 'assets' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Библиотека записей</h2>
       <div className="rounded-2xl border border-current/15 p-4 space-y-3">
