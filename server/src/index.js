@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 
 import { app, corsOptions } from './app.js';
 import { initSocket } from './socket.js';
+import { initRadioStudio } from './radioStudio.js';
 import { setIo } from './lib/notify.js';
 import { startCron } from './lib/cron.js';
 import { schedulePushCleanup } from './lib/pushCleanupCron.js';
@@ -34,6 +35,7 @@ process.on('uncaughtException', (err) => {
 
 /* ─────────── Запуск ─────────── */
 initSocket(io);
+initRadioStudio(io);
 
 if (process.env.PREVIEW_MODE !== 'true') {
     startCron();
