@@ -13,8 +13,16 @@ router.use(auth);
 
 // Students access only their own playlists; all legacy radio management remains admin-only.
 const reviewInclude = { items: { orderBy: { position: 'asc' }, include: { asset: { select: { id: true, name: true, durationMs: true } } } } };
-const studentOnly = (req, res, next) => req.user.role === 'STUDENT'
-    ? next() : res.status(403).json({ error: 'Только для студентов' });
+const studentOnly = async (req, res, next) => {
+    try {
+        if (req.user.role !== 'STUDENT') return res.status(403).json({ error: 'Только для радиоведущих' });
+        const member = await prisma.editorialTeamMember.findUnique({
+            where: { userId: req.user.id }, select: { position: true },
+        });
+        if (member?.position !== 'RADIO_HOST') return res.status(403).json({ error: 'Требуется должность Радиоведущий' });
+        next();
+    } catch (error) { next(error); }
+};
 const validStudentBody = body => typeof body?.name === 'string' && body.name.trim().length > 0
     && body.name.trim().length <= 140 && typeof (body.description ?? '') === 'string'
     && (body.description ?? '').length <= 2000 && Array.isArray(body.assetIds)
@@ -22,6 +30,16 @@ const validStudentBody = body => typeof body?.name === 'string' && body.name.tri
     && new Set(body.assetIds).size === body.assetIds.length;
 const validAssets = async assetIds => await prisma.radioAsset.count({ where: { id: { in: assetIds } } }) === assetIds.length;
 
+router.get('/access', async (req, res, next) => {
+    try {
+        if (req.user.role === 'ADMIN') return res.json({ allowed: true, admin: true });
+        if (req.user.role !== 'STUDENT') return res.json({ allowed: false, admin: false });
+        const member = await prisma.editorialTeamMember.findUnique({
+            where: { userId: req.user.id }, select: { position: true },
+        });
+        res.json({ allowed: member?.position === 'RADIO_HOST', admin: false });
+    } catch (error) { next(error); }
+});
 router.get('/student/playlists', studentOnly, async (req, res, next) => {
     try { res.json({ playlists: await prisma.radioPlaylist.findMany({
         where: { createdBy: req.user.id }, include: reviewInclude, orderBy: { updatedAt: 'desc' }, take: 250,
