@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
+import { resolveRadioCursor } from '../lib/radioTimeline.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
@@ -52,6 +53,22 @@ router.get('/agent/status', deviceAuth, safe(async(req,res) => {
   res.json({ deviceId:req.radioDevice.id, mode:req.radioDevice.playbackAllowed ? 'PILOT' : 'SYNC_ONLY', timezone:'Europe/Moscow', serverTime:new Date().toISOString(),
     playbackEnabled:!!req.radioDevice.playbackAllowed, amplifierControlEnabled:false });
 }));
+// Single station-wide playback position for future server stream and local failover.
+router.get('/agent/now-playing', deviceAuth, safe(async(req,res) => {
+  const now = new Date();
+  const slots = await prisma.radioScheduleSlot.findMany({
+    where: { startAt: { lte: now }, endAt: { gt: now }, playlist: { status: 'APPROVED' } },
+    include: { playlist: { include: { items: {
+      orderBy: { position: 'asc' }, include: { asset: {
+        select: { id: true, name: true, durationMs: true },
+      } },
+    } } } },
+    orderBy: { startAt: 'asc' }, take: 2,
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ timezone: 'Europe/Moscow', cursor: resolveRadioCursor(slots, now.getTime()) });
+}));
+
 router.get('/agent/snapshot', deviceAuth, safe(async(req,res) => {
   const from=new Date(Date.now()-3600000), to=new Date(Date.now()+14*86400000);
   const slots=await prisma.radioScheduleSlot.findMany({ where:{ startAt:{lt:to}, endAt:{gt:from},playlist:{status:'APPROVED'} },
