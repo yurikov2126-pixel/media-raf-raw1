@@ -384,9 +384,14 @@ export default function Radio() {
       <h2 className="text-xl font-bold">Сетка вещания</h2>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
-      <form onSubmit={e=>{e.preventDefault();action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId:slotPlaylist,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:slotPlaylist,startLocal:slotTime}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
+      <form onSubmit={e=>{e.preventDefault();
+        const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');
+        if (!playlistId) { toast.error('Выберите утверждённый плейлист'); return; }
+        if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
+        action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}}));
+      }} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <h3 className="font-semibold">Добавить передачу</h3>
-        <select required className={inputStyle} value={slotPlaylist} onChange={e=>setSlotPlaylist(e.target.value)}>
+        <select required className={inputStyle} value={slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '')} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
           {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
