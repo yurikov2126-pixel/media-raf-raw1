@@ -50,8 +50,8 @@ async def main():
             await listen()
 
     @sio.on('radio:studio:ended',namespace=NAMESPACE)
-    async def ended():
-        await reset(); print('ENDED',flush=True)
+    async def ended(_payload=None):
+        await reset(); print('ENDED · READY_FOR_NEXT',flush=True)
 
     @sio.on('radio:studio:signal',namespace=NAMESPACE)
     async def signal(data):
