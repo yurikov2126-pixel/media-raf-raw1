@@ -3,6 +3,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { resolveRadioCursor } from '../lib/radioTimeline.js';
+import { servePilotStream, stationStreamHealth, stationSnapshot } from '../lib/radioStreamPilot.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
@@ -54,6 +55,26 @@ router.get('/agent/status', deviceAuth, safe(async(req,res) => {
     playbackEnabled:!!req.radioDevice.playbackAllowed, amplifierControlEnabled:false });
 }));
 // Single station-wide playback position for future server stream and local failover.
+router.get('/agent/stream-pilot', deviceAuth, safe(async (req,res) => {
+  if (!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Тестовое воспроизведение запрещено'});
+  await servePilotStream(req,res);
+}));
+router.get('/dashboard', ...admin, safe(async (_req,res) => {
+  const {cursor}=await stationSnapshot();
+  const devices=await prisma.radioDevice.findMany({
+    where:{revokedAt:null}, select:{id:true,name:true,lastSeenAt:true,playbackAllowed:true},
+    orderBy:{createdAt:'desc'},take:40,
+  });
+  const upcoming=await prisma.radioScheduleSlot.findMany({
+    where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+    orderBy:{startAt:'asc'},take:6,include:{playlist:{select:{name:true}}},
+  });
+  res.setHeader('Cache-Control','no-store');
+  res.json({serverTime:new Date().toISOString(),timezone:'Europe/Moscow',
+    stream:stationStreamHealth(),cursor,devices,
+    upcoming:upcoming.map(s=>({id:s.id,startAt:s.startAt,endAt:s.endAt,name:s.playlist.name})),
+    amplifier:{connected:false},liveStudio:{integration:'SEPARATE_WEBRTC_PILOT'}});
+}));
 router.get('/agent/now-playing', deviceAuth, safe(async(req,res) => {
   const now = new Date();
   const slots = await prisma.radioScheduleSlot.findMany({
