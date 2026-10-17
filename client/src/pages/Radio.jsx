@@ -19,6 +19,8 @@ export default function Radio() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [slotPlaylist, setSlotPlaylist] = useState('');
+  const [repeatWeeks, setRepeatWeeks] = useState(1);
+  const [repeatDays, setRepeatDays] = useState([]);
   const [slotTime, setSlotTime] = useState('');
   const [dragging, setDragging] = useState(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -180,14 +182,24 @@ export default function Radio() {
     {tab==='schedule' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Сетка вещания</h2>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
-      <form onSubmit={e=>{e.preventDefault();action(()=>call('/schedule',{method:'POST',body:{playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString()}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
+      <form onSubmit={e=>{e.preventDefault();action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString(),weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString()}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <h3 className="font-semibold">Добавить передачу</h3>
         <select required className={inputStyle} value={slotPlaylist} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
           {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <input required className={inputStyle} type="datetime-local" aria-label="Дата и время эфира" value={slotTime} onChange={e=>setSlotTime(e.target.value)}/>
-        <button className={btn}>Запланировать</button>
+        <label className="text-sm block">Повторять в течение недель (1 — без повтора)
+          <input className={inputStyle} type="number" min="1" max="12" value={repeatWeeks} onChange={e=>setRepeatWeeks(Number(e.target.value))}/>
+        </label>
+        {repeatWeeks > 1 && <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold">Дни недели для повтора (UTC, временный режим)</legend>
+          <div className="flex gap-3 flex-wrap">{[['Вс',0],['Пн',1],['Вт',2],['Ср',3],['Чт',4],['Пт',5],['Сб',6]].map(([label,number])=>
+            <label key={number} className="text-sm"><input type="checkbox" checked={repeatDays.includes(number)} onChange={e=>setRepeatDays(days=>e.target.checked?[...days,number]:days.filter(d=>d!==number))}/> {label}</label>)}
+          </div>
+          <p className="text-xs opacity-60">Повторы рассчитаны в UTC. Для окончательного эфирного расписания будет добавлен часовой пояс колледжа.</p>
+        </fieldset>}
+        <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
       </form>
       <div className="grid grid-cols-1 md:grid-cols-7 gap-2" aria-label="Недельная сетка вещания">
         {Array.from({ length: 7 }, (_, index) => {
