@@ -4,6 +4,7 @@ import { useAuth } from './store/auth.jsx';
 import { useNetwork } from './store/network.jsx';
 import { useModules } from './store/modules.jsx';
 import Layout from './components/Layout.jsx';
+import { RadioUploadProvider } from './components/RadioUploadManager.jsx';
 import PwaUpdateNotice from './components/PwaUpdateNotice.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
@@ -113,7 +114,7 @@ export default function App() {
     }, [isOffline]);
 
     return (
-        <>
+        <RadioUploadProvider>
             <Routes>
                 <Route path="/" element={<RootGate />} />
                 <Route path="/login" element={<div className="page-enter"><Login /></div>} />
@@ -189,6 +190,6 @@ export default function App() {
             {user && <OnboardingModal />}
             {user && <AchievementToast />}
             {user && <CertificateCelebration />}
-        </>
+        </RadioUploadProvider>
     );
 }
