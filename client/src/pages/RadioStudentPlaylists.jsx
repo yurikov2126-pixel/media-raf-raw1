@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../store/toast.jsx';
 import RadioTrackPlayer from '../components/RadioTrackPlayer.jsx';
+import { useRadioUploads } from '../components/RadioUploadManager.jsx';
 
 const duration = ms => {
   const seconds = Math.round((ms || 0) / 1000);
@@ -18,6 +19,7 @@ const field = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py
 export default function RadioStudentPlaylists() {
   const { token } = useAuth();
   const toast = useToast();
+  const {addFiles,tasks} = useRadioUploads();
   const [searchParams, setSearchParams] = useSearchParams();
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -85,31 +87,8 @@ export default function RadioStudentPlaylists() {
     } catch (e) { toast.error(e.message); }
     finally { setBusy(false); }
   };
-  const uploadAudio = async event => {
-    const files=Array.from(event.target.files || []);
-    event.target.value='';
-    if(!files.length)return;
-    setUploading(true);
-    let ok=0;
-    try {
-      for(const file of files) {
-        setUploadProgress('Загрузка '+(ok+1)+' из '+files.length+': '+file.name);
-        if(file.size > 30*1024*1024) throw Error('Файл превышает 30 МБ: '+file.name);
-        const form=new FormData();form.append('file',file);form.append('filename',file.name);
-        const res=await fetch((import.meta.env.VITE_API || 'http://localhost:4000/api')+'/radio/student/assets',{
-          method:'POST', headers:{Authorization:'Bearer '+token},body:form,
-        });
-        const result=await res.json().catch(()=>({}));
-        if(!res.ok)throw Error(result.error||'Ошибка загрузки');
-        ok++;
-      }
-      await refresh();
-      toast.success('Загружено аудиофайлов: '+ok);
-    } catch(error) {
-      toast.error(error.message);
-      if(ok) await refresh();
-    } finally { setUploading(false);setUploadProgress(''); }
-  };
+  const uploadAudio = event => { const batch=Array.from(event.target.files||[]); event.target.value=''; addFiles(batch,true); };
+  useEffect(()=>{if(tasks.some(t=>t.student&&t.status==='done'))refresh().catch(()=>{});},[tasks.filter(t=>t.student&&t.status==='done').length]);
   const reposition = (from, to) => {
     if (from == null || from === to || from < 0 || from >= selected.length) return;
     setSelected(previous => {
@@ -145,7 +124,7 @@ export default function RadioStudentPlaylists() {
         <h2 className="font-semibold">Загрузить аудиозаписи</h2>
         <p className="text-xs opacity-65">MP3, WAV, OGG, FLAC, M4A · до 30 МБ на файл</p>
         <input type="file" multiple accept=".mp3,.wav,.ogg,.flac,.m4a" aria-label="Загрузить аудиофайлы"
-          disabled={uploading} onChange={uploadAudio} className="block w-full max-w-full text-sm"/>
+          onChange={uploadAudio} className="block w-full max-w-full text-sm"/>
         {uploading&&<p role="status" className="text-xs">{uploadProgress}</p>}
       </section>
       {previewPlaylist && <section className="space-y-2"><button type="button" onClick={()=>setPreviewPlaylist(null)} className="text-xs underline">Закрыть прослушивание</button><RadioTrackPlayer token={token} student tracks={previewPlaylist.items.map(i=>i.asset)}/></section>}

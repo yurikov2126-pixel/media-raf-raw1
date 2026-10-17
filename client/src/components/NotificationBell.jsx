@@ -161,6 +161,19 @@ export default function NotificationBell({ align = 'right' }) {
     const handleClick = async (n) => {
         const learning = n.payload?.homeworkId || n.payload?.practicalId;
 
+        // Route first: a rejected mark-read request must never suppress navigation.
+        const radioPayload = typeof n.payload === 'string' ? (() => { try { return JSON.parse(n.payload); } catch { return {}; } })() : (n.payload || {});
+        const radioType = String(n.type || '').toUpperCase();
+        if (radioType.startsWith('RADIO_PLAYLIST_')) {
+            const id = encodeURIComponent(radioPayload.playlistId || '');
+            const url = radioType === 'RADIO_PLAYLIST_SUBMITTED'
+                ? '/app/radio?tab=playlists&playlist=' + id
+                : '/app/radio/playlists/my?playlist=' + id;
+            setOpen(false);
+            nav(url);
+            if (!n.readAt) void markRead(n.id).catch(console.error);
+            return;
+        }
         if (!n.readAt) await markRead(n.id);
         setOpen(false);
         const p = n.payload || {};

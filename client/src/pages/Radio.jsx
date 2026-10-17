@@ -5,6 +5,7 @@ import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
+import { useRadioUploads } from '../components/RadioUploadManager.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -15,6 +16,7 @@ const moscowDate = date => new Intl.DateTimeFormat('sv-SE', { timeZone: STATION_
 export default function Radio() {
   const { token } = useAuth();
   const toast = useToast();
+  const { addFiles, tasks: uploadTasks } = useRadioUploads();
   const [tab, setTab] = useState(() => ['playlists','schedule','assets','equipment','studio','history'].includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -106,29 +108,9 @@ export default function Radio() {
       return [...previous, ...audio.filter(f => !keys.has(f.name + '/' + f.size + '/' + f.lastModified))];
     });
   };
-  const upload = async () => {
-    if (!files.length || uploading) return;
-    setUploading(true);
-    const failures = []; let done = 0;
-    setUploadProgress({ completed: 0, total: files.length, failed: [] });
-    for (const file of files) {
-      try {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('filename', file.name);
-        const res = await fetch(API + '/radio/assets', { method: 'POST',
-          headers: { Authorization: 'Bearer ' + token }, body: fd });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw Error(json.error || 'Ошибка загрузки');
-      } catch (e) { failures.push(file.name + ': ' + e.message); }
-      done++;
-      setUploadProgress({ completed: done, total: files.length, failed: [...failures] });
-    }
-    setFiles([]); setUploading(false);
-    try { await refresh(); } catch (e) { toast.error(e.message); }
-    if (done > failures.length) toast.success('Загружено файлов: ' + (done - failures.length));
-    if (failures.length) toast.error('Ошибки загрузки: ' + failures.join(' · '));
-  };
+  const upload = () => { if (files.length) { addFiles(files, false); setFiles([]); } };
+  const completedUploads = uploadTasks.filter(t => !t.student && t.status === 'done').length;
+  useEffect(() => { if (completedUploads) refresh().catch(() => {}); }, [completedUploads]);
   const savePlaylist = () => action(async () => {
     await call(editing ? '/playlists/' + editing : '/playlists', {
       method: editing ? 'PUT' : 'POST', body: { name, description, assetIds: selected },
