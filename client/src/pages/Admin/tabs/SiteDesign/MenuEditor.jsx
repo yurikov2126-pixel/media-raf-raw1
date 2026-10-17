@@ -12,7 +12,6 @@ const DEFAULT_DESKTOP = [
     { to: '/app/editorial', label: 'Редакция', icon: 'newspaper' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/mentor', label: 'Руководителю', icon: 'users', roles: ['MENTOR', 'ADMIN'] },
-    { to: '/app/radio', label: 'Радио', icon: 'radioStudio' },
     { to: '/app/admin', label: 'Админка', icon: 'settings', roles: ['ADMIN'] },
 ];
 const DEFAULT_MOBILE = [
@@ -40,6 +39,7 @@ const CONFIG = {
 };
 const CATALOG = [
  ...DEFAULT_DESKTOP,...DEFAULT_MOBILE,...DEFAULT_EXTRA,
+ {to:'/app/radio',label:'Радио',icon:'radioStudio'},
  {to:'/app/seasons',label:'Сезоны',icon:'trophy'},
  {to:'/app/stickers',label:'Стикеры',icon:'image'},
 ].filter((item,index,array)=>array.findIndex(other=>(other.action||other.to)===(item.action||item.to))===index);
