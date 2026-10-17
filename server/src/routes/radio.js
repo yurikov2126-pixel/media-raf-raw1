@@ -24,9 +24,28 @@ const hasAudioHeader = bytes =>
     bytes.subarray(4, 8).toString() === 'ftyp';
 const validTitle = value => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 140;
 const playlistMs = p => p.items.reduce((sum, item) => sum + item.asset.durationMs, 0);
+const RADIO_TIMEZONE = 'Europe/Moscow';
+// Europe/Moscow observes UTC+03:00 year-round for contemporary broadcasts.
+// Parse wall-clock times on the server, not in the administrator's browser timezone.
+function parseMoscowLocal(value) {
+    if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(value)) return new Date(NaN);
+    const instant = new Date(value + ':00+03:00');
+    if (!Number.isFinite(instant.getTime())) return instant;
+    const actual = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: RADIO_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(instant).replace(' ', 'T');
+    return actual === value ? instant : new Date(NaN);
+}
+function broadcastStart(body) {
+    return Object.prototype.hasOwnProperty.call(body || {}, 'startLocal')
+        ? parseMoscowLocal(body.startLocal)
+        : new Date(body?.startAt);
+}
+
 
 router.get('/status', (_req, res) => res.json({
-    enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED',
+    enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
 router.get('/assets', safe(async (_req, res) => {
     res.json({ assets: await prisma.radioAsset.findMany({ orderBy: { createdAt: 'desc' }, take: 300 }) });
@@ -241,7 +260,7 @@ router.get('/schedule', safe(async (req, res) => {
 }));
 router.post('/schedule', safe(async (req, res) => {
     const { playlistId } = req.body || {};
-    const startAt = new Date(req.body?.startAt);
+    const startAt = broadcastStart(req.body);
     if (!playlistId || !Number.isFinite(startAt.getTime()) || startAt < new Date(Date.now() - 60000))
         return res.status(400).json({ error: 'Укажите утверждённый плейлист и будущее время' });
     const playlist = await prisma.radioPlaylist.findUnique({ where: { id: playlistId }, include: playlistInclude });
@@ -276,11 +295,11 @@ router.post('/schedule/weekly', safe(async (req, res) => {
     const durationMs = playlistMs(playlist);
     if (!durationMs || durationMs > 12 * 3600000)
         return res.status(400).json({ error: 'Недопустимая продолжительность' });
-    // Weekdays follow UTC here. Station timezone support is required before autonomous playout.
+    // Every weekday and clock time is evaluated in Europe/Moscow (UTC+03:00).
     const candidateTimes = [];
     for (let offset = 0; offset < weeks * 7; offset++) {
         const point = new Date(startAt.getTime() + offset * 86400000);
-        if (weekdays.includes(point.getUTCDay())) candidateTimes.push(point);
+        if (weekdays.includes(new Date(point.getTime() + 3 * 3600000).getUTCDay())) candidateTimes.push(point);
     }
     if (!candidateTimes.length) return res.status(400).json({ error: 'Не найдены подходящие дни' });
     const result = await prisma.$transaction(async tx => {
@@ -294,7 +313,7 @@ router.post('/schedule/weekly', safe(async (req, res) => {
         })) });
     });
     if (!result) return res.status(409).json({ error: 'Есть пересечение. Повторения не созданы.' });
-    res.status(201).json({ created: result.count, timezone: 'UTC' });
+    res.status(201).json({ created: result.count, timezone: RADIO_TIMEZONE });
 }));
 
 router.delete('/schedule/:id', safe(async (req, res) => {
