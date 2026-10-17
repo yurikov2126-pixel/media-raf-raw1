@@ -134,7 +134,7 @@ router.post('/schedule', safe(async (req, res) => {
     const endAt = new Date(startAt.getTime() + durationMs);
     // Serialize scheduling writes to prevent concurrent overlaps.
     const slot = await prisma.$transaction(async tx => {
-        await tx.$executeRaw\`SELECT pg_advisory_xact_lock(1729002)\`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const clash = await tx.radioScheduleSlot.findFirst({ where: { startAt: { lt: endAt }, endAt: { gt: startAt } } });
         if (clash) return null;
         return tx.radioScheduleSlot.create({ data: { playlistId, startAt, endAt, createdBy: req.user.id } });
