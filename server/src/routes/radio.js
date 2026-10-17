@@ -35,7 +35,12 @@ router.post('/assets', upload.single('file'), safe(async (req, res) => {
     const file = req.file;
     if (!file || !file.buffer || !hasAudioHeader(file.buffer))
         return res.status(400).json({ error: 'Требуется поддерживаемый аудиофайл' });
-    const filename = (file.originalname || '').slice(0, 180);
+    // Multer/busboy may decode UTF-8 multipart filenames as latin1.
+    // Prefer a dedicated UTF-8 field sent by the client; validate and never use it as a disk path.
+    const supplied = req.body?.filename;
+    const filename = (typeof supplied === 'string' && supplied.trim()
+        ? supplied.normalize('NFC')
+        : Buffer.from(file.originalname || '', 'latin1').toString('utf8').normalize('NFC')).slice(0, 180);
     if (!filename || !/\.(mp3|wav|ogg|flac|m4a)$/i.test(filename))
         return res.status(400).json({ error: 'Поддерживаются MP3, WAV, OGG, FLAC и M4A' });
     await fs.mkdir(root, { recursive: true, mode: 0o700 });
@@ -120,16 +125,35 @@ router.put('/playlists/:id', safe(async (req, res) => {
     const playlist = await prisma.$transaction(async tx => {
         const current = await tx.radioPlaylist.findUnique({ where: { id: req.params.id } });
         if (!current) return null;
-        if (current.status === 'APPROVED' || await tx.radioScheduleSlot.count({ where: { playlistId: current.id } }))
-            return false;
+        // Existing approved playlists are editable by ADMIN; recalculate all future
+        // slot endings atomically and refuse changes that would overlap other shows.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+        const newAssets = await tx.radioAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, durationMs: true } });
+        const lengths = new Map(newAssets.map(a => [a.id, a.durationMs]));
+        const durationMs = assetIds.reduce((sum, id) => sum + (lengths.get(id) || 0), 0);
+        const future = await tx.radioScheduleSlot.findMany({ where: { playlistId: current.id, startAt: { gt: new Date() } } });
+        if (future.length && (!durationMs || durationMs > 12 * 3600000)) return false;
+        for (const slot of future) {
+            const newEnd = new Date(slot.startAt.getTime() + durationMs);
+            const collision = await tx.radioScheduleSlot.findFirst({
+                where: { id: { not: slot.id }, startAt: { lt: newEnd }, endAt: { gt: slot.startAt } },
+                select: { id: true },
+            });
+            if (collision) return false;
+        }
         await tx.radioPlaylistItem.deleteMany({ where: { playlistId: current.id } });
-        return tx.radioPlaylist.update({ where: { id: current.id }, data: {
+        const updated = await tx.radioPlaylist.update({ where: { id: current.id }, data: {
             name: name.trim(), description: description.trim(),
+            // Preserve approved status and approval attribution; this edit is by ADMIN.
             items: { create: assetIds.map((assetId, position) => ({ assetId, position })) },
         }, include: playlistInclude });
+        for (const slot of future) {
+            await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { endAt: new Date(slot.startAt.getTime() + durationMs) } });
+        }
+        return updated;
     });
     if (playlist === null) return res.status(404).json({ error: 'Плейлист не найден' });
-    if (playlist === false) return res.status(409).json({ error: 'Утверждённый или запланированный плейлист менять нельзя' });
+    if (playlist === false) return res.status(409).json({ error: 'Редактирование создаёт конфликт в запланированном эфире. Изменения не сохранены' });
     res.json({ playlist });
 }));
 router.post('/playlists/:id/approve', safe(async (req, res) => {
