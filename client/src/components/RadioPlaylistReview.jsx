@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
+import { useSearchParams } from 'react-router-dom';
+import { useRef } from 'react';
+import RadioTrackPlayer from './RadioTrackPlayer.jsx';
 
 export default function RadioPlaylistReview({ token, onChanged }) {
   const toast = useToast();
+  const [searchParams] = useSearchParams();
+  const selectedId = searchParams.get('playlist');
+  const selectedRef = useRef(null);
+  const [previewId,setPreviewId] = useState(null);
   const [pending, setPending] = useState([]);
   const [reasons, setReasons] = useState({});
   const [busy, setBusy] = useState(null);
@@ -12,6 +19,7 @@ export default function RadioPlaylistReview({ token, onChanged }) {
     setPending((response.playlists || []).filter(p => p.status === 'SUBMITTED'));
   }, [token]);
   useEffect(() => { load().catch(e => toast.error(e.message)); }, [load,toast]);
+  useEffect(()=>{ if(selectedId && pending.some(p=>p.id===selectedId)) selectedRef.current?.scrollIntoView({behavior:'smooth',block:'center'}); },[selectedId,pending]);
   const decide = async (playlist, approved) => {
     if (!approved && !reasons[playlist.id]?.trim()) {
       toast.error('Укажите причину возврата');
@@ -36,7 +44,7 @@ export default function RadioPlaylistReview({ token, onChanged }) {
         className="rounded-lg border border-current/20 px-3 py-2 text-xs">Обновить</button>
     </div>
     {!pending.length && <p className="text-sm opacity-65">Плейлистов на проверке нет.</p>}
-    {pending.map(p=><article key={p.id} className="space-y-3 rounded-xl border border-current/15 p-3">
+    {pending.map(p=><article key={p.id} ref={p.id===selectedId?selectedRef:null} className={"space-y-3 rounded-xl border p-3 "+(p.id===selectedId?"border-blue-500 bg-blue-500/10":"border-current/15")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0"><h3 className="font-medium break-words">{p.name}</h3>
           <p className="text-xs opacity-65">Автор: {p.createdBy} · {p.items.length} записей</p>
@@ -48,6 +56,8 @@ export default function RadioPlaylistReview({ token, onChanged }) {
         <summary className="cursor-pointer">Состав плейлиста</summary>
         <ol className="mt-2 list-decimal space-y-1 pl-5">{p.items.map(i=><li key={i.id}>{i.asset.name}</li>)}</ol>
       </details>
+      <button type="button" onClick={()=>setPreviewId(current=>current===p.id?null:p.id)} className="rounded-xl border border-current/20 px-3 py-2 text-sm">♫ {previewId===p.id?'Закрыть плеер':'Прослушать плейлист'}</button>
+      {previewId===p.id&&<RadioTrackPlayer token={token} tracks={p.items.map(i=>i.asset)}/>}
       <label className="block space-y-1 text-sm"><span>Причина возврата (обязательна при отклонении)</span>
         <textarea className="w-full rounded-xl border border-current/20 bg-transparent p-2 text-sm" rows={2}
           maxLength={1000} value={reasons[p.id] || ''} onChange={e=>setReasons(current=>({...current,[p.id]:e.target.value}))}

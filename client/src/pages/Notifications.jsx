@@ -125,7 +125,7 @@ export default function Notifications() {
             catch (error) { console.error('[notification] failed to locate learning work', error); nav('/app/academy/me'); }
             return;
         }
-        if (n.type === 'RADIO_PLAYLIST_SUBMITTED') nav('/app/radio?tab=playlists');
+        if (n.type === 'RADIO_PLAYLIST_SUBMITTED') nav('/app/radio?tab=playlists&playlist='+encodeURIComponent(p.playlistId||''));
         else if (n.type === 'RADIO_PLAYLIST_APPROVED' || n.type === 'RADIO_PLAYLIST_RETURNED') nav('/app/radio/playlists/my?playlist=' + encodeURIComponent(p.playlistId || ''));
         else if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
         else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);

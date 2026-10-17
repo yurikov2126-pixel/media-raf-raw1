@@ -110,7 +110,6 @@ router.post('/student/playlists/:id/submit', studentOnly, async (req, res, next)
     } catch(error) { next(error); }
 });
 
-router.use(requireRole('ADMIN'));
 
 const root = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 1 } });
@@ -146,13 +145,13 @@ function broadcastStart(body) {
 }
 
 
-router.get('/status', (_req, res) => res.json({
+router.get('/status', requireRole('ADMIN'), (_req, res) => res.json({
     enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
-router.get('/assets', safe(async (_req, res) => {
+router.get('/assets', requireRole('ADMIN'), safe(async (_req, res) => {
     res.json({ assets: await prisma.radioAsset.findMany({ orderBy: { createdAt: 'desc' }, take: 300 }) });
 }));
-router.post('/assets', upload.single('file'), safe(async (req, res) => {
+const uploadAsset = safe(async (req, res) => {
     const file = req.file;
     if (!file || !file.buffer || !hasAudioHeader(file.buffer))
         return res.status(400).json({ error: 'Требуется поддерживаемый аудиофайл' });
@@ -183,15 +182,20 @@ router.post('/assets', upload.single('file'), safe(async (req, res) => {
         const stored = await prisma.radioAsset.findUnique({ where: { storageKey: key }, select: { id: true } });
         if (!stored) await fs.unlink(filePath).catch(() => {});
     }
-}));
-router.get('/assets/:id/audio', safe(async (req, res) => {
+});
+router.post('/student/assets', studentOnly, upload.single('file'), uploadAsset);
+router.post('/assets', requireRole('ADMIN'), upload.single('file'), uploadAsset);
+const streamAudio = safe(async (req, res) => {
     const a = await prisma.radioAsset.findUnique({ where: { id: req.params.id } });
     if (!a) return res.status(404).json({ error: 'Запись не найдена' });
     res.setHeader('Content-Type', a.mimeType);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.sendFile(path.join(root, path.basename(a.storageKey)));
-}));
+});
+router.get('/student/assets/:id/audio', studentOnly, streamAudio);
+router.get('/assets/:id/audio', requireRole('ADMIN'), streamAudio);
+router.use(requireRole('ADMIN'));
 
 // Asset metadata may be edited without changing the original audio bytes.
 router.patch('/assets/:id', safe(async (req, res) => {
