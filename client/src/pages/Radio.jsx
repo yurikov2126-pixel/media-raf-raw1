@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
@@ -16,7 +15,6 @@ const moscowDate = date => new Intl.DateTimeFormat('sv-SE', { timeZone: STATION_
 export default function Radio() {
   const { token } = useAuth();
   const toast = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState(() => ['playlists','schedule','assets','equipment','studio','history'].includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
