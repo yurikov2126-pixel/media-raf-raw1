@@ -27,6 +27,8 @@ class RadioApp(tk.Tk):
         self.events = queue.Queue()
         self.worker = None
         self.pilot = None
+        self.central = None
+        self.central_reader = None
         self.audio_test = None
         self.live = None
         self.live_reader = None
@@ -78,6 +80,17 @@ class RadioApp(tk.Tk):
         self.start_btn.state(["disabled"])
         self.stop_btn.state(["disabled"])
         self.test_btn.state(["disabled"])
+        centralbox=ttk.LabelFrame(body,text="Центральный поток · резерв по сетке (пилот)",padding=10)
+        centralbox.pack(fill="x",pady=8)
+        ttk.Label(centralbox,text="Только наушники. При потере сервера воспроизводится кэш с текущей позиции.").pack(anchor="w")
+        cr=ttk.Frame(centralbox)
+        cr.pack(fill="x",pady=5)
+        self.central_start=ttk.Button(cr,text="Включить центральный эфир",command=self.start_central)
+        self.central_start.pack(side="left",padx=(0,8))
+        self.central_stop=ttk.Button(cr,text="Остановить центральный эфир",command=self.stop_central)
+        self.central_stop.pack(side="left")
+        self.central_start.state(["disabled"])
+        self.central_stop.state(["disabled"])
 
         livebox=ttk.LabelFrame(body,text="Локальный прямой эфир · тест микрофона",padding=10)
         livebox.pack(fill="x",pady=10)
@@ -175,6 +188,8 @@ class RadioApp(tk.Tk):
             self.next_var.set("Нет будущих передач в загруженной сетке")
 
     def test_audio(self):
+        if self.central and self.central.poll() is None:
+            messagebox.showwarning("Звук занят","Сначала остановите центральный эфир."); return
         if self.live and self.live.poll() is None:
             messagebox.showwarning('Прямой эфир', 'Сначала выключите микрофон.'); return
         if not self.allowed or not self.snapshot:
@@ -225,7 +240,55 @@ class RadioApp(tk.Tk):
             except Exception as exc: self.events.put(("error","Аудиоустройства: "+str(exc)))
         threading.Thread(target=task,daemon=True).start()
 
+    def start_central(self):
+        if not self.allowed:
+            messagebox.showwarning("Нет разрешения","Разрешите PILOT в настройках радиоустройства."); return
+        if any(p and p.poll() is None for p in (self.pilot,self.audio_test,self.live,self.remote_receiver)):
+            messagebox.showwarning("Звук занят","Остановите другие источники звука перед центральным эфиром."); return
+        if self.central and self.central.poll() is None:
+            return
+        if not Path(VLC).is_file():
+            messagebox.showerror("Нет VLC","Установите VLC."); return
+        if not messagebox.askyesno("Тест центрального эфира",
+            "Подтвердите, что подключены только наушники. Усилитель и реле отключены."):
+            return
+        env=os.environ.copy()
+        env["RADIO_AGENT_TOKEN"]=self.token_var.get().strip()
+        args=[sys.executable,str(Path(__file__).with_name("central_playout.py")),
+              "--server",SERVER,"--data-dir",str(ROOT),"--vlc",VLC,"--enable-headphones-test"]
+        try:
+            self.central=subprocess.Popen(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                          text=True,bufsize=1,start_new_session=True)
+            def read(proc):
+                for line in proc.stdout:
+                    self.events.put(("central_line",line.strip()))
+            self.central_reader=threading.Thread(target=read,args=(self.central,),daemon=True)
+            self.central_reader.start()
+            self.central_start.state(["disabled"])
+            self.central_stop.state(["!disabled"])
+            self.start_btn.state(["disabled"])
+            self.remote_start.state(["disabled"])
+            self.log("Центральный эфир запущен. При обрыве используется локальная сетка.")
+        except OSError as exc:
+            self.log("Ошибка центрального потока: "+str(exc))
+
+    def stop_central(self):
+        if self.central and self.central.poll() is None:
+            try: os.killpg(self.central.pid,signal.SIGTERM)
+            except ProcessLookupError: pass
+            try: self.central.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try: os.killpg(self.central.pid,signal.SIGKILL)
+                except ProcessLookupError: pass
+        self.central=None
+        self.central_stop.state(["disabled"])
+        self.central_start.state(["!disabled"] if self.allowed else ["disabled"])
+        self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
+        self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
+
     def start_live(self):
+        if self.central and self.central.poll() is None:
+            messagebox.showwarning("Звук занят","Сначала остановите центральный эфир."); return
         if not self.allowed:
             messagebox.showwarning("Нет разрешения","Сначала разрешите PILOT для этого Mac в админке.")
             return
@@ -272,6 +335,8 @@ class RadioApp(tk.Tk):
         self.test_btn.state(["!disabled"] if self.allowed and self.snapshot else ["disabled"])
 
     def start_pilot(self):
+        if self.central and self.central.poll() is None:
+            messagebox.showwarning("Звук занят","Сначала остановите центральный эфир."); return
         if self.live and self.live.poll() is None:
             messagebox.showwarning('Прямой эфир', 'Сначала выключите микрофон.'); return
         if self.pilot and self.pilot.poll() is None: return
@@ -308,6 +373,8 @@ class RadioApp(tk.Tk):
         self.priority_file().unlink(missing_ok=True)
 
     def start_remote(self):
+        if self.central and self.central.poll() is None:
+            messagebox.showwarning("Звук занят","Сначала остановите центральный эфир."); return
         self.clear_live_priority()
         if self.remote_receiver and self.remote_receiver.poll() is None: return
         if not self.allowed:
@@ -377,6 +444,8 @@ class RadioApp(tk.Tk):
                     elif value: self.log(value)
                 elif kind=="status":
                     self.allowed=value.get("mode")=="PILOT" and value.get("playbackEnabled") is True
+                    if not self.central or self.central.poll() is not None:
+                        self.central_start.state(["!disabled"] if self.allowed else ["disabled"])
                     self.status_var.set("Подключено · "+("Тестовый эфир разрешён" if self.allowed else "Только синхронизация"))
                     if not self.pilot or self.pilot.poll() is not None:
                         self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
@@ -384,6 +453,8 @@ class RadioApp(tk.Tk):
                     if not self.remote_receiver: self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
                     if not self.live: self.live_start.state(["!disabled"] if self.allowed and self.audio_devices else ["disabled"])
                     self.log("Сервер ответил. Управление усилителем: отключено.")
+                elif kind=="central_line":
+                    if value: self.log("Central: "+value)
                 elif kind=="remote_line":
                     self.log("WebRTC: "+value)
                     if value.startswith("WAIT "):
@@ -411,6 +482,13 @@ class RadioApp(tk.Tk):
             self.remote_receiver=None
             self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
             self.remote_stop.state(["disabled"])
+        if self.central and self.central.poll() is not None:
+            self.log("Центральный эфир завершён: "+str(self.central.returncode))
+            self.central=None
+            self.central_stop.state(["disabled"])
+            self.central_start.state(["!disabled"] if self.allowed else ["disabled"])
+            self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
+            self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
         if self.pilot and self.pilot.poll() is not None:
             self.pilot=None
             self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
@@ -423,6 +501,7 @@ class RadioApp(tk.Tk):
         self.after(500,self.poll)
 
     def close(self):
+        self.stop_central()
         self.stop_live()
         self.stop_pilot()
         self.token_var.set("")
