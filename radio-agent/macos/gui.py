@@ -169,7 +169,7 @@ class RadioApp(tk.Tk):
             return
         try:
             self.audio_test=subprocess.Popen([VLC,"--intf","dummy","--play-and-exit",
-                "--no-video","--no-one-instance",str(audio)],start_new_session=True,
+                "--no-video",str(audio)],start_new_session=True,
                 stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
             self.log("Тест звука: "+track.get("name",track["id"])+" · "+str(audio))
             self.stop_btn.state(["!disabled"])
