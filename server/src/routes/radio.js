@@ -145,8 +145,6 @@ function broadcastStart(body) {
 }
 
 
-router.use(requireRole('ADMIN'));
-
 router.get('/status', (_req, res) => res.json({
     enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
@@ -197,6 +195,8 @@ const streamAudio = safe(async (req, res) => {
 });
 router.get('/student/assets/:id/audio', studentOnly, streamAudio);
 router.get('/assets/:id/audio', requireRole('ADMIN'), streamAudio);
+router.use(requireRole('ADMIN'));
+
 // Asset metadata may be edited without changing the original audio bytes.
 router.patch('/assets/:id', safe(async (req, res) => {
     if (!validTitle(req.body?.name)) return res.status(400).json({ error: 'Укажите название до 140 символов' });
