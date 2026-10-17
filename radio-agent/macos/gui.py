@@ -30,6 +30,8 @@ class RadioApp(tk.Tk):
         self.audio_test = None
         self.live = None
         self.live_reader = None
+        self.remote_receiver = None
+        self.remote_reader = None
         self.token_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Не подключено")
         self.current_var = tk.StringVar(value="Нет данных")
@@ -98,6 +100,17 @@ class RadioApp(tk.Tk):
         self.audio_devices=[]
         self.after(250,self.scan_audio_devices)
 
+        remote=ttk.LabelFrame(body,text="Прямой эфир с телефона · WebRTC",padding=10)
+        remote.pack(fill="x",pady=8)
+        ttk.Label(remote,text="Принимать голос ведущего с сайта на локальный аудиовыход Mac. Используйте наушники.").pack(anchor="w")
+        rr=ttk.Frame(remote)
+        rr.pack(fill="x",pady=6)
+        self.remote_start=ttk.Button(rr,text="Принимать прямой эфир",command=self.start_remote)
+        self.remote_start.pack(side="left",padx=(0,8))
+        self.remote_stop=ttk.Button(rr,text="Остановить приём",command=self.stop_remote)
+        self.remote_stop.pack(side="left")
+        self.remote_start.state(["disabled"])
+        self.remote_stop.state(["disabled"])
         ttk.Label(body,text="Журнал событий").pack(anchor="w",pady=(12,4))
         self.logbox=tk.Text(body,height=10,wrap="word",state="disabled")
         self.logbox.pack(fill="both",expand=True)
@@ -284,6 +297,41 @@ class RadioApp(tk.Tk):
         except OSError as exc:
             self.log("Ошибка запуска: "+str(exc))
 
+    def start_remote(self):
+        if self.remote_receiver and self.remote_receiver.poll() is None: return
+        if not self.allowed:
+            messagebox.showwarning("Нет разрешения","Включите тестовый эфир для Mac в админке.")
+            return
+        if self.pilot and self.pilot.poll() is None:
+            messagebox.showwarning("Другой источник звука","Остановите воспроизведение по расписанию перед прямым эфиром.")
+            return
+        if not messagebox.askyesno("Приём прямого эфира","Используются только наушники/тестовые колонки?"):
+            return
+        env=os.environ.copy()
+        env["RADIO_AGENT_TOKEN"]=self.token_var.get().strip()
+        try:
+            self.remote_receiver=subprocess.Popen([sys.executable,str(Path(__file__).with_name("webrtc_receiver.py"))],
+                env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,start_new_session=True)
+            def reader(proc):
+                for line in proc.stdout:
+                    self.events.put(("remote_line",line.strip()))
+            self.remote_reader=threading.Thread(target=reader,args=(self.remote_receiver,),daemon=True)
+            self.remote_reader.start()
+            self.remote_start.state(["disabled"])
+            self.remote_stop.state(["!disabled"])
+            self.log("Запущен сетевой WebRTC-приёмник. Ожидаем ведущего с телефона.")
+        except OSError as e:
+            self.log("WebRTC приёмник не запустился: "+str(e))
+
+    def stop_remote(self):
+        if self.remote_receiver and self.remote_receiver.poll() is None:
+            try: os.killpg(self.remote_receiver.pid,signal.SIGTERM)
+            except ProcessLookupError: pass
+            self.log("Сетевой WebRTC-приёмник остановлен.")
+        self.remote_receiver=None
+        self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
+        self.remote_stop.state(["disabled"])
+
     def stop_pilot(self):
         if self.audio_test and self.audio_test.poll() is None:
             try: os.killpg(self.audio_test.pid, signal.SIGTERM)
@@ -324,8 +372,11 @@ class RadioApp(tk.Tk):
                     if not self.pilot or self.pilot.poll() is not None:
                         self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
                     self.test_btn.state(["!disabled"] if self.allowed and self.snapshot else ["disabled"])
+                    if not self.remote_receiver: self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
                     if not self.live: self.live_start.state(["!disabled"] if self.allowed and self.audio_devices else ["disabled"])
                     self.log("Сервер ответил. Управление усилителем: отключено.")
+                elif kind=="remote_line":
+                    self.log("WebRTC: "+value)
                 elif kind=="snapshot":
                     self.snapshot=value
                     self.update_schedule()
@@ -339,6 +390,11 @@ class RadioApp(tk.Tk):
             self.log('Проверка звука завершилась: VLC код '+str(code)+((' · '+errors) if code else ''))
             self.audio_test=None
             if not self.pilot: self.stop_btn.state(['disabled'])
+        if self.remote_receiver and self.remote_receiver.poll() is not None:
+            self.log("WebRTC-приёмник завершился с кодом "+str(self.remote_receiver.returncode))
+            self.remote_receiver=None
+            self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
+            self.remote_stop.state(["disabled"])
         if self.pilot and self.pilot.poll() is not None:
             self.pilot=None
             self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
