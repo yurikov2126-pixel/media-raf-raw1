@@ -22,7 +22,7 @@ class RadioApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("MEDIA · РАФ · RAW — Radio Agent")
-        self.geometry("800x600")
+        self.geometry("850x680")
         self.minsize(600, 480)
         self.events = queue.Queue()
         self.worker = None
@@ -40,8 +40,15 @@ class RadioApp(tk.Tk):
         self.next_var = tk.StringVar(value="Нет данных")
         self.allowed = False
         self.snapshot = None
+        self.auto_sync_enabled = False
+        self.sync_in_flight = False
+        self.last_revision = None
+        self.sync_state_var = tk.StringVar(value="Кэш: не загружен")
+        self.audio_state_var = tk.StringVar(value="Источник: остановлен")
+        self.show_advanced = tk.BooleanVar(value=False)
         self.build()
         self.after(150, self.poll)
+        self.after(15000, self.poll_schedule)
         self.protocol("WM_DELETE_WINDOW", self.close)
 
     def build(self):
@@ -59,17 +66,19 @@ class RadioApp(tk.Tk):
         self.connect_btn.pack(side="left", padx=(0,6))
         self.sync_btn = ttk.Button(actions, text="Синхронизировать файлы", command=self.do_sync)
         self.sync_btn.pack(side="left")
+        ttk.Label(auth,textvariable=self.sync_state_var).pack(anchor="w",pady=5)
         ttk.Label(auth, textvariable=self.status_var).pack(anchor="w", pady=(8,0))
 
         programs = ttk.LabelFrame(body, text="Расписание · московское время", padding=10)
-        programs.pack(fill="x", pady=12)
+        programs.pack(fill="x", pady=9)
+        ttk.Label(body,textvariable=self.audio_state_var,font=("Helvetica",14,"bold")).pack(anchor="w",pady=5)
         ttk.Label(programs, text="Сейчас:").grid(row=0,column=0,sticky="w")
         ttk.Label(programs, textvariable=self.current_var).grid(row=0,column=1,sticky="w",padx=10)
         ttk.Label(programs, text="Следующая:").grid(row=1,column=0,sticky="w")
         ttk.Label(programs, textvariable=self.next_var).grid(row=1,column=1,sticky="w",padx=10)
 
         playback = ttk.LabelFrame(body, text="Тестовый аудиовыход Mac", padding=10)
-        playback.pack(fill="x")
+        self.advanced_boxes=[playback]
         ttk.Label(playback, text="Только наушники/тестовые колонки. Не подключать общую трансляцию.").pack(anchor="w")
         self.start_btn = ttk.Button(playback,text="Включить тестовое воспроизведение",command=self.start_pilot)
         self.start_btn.pack(side="left",padx=(0,8),pady=7)
@@ -93,7 +102,7 @@ class RadioApp(tk.Tk):
         self.central_stop.state(["disabled"])
 
         livebox=ttk.LabelFrame(body,text="Локальный прямой эфир · тест микрофона",padding=10)
-        livebox.pack(fill="x",pady=10)
+        self.advanced_boxes.append(livebox)
         ttk.Label(livebox,text="Только локальный аудиовыход Mac, НЕ трансляция через интернет. Используйте наушники, чтобы не было обратной связи.").pack(anchor="w")
         self.input_choice=ttk.Combobox(livebox,state="readonly",width=60)
         self.input_choice.pack(fill="x",pady=3)
@@ -114,7 +123,7 @@ class RadioApp(tk.Tk):
         self.after(250,self.scan_audio_devices)
 
         remote=ttk.LabelFrame(body,text="Прямой эфир с телефона · WebRTC",padding=10)
-        remote.pack(fill="x",pady=8)
+        self.advanced_boxes.append(remote)
         ttk.Label(remote,text="Принимать голос ведущего с сайта на локальный аудиовыход Mac. Используйте наушники.").pack(anchor="w")
         rr=ttk.Frame(remote)
         rr.pack(fill="x",pady=6)
@@ -124,10 +133,37 @@ class RadioApp(tk.Tk):
         self.remote_stop.pack(side="left")
         self.remote_start.state(["disabled"])
         self.remote_stop.state(["disabled"])
-        ttk.Label(body,text="Журнал событий").pack(anchor="w",pady=(12,4))
+        ttk.Checkbutton(body,text="Показать дополнительные тесты",variable=self.show_advanced,command=self.toggle_advanced).pack(anchor="w",pady=(6,2))
+        ttk.Label(body,text="Журнал событий").pack(anchor="w",pady=(8,4))
         self.logbox=tk.Text(body,height=10,wrap="word",state="disabled")
         self.logbox.pack(fill="both",expand=True)
         self.log("Введите токен из Радио → Оборудование. Он хранится только в памяти приложения.")
+
+    def toggle_advanced(self):
+        for frame in self.advanced_boxes:
+            if self.show_advanced.get():
+                frame.pack(fill="x",pady=4,before=self.logbox)
+            else:
+                frame.pack_forget()
+
+    def poll_schedule(self):
+        if self.auto_sync_enabled and not self.sync_in_flight and not (self.worker and self.worker.is_alive()):
+            self.sync_in_flight=True
+            token=self.token_var.get().strip()
+            threading.Thread(target=self.check_revision,args=(token,),daemon=True).start()
+        self.after(15000,self.poll_schedule)
+
+    def check_revision(self,token):
+        try:
+            with fetch(SERVER,token,"/api/radio-agent/agent/snapshot") as response:
+                remote=json.load(response)
+            revision=remote.get("revision")
+            if revision and revision!=self.last_revision:
+                self.events.put(("revision_changed",revision))
+        except Exception as exc:
+            self.events.put(("sync_warning",str(exc)))
+        finally:
+            self.events.put(("sync_probe_done",None))
 
     def log(self,message):
         self.logbox.configure(state="normal")
@@ -161,8 +197,10 @@ class RadioApp(tk.Tk):
             self.events.put(("error",str(exc)))
 
     def connect(self):
-        self.submit("connect")
+        self.auto_sync_enabled=True
+        self.submit("sync")
     def do_sync(self):
+        self.auto_sync_enabled=True
         self.submit("sync")
 
     def update_schedule(self):
@@ -268,6 +306,7 @@ class RadioApp(tk.Tk):
             self.central_stop.state(["!disabled"])
             self.start_btn.state(["disabled"])
             self.remote_start.state(["disabled"])
+            self.audio_state_var.set("Источник: подключение к серверу...")
             self.log("Центральный эфир запущен. При обрыве используется локальная сетка.")
         except OSError as exc:
             self.log("Ошибка центрального потока: "+str(exc))
@@ -281,6 +320,7 @@ class RadioApp(tk.Tk):
                 try: os.killpg(self.central.pid,signal.SIGKILL)
                 except ProcessLookupError: pass
         self.central=None
+        self.audio_state_var.set("Источник: остановлен")
         self.central_stop.state(["disabled"])
         self.central_start.state(["!disabled"] if self.allowed else ["disabled"])
         self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
@@ -454,6 +494,12 @@ class RadioApp(tk.Tk):
                     if not self.live: self.live_start.state(["!disabled"] if self.allowed and self.audio_devices else ["disabled"])
                     self.log("Сервер ответил. Управление усилителем: отключено.")
                 elif kind=="central_line":
+                    if value.startswith("PRIMARY_STREAM"):
+                        self.audio_state_var.set("● Центральный сервер · эфир")
+                    elif value.startswith("PRIMARY_CONNECTING"):
+                        self.audio_state_var.set("◌ Центральный сервер · подключение")
+                    elif value.startswith(("FALLBACK","LOCAL_TRACK")):
+                        self.audio_state_var.set("● Резерв · локальная сетка")
                     if value: self.log("Central: "+value)
                 elif kind=="remote_line":
                     self.log("WebRTC: "+value)
@@ -463,8 +509,18 @@ class RadioApp(tk.Tk):
                         self.set_live_priority()
                     elif value.startswith(("ENDED", "SIGNAL_LOST", "PEER_FAILED", "AUDIO_ERROR")):
                         self.clear_live_priority()
+                elif kind=="sync_probe_done":
+                    self.sync_in_flight=False
+                elif kind=="revision_changed":
+                    self.sync_state_var.set("Изменение сетки · синхронизация...")
+                    self.submit("sync")
+                elif kind=="sync_warning":
+                    self.sync_state_var.set("Сеть недоступна · используется кэш")
                 elif kind=="snapshot":
                     self.snapshot=value
+                    self.last_revision=value.get("revision")
+                    count=len({t["id"] for sl in value.get("slots",[]) for t in sl.get("tracks",[])})
+                    self.sync_state_var.set("Кэш готов · записей: "+str(count)+" · автообновление")
                     self.update_schedule()
                     self.test_btn.state(["!disabled"] if self.allowed else ["disabled"])
                     self.log("Синхронизировано передач: "+str(len(value.get("slots",[]))))
@@ -484,6 +540,7 @@ class RadioApp(tk.Tk):
             self.remote_stop.state(["disabled"])
         if self.central and self.central.poll() is not None:
             self.log("Центральный эфир завершён: "+str(self.central.returncode))
+            self.audio_state_var.set("Источник: остановлен")
             self.central=None
             self.central_stop.state(["disabled"])
             self.central_start.state(["!disabled"] if self.allowed else ["disabled"])
@@ -501,6 +558,7 @@ class RadioApp(tk.Tk):
         self.after(500,self.poll)
 
     def close(self):
+        self.auto_sync_enabled=False
         self.stop_central()
         self.stop_live()
         self.stop_pilot()
