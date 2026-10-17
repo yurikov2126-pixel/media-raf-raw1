@@ -30,7 +30,7 @@ router.post('/devices', ...admin, safe(async(req,res) => {
 }));
 router.get('/devices', ...admin, safe(async(_req,res) => {
   const devices = await prisma.radioDevice.findMany({ orderBy: { createdAt:'desc' }, select: {
-    id:true, name:true, createdAt:true, lastSeenAt:true, revokedAt:true,
+    id:true, name:true, createdAt:true, lastSeenAt:true, revokedAt:true, playbackAllowed:true,
   } });
   res.json({ devices });
 }));
@@ -40,10 +40,17 @@ router.post('/devices/:id/revoke', ...admin, safe(async(req,res) => {
   if (!changed.count) return res.status(404).json({error:'Устройство не найдено или уже отключено'});
   res.json({ok:true});
 }));
+router.post('/devices/:id/playback', ...admin, safe(async(req,res) => {
+  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({error:'Передайте enabled: true или false'});
+  const changed=await prisma.radioDevice.updateMany({where:{id:req.params.id,revokedAt:null},
+    data:{playbackAllowed:req.body.enabled}});
+  if(!changed.count) return res.status(404).json({error:'Устройство не найдено или отключено'});
+  res.json({ok:true,playbackAllowed:req.body.enabled});
+}));
 router.get('/agent/status', deviceAuth, safe(async(req,res) => {
   await prisma.radioDevice.update({ where: { id:req.radioDevice.id }, data:{lastSeenAt:new Date()} });
-  res.json({ deviceId:req.radioDevice.id, mode:'SYNC_ONLY', timezone:'Europe/Moscow', serverTime:new Date().toISOString(),
-    playbackEnabled:false, amplifierControlEnabled:false });
+  res.json({ deviceId:req.radioDevice.id, mode:req.radioDevice.playbackAllowed ? 'PILOT' : 'SYNC_ONLY', timezone:'Europe/Moscow', serverTime:new Date().toISOString(),
+    playbackEnabled:!!req.radioDevice.playbackAllowed, amplifierControlEnabled:false });
 }));
 router.get('/agent/snapshot', deviceAuth, safe(async(req,res) => {
   const from=new Date(Date.now()-3600000), to=new Date(Date.now()+14*86400000);
@@ -57,8 +64,8 @@ router.get('/agent/snapshot', deviceAuth, safe(async(req,res) => {
   const json=JSON.stringify(entries);
   const revision=digest(json);
   res.setHeader('Cache-Control','no-store');
-  res.json({ revision, generatedAt:new Date().toISOString(),timezone:'Europe/Moscow',mode:'SYNC_ONLY',
-    playbackEnabled:false, slots:entries });
+  res.json({ revision, generatedAt:new Date().toISOString(),timezone:'Europe/Moscow',mode:req.radioDevice.playbackAllowed ? 'PILOT' : 'SYNC_ONLY',
+    playbackEnabled:!!req.radioDevice.playbackAllowed, slots:entries });
 }));
 router.get('/agent/assets/:id', deviceAuth, safe(async(req,res) => {
   // Allow only files currently referenced in the approved schedule.
