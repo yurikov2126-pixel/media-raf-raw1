@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
+import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -453,9 +454,10 @@ export default function Radio() {
         </div>}
       </div>)}
     </section>}
-    {(tab==='studio'||tab==='history') && <section className="rounded-2xl border border-current/10 p-6 space-y-2">
-      <h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':'История эфира'}</h2>
-      <p className="opacity-70">В разработке. Подключение эфира пока отключено.</p>
+    {tab==='studio' && <RadioLiveStudio />}
+    {tab==='history' && <section className="rounded-2xl border border-current/10 p-6 space-y-2">
+      <h2 className="text-xl font-bold">История эфира</h2>
+      <p className="opacity-70">В разработке.</p>
     </section>}
   </main>;
 }
