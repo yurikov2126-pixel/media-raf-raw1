@@ -68,11 +68,11 @@ export default function Layout() {
     ];
     const configured = siteSettings.nav_desktop_customized === 'true';
     const candidates = [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to) && (!configured || ['/app/seasons','/app/stickers','/app/radio'].includes(extra.to)))];
-    const links = normalizeLinks(candidates.map(item => item.to === '/app/radio' && user?.role === 'STUDENT' ? { ...item, to: '/app/radio/playlists/my', label: 'Радио', icon: 'radioStudio' } : item)).filter(l => {
+    const links = normalizeLinks(candidates.map(item => item.to === '/app/radio' && user?.role !== 'ADMIN' ? { ...item, to: '/app/radio/playlists/my', label: 'Радио', icon: 'radioStudio' } : item)).filter(l => {
         if (typeof l.to !== 'string' || !l.to.startsWith('/app') || l.to.startsWith('//')) return false;
         if (l.to === '/app/admin' && !isAdmin) return false;
         if (l.to === '/app/radio' && !radioAllowed) return false;
-        if (l.to === '/app/radio/playlists/my' && !(radioAllowed && user?.role === 'STUDENT')) return false;
+        if (l.to === '/app/radio/playlists/my' && !(radioAllowed && user?.role !== 'ADMIN')) return false;
         if (l.to === '/app/mentor' && !isMentor) return false;
         if (l.roles && (!Array.isArray(l.roles) || !l.roles.includes(user?.role))) return false;
         const key = moduleKeyForPath(l.to);
