@@ -49,6 +49,7 @@ const Certificate = lazy(() => import('./pages/Certificate.jsx'));
 const Verify = lazy(() => import('./pages/Verify.jsx'));
 const Wiki = lazy(() => import('./pages/Wiki.jsx'));
 const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
+const Radio = lazy(() => import('./pages/Radio.jsx'));
 const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
 
 const LazyPage = ({ children }) => (
@@ -116,6 +117,7 @@ export default function App() {
                 >
                     <Route index element={<LazyPage><DashboardMode /></LazyPage>} />
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
+                    <Route path="radio" element={<Private roles={['ADMIN']}><LazyPage><Radio /></LazyPage></Private>} />
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
                         <Route index element={<LazyPage><EditorialOverview /></LazyPage>} />
                         <Route path="projects" element={<LazyPage><EditorialProjects /></LazyPage>} />
