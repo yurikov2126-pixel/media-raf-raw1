@@ -38,11 +38,15 @@ def main():
         p.error('Provide /Applications/VLC.app/Contents/MacOS/VLC')
     base=Path(args.data_dir).resolve()
     base.mkdir(parents=True, exist_ok=True)
+    pause_file=base/'live-priority.pause'
     history=base/'played.json'
     played=set(json.loads(history.read_text(encoding='utf-8'))) if history.exists() else set()
     print('PILOT MODE. Local macOS audio ONLY. NO ESP32 OR AMPLIFIER CONTROL.',flush=True)
     while True:
         try:
+            if pause_file.exists():
+                time.sleep(1)
+                continue
             with fetch(args.server,token,'/api/radio-agent/agent/status') as resp:
                 status=json.load(resp)
             drift=abs(utc(status['serverTime'])-time.time())
@@ -63,6 +67,9 @@ def main():
                 tmp.write_text(json.dumps(sorted(played)),encoding='utf-8')
                 os.replace(tmp,history)
                 for track in slot['tracks']:
+                    if pause_file.exists():
+                        print('Live voice has priority; playlist suspended',flush=True)
+                        break
                     # Recheck admin permission before every track.
                     with fetch(args.server,token,'/api/radio-agent/agent/status') as response:
                         allowed=json.load(response)
@@ -76,8 +83,21 @@ def main():
                     duration=min(max(int(track['durationMs']/1000)+5,5),43205)
                     try:
                         print('Playing:',track.get('name'),str(audio),flush=True)
-                        subprocess.run([str(executable),'--intf','dummy','--play-and-exit','--no-video',
-                                        str(audio)],check=False,timeout=duration)
+                        child=subprocess.Popen([str(executable),'--intf','dummy','--play-and-exit','--no-video',
+                                        str(audio)],start_new_session=True)
+                        deadline=time.monotonic()+duration
+                        while child.poll() is None:
+                            if pause_file.exists():
+                                child.terminate()
+                                try: child.wait(timeout=3)
+                                except subprocess.TimeoutExpired: child.kill(); child.wait()
+                                print('VLC stopped for live voice priority',flush=True)
+                                break
+                            if time.monotonic()>deadline:
+                                child.kill(); child.wait()
+                                print('Track playback timed out',track['id'],file=sys.stderr,flush=True)
+                                break
+                            time.sleep(0.2)
                     except subprocess.TimeoutExpired:
                         print('Track playback timed out',track['id'],file=sys.stderr);break
                 break

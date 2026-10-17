@@ -297,13 +297,20 @@ class RadioApp(tk.Tk):
         except OSError as exc:
             self.log("Ошибка запуска: "+str(exc))
 
+    def priority_file(self):
+        return ROOT / "live-priority.pause"
+
+    def set_live_priority(self):
+        ROOT.mkdir(parents=True, exist_ok=True)
+        self.priority_file().write_text("live",encoding="utf-8")
+
+    def clear_live_priority(self):
+        self.priority_file().unlink(missing_ok=True)
+
     def start_remote(self):
         if self.remote_receiver and self.remote_receiver.poll() is None: return
         if not self.allowed:
             messagebox.showwarning("Нет разрешения","Включите тестовый эфир для Mac в админке.")
-            return
-        if self.pilot and self.pilot.poll() is None:
-            messagebox.showwarning("Другой источник звука","Остановите воспроизведение по расписанию перед прямым эфиром.")
             return
         if not messagebox.askyesno("Приём прямого эфира","Используются только наушники/тестовые колонки?"):
             return
@@ -324,6 +331,7 @@ class RadioApp(tk.Tk):
             self.log("WebRTC приёмник не запустился: "+str(e))
 
     def stop_remote(self):
+        self.clear_live_priority()
         if self.remote_receiver and self.remote_receiver.poll() is None:
             try: os.killpg(self.remote_receiver.pid,signal.SIGTERM)
             except ProcessLookupError: pass
@@ -377,6 +385,10 @@ class RadioApp(tk.Tk):
                     self.log("Сервер ответил. Управление усилителем: отключено.")
                 elif kind=="remote_line":
                     self.log("WebRTC: "+value)
+                    if value in ("LISTENING", "AUDIO_START"):
+                        self.set_live_priority()
+                    elif value.startswith(("ENDED", "SIGNAL_LOST", "PEER_FAILED", "AUDIO_ERROR")):
+                        self.clear_live_priority()
                 elif kind=="snapshot":
                     self.snapshot=value
                     self.update_schedule()
@@ -391,6 +403,7 @@ class RadioApp(tk.Tk):
             self.audio_test=None
             if not self.pilot: self.stop_btn.state(['disabled'])
         if self.remote_receiver and self.remote_receiver.poll() is not None:
+            self.clear_live_priority()
             self.log("WebRTC-приёмник завершился с кодом "+str(self.remote_receiver.returncode))
             self.remote_receiver=None
             self.remote_start.state(["!disabled"] if self.allowed else ["disabled"])
