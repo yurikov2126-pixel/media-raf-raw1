@@ -77,7 +77,7 @@ def main():
                     try:
                         print('Playing:',track.get('name'),str(audio),flush=True)
                         subprocess.run([str(executable),'--intf','dummy','--play-and-exit','--no-video',
-                                        '--no-one-instance',str(audio)],check=False,timeout=duration)
+                                        str(audio)],check=False,timeout=duration)
                     except subprocess.TimeoutExpired:
                         print('Track playback timed out',track['id'],file=sys.stderr);break
                 break
