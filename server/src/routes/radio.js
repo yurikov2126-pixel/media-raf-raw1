@@ -66,6 +66,32 @@ router.get('/assets/:id/audio', safe(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.sendFile(path.join(root, path.basename(a.storageKey)));
 }));
+
+// Asset metadata may be edited without changing the original audio bytes.
+router.patch('/assets/:id', safe(async (req, res) => {
+    if (!validTitle(req.body?.name)) return res.status(400).json({ error: 'Укажите название до 140 символов' });
+    const updated = await prisma.radioAsset.updateMany({
+        where: { id: req.params.id }, data: { name: req.body.name.trim() },
+    });
+    if (!updated.count) return res.status(404).json({ error: 'Запись не найдена' });
+    res.json({ asset: await prisma.radioAsset.findUnique({ where: { id: req.params.id } }) });
+}));
+router.delete('/assets/:id', safe(async (req, res) => {
+    const asset = await prisma.radioAsset.findUnique({ where: { id: req.params.id } });
+    if (!asset) return res.status(404).json({ error: 'Запись не найдена' });
+    const inUse = await prisma.radioPlaylistItem.count({ where: { assetId: asset.id } });
+    if (inUse) return res.status(409).json({ error: 'Запись используется в плейлистах. Сначала уберите её оттуда.' });
+    await prisma.radioAsset.delete({ where: { id: asset.id } }).catch(e => {
+        if (e.code === 'P2003') return null; throw e;
+    });
+    if (await prisma.radioAsset.findUnique({ where: { id: asset.id } }))
+        return res.status(409).json({ error: 'Запись используется в плейлисте' });
+    await fs.unlink(path.join(root, path.basename(asset.storageKey))).catch(error => {
+        if (error.code !== 'ENOENT') console.error('[radio] orphan file cleanup:', error);
+    });
+    res.json({ ok: true });
+}));
+
 router.get('/playlists', safe(async (_req, res) => {
     res.json({ playlists: await prisma.radioPlaylist.findMany({ include: playlistInclude, orderBy: { updatedAt: 'desc' }, take: 250 }) });
 }));
@@ -142,6 +168,43 @@ router.post('/schedule', safe(async (req, res) => {
     if (!slot) return res.status(409).json({ error: 'Этот интервал уже занят' });
     res.status(201).json({ slot });
 }));
+
+router.post('/schedule/weekly', safe(async (req, res) => {
+    const { playlistId, weekdays, weeks } = req.body || {};
+    const startAt = new Date(req.body?.startAt);
+    if (typeof playlistId !== 'string' || !Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now() ||
+        !Array.isArray(weekdays) || !weekdays.length || weekdays.length > 7 ||
+        weekdays.some(day => !Number.isInteger(day) || day < 0 || day > 6) ||
+        new Set(weekdays).size !== weekdays.length ||
+        !Number.isInteger(weeks) || weeks < 1 || weeks > 12)
+        return res.status(400).json({ error: 'Укажите будущее время, дни недели и период от 1 до 12 недель' });
+    const playlist = await prisma.radioPlaylist.findUnique({ where: { id: playlistId }, include: playlistInclude });
+    if (!playlist || playlist.status !== 'APPROVED' || !playlist.items.length)
+        return res.status(400).json({ error: 'Плейлист не утверждён' });
+    const durationMs = playlistMs(playlist);
+    if (!durationMs || durationMs > 12 * 3600000)
+        return res.status(400).json({ error: 'Недопустимая продолжительность' });
+    // Weekdays follow UTC here. Station timezone support is required before autonomous playout.
+    const candidateTimes = [];
+    for (let offset = 0; offset < weeks * 7; offset++) {
+        const point = new Date(startAt.getTime() + offset * 86400000);
+        if (weekdays.includes(point.getUTCDay())) candidateTimes.push(point);
+    }
+    if (!candidateTimes.length) return res.status(400).json({ error: 'Не найдены подходящие дни' });
+    const result = await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+        const clash = await tx.radioScheduleSlot.findFirst({ where: { OR: candidateTimes.map(t => ({
+            startAt: { lt: new Date(t.getTime() + durationMs) }, endAt: { gt: t },
+        })) } });
+        if (clash) return null;
+        return tx.radioScheduleSlot.createMany({ data: candidateTimes.map(t => ({
+            playlistId, startAt: t, endAt: new Date(t.getTime() + durationMs), createdBy: req.user.id,
+        })) });
+    });
+    if (!result) return res.status(409).json({ error: 'Есть пересечение. Повторения не созданы.' });
+    res.status(201).json({ created: result.count, timezone: 'UTC' });
+}));
+
 router.delete('/schedule/:id', safe(async (req, res) => {
     const result = await prisma.radioScheduleSlot.deleteMany({ where: { id: req.params.id, startAt: { gt: new Date() } } });
     if (!result.count) return res.status(404).json({ error: 'Будущий эфир не найден' });
