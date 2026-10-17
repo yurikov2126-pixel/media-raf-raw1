@@ -1292,6 +1292,9 @@ model RadioPlaylist {
   updatedAt   DateTime @updatedAt
   items       RadioPlaylistItem[]
   slots       RadioScheduleSlot[]
+  folderId    String?
+  folder      RadioPlaylistFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  @@index([folderId])
 }
 
 model RadioPlaylistItem {
@@ -1313,4 +1316,11 @@ model RadioScheduleSlot {
   createdAt  DateTime @default(now())
   playlist   RadioPlaylist @relation(fields: [playlistId], references: [id], onDelete: Restrict)
   @@index([startAt, endAt])
+}
+
+model RadioPlaylistFolder {
+  id        String @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  playlists RadioPlaylist[]
 }
