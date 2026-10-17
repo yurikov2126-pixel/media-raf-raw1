@@ -28,7 +28,7 @@ function normalizeLinks(items) {
     const legacy = { '🏠': 'dashboard', '💬': 'message', '🎓': 'book', '📖': 'book', '🏆': 'trophy', '⚙️': 'settings' };
     return items.map((item) => ({
         ...item,
-        icon: item.to === '/app/wiki' && item.icon === 'book' ? 'library' : (legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles')),
+        icon: item.to === '/app/radio' ? 'radioStudio' : item.to === '/app/wiki' && item.icon === 'book' ? 'library' : (legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles')),
     }));
 }
 
