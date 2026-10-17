@@ -3,6 +3,7 @@ import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
+import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -232,6 +233,7 @@ export default function Radio() {
       <p className="opacity-70">Центр управления радиовещанием колледжа</p>
     </header>
     {tab === 'home' ? <>
+      <RadioBroadcastDashboard token={token} />
       <section className="rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2" aria-live="polite">
         <div className="flex justify-between gap-3 items-center flex-wrap">
           <h2 className="font-semibold">Эфирная система</h2>
