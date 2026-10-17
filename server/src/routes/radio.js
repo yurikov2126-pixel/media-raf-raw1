@@ -145,7 +145,7 @@ function broadcastStart(body) {
 }
 
 
-router.get('/status', (_req, res) => res.json({
+router.get('/status', requireRole('ADMIN'), (_req, res) => res.json({
     enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
 router.get('/assets', requireRole('ADMIN'), safe(async (_req, res) => {
