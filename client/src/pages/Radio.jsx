@@ -19,6 +19,8 @@ export default function Radio() {
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [radioDevices, setRadioDevices] = useState([]);
+  const [deviceToken, setDeviceToken] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selected, setSelected] = useState([]);
@@ -60,6 +62,31 @@ export default function Radio() {
       toast.success(successMessage);
     } catch (e) { toast.error(e.message || 'Не удалось выполнить действие'); }
   };
+  const loadRadioDevices = async () => {
+    try {
+      const data = await api('/radio-agent/devices', { token });
+      setRadioDevices(data.devices);
+    } catch (e) { toast.error(e.message); }
+  };
+  const registerRadioDevice = async () => {
+    const name = window.prompt('Название выделенного радиокомпьютера');
+    if (!name?.trim()) return;
+    try {
+      const data = await api('/radio-agent/devices', { token, method: 'POST', body: { name: name.trim() } });
+      setDeviceToken(data.token);
+      await loadRadioDevices();
+      toast.success('Радиокомпьютер зарегистрирован. Сохраните токен — повторно он не показывается.');
+    } catch (e) { toast.error(e.message); }
+  };
+  const revokeRadioDevice = async device => {
+    if (!window.confirm('Отключить радиокомпьютер «' + device.name + '»? Его токен перестанет работать.')) return;
+    try {
+      await api('/radio-agent/devices/' + device.id + '/revoke', { token, method: 'POST' });
+      await loadRadioDevices();
+      toast.success('Доступ радиокомпьютера отозван');
+    } catch (e) { toast.error(e.message); }
+  };
+  useEffect(() => { if (tab === 'equipment') loadRadioDevices(); }, [tab, token]);
   const queueFiles = incoming => {
     const audio = [...incoming].filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f.name));
     setFiles(previous => {
@@ -374,6 +401,28 @@ export default function Radio() {
         {new Date(s.startAt)>new Date() && <button className="rounded-lg border border-red-500/30 px-3 py-2 text-red-500 text-sm" onClick={()=>{if(window.confirm('Удалить эфир?')) action(()=>call('/schedule/'+s.id,{method:'DELETE'}));}}>Удалить</button>}
       </article>)}
     </section>}
-    {(tab==='studio'||tab==='equipment'||tab==='history') && <section className="rounded-2xl border border-current/10 p-6 space-y-2"><h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':tab==='history'?'История эфира':'Оборудование'}</h2><p className="opacity-70">Подключение будет выполнено на следующем этапе. Сейчас оборудование не управляется.</p></section>}
+    {tab==='equipment' && <section className="rounded-2xl border border-current/10 p-5 space-y-4">
+      <h2 className="text-xl font-bold">Оборудование · Windows Radio Agent</h2>
+      <p className="text-sm opacity-70">Подключение пока только для синхронизации файлов и расписания. Воспроизведение и управление ESP32/AA-300 отключены.</p>
+      <div className="flex gap-2 flex-wrap">
+        <button className={btn} onClick={registerRadioDevice}>+ Зарегистрировать радиокомпьютер</button>
+        <button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={loadRadioDevices}>Обновить список</button>
+      </div>
+      {deviceToken && <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+        <p className="text-sm font-semibold">Токен показывается только сейчас. Не передавайте его в чат и не храните в публичных файлах.</p>
+        <div className="flex flex-wrap gap-2"><input className={inputStyle} readOnly aria-label="Токен устройства" value={deviceToken}/>
+          <button className={btn} onClick={()=>navigator.clipboard.writeText(deviceToken).then(()=>toast.success('Токен скопирован')).catch(()=>toast.error('Не удалось скопировать'))}>Копировать токен</button>
+          <button className="rounded-xl border border-current/20 px-3" onClick={()=>setDeviceToken('')}>Скрыть</button></div>
+      </div>}
+      {radioDevices.map(d=><div key={d.id} className="rounded-xl border border-current/10 p-3 flex items-center justify-between gap-3">
+        <div className="min-w-0"><p className="font-semibold text-sm">{d.name}</p>
+          <p className="text-xs opacity-60">{d.revokedAt ? 'Отключён' : 'Зарегистрирован'} · Последняя связь: {d.lastSeenAt ? dateLocal(d.lastSeenAt) : 'пока не выходил на связь'}</p></div>
+        {!d.revokedAt && <button className="rounded-lg border border-red-500/30 text-red-500 text-sm px-3 py-2" onClick={()=>revokeRadioDevice(d)}>Отключить</button>}
+      </div>)}
+    </section>}
+    {(tab==='studio'||tab==='history') && <section className="rounded-2xl border border-current/10 p-6 space-y-2">
+      <h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':'История эфира'}</h2>
+      <p className="opacity-70">В разработке. Подключение эфира пока отключено.</p>
+    </section>}
   </main>;
 }

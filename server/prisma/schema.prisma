@@ -1324,3 +1324,12 @@ model RadioPlaylistFolder {
   createdAt DateTime @default(now())
   playlists RadioPlaylist[]
 }
+
+model RadioDevice {
+  id          String   @id @default(cuid())
+  name        String
+  tokenHash   String   @unique
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+}
