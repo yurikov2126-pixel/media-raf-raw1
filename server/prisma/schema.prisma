@@ -1264,3 +1264,53 @@ model EditorialTaskWikiLink {
   @@unique([taskId, articleId])
   @@index([taskId])
 }
+
+
+// Radio 2.0: planning only. No device power or playback commands.
+model RadioAsset {
+  id        String   @id @default(cuid())
+  name      String
+  storageKey String  @unique
+  mimeType  String
+  byteSize  Int
+  durationMs Int
+  sha256    String
+  createdBy String
+  createdAt DateTime @default(now())
+  items     RadioPlaylistItem[]
+}
+
+model RadioPlaylist {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  status      String   @default("DRAFT")
+  createdBy   String
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       RadioPlaylistItem[]
+  slots       RadioScheduleSlot[]
+}
+
+model RadioPlaylistItem {
+  id         String @id @default(cuid())
+  playlistId String
+  assetId    String
+  position   Int
+  playlist   RadioPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  asset      RadioAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  @@unique([playlistId, position])
+}
+
+model RadioScheduleSlot {
+  id         String   @id @default(cuid())
+  playlistId String
+  startAt    DateTime
+  endAt      DateTime
+  createdBy  String
+  createdAt  DateTime @default(now())
+  playlist   RadioPlaylist @relation(fields: [playlistId], references: [id], onDelete: Restrict)
+  @@index([startAt, endAt])
+}
