@@ -46,7 +46,7 @@ def main():
             with fetch(args.server,token,'/api/radio-agent/agent/status') as resp:
                 status=json.load(resp)
             drift=abs(utc(status['serverTime'])-time.time())
-            if drift>30: raise RuntimeError('Windows clock differs from server by over 30 seconds')
+            if drift>30: raise RuntimeError('Mac clock differs from server by over 30 seconds')
             if status.get('mode')!='PILOT' or status.get('playbackEnabled') is not True:
                 print('Playback not permitted by server; monitoring only',flush=True)
                 time.sleep(15);continue
@@ -57,6 +57,7 @@ def main():
                 scheduled=utc(slot['startAt'])
                 # Never restart a show late, and never replay after process restart.
                 if key in played or not (scheduled<=now<scheduled+10): continue
+                print('Scheduled slot starting:',slot.get('playlistName'),key,flush=True)
                 played.add(key)
                 tmp=history.with_suffix('.part')
                 tmp.write_text(json.dumps(sorted(played)),encoding='utf-8')
@@ -69,11 +70,12 @@ def main():
                     audio=base/'cache'/(track['id']+'.audio')
                     if not hash_ok(audio,track['sha256']):
                         print('Skipping missing or corrupted audio',track['id'],file=sys.stderr);break
-                    # VLC runs as child in interactive Windows session and sends audio to
-                    # the selected Windows default output. Exit code is not assumed to
+                    # VLC runs as child in interactive macOS session and sends audio to
+                    # the selected macOS default output. Exit code is not assumed to
                     # guarantee audible playback.
                     duration=min(max(int(track['durationMs']/1000)+5,5),43205)
                     try:
+                        print('Playing:',track.get('name'),str(audio),flush=True)
                         subprocess.run([str(executable),'--intf','dummy','--play-and-exit','--no-video',
                                         '--no-one-instance',str(audio)],check=False,timeout=duration)
                     except subprocess.TimeoutExpired:
