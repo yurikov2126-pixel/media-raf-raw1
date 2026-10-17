@@ -49,6 +49,7 @@ const Certificate = lazy(() => import('./pages/Certificate.jsx'));
 const Verify = lazy(() => import('./pages/Verify.jsx'));
 const Wiki = lazy(() => import('./pages/Wiki.jsx'));
 const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
+import { useRadioAccess } from './hooks/useRadioAccess.js';
 const Radio = lazy(() => import('./pages/Radio.jsx'));
 const RadioStudentPlaylists = lazy(() => import('./pages/RadioStudentPlaylists.jsx'));
 const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
@@ -78,6 +79,14 @@ const Private = ({ children, roles }) => {
     if (roles && !roles.includes(user.role)) return <Navigate to="/app" replace />;
     return children;
 };
+
+function RadioGate({ admin = false, children }) {
+    const { user } = useAuth();
+    const { allowed, loading } = useRadioAccess();
+    if (loading) return <div role="status" className="p-6">Проверяем доступ к Радио…</div>;
+    if (!allowed || (admin && user?.role !== 'ADMIN')) return <Navigate to="/app" replace />;
+    return children;
+}
 
 function RootGate() {
     const { user, loading, token } = useAuth();
@@ -118,8 +127,8 @@ export default function App() {
                 >
                     <Route index element={<LazyPage><DashboardMode /></LazyPage>} />
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
-                    <Route path="radio" element={<Private roles={['ADMIN']}><LazyPage><Radio /></LazyPage></Private>} />
-                    <Route path="radio/playlists/my" element={<Private roles={['STUDENT']}><LazyPage><RadioStudentPlaylists /></LazyPage></Private>} />
+                    <Route path="radio" element={<Private><RadioGate admin><LazyPage><Radio /></LazyPage></RadioGate></Private>} />
+                    <Route path="radio/playlists/my" element={<Private roles={['STUDENT']}><RadioGate><LazyPage><RadioStudentPlaylists /></LazyPage></RadioGate></Private>} />
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
                         <Route index element={<LazyPage><EditorialOverview /></LazyPage>} />
                         <Route path="projects" element={<LazyPage><EditorialProjects /></LazyPage>} />

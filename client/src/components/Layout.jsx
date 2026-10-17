@@ -12,6 +12,7 @@ import Avatar from './Avatar.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import Icon from './Icon.jsx';
+import { useRadioAccess } from '../hooks/useRadioAccess.js';
 
 const FALLBACK_LINKS = [
     { to: '/app', label: 'Главная', end: true, icon: 'dashboard' },
@@ -27,7 +28,7 @@ function normalizeLinks(items) {
     const legacy = { '🏠': 'dashboard', '💬': 'message', '🎓': 'book', '📖': 'book', '🏆': 'trophy', '⚙️': 'settings' };
     return items.map((item) => ({
         ...item,
-        icon: item.to === '/app/wiki' && item.icon === 'book' ? 'library' : (legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles')),
+        icon: item.to === '/app/radio' ? 'radioStudio' : item.to === '/app/wiki' && item.icon === 'book' ? 'library' : (legacy[item.icon] || (typeof item.icon === 'string' && item.icon.length <= 24 ? item.icon : 'sparkles')),
     }));
 }
 
@@ -45,6 +46,7 @@ export default function Layout() {
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
     const isAdmin = user?.role === 'ADMIN';
+    const { allowed: radioAllowed } = useRadioAccess();
     const [analyticsAccess, setAnalyticsAccess] = useState(false);
     useEffect(() => {
         let active = true;
@@ -62,16 +64,15 @@ export default function Layout() {
         ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'seasonOrbit' }, { to: '/app/stickers', label: 'Стикеры', icon: 'image' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
         ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
         ...(analyticsAccess && !isAdmin ? [{ to: '/app/analytics', label: 'Аналитика', icon: 'chart' }] : []),
-        ...(isAdmin ? [{ to: '/app/radio', label: 'Радио', icon: 'radio' }] : []),
-        ...(user?.role === 'STUDENT' ? [{ to: '/app/radio/playlists/my', label: 'Мои плейлисты', icon: 'radio' }] : []),
         ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
     ];
     const configured = siteSettings.nav_desktop_customized === 'true';
     const candidates = [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to) && (!configured || ['/app/seasons','/app/stickers','/app/radio'].includes(extra.to)))];
-    const links = normalizeLinks(candidates).filter(l => {
+    const links = normalizeLinks(candidates.map(item => item.to === '/app/radio' && user?.role === 'STUDENT' ? { ...item, to: '/app/radio/playlists/my', label: 'Радио', icon: 'radioStudio' } : item)).filter(l => {
         if (typeof l.to !== 'string' || !l.to.startsWith('/app') || l.to.startsWith('//')) return false;
         if (l.to === '/app/admin' && !isAdmin) return false;
-        if (l.to === '/app/radio' && !isAdmin) return false;
+        if (l.to === '/app/radio' && !radioAllowed) return false;
+        if (l.to === '/app/radio/playlists/my' && !(radioAllowed && user?.role === 'STUDENT')) return false;
         if (l.to === '/app/mentor' && !isMentor) return false;
         if (l.roles && (!Array.isArray(l.roles) || !l.roles.includes(user?.role))) return false;
         const key = moduleKeyForPath(l.to);

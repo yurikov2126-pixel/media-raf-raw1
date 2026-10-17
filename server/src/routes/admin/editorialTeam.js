@@ -65,6 +65,7 @@ router.patch('/editorial-positions/:code', async (req, res, next) => {
   try {
     const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
     if (!label || label.length > 80) return res.status(400).json({ error: 'Название: 1–80 символов' });
+    if (req.params.code === 'RADIO_HOST') return res.status(409).json({ error: 'Системную должность Радиоведущий нельзя переименовать' });
     const positions = await getEditorialPositions();
     if (!positions.some(p => p.code === req.params.code)) return res.status(404).json({ error: 'Должность не найдена' });
     const updated = positions.map(p => p.code === req.params.code ? { ...p, label } : p);
@@ -76,6 +77,7 @@ router.patch('/editorial-positions/:code', async (req, res, next) => {
 router.delete('/editorial-positions/:code', async (req, res, next) => {
   try {
     const code = req.params.code;
+    if (code === 'RADIO_HOST') return res.status(409).json({ error: 'Системную должность Радиоведущий нельзя удалить' });
     const positions = await getEditorialPositions();
     if (!positions.some(p => p.code === code)) return res.status(404).json({ error: 'Должность не найдена' });
     const [teamCount, projectCount] = await Promise.all([
