@@ -1,0 +1,23 @@
+# Example only; adapt all paths, user, env-file and directory ownership before use.
+[Unit]
+Description=MEDIA RAF RAW Radio 2.0 Playout Worker (pilot, no amplifier)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/media-raf-raw1/server
+EnvironmentFile=/etc/mediaraf-radio-playout.env
+ExecStart=/usr/bin/node workers/radioPlayout.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

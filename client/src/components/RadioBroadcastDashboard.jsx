@@ -14,11 +14,13 @@ const tone = ok => ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-6
 export default function RadioBroadcastDashboard({token}) {
   const [report,setReport] = useState(null);
   const [error,setError] = useState('');
+  const [worker,setWorker] = useState(null);
   const [updated,setUpdated] = useState(null);
   const refresh = useCallback(async () => {
     try {
       const result = await api('/radio-agent/dashboard',{token});
       setReport(result);setError('');setUpdated(new Date());
+      try { setWorker(await api('/radio-agent/dashboard/worker',{token})); } catch {setWorker(null);}
     } catch (e) {setError(e.message || 'Нет связи с мониторингом');}
   },[token]);
   useEffect(()=>{
@@ -39,6 +41,13 @@ export default function RadioBroadcastDashboard({token}) {
       <button type="button" onClick={refresh} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Обновить ↻</button>
     </div>
     {error && <p role="alert" className="rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 p-3 text-sm">{error}</p>}
+    <div className="rounded-2xl border border-current/10 bg-white/5 p-4 flex flex-wrap justify-between items-center gap-3">
+      <div><h3 className="font-semibold">Единый серверный playout</h3>
+        <p className="text-xs opacity-60">Отдельный worker · общий MP3-поток · тестовый режим</p></div>
+      <div className="text-right"><p className={'font-semibold '+tone(!!worker)}>{worker ? ({SCHEDULED:'Вещание по сетке',SILENCE:'Тишина по сетке',STARTING:'Запускается',ERROR:'Ошибка'}[worker.mode]||worker.mode) : 'Не запущен / нет связи'}</p>
+      <p className="text-xs opacity-60">Приёмников: {worker?.connected ?? '—'} · Фреймов: {worker?.frames ?? '—'}</p></div>
+      {worker?.lastError && <p className="w-full text-xs text-rose-600 dark:text-rose-400" role="alert">{worker.lastError}</p>}
+    </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {[
         ['Серверный курсор',cursor?.status==='SCHEDULED'?'В сетке':'Нет передачи',!!report],

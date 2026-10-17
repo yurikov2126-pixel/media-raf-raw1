@@ -4,6 +4,7 @@ import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { resolveRadioCursor } from '../lib/radioTimeline.js';
 import { servePilotStream, stationStreamHealth, stationSnapshot } from '../lib/radioStreamPilot.js';
+import { streamWorker, workerHealth } from '../lib/radioWorkerProxy.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
@@ -55,6 +56,11 @@ router.get('/agent/status', deviceAuth, safe(async(req,res) => {
     playbackEnabled:!!req.radioDevice.playbackAllowed, amplifierControlEnabled:false });
 }));
 // Single station-wide playback position for future server stream and local failover.
+router.get('/agent/stream', deviceAuth, (req,res) => {
+  if(!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Воспроизведение запрещено'});
+  return streamWorker(req,res);
+});
+router.get('/dashboard/worker', ...admin, workerHealth);
 router.get('/agent/stream-pilot', deviceAuth, safe(async (req,res) => {
   if (!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Тестовое воспроизведение запрещено'});
   await servePilotStream(req,res);
