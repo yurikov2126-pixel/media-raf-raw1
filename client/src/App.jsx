@@ -84,7 +84,10 @@ function RadioGate({ admin = false, children }) {
     const { user } = useAuth();
     const { allowed, loading } = useRadioAccess();
     if (loading) return <div role="status" className="p-6">Проверяем доступ к Радио…</div>;
-    if (!allowed || (admin && user?.role !== 'ADMIN')) return <Navigate to="/app" replace />;
+    if (!allowed) return <Navigate to="/app" replace />;
+    // One public entry point; authorized student presenters enter their own studio.
+    if (admin && user?.role === 'STUDENT') return <Navigate to="/app/radio/playlists/my" replace />;
+    if (admin && user?.role !== 'ADMIN') return <Navigate to="/app" replace />;
     return children;
 }
 
