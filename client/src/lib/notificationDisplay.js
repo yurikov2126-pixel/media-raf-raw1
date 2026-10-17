@@ -13,6 +13,9 @@ const editorialLabels = {
 export function notificationTitle(n) {
  const p = n?.payload || {};
  switch (n?.type) {
+  case 'RADIO_PLAYLIST_SUBMITTED': return 'Новый плейлист на проверке: ' + (p.playlistName || 'Без названия');
+  case 'RADIO_PLAYLIST_APPROVED': return 'Плейлист утверждён: ' + (p.playlistName || 'Без названия');
+  case 'RADIO_PLAYLIST_RETURNED': return 'Плейлист возвращён: ' + (p.playlistName || 'Без названия');
   case 'mention': return mentionTitle(p);
   case 'message': return p.chatTitle ? 'Сообщение в чате «' + p.chatTitle + '»' : 'Сообщение от ' + (p.senderName || 'участника');
   case 'editorial': return (editorialLabels[p.event] || 'Событие редакции') + (p.taskTitle ? ': ' + p.taskTitle : '');
@@ -33,6 +36,9 @@ export function notificationTitle(n) {
 }
 export function notificationPreview(n) {
  const p = n?.payload || {};
+ if (n?.type === 'RADIO_PLAYLIST_RETURNED') return 'Причина: ' + (p.reason || 'Не указана');
+ if (n?.type === 'RADIO_PLAYLIST_SUBMITTED') return 'Откройте очередь проверки плейлистов';
+ if (n?.type === 'RADIO_PLAYLIST_APPROVED') return 'Плейлист доступен для планирования эфира';
  if (n?.type === 'mention') return mentionPreview(p);
  if (n?.type === 'editorial') return [p.projectTitle ? 'Проект: ' + p.projectTitle : null, p.actorName ? 'Исполнитель: ' + p.actorName : null, p.reason ? 'Причина отказа: ' + p.reason : null, p.message].filter(Boolean).join(' · ');
  if (n?.type === 'certificate') return p.courseTitle || p.message || '';
