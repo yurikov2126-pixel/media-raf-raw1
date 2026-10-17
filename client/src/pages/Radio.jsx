@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
+import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -299,6 +300,7 @@ export default function Radio() {
       </div>)}</div>
     </section>}
     {tab === 'playlists' && <section className="space-y-4">
+      <RadioPlaylistReview token={token} onChanged={refresh} />
       <h2 className="text-xl font-bold">Конструктор радиопрограмм</h2>
       {wizard === 0 ? <button className={btn} onClick={() => { reset(); setWizard(1); }}>+ Создать плейлист</button> : <form onSubmit={e => { e.preventDefault(); if (wizard===1) setWizard(2); else if (wizard===2) { setSelected(ids=>[...ids,...pickIds.filter(id=>!ids.includes(id))]); setPickIds([]); setWizard(3); } else savePlaylist(); }} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <p className="text-xs opacity-60">Шаг {wizard} из 3 · {editing ? 'Редактирование' : 'Новый плейлист'}</p>
@@ -365,7 +367,7 @@ export default function Radio() {
                 <div className="min-w-0 flex-1">
                   <div className="flex gap-2 items-center"><span className="cursor-grab opacity-50" title="Перетащить">⠿</span>
                     <span className="font-medium text-sm truncate">{p.name}</span>
-                    <span className="shrink-0 text-xs opacity-50">{p.status==='APPROVED'?'Утверждён':'Черновик'}</span></div>
+                    <span className="shrink-0 text-xs opacity-50">{p.status==='APPROVED'?'Утверждён':p.status==='SUBMITTED'?'На проверке':p.status==='RETURNED'?'Возвращён':'Черновик'}</span></div>
                   <p className="ml-5 text-xs opacity-60 truncate">{p.items.length} записей · {fmt(p.items.reduce((sum,i)=>sum+i.asset.durationMs,0))}{p.description ? ' · ' + p.description : ''}</p>
                 </div>
                 <div className="flex gap-2 items-center shrink-0">
@@ -374,7 +376,7 @@ export default function Radio() {
                     <option value="">Без папки</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                   <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" onClick={()=>startEdit(p)}>Изменить</button>
-                  {p.status!=='APPROVED' && <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2 disabled:opacity-50" disabled={!!approvingId} onClick={()=>approvePlaylist(p)}>{approvingId===p.id ? 'Утверждение…' : 'Утвердить'}</button>}
+                  {p.status==='SUBMITTED' && <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2 disabled:opacity-50" disabled={!!approvingId} onClick={()=>approvePlaylist(p)}>{approvingId===p.id ? 'Утверждение…' : 'Утвердить'}</button>}
                   <button type="button" className="text-xs rounded-lg border border-red-500/30 text-red-500 px-2 py-2" onClick={()=>deletePlaylist(p)}>Удалить</button>
                 </div>
               </div>)}
