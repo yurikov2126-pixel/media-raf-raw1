@@ -31,6 +31,7 @@ export function initRadioStudio(io) {
     socket.on('radio:studio:state', cb => cb?.(state()));
     socket.on('radio:studio:listen', cb => {
       if (!presenter) return cb?.({error:'Ведущий ещё не вышел в эфир'});
+      if (listener === socket.id) return cb?.({ok:true,alreadyListening:true});
       if (listener && listener !== socket.id) return cb?.({error:'Приёмник занят'});
       listener = socket.id; deviceListener = socket.id;
       io.to(presenter).emit('radio:studio:listener', {id:listener});
