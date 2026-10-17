@@ -8,7 +8,7 @@ const dateLocal = value => new Date(value).toLocaleString('ru-RU', { dateStyle: 
 
 export default function Radio() {
   const { token } = useAuth();
-  const [tab, setTab] = useState('schedule');
+  const [tab, setTab] = useState('home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -78,20 +78,39 @@ export default function Radio() {
   };
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
-  return <main className="max-w-6xl mx-auto p-4 md:p-8 space-y-5">
-    <header><p className="text-xs uppercase tracking-widest opacity-60">MEDIA · РАФ · RAW</p>
+  return <main className="p-4 md:p-8 space-y-6 max-w-6xl mx-auto">
+    <header className="space-y-2">
+      <p className="text-xs uppercase tracking-widest opacity-60">MEDIA · РАФ · RAW</p>
       <h1 className="text-3xl font-bold">Радио</h1>
-      <p className="text-sm opacity-70">Планирование вещания · Только администратор</p></header>
-    <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-      Эфирный тракт пока не подключён. Расписание сохраняется, но не запускает усилитель или звук.
-    </section>
+      <p className="opacity-70">Центр управления радиовещанием колледжа</p>
+    </header>
+    {tab === 'home' ? <>
+      <section className="rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2" aria-live="polite">
+        <div className="flex justify-between gap-3 items-center flex-wrap">
+          <h2 className="font-semibold">Эфирная система</h2>
+          <span className="rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-300 px-3 py-1 text-xs font-medium">Настройка</span>
+        </div>
+        <p className="text-sm opacity-70">Воспроизведение и управление оборудованием ещё не активированы.</p>
+      </section>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {[
+          ['schedule','Сетка вещания','Единое расписание радиопрограмм и управления усилителем'],
+          ['playlists','Плейлисты','Подготовка и согласование радиопередач'],
+          ['studio','Эфирная студия','Прямые трансляции с мобильных устройств'],
+          ['equipment','Оборудование','Windows Radio Agent, ESP32, усилитель AA-300'],
+          ['history','История эфира','Отчёты о воспроизведении и событиях'],
+        ].map(([id,title,description]) => (
+          <button key={id} type="button" onClick={() => setTab(id)} className="text-left rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
+            <h2 className="font-semibold">{title}</h2>
+            <p className="text-sm opacity-70">{description}</p>
+            <p className="text-xs opacity-50">{id === 'schedule' || id === 'playlists' ? 'Открыть раздел →' : 'В разработке'}</p>
+          </button>
+        ))}
+      </div>
+      <button type="button" onClick={() => setTab('assets')} className="rounded-xl border border-current/15 px-4 py-2 text-sm">Аудиотека →</button>
+    </> : <button type="button" onClick={() => setTab('home')} className="rounded-xl border border-current/15 px-4 py-2 text-sm">← Назад к Радио</button>}
     {error && <p role="alert" className="text-red-500">{error}</p>}
     {notice && <p role="status" className="text-green-600 dark:text-green-400">{notice}</p>}
-    <nav className="flex flex-wrap gap-2" aria-label="Разделы радио">
-      {[['schedule','Сетка вещания'],['playlists','Плейлисты'],['assets','Аудиотека'],['studio','Эфирная студия'],['equipment','Оборудование']].map(([id,title]) =>
-        <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined}
-          className={'rounded-xl px-3 py-2 text-sm border border-current/15 ' + (tab === id ? 'bg-blue-600 text-white' : 'bg-white/5')}>{title}</button>)}
-    </nav>
     {tab === 'assets' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Библиотека записей</h2>
       <form className="rounded-2xl border border-current/10 p-4 flex flex-wrap gap-3 items-center"
@@ -150,6 +169,6 @@ export default function Radio() {
         {new Date(s.startAt)>new Date() && <button className="rounded-lg border border-red-500/30 px-3 py-2 text-red-500 text-sm" onClick={()=>{if(window.confirm('Удалить эфир?')) action(()=>call('/schedule/'+s.id,{method:'DELETE'}));}}>Удалить</button>}
       </article>)}
     </section>}
-    {(tab==='studio'||tab==='equipment') && <section className="rounded-2xl border border-current/10 p-6 space-y-2"><h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':'Оборудование'}</h2><p className="opacity-70">Подключение будет выполнено на следующем этапе. Сейчас оборудование не управляется.</p></section>}
+    {(tab==='studio'||tab==='equipment'||tab==='history') && <section className="rounded-2xl border border-current/10 p-6 space-y-2"><h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':tab==='history'?'История эфира':'Оборудование'}</h2><p className="opacity-70">Подключение будет выполнено на следующем этапе. Сейчас оборудование не управляется.</p></section>}
   </main>;
 }
