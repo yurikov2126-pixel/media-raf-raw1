@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """MEDIA RAF RAW graphical macOS pilot. No hardware or relay commands."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import queue
@@ -26,6 +27,7 @@ class RadioApp(tk.Tk):
         self.events = queue.Queue()
         self.worker = None
         self.pilot = None
+        self.audio_test = None
         self.token_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Не подключено")
         self.current_var = tk.StringVar(value="Нет данных")
@@ -67,8 +69,11 @@ class RadioApp(tk.Tk):
         self.start_btn.pack(side="left",padx=(0,8),pady=7)
         self.stop_btn = ttk.Button(playback,text="Остановить",command=self.stop_pilot)
         self.stop_btn.pack(side="left",pady=7)
+        self.test_btn = ttk.Button(playback,text="Проверить звук",command=self.test_audio)
+        self.test_btn.pack(side="left",padx=8,pady=7)
         self.start_btn.state(["disabled"])
         self.stop_btn.state(["disabled"])
+        self.test_btn.state(["disabled"])
 
         ttk.Label(body,text="Журнал событий").pack(anchor="w",pady=(12,4))
         self.logbox=tk.Text(body,height=10,wrap="word",state="disabled")
@@ -133,6 +138,44 @@ class RadioApp(tk.Tk):
         else:
             self.next_var.set("Нет будущих передач в загруженной сетке")
 
+    def test_audio(self):
+        if not self.allowed or not self.snapshot:
+            messagebox.showwarning("Нет разрешения", "Подключитесь и синхронизируйте аудио, затем разрешите пилотный режим в админке.")
+            return
+        if self.pilot and self.pilot.poll() is None:
+            messagebox.showwarning("Тест занят", "Сначала остановите автоматический пилот.")
+            return
+        if self.audio_test and self.audio_test.poll() is None:
+            self.log("Проверка звука уже запущена.")
+            return
+        if not Path(VLC).is_file():
+            messagebox.showerror("Нет VLC", "Не найден /Applications/VLC.app/Contents/MacOS/VLC")
+            return
+        tracks=[track for slot in self.snapshot.get("slots",[]) for track in slot.get("tracks",[])]
+        if not tracks:
+            messagebox.showwarning("Нет записей", "Сначала запланируйте эфир и синхронизируйте файлы.")
+            return
+        track=tracks[0]
+        audio=ROOT/"cache"/(track["id"]+".audio")
+        if not audio.is_file():
+            messagebox.showerror("Нет файла", "Аудиозапись отсутствует в кэше. Нажмите «Синхронизировать файлы».")
+            return
+        with audio.open("rb") as stream:
+            checksum=hashlib.file_digest(stream,"sha256").hexdigest()
+        if checksum != track["sha256"]:
+            messagebox.showerror("Ошибка файла", "SHA-256 не совпадает: файл нельзя воспроизвести.")
+            return
+        if not messagebox.askyesno("Проверить звук", "Воспроизвести одну запись через локальный выход Mac? Убедитесь, что подключены только наушники."):
+            return
+        try:
+            self.audio_test=subprocess.Popen([VLC,"--intf","dummy","--play-and-exit",
+                "--no-video","--no-one-instance",str(audio)],start_new_session=True,
+                stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+            self.log("Тест звука: "+track.get("name",track["id"])+" · "+str(audio))
+            self.stop_btn.state(["!disabled"])
+        except OSError as exc:
+            self.log("VLC не запустился: "+str(exc))
+
     def start_pilot(self):
         if self.pilot and self.pilot.poll() is None: return
         if not self.allowed:
@@ -158,6 +201,11 @@ class RadioApp(tk.Tk):
             self.log("Ошибка запуска: "+str(exc))
 
     def stop_pilot(self):
+        if self.audio_test and self.audio_test.poll() is None:
+            try: os.killpg(self.audio_test.pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+            self.log("Тестовый звук остановлен.")
+        self.audio_test=None
         if self.pilot and self.pilot.poll() is None:
             # Child VLC inherits pilot's process group: stop the whole playback group.
             try: os.killpg(self.pilot.pid,signal.SIGTERM)
@@ -176,13 +224,21 @@ class RadioApp(tk.Tk):
                     self.status_var.set("Подключено · "+("Тестовый эфир разрешён" if self.allowed else "Только синхронизация"))
                     if not self.pilot or self.pilot.poll() is not None:
                         self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
+                    self.test_btn.state(["!disabled"] if self.allowed and self.snapshot else ["disabled"])
                     self.log("Сервер ответил. Управление усилителем: отключено.")
                 elif kind=="snapshot":
                     self.snapshot=value
                     self.update_schedule()
+                    self.test_btn.state(["!disabled"] if self.allowed else ["disabled"])
                     self.log("Синхронизировано передач: "+str(len(value.get("slots",[]))))
                 else: self.log("Ошибка: "+value)
         except queue.Empty: pass
+        if self.audio_test and self.audio_test.poll() is not None:
+            code=self.audio_test.returncode
+            errors=(self.audio_test.stderr.read() or b'').decode('utf-8','replace')[-1500:]
+            self.log('Проверка звука завершилась: VLC код '+str(code)+((' · '+errors) if code else ''))
+            self.audio_test=None
+            if not self.pilot: self.stop_btn.state(['disabled'])
         if self.pilot and self.pilot.poll() is not None:
             self.pilot=None
             self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
