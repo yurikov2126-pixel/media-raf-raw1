@@ -148,7 +148,7 @@ function broadcastStart(body) {
 router.get('/status', (_req, res) => res.json({
     enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
-router.get('/assets', safe(async (_req, res) => {
+router.get('/assets', requireRole('ADMIN'), safe(async (_req, res) => {
     res.json({ assets: await prisma.radioAsset.findMany({ orderBy: { createdAt: 'desc' }, take: 300 }) });
 }));
 const uploadAsset = safe(async (req, res) => {
