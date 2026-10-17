@@ -97,6 +97,65 @@ router.delete('/assets/:id', safe(async (req, res) => {
     res.json({ ok: true });
 }));
 
+
+router.get('/folders', safe(async (_req, res) => {
+    const folders = await prisma.radioPlaylistFolder.findMany({
+        orderBy: [{ name: 'asc' }, { createdAt: 'asc' }],
+    });
+    res.json({ folders });
+}));
+router.post('/folders', safe(async (req, res) => {
+    if (!validTitle(req.body?.name)) return res.status(400).json({ error: 'Название папки должно содержать от 1 до 140 символов' });
+    const folder = await prisma.radioPlaylistFolder.create({ data: { name: req.body.name.trim() } });
+    res.status(201).json({ folder });
+}));
+router.patch('/folders/:id', safe(async (req, res) => {
+    if (!validTitle(req.body?.name)) return res.status(400).json({ error: 'Укажите название папки' });
+    const result = await prisma.radioPlaylistFolder.updateMany({
+        where: { id: req.params.id }, data: { name: req.body.name.trim() },
+    });
+    if (!result.count) return res.status(404).json({ error: 'Папка не найдена' });
+    res.json({ folder: await prisma.radioPlaylistFolder.findUnique({ where: { id: req.params.id } }) });
+}));
+router.delete('/folders/:id', safe(async (req, res) => {
+    const result = await prisma.$transaction(async tx => {
+        const folder = await tx.radioPlaylistFolder.findUnique({ where: { id: req.params.id } });
+        if (!folder) return null;
+        await tx.radioPlaylist.updateMany({ where: { folderId: folder.id }, data: { folderId: null } });
+        await tx.radioPlaylistFolder.delete({ where: { id: folder.id } });
+        return true;
+    });
+    if (!result) return res.status(404).json({ error: 'Папка не найдена' });
+    res.json({ ok: true });
+}));
+router.patch('/playlists/:id/folder', safe(async (req, res) => {
+    const { folderId } = req.body || {};
+    if (folderId !== null && (typeof folderId !== 'string' || !folderId.trim()))
+        return res.status(400).json({ error: 'Неверная папка' });
+    if (folderId && !(await prisma.radioPlaylistFolder.findUnique({ where: { id: folderId } })))
+        return res.status(404).json({ error: 'Папка не найдена' });
+    const updated = await prisma.radioPlaylist.updateMany({
+        where: { id: req.params.id }, data: { folderId },
+    });
+    if (!updated.count) return res.status(404).json({ error: 'Плейлист не найден' });
+    res.json({ playlist: await prisma.radioPlaylist.findUnique({ where: { id: req.params.id } }) });
+}));
+router.delete('/playlists/:id', safe(async (req, res) => {
+    const result = await prisma.$transaction(async tx => {
+        // Use the same advisory lock as schedule creation to avoid a race with a new slot.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+        const playlist = await tx.radioPlaylist.findUnique({ where: { id: req.params.id } });
+        if (!playlist) return 'missing';
+        const slots = await tx.radioScheduleSlot.count({ where: { playlistId: playlist.id } });
+        if (slots) return 'in-use';
+        await tx.radioPlaylist.delete({ where: { id: playlist.id } });
+        return 'deleted';
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Плейлист не найден' });
+    if (result === 'in-use') return res.status(409).json({ error: 'Нельзя удалить плейлист, который присутствует в сетке вещания' });
+    res.json({ ok: true });
+}));
+
 router.get('/playlists', safe(async (_req, res) => {
     res.json({ playlists: await prisma.radioPlaylist.findMany({ include: playlistInclude, orderBy: { updatedAt: 'desc' }, take: 250 }) });
 }));
