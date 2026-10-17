@@ -5,7 +5,9 @@ import { useToast } from '../store/toast.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-const dateLocal = value => new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+const STATION_ZONE = 'Europe/Moscow';
+const dateLocal = value => new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone: STATION_ZONE });
+const moscowDate = date => new Intl.DateTimeFormat('en-CA', { timeZone: STATION_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 
 export default function Radio() {
   const { token } = useAuth();
@@ -37,11 +39,11 @@ export default function Radio() {
   const [repeatDays, setRepeatDays] = useState([]);
   const [slotTime, setSlotTime] = useState('');
   const [dragging, setDragging] = useState(null);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => moscowDate(new Date()));
   const editRequestId = useRef(0);
   const call = useCallback((path, options) => api('/radio' + path, { token, ...options }), [token]);
   const refresh = useCallback(async () => {
-    const from = new Date(date + 'T00:00:00');
+    const from = new Date(date + 'T00:00:00+03:00');
     const to = new Date(from.getTime() + 7 * 86400000);
     const [a, p, s, f] = await Promise.all([
       call('/assets'), call('/playlists'),
@@ -330,8 +332,9 @@ export default function Radio() {
     </section>}
     {tab==='schedule' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Сетка вещания</h2>
+      <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
-      <form onSubmit={e=>{e.preventDefault();action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString(),weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString()}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
+      <form onSubmit={e=>{e.preventDefault();action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId:slotPlaylist,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString()}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <h3 className="font-semibold">Добавить передачу</h3>
         <select required className={inputStyle} value={slotPlaylist} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
@@ -342,23 +345,23 @@ export default function Radio() {
           <input className={inputStyle} type="number" min="1" max="12" value={repeatWeeks} onChange={e=>setRepeatWeeks(Number(e.target.value))}/>
         </label>
         {repeatWeeks > 1 && <fieldset className="space-y-2">
-          <legend className="text-sm font-semibold">Дни недели для повтора (UTC, временный режим)</legend>
+          <legend className="text-sm font-semibold">Дни недели (московское время)</legend>
           <div className="flex gap-3 flex-wrap">{[['Вс',0],['Пн',1],['Вт',2],['Ср',3],['Чт',4],['Пт',5],['Сб',6]].map(([label,number])=>
             <label key={number} className="text-sm"><input type="checkbox" checked={repeatDays.includes(number)} onChange={e=>setRepeatDays(days=>e.target.checked?[...days,number]:days.filter(d=>d!==number))}/> {label}</label>)}
           </div>
-          <p className="text-xs opacity-60">Повторы рассчитаны в UTC. Для окончательного эфирного расписания будет добавлен часовой пояс колледжа.</p>
+          <p className="text-xs opacity-60">Время и дни недели привязаны к часовому поясу радиостанции — Москва (UTC+3), независимо от устройства администратора.</p>
         </fieldset>}
         <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
       </form>
       <div className="grid grid-cols-1 md:grid-cols-7 gap-2" aria-label="Недельная сетка вещания">
         {Array.from({ length: 7 }, (_, index) => {
-          const day = new Date(date + 'T00:00:00');
-          day.setDate(day.getDate() + index);
-          const daySlots = slots.filter(slot => new Date(slot.startAt).toDateString() === day.toDateString());
+          const day = new Date(date + 'T00:00:00+03:00');
+          day.setUTCDate(day.getUTCDate() + index);
+          const daySlots = slots.filter(slot => moscowDate(new Date(slot.startAt)) === moscowDate(day));
           return <section key={index} className="rounded-xl border border-current/10 bg-white/5 p-3 min-h-32">
-            <h3 className="text-sm font-semibold mb-3">{day.toLocaleDateString('ru-RU', { weekday: 'short', day: '2-digit', month: '2-digit' })}</h3>
+            <h3 className="text-sm font-semibold mb-3">{day.toLocaleDateString('ru-RU', { timeZone: STATION_ZONE, weekday: 'short', day: '2-digit', month: '2-digit' })}</h3>
             {daySlots.map(slot => <div key={slot.id} className="mb-2 p-2 rounded-lg border-l-4 border-blue-500 bg-blue-500/10">
-              <p className="text-xs font-bold">{new Date(slot.startAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</p>
+              <p className="text-xs font-bold">{new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p>
               <p className="text-xs break-words">{slot.playlist.name}</p>
             </div>)}
             {!daySlots.length && <p className="text-xs opacity-40">Свободно</p>}
@@ -367,7 +370,7 @@ export default function Radio() {
       </div>
       {slots.length===0 && <p className="text-sm opacity-60">В выбранном периоде эфиров нет.</p>}
       {slots.map(s=><article key={s.id} className="rounded-2xl border border-current/10 p-4 flex items-center gap-3 justify-between">
-        <div><h3 className="font-semibold">{s.playlist.name}</h3><p className="text-sm opacity-70">{dateLocal(s.startAt)} — {new Date(s.endAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</p></div>
+        <div><h3 className="font-semibold">{s.playlist.name}</h3><p className="text-sm opacity-70">{dateLocal(s.startAt)} — {new Date(s.endAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p></div>
         {new Date(s.startAt)>new Date() && <button className="rounded-lg border border-red-500/30 px-3 py-2 text-red-500 text-sm" onClick={()=>{if(window.confirm('Удалить эфир?')) action(()=>call('/schedule/'+s.id,{method:'DELETE'}));}}>Удалить</button>}
       </article>)}
     </section>}
