@@ -156,6 +156,8 @@ def run(args, token):
     thread = threading.Thread(target=relay.serve_forever, daemon=True)
     thread.start()
     primary = None
+    primary_announced = False
+    primary_connected_at = 0
     fallback = None
     fallback_id = None
     fallback_until = 0
@@ -223,13 +225,18 @@ def run(args, token):
                 relay.last_data = time.monotonic()
                 url = "http://127.0.0.1:%d/listen" % relay.server_address[1]
                 primary = player(args.vlc, vlc_log, "--network-caching=250", url)
+                primary_connected_at = time.monotonic()
+                primary_announced = False
                 # Never tear down an audible reserve until the new stream has supplied data.
                 print("PRIMARY_CONNECTING", flush=True)
-            if primary is not None and fallback is not None and relay.last_data > now - 1.5:
-                stop_player(fallback)
-                fallback = None
-                fallback_id = None
-                print("PRIMARY_STREAM", flush=True)
+            if primary is not None and relay.last_data > primary_connected_at:
+                if fallback is not None:
+                    stop_player(fallback)
+                    fallback = None
+                    fallback_id = None
+                if not primary_announced:
+                    print("PRIMARY_STREAM", flush=True)
+                    primary_announced = True
             # If relay stalls, immediately stop central VLC, then use cached timeline.
             if primary is not None and (primary.poll() is not None or
                     relay.failed.is_set() or now - relay.last_data > 3):
@@ -237,6 +244,7 @@ def run(args, token):
                           else "RELAY_FAILED" if relay.failed.is_set() else "STREAM_TIMEOUT")
                 stop_player(primary)
                 primary = None
+                primary_announced = False
                 relay.failed.clear()
                 print("FALLBACK", reason, "VLC_LOG", str(vlc_log), flush=True)
             if primary is None:
