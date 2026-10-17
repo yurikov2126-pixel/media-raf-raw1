@@ -55,7 +55,7 @@ async def main():
 
     @sio.on('radio:studio:signal',namespace=NAMESPACE)
     async def signal(data):
-        nonlocal peer,player,sink
+        nonlocal peer,player,sink,queued
         payload=data.get('payload') or {}
         source=data.get('from')
         if payload.get('type')=='offer':
