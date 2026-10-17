@@ -66,6 +66,32 @@ router.get('/assets/:id/audio', safe(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.sendFile(path.join(root, path.basename(a.storageKey)));
 }));
+
+// Asset metadata may be edited without changing the original audio bytes.
+router.patch('/assets/:id', safe(async (req, res) => {
+    if (!validTitle(req.body?.name)) return res.status(400).json({ error: 'Укажите название до 140 символов' });
+    const updated = await prisma.radioAsset.updateMany({
+        where: { id: req.params.id }, data: { name: req.body.name.trim() },
+    });
+    if (!updated.count) return res.status(404).json({ error: 'Запись не найдена' });
+    res.json({ asset: await prisma.radioAsset.findUnique({ where: { id: req.params.id } }) });
+}));
+router.delete('/assets/:id', safe(async (req, res) => {
+    const asset = await prisma.radioAsset.findUnique({ where: { id: req.params.id } });
+    if (!asset) return res.status(404).json({ error: 'Запись не найдена' });
+    const inUse = await prisma.radioPlaylistItem.count({ where: { assetId: asset.id } });
+    if (inUse) return res.status(409).json({ error: 'Запись используется в плейлистах. Сначала уберите её оттуда.' });
+    await prisma.radioAsset.delete({ where: { id: asset.id } }).catch(e => {
+        if (e.code === 'P2003') return null; throw e;
+    });
+    if (await prisma.radioAsset.findUnique({ where: { id: asset.id } }))
+        return res.status(409).json({ error: 'Запись используется в плейлисте' });
+    await fs.unlink(path.join(root, path.basename(asset.storageKey))).catch(error => {
+        if (error.code !== 'ENOENT') console.error('[radio] orphan file cleanup:', error);
+    });
+    res.json({ ok: true });
+}));
+
 router.get('/playlists', safe(async (_req, res) => {
     res.json({ playlists: await prisma.radioPlaylist.findMany({ include: playlistInclude, orderBy: { updatedAt: 'desc' }, take: 250 }) });
 }));
