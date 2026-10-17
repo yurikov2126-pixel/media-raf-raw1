@@ -59,8 +59,8 @@ export function initRadioStudio(io) {
     socket.on('radio:studio:present', callback => {
       if (presenter && presenter !== socket.id) return callback?.({ error: 'Другой ведущий уже в эфире' });
       presenter = socket.id;
-      broadcast();
       callback?.({ ok: true });
+      setImmediate(broadcast);
     });
     socket.on('radio:studio:listen', callback => {
       if (!presenter) return callback?.({ error: 'Прямой эфир не запущен' });
