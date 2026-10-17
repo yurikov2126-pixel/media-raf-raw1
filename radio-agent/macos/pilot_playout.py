@@ -60,14 +60,13 @@ def main():
                 key=slot['id']
                 scheduled=utc(slot['startAt'])
                 # Never restart a show late, and never replay after process restart.
-                if key in played or not (scheduled<=now<scheduled+10): continue
+                ends=utc(slot['endAt'])
+                if key in played or not (scheduled<=now<ends): continue
                 print('Scheduled slot starting:',slot.get('playlistName'),key,flush=True)
-                played.add(key)
-                tmp=history.with_suffix('.part')
-                tmp.write_text(json.dumps(sorted(played)),encoding='utf-8')
-                os.replace(tmp,history)
+                interrupted=False
                 for track in slot['tracks']:
                     if pause_file.exists():
+                        interrupted=True
                         print('Live voice has priority; playlist suspended',flush=True)
                         break
                     # Recheck admin permission before every track.
@@ -91,6 +90,7 @@ def main():
                                 child.terminate()
                                 try: child.wait(timeout=3)
                                 except subprocess.TimeoutExpired: child.kill(); child.wait()
+                                interrupted=True
                                 print('VLC stopped for live voice priority',flush=True)
                                 break
                             if time.monotonic()>deadline:
@@ -100,6 +100,13 @@ def main():
                             time.sleep(0.2)
                     except subprocess.TimeoutExpired:
                         print('Track playback timed out',track['id'],file=sys.stderr);break
+                if not interrupted:
+                    played.add(key)
+                    tmp=history.with_suffix('.part')
+                    tmp.write_text(json.dumps(sorted(played)),encoding='utf-8')
+                    os.replace(tmp,history)
+                else:
+                    print('Playlist interrupted; will retry if schedule remains active',flush=True)
                 break
         except (OSError,ValueError,KeyError,RuntimeError,subprocess.SubprocessError) as e:
             print('PILOT:',e,file=sys.stderr,flush=True)
