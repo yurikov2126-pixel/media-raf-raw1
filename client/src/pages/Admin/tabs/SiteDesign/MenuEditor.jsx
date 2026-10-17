@@ -12,6 +12,7 @@ const DEFAULT_DESKTOP = [
     { to: '/app/editorial', label: 'Редакция', icon: 'newspaper' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/mentor', label: 'Руководителю', icon: 'users', roles: ['MENTOR', 'ADMIN'] },
+    { to: '/app/radio', label: 'Радио', icon: 'radioStudio' },
     { to: '/app/admin', label: 'Админка', icon: 'settings', roles: ['ADMIN'] },
 ];
 const DEFAULT_MOBILE = [
@@ -27,6 +28,7 @@ const DEFAULT_EXTRA = [
     { to: '/app/editorial', label: 'Редакция', icon: 'book' },
     { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' },
     { to: '/app/notifications', label: 'Уведомления', icon: 'bell' },
+    { to: '/app/radio', label: 'Радио', icon: 'radioStudio' },
     { to: '/app/mentor', label: 'Руководителю', icon: 'users', roles: ['MENTOR', 'ADMIN'] },
     { to: '/app/admin', label: 'Админка', icon: 'settings', roles: ['ADMIN'] },
 ];
