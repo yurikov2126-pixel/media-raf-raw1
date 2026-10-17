@@ -25,6 +25,7 @@ export default function RadioStudentPlaylists() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const dragged = useRef(null);
+  const touchStart = useRef(null);
   const call = useCallback((path, options) => api('/radio/student' + path, { token, ...options }), [token]);
   const refresh = useCallback(async () => {
     const [a, p] = await Promise.all([call('/assets'), call('/playlists')]);
@@ -121,9 +122,16 @@ export default function RadioStudentPlaylists() {
             <div className="space-y-1">
               {selected.map((id,index)=><div key={id} onDragOver={e=>e.preventDefault()}
                 onDrop={e=>{e.preventDefault();reposition(dragged.current,index);dragged.current=null;}}
+                data-playlist-position={index}
                 className="flex items-center gap-2 rounded-xl border border-current/15 px-2 py-2">
                 <span draggable onDragStart={e=>{dragged.current=index;e.dataTransfer.effectAllowed='move';}}
-                  onDragEnd={()=>{dragged.current=null;}} className="cursor-grab select-none rounded-lg p-2 touch-none" aria-label="Перетащить запись">⠿</span>
+                  onDragEnd={()=>{dragged.current=null;}}
+                  onTouchStart={e=>{touchStart.current={from:index,x:e.touches[0].clientX,y:e.touches[0].clientY};}}
+                  onTouchEnd={e=>{const start=touchStart.current;touchStart.current=null;if(!start)return;
+                    const point=e.changedTouches[0];const target=document.elementFromPoint(point.clientX,point.clientY)?.closest("[data-playlist-position]");
+                    if(target)reposition(start.from,Number(target.dataset.playlistPosition));}}
+                  onTouchCancel={()=>{touchStart.current=null;}}
+                  className="cursor-grab select-none rounded-lg p-2 touch-none" aria-label="Перетащить запись">⠿</span>
                 <span className="min-w-0 flex-1 truncate text-sm">{index+1}. {assets.find(a=>a.id===id)?.name || id}</span>
                 <button type="button" onClick={()=>setSelected(old=>old.filter((_,i)=>i!==index))} aria-label="Убрать запись" className="rounded-lg border border-current/20 px-3 py-2">×</button>
               </div>)}
