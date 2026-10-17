@@ -62,13 +62,15 @@ export default function Layout() {
         ...(gamifEnabled ? [{ to: '/app/seasons', label: 'Сезоны', icon: 'seasonOrbit' }, { to: '/app/stickers', label: 'Стикеры', icon: 'image' }, { to: '/app/leaderboard', label: 'Рейтинг', icon: 'trophy' }] : []),
         ...(isMentor ? [{ to: '/app/mentor', label: 'Руководителю', icon: 'users' }] : []),
         ...(analyticsAccess && !isAdmin ? [{ to: '/app/analytics', label: 'Аналитика', icon: 'chart' }] : []),
+        ...(isAdmin ? [{ to: '/app/radio', label: 'Радио', icon: 'radio' }] : []),
         ...(isAdmin ? [{ to: '/app/admin', label: 'Админка', icon: 'settings' }] : []),
     ];
     const configured = siteSettings.nav_desktop_customized === 'true';
-    const candidates = [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to) && (!configured || ['/app/seasons','/app/stickers'].includes(extra.to)))];
+    const candidates = [...rawLinks, ...legacyExtras.filter(extra => !rawLinks.some(link => link.to === extra.to) && (!configured || ['/app/seasons','/app/stickers','/app/radio'].includes(extra.to)))];
     const links = normalizeLinks(candidates).filter(l => {
         if (typeof l.to !== 'string' || !l.to.startsWith('/app') || l.to.startsWith('//')) return false;
         if (l.to === '/app/admin' && !isAdmin) return false;
+        if (l.to === '/app/radio' && !isAdmin) return false;
         if (l.to === '/app/mentor' && !isMentor) return false;
         if (l.roles && (!Array.isArray(l.roles) || !l.roles.includes(user?.role))) return false;
         const key = moduleKeyForPath(l.to);
