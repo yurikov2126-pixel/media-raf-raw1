@@ -28,6 +28,8 @@ class RadioApp(tk.Tk):
         self.worker = None
         self.pilot = None
         self.audio_test = None
+        self.live = None
+        self.live_reader = None
         self.token_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Не подключено")
         self.current_var = tk.StringVar(value="Нет данных")
@@ -74,6 +76,27 @@ class RadioApp(tk.Tk):
         self.start_btn.state(["disabled"])
         self.stop_btn.state(["disabled"])
         self.test_btn.state(["disabled"])
+
+        livebox=ttk.LabelFrame(body,text="Локальный прямой эфир · тест микрофона",padding=10)
+        livebox.pack(fill="x",pady=10)
+        ttk.Label(livebox,text="Только локальный аудиовыход Mac, НЕ трансляция через интернет. Используйте наушники, чтобы не было обратной связи.").pack(anchor="w")
+        self.input_choice=ttk.Combobox(livebox,state="readonly",width=60)
+        self.input_choice.pack(fill="x",pady=3)
+        self.output_choice=ttk.Combobox(livebox,state="readonly",width=60)
+        self.output_choice.pack(fill="x",pady=3)
+        row=ttk.Frame(livebox)
+        row.pack(fill="x",pady=4)
+        ttk.Button(row,text="Обновить устройства",command=self.scan_audio_devices).pack(side="left",padx=(0,8))
+        self.live_start=ttk.Button(row,text="Включить микрофон",command=self.start_live)
+        self.live_start.pack(side="left",padx=(0,8))
+        self.live_stop=ttk.Button(row,text="Выключить микрофон",command=self.stop_live)
+        self.live_stop.pack(side="left")
+        self.live_start.state(["disabled"])
+        self.live_stop.state(["disabled"])
+        self.level_var=tk.DoubleVar(value=0)
+        ttk.Progressbar(livebox,maximum=100,variable=self.level_var).pack(fill="x")
+        self.audio_devices=[]
+        self.after(250,self.scan_audio_devices)
 
         ttk.Label(body,text="Журнал событий").pack(anchor="w",pady=(12,4))
         self.logbox=tk.Text(body,height=10,wrap="word",state="disabled")
@@ -139,6 +162,8 @@ class RadioApp(tk.Tk):
             self.next_var.set("Нет будущих передач в загруженной сетке")
 
     def test_audio(self):
+        if self.live and self.live.poll() is None:
+            messagebox.showwarning('Прямой эфир', 'Сначала выключите микрофон.'); return
         if not self.allowed or not self.snapshot:
             messagebox.showwarning("Нет разрешения", "Подключитесь и синхронизируйте аудио, затем разрешите пилотный режим в админке.")
             return
@@ -176,7 +201,66 @@ class RadioApp(tk.Tk):
         except OSError as exc:
             self.log("VLC не запустился: "+str(exc))
 
+    def scan_audio_devices(self):
+        def task():
+            try:
+                result=subprocess.run([sys.executable,str(Path(__file__).with_name("live_audio.py")),"--list"],
+                    capture_output=True,text=True,timeout=12)
+                if result.returncode: raise RuntimeError(result.stderr.strip() or "Не удалось прочитать устройства")
+                devices=[json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+                self.events.put(("devices",devices))
+            except Exception as exc: self.events.put(("error","Аудиоустройства: "+str(exc)))
+        threading.Thread(target=task,daemon=True).start()
+
+    def start_live(self):
+        if not self.allowed:
+            messagebox.showwarning("Нет разрешения","Сначала разрешите PILOT для этого Mac в админке.")
+            return
+        if self.live and self.live.poll() is None: return
+        if self.pilot and self.pilot.poll() is None or self.audio_test and self.audio_test.poll() is None:
+            messagebox.showwarning("Звук занят","Сначала остановите автоматический эфир или проверку звука.")
+            return
+        if self.input_choice.current()<0 or self.output_choice.current()<0:
+            messagebox.showwarning("Выбор устройств","Выберите микрофон и аудиовыход.")
+            return
+        inputs=[d for d in self.audio_devices if d["inputs"]>0]
+        outputs=[d for d in self.audio_devices if d["outputs"]>0]
+        source=inputs[self.input_choice.current()]
+        target=outputs[self.output_choice.current()]
+        if not messagebox.askyesno("Локальный прямой эфир",
+            "Звук микрофона будет немедленно поступать на выбранный аудиовыход. Подключены наушники и исключена обратная связь?"):
+            return
+        try:
+            self.live=subprocess.Popen([sys.executable,str(Path(__file__).with_name("live_audio.py")),
+                "--input",str(source["id"]),"--output",str(target["id"])],
+                stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,start_new_session=True)
+            proc=self.live
+            def read():
+                for line in proc.stdout:
+                    self.events.put(("live_line",line.strip()))
+            self.live_reader=threading.Thread(target=read,daemon=True)
+            self.live_reader.start()
+            self.live_start.state(["disabled"])
+            self.live_stop.state(["!disabled"])
+            self.start_btn.state(["disabled"])
+            self.test_btn.state(["disabled"])
+            self.log("Запуск микрофона: "+source["name"]+" → "+target["name"])
+        except OSError as exc: self.log("Микрофон: "+str(exc))
+
+    def stop_live(self):
+        if self.live and self.live.poll() is None:
+            try: os.killpg(self.live.pid,signal.SIGTERM)
+            except ProcessLookupError: pass
+        self.live=None
+        self.level_var.set(0)
+        self.live_start.state(["!disabled"] if self.allowed and self.audio_devices else ["disabled"])
+        self.live_stop.state(["disabled"])
+        self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
+        self.test_btn.state(["!disabled"] if self.allowed and self.snapshot else ["disabled"])
+
     def start_pilot(self):
+        if self.live and self.live.poll() is None:
+            messagebox.showwarning('Прямой эфир', 'Сначала выключите микрофон.'); return
         if self.pilot and self.pilot.poll() is None: return
         if not self.allowed:
             messagebox.showwarning("Нет разрешения","Включите тестовое воспроизведение для этого устройства в админке.")
@@ -219,12 +303,28 @@ class RadioApp(tk.Tk):
         try:
             while True:
                 kind,value=self.events.get_nowait()
-                if kind=="status":
+                if kind=="devices":
+                    self.audio_devices=value
+                    inputs=[d for d in value if d["inputs"]>0]
+                    outputs=[d for d in value if d["outputs"]>0]
+                    self.input_choice["values"]=[str(d["id"])+" · "+d["name"] for d in inputs]
+                    self.output_choice["values"]=[str(d["id"])+" · "+d["name"] for d in outputs]
+                    if inputs: self.input_choice.current(0)
+                    if outputs: self.output_choice.current(0)
+                    self.live_start.state(["!disabled"] if self.allowed and inputs and outputs else ["disabled"])
+                    self.log("Аудиоустройств обнаружено: "+str(len(value)))
+                elif kind=="live_line":
+                    if value.startswith("LEVEL "):
+                        try: self.level_var.set(min(100,float(value.split()[1])*100))
+                        except (ValueError,IndexError): pass
+                    elif value: self.log(value)
+                elif kind=="status":
                     self.allowed=value.get("mode")=="PILOT" and value.get("playbackEnabled") is True
                     self.status_var.set("Подключено · "+("Тестовый эфир разрешён" if self.allowed else "Только синхронизация"))
                     if not self.pilot or self.pilot.poll() is not None:
                         self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
                     self.test_btn.state(["!disabled"] if self.allowed and self.snapshot else ["disabled"])
+                    if not self.live: self.live_start.state(["!disabled"] if self.allowed and self.audio_devices else ["disabled"])
                     self.log("Сервер ответил. Управление усилителем: отключено.")
                 elif kind=="snapshot":
                     self.snapshot=value
@@ -244,10 +344,14 @@ class RadioApp(tk.Tk):
             self.start_btn.state(["!disabled"] if self.allowed else ["disabled"])
             self.stop_btn.state(["disabled"])
             self.log("Пилот завершён.")
+        if self.live and self.live.poll() is not None:
+            self.log('Микрофон завершился с кодом '+str(self.live.returncode))
+            self.stop_live()
         self.update_schedule()
         self.after(500,self.poll)
 
     def close(self):
+        self.stop_live()
         self.stop_pilot()
         self.token_var.set("")
         self.destroy()
