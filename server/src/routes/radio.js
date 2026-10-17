@@ -28,7 +28,7 @@ const RADIO_TIMEZONE = 'Europe/Moscow';
 // Europe/Moscow observes UTC+03:00 year-round for contemporary broadcasts.
 // Parse wall-clock times on the server, not in the administrator's browser timezone.
 function parseMoscowLocal(value) {
-    if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(value)) return new Date(NaN);
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return new Date(NaN);
     const instant = new Date(value + ':00+03:00');
     if (!Number.isFinite(instant.getTime())) return instant;
     const actual = new Intl.DateTimeFormat('sv-SE', {
