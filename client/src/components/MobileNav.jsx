@@ -101,7 +101,7 @@ export default function MobileNav({ links, user }) {
     const moreKey = standalone ? 'nav_pwa_more_items' : 'nav_mobile_more_items';
     const resolve = (item) => ({ ...item,
         icon: item.to === '/app/radio' ? 'radioStudio' : item.to === '/app/wiki' && item.icon === 'book' ? 'library' : item.icon,
-        to: item.to === '/app/radio' && user?.role === 'STUDENT' ? '/app/radio/playlists/my' : item.to === '/app/u/me' ? `/app/u/${user.username}` : item.to,
+        to: item.to === '/app/radio' && user?.role !== 'ADMIN' ? '/app/radio/playlists/my' : item.to === '/app/u/me' ? `/app/u/${user.username}` : item.to,
     });
     const allowed = (item) => (item.to !== '/app/radio' || radioAllowed) && (!item.roles || item.roles.includes(user?.role)) && (item.action === 'more' || (typeof item.to === 'string' && item.to.startsWith('/app') && !item.to.startsWith('//'))) && (item.to !== '/app/admin' || user?.role === 'ADMIN') && (item.to !== '/app/mentor' || ['ADMIN', 'MENTOR'].includes(user?.role));
     const primaryItems = parseMenu(siteSettings[navKey], primary).filter(allowed).map(resolve).slice(0, 5);
