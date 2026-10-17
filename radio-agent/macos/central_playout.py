@@ -126,17 +126,24 @@ def probe(server, token):
         return len(response.read(2048)) >= 1024
 
 
-def player(vlc, *args):
-    return subprocess.Popen([str(vlc), "--intf", "dummy", "--no-video",
-                             "--play-and-exit", "--no-one-instance", *args],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            start_new_session=True)
+def player(vlc, log_path, *args):
+    # Reuse VLC flags that are already known to work in the older Mac pilot.
+    # Keep stderr in a local file; silent exit is otherwise impossible to diagnose.
+    stderr = open(log_path, "ab", buffering=0)
+    try:
+        return subprocess.Popen([str(vlc), "--intf", "dummy", "--no-video",
+                                 "--play-and-exit", *args],
+                                stdout=subprocess.DEVNULL, stderr=stderr,
+                                start_new_session=True)
+    finally:
+        stderr.close()
 
 
 def run(args, token):
     base = Path(args.data_dir).expanduser().resolve()
     base.mkdir(parents=True, exist_ok=True)
     cache = base / "cache"
+    vlc_log = base / "central-vlc.log"
     # Keep last verified snapshot for an outage; sync only when connected.
     snapshot_path = base / "snapshot.json"
     snapshot = None
@@ -195,7 +202,7 @@ def run(args, token):
                             relay.failed.clear()
                             relay.last_data = time.monotonic()
                             url = "http://127.0.0.1:%d/listen" % relay.server_address[1]
-                            primary = player(args.vlc, "--network-caching=800", url)
+                            primary = player(args.vlc, vlc_log, "--network-caching=800", url)
                             print("PRIMARY_STREAM", flush=True)
                 except PermissionError:
                     raise
@@ -204,10 +211,12 @@ def run(args, token):
             # If relay stalls, immediately stop central VLC, then use cached timeline.
             if primary is not None and (primary.poll() is not None or
                     relay.failed.is_set() or now - relay.last_data > 8):
+                reason = ("VLC_EXIT_" + str(primary.poll()) if primary.poll() is not None
+                          else "RELAY_FAILED" if relay.failed.is_set() else "STREAM_TIMEOUT")
                 stop_player(primary)
                 primary = None
                 relay.failed.clear()
-                print("FALLBACK", flush=True)
+                print("FALLBACK", reason, "VLC_LOG", str(vlc_log), flush=True)
             if primary is None:
                 cursor = local_cursor(snapshot or {"slots": []}, time.time())
                 if cursor:
@@ -230,10 +239,12 @@ def run(args, token):
                     if file:
                         if (fallback is None or fallback.poll() is not None or
                                 fallback_id != track["id"] or now >= fallback_until):
+                            if fallback is not None and fallback.poll() is not None:
+                                print("LOCAL_VLC_EXIT", fallback.returncode, "VLC_LOG", str(vlc_log), flush=True)
                             stop_player(fallback)
                             fallback_id = track["id"]
                             fallback_until = now + max(0, remaining)
-                            fallback = player(args.vlc, "--start-time=%.3f" % offset, str(file))
+                            fallback = player(args.vlc, vlc_log, "--start-time=%.3f" % offset, str(file))
                             print("LOCAL_TRACK", track["id"], "offset", round(offset, 1), flush=True)
                     else:
                         stop_player(fallback)
