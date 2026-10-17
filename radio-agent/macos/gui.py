@@ -308,6 +308,7 @@ class RadioApp(tk.Tk):
         self.priority_file().unlink(missing_ok=True)
 
     def start_remote(self):
+        self.clear_live_priority()
         if self.remote_receiver and self.remote_receiver.poll() is None: return
         if not self.allowed:
             messagebox.showwarning("Нет разрешения","Включите тестовый эфир для Mac в админке.")
@@ -385,6 +386,8 @@ class RadioApp(tk.Tk):
                     self.log("Сервер ответил. Управление усилителем: отключено.")
                 elif kind=="remote_line":
                     self.log("WebRTC: "+value)
+                    if value.startswith("WAIT "):
+                        self.clear_live_priority()
                     if value in ("LISTENING", "AUDIO_START"):
                         self.set_live_priority()
                     elif value.startswith(("ENDED", "SIGNAL_LOST", "PEER_FAILED", "AUDIO_ERROR")):

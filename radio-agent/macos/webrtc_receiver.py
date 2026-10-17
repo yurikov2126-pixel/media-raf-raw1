@@ -28,6 +28,7 @@ async def main():
     player=None
     queued=[]
     connecting=False
+    joined=False
     async def reset():
         nonlocal peer,sink,player,queued
         if player: player.cancel(); await asyncio.gather(player,return_exceptions=True);player=None
@@ -36,14 +37,16 @@ async def main():
         queued=[]
 
     async def listen():
-        nonlocal connecting
-        if connecting or not sio.connected or peer:
+        nonlocal connecting,joined
+        if connecting or joined or not sio.connected or peer:
             return
         connecting=True
         try:
             result=await sio.call('radio:studio:listen',namespace=NAMESPACE,timeout=10)
             if not result.get('ok'): print('WAIT',result.get('error','Нет эфира'),flush=True)
-            else: print('LISTENING',flush=True)
+            else:
+                joined=True
+                print('LISTENING',flush=True)
         except (socketio.exceptions.TimeoutError, OSError) as exc:
             print('WAIT_SIGNAL',str(exc),flush=True)
         finally:
@@ -56,16 +59,24 @@ async def main():
 
     @sio.event(namespace=NAMESPACE)
     async def disconnect():
+        nonlocal joined
+        joined=False
         await reset()
         print('SIGNAL_LOST · waiting for reconnect',flush=True)
 
     @sio.on('radio:studio:state',namespace=NAMESPACE)
     async def state(data):
-        if data.get('live') and not peer and not data.get('listener'):
+        nonlocal joined
+        if not data.get('live'):
+            joined=False
+            if peer: await reset()
+        elif not joined and not peer and not data.get('listener'):
             await listen()
 
     @sio.on('radio:studio:ended',namespace=NAMESPACE)
     async def ended(_payload=None):
+        nonlocal joined
+        joined=False
         await reset(); print('ENDED · READY_FOR_NEXT',flush=True)
 
     @sio.on('radio:studio:signal',namespace=NAMESPACE)
