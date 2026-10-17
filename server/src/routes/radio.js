@@ -9,7 +9,91 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
 const router = Router();
-router.use(auth, requireRole('ADMIN'));
+router.use(auth);
+
+// Students access only their own playlists; all legacy radio management remains admin-only.
+const reviewInclude = { items: { orderBy: { position: 'asc' }, include: { asset: { select: { id: true, name: true, durationMs: true } } } } };
+const studentOnly = (req, res, next) => req.user.role === 'STUDENT'
+    ? next() : res.status(403).json({ error: 'Только для студентов' });
+const validStudentBody = body => typeof body?.name === 'string' && body.name.trim().length > 0
+    && body.name.trim().length <= 140 && typeof (body.description ?? '') === 'string'
+    && (body.description ?? '').length <= 2000 && Array.isArray(body.assetIds)
+    && body.assetIds.length <= 100 && body.assetIds.every(id => typeof id === 'string')
+    && new Set(body.assetIds).size === body.assetIds.length;
+const validAssets = async assetIds => await prisma.radioAsset.count({ where: { id: { in: assetIds } } }) === assetIds.length;
+
+router.get('/student/playlists', studentOnly, async (req, res, next) => {
+    try { res.json({ playlists: await prisma.radioPlaylist.findMany({
+        where: { createdBy: req.user.id }, include: reviewInclude, orderBy: { updatedAt: 'desc' }, take: 250,
+    }) }); } catch (error) { next(error); }
+});
+router.get('/student/assets', studentOnly, async (_req, res, next) => {
+    try { res.json({ assets: await prisma.radioAsset.findMany({
+        select: { id: true, name: true, durationMs: true }, orderBy: { createdAt: 'desc' }, take: 300,
+    }) }); } catch(error) { next(error); }
+});
+router.post('/student/playlists', studentOnly, async (req, res, next) => {
+    try {
+        if (!validStudentBody(req.body) || !(await validAssets(req.body.assetIds)))
+            return res.status(400).json({ error: 'Проверьте название и аудиозаписи' });
+        const playlist = await prisma.radioPlaylist.create({ data: {
+            name: req.body.name.trim(), description: (req.body.description ?? '').trim(),
+            createdBy: req.user.id, status: 'DRAFT',
+            items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position })) },
+        }, include: reviewInclude });
+        res.status(201).json({ playlist });
+    } catch(error) { next(error); }
+});
+router.put('/student/playlists/:id', studentOnly, async (req, res, next) => {
+    try {
+        if (!validStudentBody(req.body) || !(await validAssets(req.body.assetIds)))
+            return res.status(400).json({ error: 'Проверьте название и аудиозаписи' });
+        const result = await prisma.$transaction(async tx => {
+            const playlist = await tx.radioPlaylist.findFirst({
+                where: { id: req.params.id, createdBy: req.user.id },
+            });
+            if (!playlist) return 'missing';
+            if (!['DRAFT','RETURNED'].includes(playlist.status)) return 'locked';
+            await tx.radioPlaylistItem.deleteMany({ where: { playlistId: playlist.id } });
+            return tx.radioPlaylist.update({ where: { id: playlist.id }, data: {
+                name: req.body.name.trim(), description: (req.body.description ?? '').trim(),
+                items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position })) },
+            }, include: reviewInclude });
+        });
+        if (result === 'missing') return res.status(404).json({ error: 'Плейлист не найден' });
+        if (result === 'locked') return res.status(409).json({ error: 'Плейлист уже отправлен или утверждён' });
+        res.json({ playlist: result });
+    } catch(error) { next(error); }
+});
+router.post('/student/playlists/:id/submit', studentOnly, async (req, res, next) => {
+    try {
+        const result = await prisma.$transaction(async tx => {
+            const playlist = await tx.radioPlaylist.findFirst({
+                where: { id: req.params.id, createdBy: req.user.id }, include: reviewInclude,
+            });
+            if (!playlist) return 'missing';
+            if (!['DRAFT','RETURNED'].includes(playlist.status)) return 'locked';
+            if (!playlist.items.length) return 'empty';
+            if (playlist.items.reduce((sum, item) => sum + item.asset.durationMs, 0) > 12 * 3600000) return 'long';
+            const updated = await tx.radioPlaylist.update({ where: { id: playlist.id }, data: {
+                status: 'SUBMITTED', submittedAt: new Date(), reviewedReason: null,
+            }, include: reviewInclude });
+            const admins = await tx.user.findMany({ where: { role: 'ADMIN', isBanned: false }, select: { id: true } });
+            if (admins.length) await tx.notification.createMany({ data: admins.map(admin => ({
+                userId: admin.id, type: 'RADIO_PLAYLIST_SUBMITTED',
+                payload: JSON.stringify({ playlistId: playlist.id, playlistName: playlist.name, authorId: req.user.id }),
+            })) });
+            return updated;
+        });
+        if (typeof result === 'string') return res.status(result === 'missing' ? 404 : 409).json({
+            error: {missing:'Плейлист не найден',locked:'Этот плейлист уже отправлен',empty:'Добавьте записи перед отправкой',long:'Плейлист длиннее 12 часов'}[result],
+        });
+        res.json({ playlist: result });
+    } catch(error) { next(error); }
+});
+
+router.use(requireRole('ADMIN'));
+
 const root = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 1 } });
 const run = promisify(execFile);
@@ -197,6 +281,7 @@ router.post('/playlists', safe(async (req, res) => {
         return res.status(400).json({ error: 'Одна или несколько записей не найдены' });
     const playlist = await prisma.radioPlaylist.create({ data: {
         name: name.trim(), description: description.trim(), createdBy: req.user.id,
+        status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date(),
         items: { create: assetIds.map((assetId, position) => ({ assetId, position })) },
     }, include: playlistInclude });
     res.status(201).json({ playlist });
@@ -244,28 +329,50 @@ router.put('/playlists/:id', safe(async (req, res) => {
     res.json({ playlist });
 }));
 router.post('/playlists/:id/approve', safe(async (req, res) => {
-    // Always derive approval eligibility from persisted playlist items, never UI state.
     const result = await prisma.$transaction(async tx => {
-        const playlist = await tx.radioPlaylist.findUnique({
-            where: { id: req.params.id }, include: playlistInclude,
-        });
-        if (!playlist) return { status: 404, error: 'Плейлист не найден. Обновите список.' };
+        const playlist = await tx.radioPlaylist.findUnique({ where: { id: req.params.id }, include: playlistInclude });
+        if (!playlist) return { status: 404, error: 'Плейлист не найден' };
         if (playlist.status === 'APPROVED') return { playlist };
-        if (playlist.items.length === 0)
-            return { status: 409, error: 'Нельзя утвердить пустой плейлист. Сначала добавьте и сохраните записи.' };
-        const durationMs = playlistMs(playlist);
-        if (durationMs <= 0 || durationMs > 12 * 3600000)
-            return { status: 409, error: 'Продолжительность программы должна быть больше нуля и не превышать 12 часов.' };
-        const updated = await tx.radioPlaylist.update({
-            where: { id: playlist.id },
-            data: { status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date() },
-            include: playlistInclude,
-        });
+        if (playlist.status !== 'SUBMITTED') return { status: 409, error: 'Студент ещё не отправил плейлист' };
+        const author = await tx.user.findUnique({ where: { id: playlist.createdBy }, select: { role: true } });
+        if (author?.role !== 'STUDENT') return { status: 409, error: 'Утверждаются только студенческие плейлисты' };
+        const duration = playlistMs(playlist);
+        if (!playlist.items.length || duration <= 0 || duration > 12 * 3600000)
+            return { status: 409, error: 'Недопустимая длительность плейлиста' };
+        const updated = await tx.radioPlaylist.update({ where: { id: playlist.id }, data: {
+            status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date(), reviewedReason: null,
+        }, include: playlistInclude });
+        await tx.notification.create({ data: { userId: playlist.createdBy,
+            type: 'RADIO_PLAYLIST_APPROVED',
+            payload: JSON.stringify({ playlistId: playlist.id, playlistName: playlist.name, reviewerId: req.user.id }),
+        } });
         return { playlist: updated };
     });
     if (result.error) return res.status(result.status).json({ error: result.error });
-    res.setHeader('Cache-Control', 'no-store');
     res.json({ playlist: result.playlist });
+}));
+router.post('/playlists/:id/return', safe(async (req, res) => {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason || reason.length > 1000) return res.status(400).json({ error: 'Укажите причину возврата (до 1000 символов)' });
+    const result = await prisma.$transaction(async tx => {
+        const playlist = await tx.radioPlaylist.findUnique({ where: { id: req.params.id } });
+        if (!playlist) return 'missing';
+        if (playlist.status !== 'SUBMITTED') return 'locked';
+        const author = await tx.user.findUnique({ where: { id: playlist.createdBy }, select: { role: true } });
+        if (author?.role !== 'STUDENT') return 'not-student';
+        const updated = await tx.radioPlaylist.update({ where: { id: playlist.id }, data: {
+            status: 'RETURNED', reviewedReason: reason, approvedBy: null, approvedAt: null,
+        }, include: playlistInclude });
+        await tx.notification.create({ data: { userId: playlist.createdBy,
+            type: 'RADIO_PLAYLIST_RETURNED',
+            payload: JSON.stringify({ playlistId: playlist.id, playlistName: playlist.name, reason, reviewerId: req.user.id }),
+        } });
+        return updated;
+    });
+    if (typeof result === 'string') return res.status(result === 'missing' ? 404 : 409).json({
+        error: {missing:'Плейлист не найден',locked:'Плейлист не ожидает проверки','not-student':'Возврат предусмотрен только для студентов'}[result],
+    });
+    res.json({ playlist: result });
 }));
 router.get('/schedule', safe(async (req, res) => {
     const from = new Date(req.query.from), to = new Date(req.query.to);
