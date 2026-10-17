@@ -27,6 +27,7 @@ async def main():
     sink=None
     player=None
     queued=[]
+    connecting=False
     async def reset():
         nonlocal peer,sink,player,queued
         if player: player.cancel(); await asyncio.gather(player,return_exceptions=True);player=None
@@ -35,14 +36,28 @@ async def main():
         queued=[]
 
     async def listen():
-        result=await sio.call('radio:studio:listen',namespace=NAMESPACE,timeout=10)
-        if not result.get('ok'): print('WAIT',result.get('error','Нет эфира'),flush=True)
-        else: print('LISTENING',flush=True)
+        nonlocal connecting
+        if connecting or not sio.connected or peer:
+            return
+        connecting=True
+        try:
+            result=await sio.call('radio:studio:listen',namespace=NAMESPACE,timeout=10)
+            if not result.get('ok'): print('WAIT',result.get('error','Нет эфира'),flush=True)
+            else: print('LISTENING',flush=True)
+        except (socketio.exceptions.TimeoutError, OSError) as exc:
+            print('WAIT_SIGNAL',str(exc),flush=True)
+        finally:
+            connecting=False
 
     @sio.event(namespace=NAMESPACE)
     async def connect():
         print('CONNECTED',flush=True)
         await listen()
+
+    @sio.event(namespace=NAMESPACE)
+    async def disconnect():
+        await reset()
+        print('SIGNAL_LOST · waiting for reconnect',flush=True)
 
     @sio.on('radio:studio:state',namespace=NAMESPACE)
     async def state(data):
@@ -62,6 +77,13 @@ async def main():
             await reset()
             peer=RTCPeerConnection()
             current=peer
+            @current.on('connectionstatechange')
+            async def connection_changed():
+                if current.connectionState == 'failed' and peer is current:
+                    print('PEER_FAILED · waiting for next stream',flush=True)
+                    await reset()
+                    if sio.connected:
+                        await sio.emit('radio:studio:leave',namespace=NAMESPACE)
             @current.on('track')
             async def track_received(track):
                 nonlocal player,sink
@@ -79,6 +101,11 @@ async def main():
                             else: samples=samples.reshape((-1,2))
                             await asyncio.to_thread(sink.write,np.ascontiguousarray(samples,dtype=np.float32))
                 player=asyncio.create_task(play())
+                def on_player_done(task):
+                    if not task.cancelled() and task.exception():
+                        print('AUDIO_ERROR',repr(task.exception()),flush=True)
+                        asyncio.create_task(reset())
+                player.add_done_callback(on_player_done)
             await current.setRemoteDescription(RTCSessionDescription(sdp=payload['sdp']['sdp'],type='offer'))
             await current.setLocalDescription(await current.createAnswer())
             await sio.emit('radio:studio:signal',{'target':source,'payload':{
