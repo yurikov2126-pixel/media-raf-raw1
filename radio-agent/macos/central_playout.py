@@ -87,7 +87,7 @@ class RelayHandler(BaseHTTPRequestHandler):
             return
         req = Request(self.server.upstream, headers={"Authorization": "Bearer " + self.server.token})
         try:
-            with urlopen(req, timeout=8) as source:
+            with urlopen(req, timeout=2.5) as source:
                 if source.status != 200 or "audio/" not in source.headers.get("Content-Type", ""):
                     raise RuntimeError("Unexpected radio stream response")
                 self.send_response(200)
@@ -162,6 +162,27 @@ def run(args, token):
     verified = {}
     next_attempt = 0
     next_sync = 0
+    network_ready = threading.Event()
+    network_denied = threading.Event()
+    network_checking = threading.Event()
+
+    def background_check():
+        try:
+            if not check_permission(args.server, token):
+                network_denied.set()
+                return
+            network_ready.clear()
+            if probe(args.server, token):
+                network_ready.set()
+        except HTTPError as exc:
+            if exc.code in (401, 403):
+                network_denied.set()
+            else:
+                network_ready.clear()
+        except (OSError, ValueError, RuntimeError):
+            network_ready.clear()
+        finally:
+            network_checking.clear()
     syncing = threading.Event()
     sync_results = []
     sync_lock = threading.Lock()
@@ -185,32 +206,33 @@ def run(args, token):
                     snapshot = sync_results[-1]
                     sync_results.clear()
             now = time.monotonic()
-            if now >= next_attempt:
-                next_attempt = now + 6
-                try:
-                    if not check_permission(args.server, token):
-                        raise PermissionError("Playback permission revoked")
-                    if now >= next_sync and not syncing.is_set():
-                        syncing.set()
-                        threading.Thread(target=refresh_cache, daemon=True).start()
-                        next_sync = now + 120
-                    if probe(args.server, token):
-                        if primary is None or primary.poll() is not None:
-                            stop_player(fallback)
-                            fallback = None
-                            fallback_id = None
-                            relay.failed.clear()
-                            relay.last_data = time.monotonic()
-                            url = "http://127.0.0.1:%d/listen" % relay.server_address[1]
-                            primary = player(args.vlc, vlc_log, "--network-caching=800", url)
-                            print("PRIMARY_STREAM", flush=True)
-                except PermissionError:
-                    raise
-                except (OSError, URLError, ValueError, RuntimeError) as exc:
-                    print("PRIMARY_UNAVAILABLE", type(exc).__name__, flush=True)
+            # Network probes must NEVER block the 0.5s local failover watchdog.
+            if network_denied.is_set():
+                raise PermissionError("Playback permission revoked")
+            if now >= next_sync and not syncing.is_set() and network_ready.is_set():
+                syncing.set()
+                threading.Thread(target=refresh_cache, daemon=True).start()
+                next_sync = now + 30
+            if now >= next_attempt and not network_checking.is_set():
+                network_checking.set()
+                next_attempt = now + (4 if primary is None else 12)
+                threading.Thread(target=background_check, daemon=True).start()
+            if network_ready.is_set() and primary is None:
+                network_ready.clear()
+                relay.failed.clear()
+                relay.last_data = time.monotonic()
+                url = "http://127.0.0.1:%d/listen" % relay.server_address[1]
+                primary = player(args.vlc, vlc_log, "--network-caching=250", url)
+                # Never tear down an audible reserve until the new stream has supplied data.
+                print("PRIMARY_CONNECTING", flush=True)
+            if primary is not None and fallback is not None and relay.last_data > now - 1.5:
+                stop_player(fallback)
+                fallback = None
+                fallback_id = None
+                print("PRIMARY_STREAM", flush=True)
             # If relay stalls, immediately stop central VLC, then use cached timeline.
             if primary is not None and (primary.poll() is not None or
-                    relay.failed.is_set() or now - relay.last_data > 8):
+                    relay.failed.is_set() or now - relay.last_data > 3):
                 reason = ("VLC_EXIT_" + str(primary.poll()) if primary.poll() is not None
                           else "RELAY_FAILED" if relay.failed.is_set() else "STREAM_TIMEOUT")
                 stop_player(primary)
