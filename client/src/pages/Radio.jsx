@@ -15,7 +15,7 @@ const moscowDate = date => new Intl.DateTimeFormat('sv-SE', { timeZone: STATION_
 export default function Radio() {
   const { token } = useAuth();
   const toast = useToast();
-  const [tab, setTab] = useState('home');
+  const [tab, setTab] = useState(() => ['playlists','schedule','assets','equipment','studio','history'].includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [folders, setFolders] = useState([]);

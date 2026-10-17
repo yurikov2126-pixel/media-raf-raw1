@@ -11,6 +11,9 @@ import usePageMeta from '../hooks/usePageMeta.js';
 
 const ICONS = {
     message: '💬',
+    RADIO_PLAYLIST_SUBMITTED: '🎵',
+    RADIO_PLAYLIST_APPROVED: '🎵',
+    RADIO_PLAYLIST_RETURNED: '🎵',
     editorial: '📋',
     personal_calendar: '🗓️',
     mention: '📣',
@@ -49,6 +52,7 @@ const TITLES = {
 
 const FILTERS = [
     { v: 'all', l: 'Все' },
+    { v: 'radio', l: '🎵 Радио' },
     { v: 'unread', l: 'Непрочитанные' },
     { v: 'lesson_new', l: '📖 Уроки' },
     { v: 'practical_scheduled', l: '🎯 Практики' },
@@ -73,6 +77,7 @@ const FILTERS = [
 
 function matchesFilter(n, filter) {
     if (filter === 'all') return true;
+    if (filter === 'radio') return n.type?.startsWith('RADIO_PLAYLIST_');
     if (filter === 'unread') return !n.readAt;
     if (filter === 'mention_comment') return n.type === 'mention' && Boolean(n.payload?.commentId);
     if (filter === 'mention_post') return n.type === 'mention' && Boolean(n.payload?.postId) && !n.payload?.commentId;
@@ -120,7 +125,9 @@ export default function Notifications() {
             catch (error) { console.error('[notification] failed to locate learning work', error); nav('/app/academy/me'); }
             return;
         }
-        if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
+        if (n.type === 'RADIO_PLAYLIST_SUBMITTED') nav('/app/radio?tab=playlists');
+        else if (n.type === 'RADIO_PLAYLIST_APPROVED' || n.type === 'RADIO_PLAYLIST_RETURNED') nav('/app/radio/playlists/my?playlist=' + encodeURIComponent(p.playlistId || ''));
+        else if (n.type === 'mention' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}${p.commentId ? `&comment=${encodeURIComponent(p.commentId)}` : ''}`);
         else if ((n.type === 'message' || n.type === 'mention') && p.chatId) nav(`/app/chats/${encodeURIComponent(p.chatId)}`);
         else if (n.type === 'mention') nav('/app/notifications');
         else if (n.type === 'post' && p.postId) nav(`/app/feed?post=${encodeURIComponent(p.postId)}`);

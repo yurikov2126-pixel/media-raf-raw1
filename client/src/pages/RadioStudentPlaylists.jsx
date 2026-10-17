@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../store/toast.jsx';
@@ -16,6 +17,7 @@ const field = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py
 export default function RadioStudentPlaylists() {
   const { token } = useAuth();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -25,7 +27,8 @@ export default function RadioStudentPlaylists() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const dragged = useRef(null);
-  const touchStart = useRef(null);
+  const pointerDrag = useRef(null);
+  const [dragTarget, setDragTarget] = useState(null);
   const call = useCallback((path, options) => api('/radio/student' + path, { token, ...options }), [token]);
   const refresh = useCallback(async () => {
     const [a, p] = await Promise.all([call('/assets'), call('/playlists')]);
@@ -39,7 +42,15 @@ export default function RadioStudentPlaylists() {
     }).catch(e => toast.error(e.message)).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [call,toast]);
-  const reset = () => { setEditing(null); setName(''); setDescription(''); setSelected([]); };
+  const reset = () => { setEditing(null); setName(''); setDescription(''); setSelected([]); if(searchParams.has('playlist')) setSearchParams({}, { replace: true }); };
+  useEffect(() => {
+    const id = searchParams.get('playlist');
+    const playlist = playlists.find(p => p.id === id);
+    if (playlist && ['DRAFT','RETURNED'].includes(playlist.status) && editing !== id) {
+      setEditing(playlist.id); setName(playlist.name); setDescription(playlist.description || '');
+      setSelected(playlist.items.map(item => item.assetId));
+    }
+  }, [playlists,searchParams,editing]);
   const edit = playlist => {
     setEditing(playlist.id);
     setName(playlist.name);
@@ -119,19 +130,30 @@ export default function RadioStudentPlaylists() {
           <div>
             <p className="text-sm font-medium">Очередь · {selected.length} записей · {duration(selected.reduce((n,id)=>n+(assets.find(a=>a.id===id)?.durationMs || 0),0))}</p>
             <p className="mb-2 text-xs opacity-60">Перемещайте за ручку ⠿, на телефоне — удерживайте и перетаскивайте.</p>
-            <div className="space-y-1">
+            <div data-playlist-scroll className="max-h-[55vh] overflow-y-auto space-y-1">
               {selected.map((id,index)=><div key={id} onDragOver={e=>e.preventDefault()}
                 onDrop={e=>{e.preventDefault();reposition(dragged.current,index);dragged.current=null;}}
                 data-playlist-position={index}
-                className="flex items-center gap-2 rounded-xl border border-current/15 px-2 py-2">
-                <span draggable onDragStart={e=>{dragged.current=index;e.dataTransfer.effectAllowed='move';}}
-                  onDragEnd={()=>{dragged.current=null;}}
-                  onTouchStart={e=>{touchStart.current={from:index,x:e.touches[0].clientX,y:e.touches[0].clientY};}}
-                  onTouchEnd={e=>{const start=touchStart.current;touchStart.current=null;if(!start)return;
-                    const point=e.changedTouches[0];const target=document.elementFromPoint(point.clientX,point.clientY)?.closest("[data-playlist-position]");
-                    if(target)reposition(start.from,Number(target.dataset.playlistPosition));}}
-                  onTouchCancel={()=>{touchStart.current=null;}}
-                  className="cursor-grab select-none rounded-lg p-2 touch-none" aria-label="Перетащить запись">⠿</span>
+                className={"flex items-center gap-2 rounded-xl border px-2 py-2 " + (dragTarget===index ? "border-blue-500 bg-blue-500/10" : "border-current/15")}>
+                <span
+                  onPointerDown={e=>{ if(e.button!==0) return; pointerDrag.current={from:index,pointerId:e.pointerId}; e.currentTarget.setPointerCapture(e.pointerId); setDragTarget(index); }}
+                  onPointerMove={e=>{ if(pointerDrag.current?.pointerId!==e.pointerId)return;
+                    const below=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-playlist-position]');
+                    if(below)setDragTarget(Number(below.dataset.playlistPosition));
+                    const scrollBox=e.currentTarget.closest('[data-playlist-scroll]');
+                    if(scrollBox){ const rect=scrollBox.getBoundingClientRect();
+                      if(e.clientY>rect.bottom-44) scrollBox.scrollTop+=18;
+                      else if(e.clientY<rect.top+44) scrollBox.scrollTop-=18;
+                    }
+                  }}
+                  onPointerUp={e=>{ const current=pointerDrag.current; if(current?.pointerId!==e.pointerId)return;
+                    const below=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-playlist-position]');
+                    const to=below?Number(below.dataset.playlistPosition):dragTarget;
+                    pointerDrag.current=null;setDragTarget(null);if(Number.isInteger(to))reposition(current.from,to);
+                  }}
+                  onPointerCancel={()=>{pointerDrag.current=null;setDragTarget(null);}}
+                  className="cursor-grab select-none rounded-lg p-2 touch-none active:cursor-grabbing"
+                  role="button" tabIndex={0} aria-label="Перетащить запись">⠿</span>
                 <span className="min-w-0 flex-1 truncate text-sm">{index+1}. {assets.find(a=>a.id===id)?.name || id}</span>
                 <button type="button" onClick={()=>setSelected(old=>old.filter((_,i)=>i!==index))} aria-label="Убрать запись" className="rounded-lg border border-current/20 px-3 py-2">×</button>
               </div>)}
