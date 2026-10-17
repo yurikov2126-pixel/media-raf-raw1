@@ -8,7 +8,7 @@ const dateLocal = value => new Date(value).toLocaleString('ru-RU', { dateStyle: 
 
 export default function Radio() {
   const { token } = useAuth();
-  const [tab, setTab] = useState('schedule');
+  const [tab, setTab] = useState('home');
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [slots, setSlots] = useState([]);
@@ -87,11 +87,23 @@ export default function Radio() {
     </section>
     {error && <p role="alert" className="text-red-500">{error}</p>}
     {notice && <p role="status" className="text-green-600 dark:text-green-400">{notice}</p>}
-    <nav className="flex flex-wrap gap-2" aria-label="Разделы радио">
-      {[['schedule','Сетка вещания'],['playlists','Плейлисты'],['assets','Аудиотека'],['studio','Эфирная студия'],['equipment','Оборудование']].map(([id,title]) =>
-        <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined}
-          className={'rounded-xl px-3 py-2 text-sm border border-current/15 ' + (tab === id ? 'bg-blue-600 text-white' : 'bg-white/5')}>{title}</button>)}
-    </nav>
+    {tab === 'home' ? <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {[
+        ['schedule', 'Сетка вещания', 'Единое расписание радиопрограмм и управления усилителем'],
+        ['playlists', 'Плейлисты', 'Подготовка и согласование радиопередач'],
+        ['assets', 'Аудиотека', 'Загрузка и прослушивание записей'],
+        ['studio', 'Эфирная студия', 'Прямые трансляции с мобильных устройств'],
+        ['equipment', 'Оборудование', 'Windows Radio Agent, ESP32, усилитель AA-300'],
+        ['history', 'История эфира', 'Отчёты о воспроизведении и событиях'],
+      ].map(([id, title, description]) => (
+        <button type="button" key={id} onClick={() => setTab(id)}
+          className="text-left rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-sm opacity-70">{description}</p>
+          <p className="text-xs opacity-50">{id === 'assets' || id === 'playlists' || id === 'schedule' ? 'Открыть раздел →' : 'В разработке'}</p>
+        </button>
+      ))}
+    </div> : <button type="button" className="rounded-xl border border-current/15 px-4 py-2 text-sm" onClick={() => setTab('home')}>← Назад к Радио</button>}
     {tab === 'assets' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Библиотека записей</h2>
       <form className="rounded-2xl border border-current/10 p-4 flex flex-wrap gap-3 items-center"
@@ -150,6 +162,6 @@ export default function Radio() {
         {new Date(s.startAt)>new Date() && <button className="rounded-lg border border-red-500/30 px-3 py-2 text-red-500 text-sm" onClick={()=>{if(window.confirm('Удалить эфир?')) action(()=>call('/schedule/'+s.id,{method:'DELETE'}));}}>Удалить</button>}
       </article>)}
     </section>}
-    {(tab==='studio'||tab==='equipment') && <section className="rounded-2xl border border-current/10 p-6 space-y-2"><h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':'Оборудование'}</h2><p className="opacity-70">Подключение будет выполнено на следующем этапе. Сейчас оборудование не управляется.</p></section>}
+    {(tab==='studio'||tab==='equipment'||tab==='history') && <section className="rounded-2xl border border-current/10 p-6 space-y-2"><h2 className="text-xl font-bold">{tab==='studio'?'Эфирная студия':tab==='history'?'История эфира':'Оборудование'}</h2><p className="opacity-70">Подключение будет выполнено на следующем этапе. Сейчас оборудование не управляется.</p></section>}
   </main>;
 }
