@@ -38,6 +38,7 @@ import competenciesRouter from './routes/competencies.js';
 import learningCollaborationRouter from './routes/learningCollaboration.js';
 import mentorAcademyRouter from './routes/mentorAcademy.js';
 import editorialRouter from './routes/editorial.js';
+import radioRouter from './routes/radio.js';
 import editorialWorkflowRouter from './routes/editorialWorkflow.js';
 import editorialMaterialsRouter from './routes/editorialMaterials.js';
 import editorialLibraryRouter from './routes/editorialLibrary.js';
@@ -166,6 +167,7 @@ const requireModule = (key) => async (_req, res, next) => {
 
 /* ─────────── API-роуты ─────────── */
 app.use('/api/reports', reportsRouter);
+app.use('/api/radio', radioRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/chats', requireModule('chats'), chatRoutes);
