@@ -50,7 +50,7 @@ export default function Radio() {
     ]);
     setAssets(a.assets); setPlaylists(p.playlists); setSlots(s.slots); setFolders(f.folders);
   }, [call, date]);
-  useEffect(() => { refresh().catch(e => toast.error(e.message)); }, [refresh, toast]);
+  useEffect(() => { refresh().catch(e => toast.error(e.message)); }, [refresh]);
   const action = async (fn, successMessage = 'Изменения сохранены') => {
     try {
       await fn();
