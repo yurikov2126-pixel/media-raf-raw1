@@ -244,12 +244,28 @@ router.put('/playlists/:id', safe(async (req, res) => {
     res.json({ playlist });
 }));
 router.post('/playlists/:id/approve', safe(async (req, res) => {
-    const current = await prisma.radioPlaylist.findUnique({ where: { id: req.params.id }, include: playlistInclude });
-    if (!current) return res.status(404).json({ error: 'Плейлист не найден' });
-    if (!current.items.length) return res.status(400).json({ error: 'Добавьте записи перед утверждением' });
-    const playlist = await prisma.radioPlaylist.update({ where: { id: current.id },
-        data: { status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date() }, include: playlistInclude });
-    res.json({ playlist });
+    // Always derive approval eligibility from persisted playlist items, never UI state.
+    const result = await prisma.$transaction(async tx => {
+        const playlist = await tx.radioPlaylist.findUnique({
+            where: { id: req.params.id }, include: playlistInclude,
+        });
+        if (!playlist) return { status: 404, error: 'Плейлист не найден. Обновите список.' };
+        if (playlist.status === 'APPROVED') return { playlist };
+        if (playlist.items.length === 0)
+            return { status: 409, error: 'Нельзя утвердить пустой плейлист. Сначала добавьте и сохраните записи.' };
+        const durationMs = playlistMs(playlist);
+        if (durationMs <= 0 || durationMs > 12 * 3600000)
+            return { status: 409, error: 'Продолжительность программы должна быть больше нуля и не превышать 12 часов.' };
+        const updated = await tx.radioPlaylist.update({
+            where: { id: playlist.id },
+            data: { status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date() },
+            include: playlistInclude,
+        });
+        return { playlist: updated };
+    });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ playlist: result.playlist });
 }));
 router.get('/schedule', safe(async (req, res) => {
     const from = new Date(req.query.from), to = new Date(req.query.to);
