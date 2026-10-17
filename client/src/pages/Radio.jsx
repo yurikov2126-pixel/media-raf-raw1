@@ -7,7 +7,7 @@ const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 const fmt = ms => { const s = Math.round((ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const STATION_ZONE = 'Europe/Moscow';
 const dateLocal = value => new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone: STATION_ZONE });
-const moscowDate = date => new Intl.DateTimeFormat('en-CA', { timeZone: STATION_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+const moscowDate = date => new Intl.DateTimeFormat('sv-SE', { timeZone: STATION_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 
 export default function Radio() {
   const { token } = useAuth();
@@ -334,7 +334,7 @@ export default function Radio() {
       <h2 className="text-xl font-bold">Сетка вещания</h2>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
-      <form onSubmit={e=>{e.preventDefault();action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId:slotPlaylist,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:slotPlaylist,startAt:new Date(slotTime).toISOString()}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
+      <form onSubmit={e=>{e.preventDefault();action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId:slotPlaylist,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:slotPlaylist,startLocal:slotTime}}));}} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <h3 className="font-semibold">Добавить передачу</h3>
         <select required className={inputStyle} value={slotPlaylist} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
