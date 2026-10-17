@@ -24,9 +24,10 @@ export function initRadioStudio(io) {
     if (deviceListener === target) devices.to(target).emit(event, message);
     else io.to(target).emit(event, message);
   };
-  const broadcast = () => io.emit('radio:studio:state', state());
+  const broadcast = () => { io.emit('radio:studio:state', state()); devices.emit('radio:studio:state', state()); };
 
   devices.on('connection', socket => {
+    socket.emit('radio:studio:state', state());
     socket.on('radio:studio:state', cb => cb?.(state()));
     socket.on('radio:studio:listen', cb => {
       if (!presenter) return cb?.({error:'Ведущий ещё не вышел в эфир'});
@@ -58,8 +59,8 @@ export function initRadioStudio(io) {
     socket.on('radio:studio:present', callback => {
       if (presenter && presenter !== socket.id) return callback?.({ error: 'Другой ведущий уже в эфире' });
       presenter = socket.id;
-      broadcast();
       callback?.({ ok: true });
+      setImmediate(broadcast);
     });
     socket.on('radio:studio:listen', callback => {
       if (!presenter) return callback?.({ error: 'Прямой эфир не запущен' });
@@ -80,7 +81,7 @@ export function initRadioStudio(io) {
     const leave = () => {
       const wasPresenter = presenter === socket.id;
       if (wasPresenter) { presenter = null; if (listener) signalTo(listener, 'radio:studio:ended'); listener = null; deviceListener = null; }
-      else if (listener === socket.id) { listener = null; if (presenter) io.to(presenter).emit('radio:studio:listener-left'); }
+      else if (listener === socket.id) { listener = null; deviceListener = null; if (presenter) io.to(presenter).emit('radio:studio:listener-left'); }
       broadcast();
     };
     socket.on('radio:studio:leave', leave);
