@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from sync_agent import fetch, sync
+from sync_agent import sync
 
 STOP = threading.Event()
 
@@ -109,7 +109,9 @@ class RelayHandler(BaseHTTPRequestHandler):
 
 
 def check_permission(server, token):
-    with fetch(server, token, "/api/radio-agent/agent/status") as response:
+    req = Request(server.rstrip("/") + "/api/radio-agent/agent/status",
+                  headers={"Authorization": "Bearer " + token})
+    with urlopen(req, timeout=4) as response:
         status = json.load(response)
     return status.get("mode") == "PILOT" and status.get("playbackEnabled") is True
 
@@ -152,18 +154,37 @@ def run(args, token):
     fallback_until = 0
     next_attempt = 0
     next_sync = 0
+    syncing = threading.Event()
+    sync_results = []
+    sync_lock = threading.Lock()
+
+    def refresh_cache():
+        try:
+            updated = sync(args.server, token, base)
+            with sync_lock:
+                sync_results.append(updated)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print("CACHE_SYNC_FAILED", type(exc).__name__, flush=True)
+        finally:
+            syncing.clear()
+
     try:
         if not check_permission(args.server, token):
             raise RuntimeError("Device pilot playback not permitted")
         while not STOP.is_set():
+            with sync_lock:
+                if sync_results:
+                    snapshot = sync_results[-1]
+                    sync_results.clear()
             now = time.monotonic()
             if now >= next_attempt:
                 next_attempt = now + 6
                 try:
                     if not check_permission(args.server, token):
                         raise PermissionError("Playback permission revoked")
-                    if now >= next_sync:
-                        snapshot = sync(args.server, token, base)
+                    if now >= next_sync and not syncing.is_set():
+                        syncing.set()
+                        threading.Thread(target=refresh_cache, daemon=True).start()
                         next_sync = now + 120
                     if probe(args.server, token):
                         if primary is None or primary.poll() is not None:
