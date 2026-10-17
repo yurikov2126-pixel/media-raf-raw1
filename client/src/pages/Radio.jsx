@@ -19,6 +19,7 @@ export default function Radio() {
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [approvingId, setApprovingId] = useState(null);
   const [radioDevices, setRadioDevices] = useState([]);
   const [deviceToken, setDeviceToken] = useState('');
   const [name, setName] = useState('');
@@ -149,6 +150,20 @@ export default function Radio() {
     if (!id) return;
     setDragPlaylistId(null);
     action(() => call('/playlists/' + id + '/folder', { method: 'PATCH', body: { folderId } }));
+  };
+  const approvePlaylist = async playlist => {
+    if (approvingId) return;
+    setApprovingId(playlist.id);
+    try {
+      const response = await call('/playlists/' + playlist.id + '/approve', { method: 'POST' });
+      if (response.playlist?.status !== 'APPROVED') throw Error('Сервер не подтвердил утверждение плейлиста');
+      // Update immediately so the schedule selector can use it without a reload.
+      setPlaylists(previous => previous.map(item => item.id === playlist.id ? response.playlist : item));
+      await refresh();
+      toast.success('Плейлист «' + playlist.name + '» утверждён и доступен в сетке вещания');
+    } catch (e) {
+      toast.error(e.message || 'Не удалось утвердить плейлист');
+    } finally { setApprovingId(null); }
   };
   const deletePlaylist = playlist => {
     if (window.confirm('Удалить плейлист «' + playlist.name + '»? Это невозможно, если он используется в сетке вещания.'))
@@ -356,7 +371,7 @@ export default function Radio() {
                     <option value="">Без папки</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                   <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" onClick={()=>startEdit(p)}>Изменить</button>
-                  {p.status!=='APPROVED' && <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" disabled={!p.items.length} onClick={()=>action(()=>call('/playlists/'+p.id+'/approve',{method:'POST'}))}>Утвердить</button>}
+                  {p.status!=='APPROVED' && <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2 disabled:opacity-50" disabled={!!approvingId} onClick={()=>approvePlaylist(p)}>{approvingId===p.id ? 'Утверждение…' : 'Утвердить'}</button>}
                   <button type="button" className="text-xs rounded-lg border border-red-500/30 text-red-500 px-2 py-2" onClick={()=>deletePlaylist(p)}>Удалить</button>
                 </div>
               </div>)}
