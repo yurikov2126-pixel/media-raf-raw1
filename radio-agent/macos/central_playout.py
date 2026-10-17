@@ -152,6 +152,7 @@ def run(args, token):
     fallback = None
     fallback_id = None
     fallback_until = 0
+    verified = {}
     next_attempt = 0
     next_sync = 0
     syncing = threading.Event()
@@ -211,7 +212,21 @@ def run(args, token):
                 cursor = local_cursor(snapshot or {"slots": []}, time.time())
                 if cursor:
                     track, offset, remaining = cursor
-                    file = cached_file(cache, track)
+                    candidate = cache / (track["id"] + ".audio")
+                    signature = None
+                    try:
+                        metadata = candidate.stat()
+                        signature = (track.get("sha256"), metadata.st_size, metadata.st_mtime_ns)
+                    except OSError:
+                        pass
+                    if verified.get(track["id"]) == signature and signature is not None:
+                        file = candidate
+                    else:
+                        file = cached_file(cache, track)
+                        if file:
+                            verified[track["id"]] = signature
+                        else:
+                            verified.pop(track["id"], None)
                     if file:
                         if (fallback is None or fallback.poll() is not None or
                                 fallback_id != track["id"] or now >= fallback_until):
