@@ -1,6 +1,7 @@
 import { prisma } from './prisma.js';
 
 const KEY = 'editorial_positions_v1';
+export const RADIO_HOST_POSITION = { code: 'RADIO_HOST', label: 'Радиоведущий' };
 export const DEFAULT_POSITIONS = [
   { code: 'LEAD_PHOTO', label: 'Основной фотограф' },
   { code: 'ADDITIONAL_PHOTO', label: 'Дополнительный фотограф' },
@@ -16,6 +17,7 @@ export const DEFAULT_POSITIONS = [
   { code: 'DESIGNER', label: 'Дизайнер' },
   { code: 'PRODUCER', label: 'Продюсер' },
   { code: 'CURATOR', label: 'Куратор редакции' },
+  RADIO_HOST_POSITION,
 ];
 export const validPositionCode = code => typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,39}$/.test(code);
 export async function getEditorialPositions(db = prisma) {
@@ -23,7 +25,10 @@ export async function getEditorialPositions(db = prisma) {
   if (!row) return DEFAULT_POSITIONS;
   try {
     const parsed = JSON.parse(row.value);
-    if (Array.isArray(parsed)) return parsed.filter(p => validPositionCode(p.code) && typeof p.label === 'string');
+    if (Array.isArray(parsed)) {
+      const list = parsed.filter(p => validPositionCode(p.code) && typeof p.label === 'string');
+      return list.some(p => p.code === RADIO_HOST_POSITION.code) ? list : [...list, RADIO_HOST_POSITION];
+    }
   } catch {}
   return DEFAULT_POSITIONS;
 }
