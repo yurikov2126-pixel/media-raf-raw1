@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../store/toast.jsx';
+import RadioTrackPlayer from '../components/RadioTrackPlayer.jsx';
 
 const duration = ms => {
   const seconds = Math.round((ms || 0) / 1000);
@@ -26,6 +27,9 @@ export default function RadioStudentPlaylists() {
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [uploading,setUploading] = useState(false);
+  const [uploadProgress,setUploadProgress] = useState('');
+  const [previewPlaylist,setPreviewPlaylist] = useState(null);
   const dragged = useRef(null);
   const pointerDrag = useRef(null);
   const [dragTarget, setDragTarget] = useState(null);
@@ -81,6 +85,31 @@ export default function RadioStudentPlaylists() {
     } catch (e) { toast.error(e.message); }
     finally { setBusy(false); }
   };
+  const uploadAudio = async event => {
+    const files=Array.from(event.target.files || []);
+    event.target.value='';
+    if(!files.length)return;
+    setUploading(true);
+    let ok=0;
+    try {
+      for(const file of files) {
+        setUploadProgress('Загрузка '+(ok+1)+' из '+files.length+': '+file.name);
+        if(file.size > 30*1024*1024) throw Error('Файл превышает 30 МБ: '+file.name);
+        const form=new FormData();form.append('file',file);form.append('filename',file.name);
+        const res=await fetch((import.meta.env.VITE_API || 'http://localhost:4000/api')+'/radio/student/assets',{
+          method:'POST', headers:{Authorization:'Bearer '+token},body:form,
+        });
+        const result=await res.json().catch(()=>({}));
+        if(!res.ok)throw Error(result.error||'Ошибка загрузки');
+        ok++;
+      }
+      await refresh();
+      toast.success('Загружено аудиофайлов: '+ok);
+    } catch(error) {
+      toast.error(error.message);
+      if(ok) await refresh();
+    } finally { setUploading(false);setUploadProgress(''); }
+  };
   const reposition = (from, to) => {
     if (from == null || from === to || from < 0 || from >= selected.length) return;
     setSelected(previous => {
@@ -105,12 +134,21 @@ export default function RadioStudentPlaylists() {
           </div>
           <p className="text-xs opacity-65">{p.items.length} записей · {duration(p.items.reduce((n,item)=>n+item.asset.durationMs,0))}</p>
           {p.status === 'RETURNED' && <p className="rounded-xl border border-amber-500/30 p-3 text-sm text-amber-700 dark:text-amber-300">Причина возврата: {p.reviewedReason}</p>}
+          <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setPreviewPlaylist(p)}>♫ Прослушать</button>
           {['DRAFT','RETURNED'].includes(p.status) && <div className="flex flex-wrap gap-2">
             <button type="button" disabled={busy} onClick={() => edit(p)} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Редактировать</button>
             <button type="button" disabled={busy || !p.items.length} onClick={() => submit(p)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">Отправить на проверку</button>
           </div>}
         </article>)}
       </div>
+      <section className="rounded-2xl border border-current/15 bg-white/5 p-4 space-y-2">
+        <h2 className="font-semibold">Загрузить аудиозаписи</h2>
+        <p className="text-xs opacity-65">MP3, WAV, OGG, FLAC, M4A · до 30 МБ на файл</p>
+        <input type="file" multiple accept=".mp3,.wav,.ogg,.flac,.m4a" aria-label="Загрузить аудиофайлы"
+          disabled={uploading} onChange={uploadAudio} className="block w-full max-w-full text-sm"/>
+        {uploading&&<p role="status" className="text-xs">{uploadProgress}</p>}
+      </section>
+      {previewPlaylist && <section className="space-y-2"><button type="button" onClick={()=>setPreviewPlaylist(null)} className="text-xs underline">Закрыть прослушивание</button><RadioTrackPlayer token={token} student tracks={previewPlaylist.items.map(i=>i.asset)}/></section>}
       <section className="rounded-2xl border border-current/15 bg-white/5 p-4 sm:p-5 space-y-4">
         <h2 className="text-lg font-semibold">{editing ? 'Редактирование плейлиста' : 'Новый плейлист'}</h2>
         <form className="space-y-3" onSubmit={save}>
@@ -133,10 +171,10 @@ export default function RadioStudentPlaylists() {
             <div data-playlist-scroll className="max-h-[55vh] overflow-y-auto space-y-1">
               {selected.map((id,index)=><div key={id} onDragOver={e=>e.preventDefault()}
                 onDrop={e=>{e.preventDefault();reposition(dragged.current,index);dragged.current=null;}}
-                data-playlist-position={index}
+                data-playlist-position={index} onSelectStart={e=>e.preventDefault()} style={{WebkitUserSelect:"none",userSelect:"none"}}
                 className={"flex items-center gap-2 rounded-xl border px-2 py-2 " + (dragTarget===index ? "border-blue-500 bg-blue-500/10" : "border-current/15")}>
                 <span
-                  onPointerDown={e=>{ if(e.button!==0) return; pointerDrag.current={from:index,pointerId:e.pointerId}; e.currentTarget.setPointerCapture(e.pointerId); setDragTarget(index); }}
+                  onPointerDown={e=>{ if(e.button!==0) return; e.preventDefault(); window.getSelection()?.removeAllRanges(); pointerDrag.current={from:index,pointerId:e.pointerId}; e.currentTarget.setPointerCapture(e.pointerId); setDragTarget(index); }}
                   onPointerMove={e=>{ if(pointerDrag.current?.pointerId!==e.pointerId)return;
                     const below=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-playlist-position]');
                     if(below)setDragTarget(Number(below.dataset.playlistPosition));
@@ -152,13 +190,16 @@ export default function RadioStudentPlaylists() {
                     pointerDrag.current=null;setDragTarget(null);if(Number.isInteger(to))reposition(current.from,to);
                   }}
                   onPointerCancel={()=>{pointerDrag.current=null;setDragTarget(null);}}
-                  className="cursor-grab select-none rounded-lg p-2 touch-none active:cursor-grabbing"
+                  onContextMenu={e=>e.preventDefault()}
+                  onSelectStart={e=>e.preventDefault()}
+                  className="cursor-grab select-none rounded-lg p-2 touch-none active:cursor-grabbing" style={{WebkitUserSelect:'none',userSelect:'none',WebkitTouchCallout:'none'}}
                   role="button" tabIndex={0} aria-label="Перетащить запись">⠿</span>
                 <span className="min-w-0 flex-1 truncate text-sm">{index+1}. {assets.find(a=>a.id===id)?.name || id}</span>
                 <button type="button" onClick={()=>setSelected(old=>old.filter((_,i)=>i!==index))} aria-label="Убрать запись" className="rounded-lg border border-current/20 px-3 py-2">×</button>
               </div>)}
             </div>
           </div>
+          {selected.length>0 && <RadioTrackPlayer token={token} student tracks={selected.map(id=>assets.find(a=>a.id===id)).filter(Boolean)}/>}
           <div className="flex flex-wrap gap-2">
             <button disabled={busy} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{busy?'Сохранение…':'Сохранить черновик'}</button>
             {editing && <button type="button" className="rounded-xl border border-current/20 px-4 py-2.5 text-sm" onClick={reset}>Отмена</button>}
