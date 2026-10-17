@@ -19,11 +19,11 @@ def fetch(base, token, route):
 def sync(base, token, destination):
     with fetch(base, token, '/api/radio-agent/agent/status') as response:
         status=json.load(response)
-    if status.get('playbackEnabled') is not False or status.get('mode') != 'SYNC_ONLY':
+    if status.get('mode') not in ('SYNC_ONLY', 'PILOT'):
         raise RuntimeError('Unsupported radio mode — refusing to continue')
     with fetch(base, token, '/api/radio-agent/agent/snapshot') as response:
         snapshot=json.load(response)
-    if snapshot.get('playbackEnabled') is not False or snapshot.get('mode') != 'SYNC_ONLY':
+    if snapshot.get('mode') not in ('SYNC_ONLY', 'PILOT'):
         raise RuntimeError('Snapshot is not marked sync-only')
     cache=destination / 'cache'
     cache.mkdir(parents=True, exist_ok=True)
@@ -60,7 +60,8 @@ def sync(base, token, destination):
     temp.write_text(json.dumps(snapshot,ensure_ascii=False,indent=2),encoding='utf-8')
     os.replace(temp,destination/'snapshot.json')
     print('Revision:',snapshot['revision'],'Broadcast slots:',len(snapshot['slots']),
-          'Cached assets:',len(assets),'Playback: DISABLED',flush=True)
+          'Cached assets:',len(assets),'Playback: DISABLED by sync_agent.py',flush=True)
+    return snapshot
 
 def main():
     p=argparse.ArgumentParser(description='MEDIA RAF RAW radio sync agent (no playout)')

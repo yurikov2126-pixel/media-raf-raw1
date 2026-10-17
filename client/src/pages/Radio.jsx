@@ -87,6 +87,14 @@ export default function Radio() {
     } catch (e) { toast.error(e.message); }
   };
   useEffect(() => { if (tab === 'equipment') loadRadioDevices(); }, [tab, token]);
+  const setPilot = async (device, enabled) => {
+    if (enabled && !window.confirm('Разрешить пробное воспроизведение через локальный аудиовыход Windows? Усилитель и ESP32 не управляются.')) return;
+    try {
+      await api('/radio-agent/devices/' + device.id + '/playback', {token,method:'POST',body:{enabled}});
+      await loadRadioDevices();
+      toast.success(enabled ? 'Тестовый вывод звука разрешён' : 'Тестовый вывод звука отключён');
+    } catch (e) { toast.error(e.message); }
+  };
   const queueFiles = incoming => {
     const audio = [...incoming].filter(f => /\.(mp3|wav|ogg|flac|m4a)$/i.test(f.name));
     setFiles(previous => {
@@ -417,7 +425,12 @@ export default function Radio() {
       {radioDevices.map(d=><div key={d.id} className="rounded-xl border border-current/10 p-3 flex items-center justify-between gap-3">
         <div className="min-w-0"><p className="font-semibold text-sm">{d.name}</p>
           <p className="text-xs opacity-60">{d.revokedAt ? 'Отключён' : 'Зарегистрирован'} · Последняя связь: {d.lastSeenAt ? dateLocal(d.lastSeenAt) : 'пока не выходил на связь'}</p></div>
-        {!d.revokedAt && <button className="rounded-lg border border-red-500/30 text-red-500 text-sm px-3 py-2" onClick={()=>revokeRadioDevice(d)}>Отключить</button>}
+        {!d.revokedAt && <div className="flex flex-col sm:flex-row gap-2">
+          <button className="rounded-lg border border-current/20 text-sm px-3 py-2" onClick={()=>setPilot(d,!d.playbackAllowed)}>
+            {d.playbackAllowed ? 'Запретить тестовый эфир' : 'Разрешить тестовый эфир'}
+          </button>
+          <button className="rounded-lg border border-red-500/30 text-red-500 text-sm px-3 py-2" onClick={()=>revokeRadioDevice(d)}>Отключить</button>
+        </div>}
       </div>)}
     </section>}
     {(tab==='studio'||tab==='history') && <section className="rounded-2xl border border-current/10 p-6 space-y-2">

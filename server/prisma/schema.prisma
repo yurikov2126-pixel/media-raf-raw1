@@ -1332,4 +1332,5 @@ model RadioDevice {
   createdAt   DateTime @default(now())
   lastSeenAt  DateTime?
   revokedAt   DateTime?
+  playbackAllowed Boolean @default(false)
 }
