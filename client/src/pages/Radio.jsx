@@ -460,7 +460,7 @@ export default function Radio() {
           const day = new Date(new Date(date + 'T00:00:00+03:00').getTime()+index*86400000);
           const dayKey=moscowDate(day);
           const daySlots = slots.filter(slot => moscowDate(new Date(slot.startAt)) === dayKey);
-          return <section key={dayKey} className={"rounded-xl border p-3 min-h-32 "+(dragSlotId?'border-blue-500/40 bg-blue-500/5':'border-current/10 bg-white/5')}
+          return <section key={dayKey} data-radio-day={dayKey} className={"rounded-xl border p-3 min-h-32 "+(dragSlotId?'border-blue-500/40 bg-blue-500/5':'border-current/10 bg-white/5')}
             onDragOver={e=>{if(dragSlotId)e.preventDefault();}}
             onDrop={e=>{e.preventDefault();const slot=slots.find(s=>s.id===dragSlotId);setDragSlotId(null);if(slot)proposeMove(slot,dayKey);}}>
             <h3 className="text-sm font-semibold mb-3">{day.toLocaleDateString('ru-RU', { timeZone: STATION_ZONE, weekday: 'short', day: '2-digit', month: '2-digit' })}</h3>
@@ -470,7 +470,11 @@ export default function Radio() {
               onContextMenu={e=>{e.preventDefault();openSlotMenu(slot);}}
               onTouchStart={e=>startSlotTouch(slot,e)}
               onTouchMove={e=>{if(touchPoint.current && (Math.abs(e.touches[0].clientX-touchPoint.current.x)>12||Math.abs(e.touches[0].clientY-touchPoint.current.y)>12))cancelSlotTouch();}}
-              onTouchEnd={cancelSlotTouch} onTouchCancel={cancelSlotTouch}
+              onTouchEnd={e=>{const pos=e.changedTouches[0];const start=touchPoint.current;
+                const target=document.elementFromPoint(pos.clientX,pos.clientY)?.closest('[data-radio-day]');
+                cancelSlotTouch();
+                if(start && (Math.abs(pos.clientX-start.x)>18||Math.abs(pos.clientY-start.y)>18) && target?.dataset.radioDay && new Date(slot.startAt)>new Date())proposeMove(slot,target.dataset.radioDay);
+              }} onTouchCancel={cancelSlotTouch}
               onClick={()=>{if(!contextSlot)proposeMove(slot,dayKey);}}
               className="mb-2 cursor-grab select-none rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-2 active:cursor-grabbing"
               style={{userSelect:'none',WebkitUserSelect:'none'}}>
