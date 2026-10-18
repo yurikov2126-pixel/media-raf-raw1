@@ -18,6 +18,7 @@ import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
+import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
@@ -129,7 +130,7 @@ async function current() {
     id:blend.track.id,name:blend.track.name,index:blend.index,
     durationMs:blend.track.playDurationMs,offsetMs:0,seekMs:blend.seekMs,
     remainingMs:blend.remainingMs,blend:blend.mode==='BLEND'?{
-      nextId:blend.next.id,nextStorageKey:blend.next.storageKey,
+      nextId:blend.next.id,nextName:blend.next.name,nextStorageKey:blend.next.storageKey,
       nextSeekMs:blend.nextSeekMs,overlapMs:blend.overlapMs,
       blendPosition:blend.blendPosition,
     }:null,
@@ -249,10 +250,12 @@ async function run() {
     if(watchdog)clearInterval(watchdog);
     // Log only PCM that actually reached the persistent encoder, not planned selections.
     // The event measures generated playout, NOT acoustic proof at the listener.
-    if(emittedBytes>=48000*2*2 && cursor.track?.id){
-      try {await recordPlayoutEvent({id:asset.id,name:asset.name,mode:state.mode,
-        startedAt:playbackStartedAt,generatedMs:Math.round(emittedBytes/(48000*2*2)*1000),
-        slotId:cursor.slot?.id||null});}
+    const generatedMs=emittedBytes/(48000*2*2)*1000;
+    if(generatedMs>=1000){
+      const events=playbackAttributions({track:{id:asset.id,name:asset.name},
+        blend:usableBlend,generatedMs,startedAt:playbackStartedAt,
+        mode:cursor.status,slotId:cursor.slot?.id||null});
+      try {for(const event of events)await recordPlayoutEvent(event);}
       catch(error){state.lastError='Playback journal: '+error.message;}
     }
     if(!ended) child.kill('SIGTERM');
