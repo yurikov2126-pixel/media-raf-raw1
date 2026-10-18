@@ -18,6 +18,7 @@ import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
+import { chooseQueuedTrack } from '../src/lib/radioEventQueue.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -97,6 +98,29 @@ async function current() {
   const rotation=frozenRotation?.plan||null;
   const music=rotation?.items||catalog;
   const clock=rotation?nowMs-rotation.anchorMs:nowMs;
+  // Strict mode advances only after a decoder finishes. Nothing in the
+  // generated playback history changes the selection of an already playing track.
+  if(rotation && rotationSettings.strictCooldown && rotationSettings.cooldownMinutes>0){
+    const history=await readPlayoutHistory();
+    const selected=chooseQueuedTrack(music,history,rotationSettings.cooldownMinutes,nowMs);
+    const next=await prisma.radioScheduleSlot.findFirst({
+      where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+      select:{startAt:true},orderBy:{startAt:'asc'}
+    });
+    const until=Math.min(next?next.startAt.getTime():Infinity,rotation.endMs);
+    if(!selected || until-nowMs<150){
+      state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
+      return {cursor,asset:null};
+    }
+    state.queueStatus='PLAYING';
+    const index=music.findIndex(item=>item.id===selected.id);
+    return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
+      track:{id:selected.id,name:selected.name,index,seekMs:selected.cue.inMs,
+        offsetMs:0,durationMs:selected.playDurationMs},
+      until:Number.isFinite(until)?new Date(until).toISOString():null},
+      asset:selected};
+  }
+  state.queueStatus='TIMELINE';
   const dsp=await readAudioProcessing();
   const blend=dsp.crossfadeMs>0?crossfadePlan(music,clock,dsp.crossfadeMs):null;
   const track=blend?{
