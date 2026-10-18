@@ -181,7 +181,14 @@ export function initRadioStudio(io) {
         scheduledSourceReady:authority?.known===true?authority.sourceReady:false,
       });
       const verified=scheduleAwareReadiness({authority,readiness});
-      callback({ok:true,observedAt:Date.now(),publicLiveEnabled:process.env.RADIO_PUBLIC_LIVE_ENABLED==='true',publicLiveOnAir:workerStatus?.publicLive?.onAir===true,pilotEnabled:gatewayEnabled,opusEnabled:browserUplinkEnabled,
+      const apiPublicLiveEnabled=process.env.RADIO_PUBLIC_LIVE_ENABLED==='true';
+      const workerPublicLiveEnabled=workerStatus?.publicLiveEnabled===true;
+      const publicLiveReady=apiPublicLiveEnabled&&workerReachable&&workerPublicLiveEnabled&&activeGateway;
+      callback({ok:true,observedAt:Date.now(),
+        publicLiveEnabled:apiPublicLiveEnabled,
+        publicLiveWorkerEnabled:workerReachable?workerPublicLiveEnabled:null,
+        publicLiveReady,publicLiveOnAir:workerStatus?.publicLive?.onAir===true,
+        pilotEnabled:gatewayEnabled,opusEnabled:browserUplinkEnabled,
         pilotMode:!browserUplinkEnabled?'DISABLED':gatewayEnabled?'PCM_GATEWAY':'VALIDATION_ONLY',
         pilotBlocker:!browserUplinkEnabled?'OPUS_UPLINK_DISABLED':!gatewayEnabled?'PCM_GATEWAY_DISABLED':null,
         workerReachable,transportConnected:connected,decoderRunning:activeGateway,
@@ -204,7 +211,7 @@ export function initRadioStudio(io) {
         const snapshot=await observeHandover();
         const result=handoverDryRun.prepare({owner:socket.id,snapshot});
         callback({ ...result,mode:'DRY_RUN_ONLY',connectedToEncoder:false});
-      }catch{callback({ok:false,reason:'AUTHORITY_OR_WORKER_UNAVAILABLE',changeApplied:false});}
+      }catch{callback({ok:false,reason:'DRY_RUN_DEPENDENCY_UNAVAILABLE',changeApplied:false});}
     });
     socket.on('radio:studio:handover:verify',async ({proposalId}={},callback)=>{
       if(typeof callback!=='function')return;

@@ -315,13 +315,13 @@ export default function RadioLiveStudio() {
     {role==='presenter'&&<details className="rounded-xl border border-current/10 p-3">
       <summary className="cursor-pointer text-sm font-semibold">Расширенная проверка переключений</summary>
       <div className="mt-3 space-y-2">
-      <strong className="text-sm">Проверка переключения · без выхода в эфир</strong>
+      <strong className="text-sm">Старая диагностическая симуляция · не управляет публичным LIVE</strong>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={()=>runHandoverCheck('prepare')} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Подготовить переход</button>
         <button type="button" disabled={!handoverProposal} onClick={()=>runHandoverCheck('verify')} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-40">Повторная проверка</button>
       </div>
       <p className="text-xs opacity-75" role="status">{handoverResult}</p>
-      <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
+      <p className="text-xs opacity-60">Это отдельный режим dry-run, требующий диагностической авторизации расписания и PCM Worker. Его ошибки не блокируют реальный LIVE. Для выхода в эфир используйте отдельный блок ниже.</p>
       </div>
     </details>}
     {role==='presenter'&&<section className="space-y-3 rounded-xl border-2 border-rose-500/30 p-4">
@@ -329,10 +329,18 @@ export default function RadioLiveStudio() {
        <strong>Публичный эфир · MP3</strong>
        <span className={health?.publicLiveOnAir?'font-bold text-rose-500':'text-xs opacity-65'}>{health?.publicLiveOnAir?'● В ЭФИРЕ':'Auto-DJ / расписание'}</span>
       </div>
-      <p className="text-sm opacity-75">Подключение микрофона само по себе не переключает слушателей. Переключение действует только после подтверждения Worker.</p>
-      {!health?.publicLiveEnabled&&<p className="text-xs text-amber-600 dark:text-amber-400">Публичный LIVE не разрешён на сервере. Тестовый режим продолжает работать.</p>}
+      <p className="text-sm opacity-75">Подключение микрофона само по себе не переключает слушателей. После запуска Opus и подтверждения Worker нажмите «В эфир»; слушатели перейдут на голос.</p>
+      <div className="space-y-1 rounded-lg border border-current/10 p-3 text-xs" role="status">
+       <p>{health?.publicLiveEnabled?'✓ Публичный LIVE разрешён в API':'○ Публичный LIVE выключен в API'}</p>
+       <p>{health?.workerReachable?(health?.publicLiveWorkerEnabled?'✓ Публичный LIVE разрешён в Worker':'○ Публичный LIVE выключен в Worker'):'○ Нет ответа PCM Worker'}</p>
+       <p>{uplinkActive?'✓ Передача Opus запущена':'○ Передача Opus не запущена: нажмите «Тест передачи Opus» выше'}</p>
+       <p>{health?.decoderRunning?'✓ Серверный декодер работает':'○ Серверный декодер не подтверждён'}</p>
+       {health?.publicLiveOnAir&&<p className="font-semibold text-rose-500">● LIVE подтверждён сервером</p>}
+      </div>
+      {health?.publicLiveEnabled&&!health?.publicLiveWorkerEnabled&&health?.workerReachable&&<p className="text-xs text-amber-600 dark:text-amber-400">API разрешил LIVE, но Worker ещё не разрешил. Проверьте RADIO_PUBLIC_LIVE_ENABLED=true в окружении Worker и его перезапуск.</p>}
+      {!health?.publicLiveEnabled&&<p className="text-xs text-amber-600 dark:text-amber-400">Публичный LIVE не разрешён на API. Тестовый режим продолжает работать.</p>}
       <div className="flex flex-wrap gap-2">
-       <button type="button" disabled={publicLivePending||!health?.publicLiveEnabled||!uplinkActive||health?.publicLiveOnAir} onClick={()=>publicLiveAction('start')} className="rounded-xl bg-rose-600 px-4 py-2 font-semibold text-white disabled:opacity-40">● В эфир</button>
+       <button type="button" disabled={publicLivePending||!health?.publicLiveReady||!uplinkActive||health?.publicLiveOnAir} onClick={()=>publicLiveAction('start')} className="rounded-xl bg-rose-600 px-4 py-2 font-semibold text-white disabled:opacity-40">● В эфир</button>
        <button type="button" disabled={publicLivePending||!health?.publicLiveOnAir} onClick={()=>publicLiveAction('stop')} className="rounded-xl border border-current/20 px-4 py-2 font-semibold disabled:opacity-40">Завершить эфир / Auto-DJ</button>
       </div>
       {publicLiveError&&<p role="alert" className="text-sm text-rose-500">{publicLiveError}</p>}
