@@ -6,6 +6,7 @@ export const DEFAULT_AUDIO_PROCESSING=Object.freeze({
   loudnessTarget:-16,
   truePeak:-2,
   fadeMs:0,
+  crossfadeMs:0,
 });
 
 export function validateAudioProcessing(input) {
@@ -13,10 +14,11 @@ export function validateAudioProcessing(input) {
     typeof input.enabled!=='boolean' ||
     !Number.isInteger(input.loudnessTarget) || input.loudnessTarget < -24 || input.loudnessTarget > -12 ||
     !Number.isInteger(input.truePeak) || input.truePeak < -6 || input.truePeak > -1 ||
-    !Number.isInteger(input.fadeMs) || input.fadeMs < 0 || input.fadeMs > 3000)
+    !Number.isInteger(input.fadeMs) || input.fadeMs < 0 || input.fadeMs > 3000 ||
+    !Number.isInteger(input.crossfadeMs) || input.crossfadeMs < 0 || input.crossfadeMs > 5000)
     throw new TypeError('Недопустимые настройки обработки звука');
   return {enabled:input.enabled,loudnessTarget:input.loudnessTarget,
-    truePeak:input.truePeak,fadeMs:input.fadeMs};
+    truePeak:input.truePeak,fadeMs:input.fadeMs,crossfadeMs:input.crossfadeMs};
 }
 export async function readAudioProcessing(db=prisma) {
   const row=await db.setting.findUnique({where:{key:KEY}});
