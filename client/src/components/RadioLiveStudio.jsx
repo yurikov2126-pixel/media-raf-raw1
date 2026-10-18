@@ -9,6 +9,8 @@ export default function RadioLiveStudio() {
   const [state, setState] = useState({ live: false, listener: false });
   const [role, setRole] = useState(null);
   const [muted, setMuted] = useState(false);
+  const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
+  const recorderRef=useRef(null);
   const [error, setError] = useState('');
   const socketRef = useRef(null);
   const peerRef = useRef(null);
@@ -16,6 +18,7 @@ export default function RadioLiveStudio() {
   const audioRef = useRef(null);
   const roleRef = useRef(null);
   const stop = () => {
+    recorderRef.current?.stop();recorderRef.current=null;setUplinkInfo('Тестовый uplink остановлен');
     const socket = socketRef.current;
     socket?.emit('radio:studio:leave');
     peerRef.current?.close(); peerRef.current = null;
@@ -94,6 +97,33 @@ export default function RadioLiveStudio() {
       roleRef.current = 'listener'; setRole('listener'); setStatus('Ожидаем звуковой поток');
     });
   };
+  const startUplink=()=>{
+    const socket=socketRef.current,stream=streamRef.current;
+    if(roleRef.current!=='presenter'||!stream)return setError('Сначала подключите ведущего');
+    if(typeof MediaRecorder==='undefined'||!MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
+      return setError('Этот браузер не поддерживает WebM/Opus');
+    socket.emit('radio:studio:uplink:start',response=>{
+      if(!response?.ok)return setError(response?.error||'Тестовый uplink недоступен');
+      let seq=0,awaiting=false;
+      const recorder=new MediaRecorder(stream,{mimeType:'audio/webm;codecs=opus'});
+      recorderRef.current=recorder;
+      recorder.ondataavailable=async event=>{
+        if(!event.data.size||awaiting)return;
+        awaiting=true;
+        try{
+          const chunk=await event.data.arrayBuffer();
+          socket.emit('radio:studio:uplink:chunk',{chunk,sequence:seq},ack=>{
+            awaiting=false;
+            if(ack?.ok){seq++;setUplinkInfo('Принято WebM/Opus-блоков: '+seq+' (без выхода в эфир)');}
+            else{setError('Тестовый uplink: '+(ack?.reason||'пакет отклонён'));recorder.stop();}
+          });
+        }catch(e){awaiting=false;setError(e.message);recorder.stop();}
+      };
+      recorder.onstop=()=>{socket.emit('radio:studio:uplink:stop');recorderRef.current=null;};
+      recorder.start(250);
+      setUplinkInfo('Тестовый uplink: проверка WebM-блоков');
+    });
+  };
   const toggleMute = () => {
     streamRef.current?.getAudioTracks().forEach(track => { track.enabled = muted; });
     setMuted(!muted);
@@ -106,9 +136,11 @@ export default function RadioLiveStudio() {
     <div className="flex flex-wrap gap-2">
       {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 text-white px-4 py-2">Начать эфир с микрофона</button>
         <button type="button" onClick={listen} disabled={!state.live || state.listener} className="rounded-xl border border-current/20 px-4 py-2">Принимать эфир на этом устройстве</button></>}
+      {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={recorderRef.current?()=>recorderRef.current?.stop():startUplink}>{recorderRef.current?'Остановить тест Opus':'Тест передачи Opus'}</button>}
       {role === 'presenter' && <button type="button" onClick={toggleMute} className="rounded-xl border border-current/20 px-4 py-2">{muted ? 'Включить микрофон' : 'Выключить микрофон'}</button>}
       {role && <button type="button" onClick={stop} className="rounded-xl border border-red-500/30 px-4 py-2 text-red-500">Завершить тест</button>}
     </div>
+    {role==='presenter'&&<p className="text-xs opacity-65">{uplinkInfo}. Тестовые блоки проверяются и отбрасываются сервером; PCM и общий эфир не меняются.</p>}
     <audio ref={audioRef} autoPlay controls className="w-full"/>
     {role==='listener' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>audioRef.current?.play().catch(e=>setError(e.message))}>Включить звук</button>}
     <p className="text-xs opacity-60">Нужен HTTPS и разрешение микрофона. В разных сетях прямое соединение может не установиться без TURN-сервера.</p>
