@@ -8,7 +8,7 @@ export const DAYPARTS=[
   {id:'DAY',start:11,end:18},
   {id:'EVENING',start:18,end:24},
 ];
-export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:{
+export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:{
   NIGHT:['CALM','INSTRUMENTAL','OTHER'],
   MORNING:['ENERGY','POP','OTHER'],
   DAY:['POP','ENERGY','INSTRUMENTAL','OTHER'],
@@ -32,6 +32,11 @@ export function validateRotation(input) {
     if(!/^[a-z0-9_-]{1,120}$/i.test(id)||typeof name!=='string'||name.length>100)throw new TypeError('Некорректный исполнитель');
     if(name.trim())artists[id]=name.trim();
   }
+  const categoryPriority={};
+  for(const [category,value] of Object.entries(input.categoryPriority||{})){
+    if(!CATEGORIES.includes(category)||!Number.isInteger(value)||value<1||value>5)throw new TypeError('Приоритет категории: 1–5');
+    categoryPriority[category]=value;
+  }
   const dayparts={};
   for(const {id} of DAYPARTS){
     const choices=input.dayparts[id];
@@ -40,12 +45,12 @@ export function validateRotation(input) {
       throw new TypeError('Недопустимые категории периода '+id);
     dayparts[id]=choices;
   }
-  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,allowCooldownFallback:input.allowCooldownFallback,dayparts};
+  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,categoryPriority,cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,allowCooldownFallback:input.allowCooldownFallback,dayparts};
 }
 export async function readRotation(db=prisma){
   const row=await db.setting.findUnique({where:{key:KEY}});
   try {return validateRotation({...DEFAULT_ROTATION,...JSON.parse(row?.value||'{}')});}
-  catch {return {enabled:false,tags:{},artists:{},artistGap:0,cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
+  catch {return {enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
 }
 export async function writeRotation(data,db=prisma){
   const rotation=validateRotation(data);
@@ -110,7 +115,11 @@ export function rotationPlan(assets,config,nowMs=Date.now()){
   const pool=picked.length?picked:assets;
   const seed=dayKey+':'+part.id;
   // Stable pseudo-random order, independent of process restart and asset position.
-  const shuffled=[...pool].sort((a,b)=>hash(seed+a.id)-hash(seed+b.id)||a.id.localeCompare(b.id));
+  const shuffled=[...pool].sort((a,b)=>{
+    const scoreA=config.categoryPriority?.[config.tags[a.id]||'OTHER']||3;
+    const scoreB=config.categoryPriority?.[config.tags[b.id]||'OTHER']||3;
+    return scoreB-scoreA||hash(seed+a.id)-hash(seed+b.id)||a.id.localeCompare(b.id);
+  });
   const arranged=separateArtists(shuffled,config.artists,config.artistGap);
   const ordered=arranged.items;
   const duration=ordered.reduce((n,a)=>n+a.playDurationMs,0);

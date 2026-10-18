@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
-import { readRotation, writeRotation } from '../lib/radioRotation.js';
+import { readRotation, writeRotation, rotationPlan } from '../lib/radioRotation.js';
 import { readPlayoutHistory } from '../lib/radioPlayoutHistory.js';
 import { previewMusicQueue } from '../lib/radioMusicPlanner.js';
 import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.js';
@@ -457,6 +457,23 @@ router.get('/playout-history.csv', safe(async(_req,res)=>{
 router.get('/playout-history', safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   res.json({events:(await readPlayoutHistory()).slice(-50).reverse()});
+}));
+router.get('/rotation/preview', safe(async(_req,res)=>{
+  const settings=await readRotation();
+  const autoDj=await readAutoDjSettings();
+  const playlist=autoDj.playlistId?await prisma.radioPlaylist.findUnique({
+    where:{id:autoDj.playlistId},
+    include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+  }):null;
+  if(!playlist||playlist.status!=='APPROVED')return res.json({daypart:null,tracks:[]});
+  const assets=playlist.items.map(item=>item.asset)
+    .filter(asset=>Number.isInteger(asset.durationMs)&&asset.durationMs>0)
+    .map(asset=>({...asset,playDurationMs:asset.durationMs}));
+  const result=rotationPlan(assets,settings,Date.now());
+  res.setHeader('Cache-Control','no-store');
+  res.json({daypart:result?.daypart||null,tracks:(result?.items||assets).slice(0,15).map(a=>({
+    id:a.id,name:a.name,category:settings.tags[a.id]||'OTHER'
+  }))});
 }));
 router.get('/rotation', safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');

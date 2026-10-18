@@ -65,6 +65,22 @@ export default function RadioRotationSettings({token,assets=[]}){
      <p className="opacity-60">Это расчёт по сохранённым данным, не гарантия реального эфира.</p>
     </div>}
    </section>
+   <fieldset className="rounded-xl border border-current/15 p-3 space-y-2">
+    <legend className="text-sm font-semibold px-1">Приоритет категорий в музыкальной программе</legend>
+    <p className="text-xs opacity-60">1 — низкий, 5 — высокий. Композиции более высокого приоритета располагаются раньше в рамках периода; это пока не весовая случайная выборка.</p>
+    <div className="grid sm:grid-cols-2 gap-2">{Object.entries(categories).map(([id,label])=><label key={id} className="flex justify-between items-center gap-2 text-sm">{label}
+     <select className="rounded-lg border border-current/20 bg-transparent p-2" value={settings.categoryPriority?.[id]??3}
+      onChange={e=>setSettings(v=>({...v,categoryPriority:{...v.categoryPriority,[id]:Number(e.target.value)}}))}>
+      {[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}
+     </select></label>)}</div>
+   </fieldset>
+   <div className="rounded-xl border border-current/15 p-3 space-y-2">
+    <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm" onClick={async()=>{
+     try{setPreview(await api('/radio/rotation/preview',{token}));setError('');}catch(e){setError(e.message);}
+    }}>Предпросмотр очереди</button>
+    {preview&&<div className="space-y-1 text-xs"><p className="opacity-65">Текущий период: {partNames[preview.daypart]||'без ротации'}</p>
+     {preview.tracks.length?preview.tracks.map((t,i)=><p key={t.id+'-'+i}>{i+1}. {t.name} · {categories[t.category]}</p>):<p>Нет утверждённого плейлиста Авто-DJ</p>}</div>}
+   </div>
    <details className="rounded-xl border border-current/15 p-3"><summary className="cursor-pointer text-sm font-semibold">Назначить категории аудиозаписям ({assets.length})</summary>
     <div className="mt-3 max-h-72 space-y-2 overflow-auto">{assets.map(a=><label key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
      <span className="min-w-0 truncate">{a.name}</span>
