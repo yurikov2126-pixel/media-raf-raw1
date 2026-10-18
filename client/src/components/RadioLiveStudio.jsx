@@ -20,6 +20,7 @@ export default function RadioLiveStudio() {
   const [privatePreviewInfo,setPrivatePreviewInfo]=useState('');
   const previewUrlRef=useRef(null);
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
+  const [uplinkActive,setUplinkActive]=useState(false);
   const [health,setHealth]=useState(null);
   const [handoverResult,setHandoverResult]=useState('Проверка переключения ещё не проводилась');
   const [handoverProposal,setHandoverProposal]=useState(null);
@@ -36,7 +37,7 @@ export default function RadioLiveStudio() {
     setPrivatePreviewUrl(null);
     uplinkRef.current?.close();
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
-    recorderRef.current=null;setUplinkInfo('Тестовый uplink остановлен');
+    recorderRef.current=null;setUplinkActive(false);setUplinkInfo('Тестовый uplink остановлен');
     const socket = socketRef.current;
     socket?.emit('radio:studio:leave');
     peerRef.current?.close(); peerRef.current = null;
@@ -66,18 +67,15 @@ export default function RadioLiveStudio() {
   useEffect(() => {
     const socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, { auth: { token }, transports: ['websocket', 'polling'] });
     socketRef.current = socket;
-    socket.on('connect', () => { setStatus('Сервер подключён'); socket.emit('radio:studio:state', setState); });
+    const getHealth=()=>{if(!socket.connected)return;socket.timeout(3500).emit('radio:studio:health',(err,result)=>{
+      if(err||!result?.ok){setHealth(null);return;}setHealth(result);
+    });};
+    socket.on('connect', () => { setStatus('Сервер подключён'); socket.emit('radio:studio:state', setState); getHealth(); });
     socket.on('connect_error', () => setError('Не удалось подключить канал студии'));
-    socket.on('disconnect',()=>{setHealth(null);setHandoverProposal(null);});
-    const healthTimer=setInterval(()=>{
-      if(!socket.connected)return;
-      socket.timeout(2000).emit('radio:studio:health',(err,result)=>{
-        if(err||!result?.ok){setHealth(null);return;}
-        setHealth(result);
-      });
-    },2500);
+    socket.on('disconnect',()=>{setHealth(null);setUplinkActive(false);setHandoverProposal(null);});
+    const healthTimer=setInterval(getHealth,2500);
     socket.on('radio:studio:uplink:ended', ({ reason } = {}) => {
-      uplinkRef.current?.close();
+      uplinkRef.current?.close();setUplinkActive(false);
       if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
       setError(reason === 'UPLINK_LEASE_EXPIRED' ? 'Тестовый аудиоканал остановлен: истекло время ожидания ведущего' : 'Тестовый аудиоканал остановлен сервером');
     });
@@ -142,11 +140,13 @@ export default function RadioLiveStudio() {
   const stopUplink = () => {
     uplinkRef.current?.close();
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
-    recorderRef.current = null;
+    recorderRef.current = null;setUplinkActive(false);setUplinkInfo('Тестовый uplink остановлен');
   };
   const startUplink=()=>{
     const socket=socketRef.current,stream=streamRef.current;
     if(roleRef.current!=='presenter'||!stream)return setError('Сначала подключите ведущего');
+    if(health?.opusEnabled===false)return setError('Серверный Opus uplink отключён. Администратор должен включить RADIO_BROWSER_OPUS_UPLINK_ENABLED на тестовом API.');
+    if(health?.pilotEnabled===false)return setError('PCM-шлюз отключён. Для проверки серверного звука нужен RADIO_BROWSER_PCM_GATEWAY_ENABLED на API и RADIO_LIVE_PCM_INTAKE_ENABLED на Worker.');
     if(typeof MediaRecorder==='undefined'||!MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
       return setError('Этот браузер не поддерживает WebM/Opus');
     if (uplinkRef.current) return;
@@ -167,7 +167,7 @@ export default function RadioLiveStudio() {
       };
       const fail = reason => {
         setError('Тестовый uplink остановлен: ' + reason);
-        setUplinkInfo('Передача остановлена из-за ошибки');
+        setUplinkActive(false);setUplinkInfo('Передача остановлена из-за ошибки');
         close();
         if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
       };
@@ -203,8 +203,8 @@ export default function RadioLiveStudio() {
           } catch (e) { fail(e.message); }
         };
         recorder.onerror = () => fail('ошибка MediaRecorder');
-        recorder.onstop = () => { close(); recorderRef.current = null; setUplinkInfo('Тестовый uplink остановлен'); };
-        recorder.start(250);
+        recorder.onstop = () => { close(); recorderRef.current = null;setUplinkActive(false); setUplinkInfo('Тестовый uplink остановлен'); };
+        recorder.start(250);setUplinkActive(true);
         setUplinkInfo('Тестовый uplink: передача WebM/Opus с контролем очереди');
       } catch (e) { fail(e.message); }
     });
@@ -264,14 +264,17 @@ export default function RadioLiveStudio() {
       try{if(id)localStorage.setItem('radio:studio:input-id',id);else localStorage.removeItem('radio:studio:input-id');}catch{ /* optional local preference */ }
     }}/>
     {error && <p role="alert" className="text-red-500">{error}</p>}
+    {role==='presenter'&&health?.pilotEnabled===false&&<div role="alert" className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm">
+      <strong>Серверное PCM-прослушивание пока недоступно.</strong> {health?.opusEnabled===false?'Opus uplink выключен на API.':'Opus-валидация может работать, но FFmpeg/PCM-шлюз выключен на API.'} Для включения нужен администратор сервера. Уровни L/R показывают только локальный звук микрофона.
+    </div>}
     <div className="flex flex-wrap gap-2 rounded-xl border border-current/10 bg-white/60 p-4 dark:bg-slate-900/50">
       {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 text-white px-4 py-2">Начать эфир с микрофона</button>
         <button type="button" onClick={listen} disabled={!state.live || state.listener} className="rounded-xl border border-current/20 px-4 py-2">Принимать эфир на этом устройстве</button></>}
-      {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={recorderRef.current?stopUplink:startUplink}>{recorderRef.current?'Остановить тест Opus':'Тест передачи Opus'}</button>}
+      {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={uplinkActive?stopUplink:startUplink} disabled={!uplinkActive&&health?.pilotEnabled===false} title={!uplinkActive&&health?.pilotEnabled===false?'Требуется настройка PCM-шлюза на сервере':undefined}>{uplinkActive?'Остановить тест Opus':'Тест передачи Opus'}</button>}
       {role === 'presenter' && <button type="button" onClick={toggleMute} className="rounded-xl border border-current/20 px-4 py-2">{muted ? 'Включить микрофон' : 'Выключить микрофон'}</button>}
       {role && <button type="button" onClick={stop} className="rounded-xl border border-red-500/30 px-4 py-2 text-red-500">Завершить тест</button>}
     </div>
-    {role==='presenter'&&<p className="text-xs opacity-65">{uplinkInfo}. Тестовые блоки проверяются и отбрасываются сервером; PCM и общий эфир не меняются.</p>}
+    {role==='presenter'&&<p className="text-xs opacity-65">{uplinkInfo}. {health?.decoderRunning?'Декодированный PCM доступен только изолированному Worker; основной эфир не меняется.':'Без активного PCM-шлюза серверное прослушивание невозможно.'}</p>}
     <details className="rounded-xl border border-current/10 p-3">
       <summary className="cursor-pointer text-sm font-semibold">Техническая диагностика шлюза</summary>
       <div className="mt-3 space-y-2 rounded-lg bg-black/5 p-3 dark:bg-white/5" aria-live="polite">
@@ -307,13 +310,13 @@ export default function RadioLiveStudio() {
     </details>}
     <RadioStudioTrialChecklist health={health} role={role}/>
     <div className="grid gap-3 xl:grid-cols-2">
-    {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
+    {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={uplinkActive&&health?.decoderRunning===true}/>}
     {role==='presenter'&&<RadioPrivateLiveMonitor mode="mix" socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
     </div>
     {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 bg-white/50 p-4 dark:bg-slate-900/50">
       <strong className="text-sm">Приватное PCM-прослушивание · без выхода в эфир</strong>
       <p className="text-xs opacity-65">Запросите последний фрагмент реального входящего звука (до 1 секунды). Используйте наушники — возможна обратная связь через USB.</p>
-      <button type="button" onClick={requestPrivatePreview} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Получить тестовый WAV-фрагмент</button>
+      <button type="button" disabled={!uplinkActive||health?.decoderRunning!==true} onClick={requestPrivatePreview} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Получить тестовый WAV-фрагмент</button>
       <p role="status" className="text-xs opacity-70">{privatePreviewInfo}</p>
       {privatePreviewUrl&&<audio src={privatePreviewUrl} controls className="w-full"/>}
     </div>}

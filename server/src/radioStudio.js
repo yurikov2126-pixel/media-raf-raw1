@@ -154,7 +154,9 @@ export function initRadioStudio(io) {
         scheduledSourceReady:authority?.known===true?authority.sourceReady:false,
       });
       const verified=scheduleAwareReadiness({authority,readiness});
-      callback({ok:true,observedAt:Date.now(),pilotEnabled:gatewayEnabled,
+      callback({ok:true,observedAt:Date.now(),pilotEnabled:gatewayEnabled,opusEnabled:browserUplinkEnabled,
+        pilotMode:!browserUplinkEnabled?'DISABLED':gatewayEnabled?'PCM_GATEWAY':'VALIDATION_ONLY',
+        pilotBlocker:!browserUplinkEnabled?'OPUS_UPLINK_DISABLED':!gatewayEnabled?'PCM_GATEWAY_DISABLED':null,
         workerReachable,transportConnected:connected,decoderRunning:activeGateway,
         ...verified,blockers:[...new Set([...verified.blockers,
           ...(!workerReachable?['WORKER_UNAVAILABLE']:[])])],
