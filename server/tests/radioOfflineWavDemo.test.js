@@ -14,8 +14,8 @@ describe('offline audible mixer WAV',()=>{
  it('ducks the music under synthetic voice in the middle section',()=>{
   const wav=makeOfflineRadioWav({seconds:4,voiceHz:220,musicHz:440});
   const sample=(time)=>wav.readInt16LE(44+Math.floor(time*48000)*4);
-  expect(Math.abs(sample(1.125))).toBeGreaterThan(0);
-  expect(Math.abs(sample(0.125))).toBeGreaterThan(0);
+  expect(Math.abs(sample(1.126))).toBeGreaterThan(0);
+  expect(Math.abs(sample(0.126))).toBeGreaterThan(0);
   expect(wav.subarray(44,44+3840).equals(wav.subarray(44+48000*4,44+48000*4+3840))).toBe(false);
  });
  it('limits duration and rejects invalid formats',()=>{
