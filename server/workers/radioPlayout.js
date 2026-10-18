@@ -15,6 +15,7 @@ import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
+import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -76,7 +77,17 @@ async function current() {
   for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
-  const track=cueCursor(catalog,nowMs);
+  const dsp=await readAudioProcessing();
+  const blend=dsp.crossfadeMs>0?crossfadePlan(catalog,nowMs,dsp.crossfadeMs):null;
+  const track=blend?{
+    id:blend.track.id,name:blend.track.name,index:blend.index,
+    durationMs:blend.track.playDurationMs,offsetMs:0,seekMs:blend.seekMs,
+    remainingMs:blend.remainingMs,blend:blend.mode==='BLEND'?{
+      nextId:blend.next.id,nextStorageKey:blend.next.storageKey,
+      nextSeekMs:blend.nextSeekMs,overlapMs:blend.overlapMs,
+      blendPosition:blend.blendPosition,
+    }:null,
+  }:cueCursor(catalog,nowMs);
   const next=await prisma.radioScheduleSlot.findFirst({
     where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
     select:{startAt:true},orderBy:{startAt:'asc'}
@@ -107,7 +118,7 @@ async function run() {
     }
     state.mode=cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;
     const boundary=cursor.status==='AUTO_DJ'?(cursor.until?Date.parse(cursor.until):Infinity):Date.parse(cursor.slot.endAt);
-    const remaining=Math.max(0,Math.min(cursor.track.durationMs-cursor.track.offsetMs,boundary-Date.now()));
+    const remaining=Math.max(0,Math.min(cursor.track.remainingMs??(cursor.track.durationMs-cursor.track.offsetMs),boundary-Date.now()));
     if(remaining<150) continue;
     const filename=path.join(assetsRoot,path.basename(asset.storageKey));
     try {await fs.access(filename);} catch(error) {
@@ -119,13 +130,32 @@ async function run() {
     // A new per-track decoder receives the latest settings. The shared encoder
     // remains alive and scheduled boundaries keep priority over DSP effects.
     let dsp;
-    try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0};}
-    state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs};
+    try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0,crossfadeMs:0};}
+    state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs,crossfadeMs:dsp.crossfadeMs};
     const filter=audioProcessingFilter(dsp,remaining/1000);
-    decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
-      '-ss',String((cursor.track.seekMs??cursor.track.offsetMs)/1000),'-i',filename,
-      '-t',String(remaining/1000),'-vn',...(filter?['-af',filter]:[]),'-f','s16le','-ac','2','-ar','48000','pipe:1'],
-      {stdio:['ignore','pipe','pipe']});
+    const blend=cursor.status==='AUTO_DJ'?cursor.track.blend:null;
+    let args;
+    if(blend){
+      const nextFilename=path.join(assetsRoot,path.basename(blend.nextStorageKey));
+      const fullSeconds=blend.overlapMs/1000;
+      const blendStart=blend.blendPosition/1000;
+      // Build the complete overlap and discard its elapsed portion. Starting the
+      // filter at zero would otherwise restart gain curves after Worker recovery.
+      const firstSeek=(cursor.track.seekMs-blend.blendPosition)/1000;
+      const secondSeek=(blend.nextSeekMs-blend.blendPosition)/1000;
+      args=['-hide_banner','-loglevel','error','-nostdin','-re',
+        '-ss',String(firstSeek),'-t',String(fullSeconds),'-i',filename,
+        '-re','-ss',String(secondSeek),'-t',String(fullSeconds),'-i',nextFilename,
+        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1=tri:c2=tri[m]',
+        '-map','[m]','-ss',String(blendStart),'-t',String(remaining/1000),
+        '-f','s16le','-ac','2','-ar','48000','pipe:1'];
+    } else {
+      args=['-hide_banner','-loglevel','error','-nostdin','-re',
+        '-ss',String((cursor.track.seekMs??cursor.track.offsetMs)/1000),'-i',filename,
+        '-t',String(remaining/1000),'-vn',...(filter?['-af',filter]:[]),
+        '-f','s16le','-ac','2','-ar','48000','pipe:1'];
+    }
+    decoder=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});
     const child=decoder;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.

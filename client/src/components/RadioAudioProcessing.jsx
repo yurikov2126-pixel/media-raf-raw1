@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 
 export default function RadioAudioProcessing({token}) {
-  const [settings,setSettings]=useState({enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0});
+  const [settings,setSettings]=useState({enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0,crossfadeMs:0});
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
@@ -30,6 +30,12 @@ export default function RadioAudioProcessing({token}) {
         <label className="block text-sm space-y-1"><span>Потолок пиков (dBTP)</span><select className="w-full rounded-xl border border-current/20 bg-transparent p-2.5" value={settings.truePeak} onChange={e=>setSettings(s=>({...s,truePeak:Number(e.target.value)}))}>{[-6,-5,-4,-3,-2,-1].map(v=><option key={v} value={v}>{v} dBTP</option>)}</select></label>
         <label className="block text-sm space-y-1"><span>Fade в начале и конце</span><select className="w-full rounded-xl border border-current/20 bg-transparent p-2.5" value={settings.fadeMs} onChange={e=>setSettings(s=>({...s,fadeMs:Number(e.target.value)}))}>{[0,250,500,1000,1500,2000,3000].map(v=><option key={v} value={v}>{v===0?'Выключен':v+' мс'}</option>)}</select></label>
       </div>
+      <label className="block max-w-xs text-sm space-y-1"><span>Crossfade Авто-DJ</span>
+        <select className="w-full rounded-xl border border-current/20 bg-transparent p-2.5" value={settings.crossfadeMs??0} onChange={e=>setSettings(v=>({...v,crossfadeMs:Number(e.target.value)}))}>
+          {[0,500,1000,1500,2000,3000,5000].map(v=><option key={v} value={v}>{v===0?'Выключен':(v/1000)+' с'}</option>)}
+        </select>
+      </label>
+      <p className="text-xs opacity-60">Crossfade перекрывает соседние композиции Авто-DJ. Для запланированных передач перекрытие отключено; обработка двумя источниками требует дополнительного тестирования.</p>
       <p className="text-xs opacity-60">Fade — затухание отдельного трека, не crossfade между треками. Точность LUFS в однопроходном режиме приблизительная; исходные аудиофайлы не изменяются.</p>
       {error&&<p role="alert" className="text-sm text-red-500">{error}</p>}
       {success&&<p role="status" className="text-sm text-emerald-500">{success}</p>}
