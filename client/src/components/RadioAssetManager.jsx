@@ -7,7 +7,7 @@ const keys=['title','artist','album','genre','year','track','composer','comment'
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
 export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player}){
  const [folders,setFolders]=useState([]),[folder,setFolder]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('name');
- const [view,setView]=useState('list'),[selected,setSelected]=useState(null),[tags,setTags]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [view,setView]=useState('list'),[selected,setSelected]=useState(null),[moveItem,setMoveItem]=useState(null),[moveTarget,setMoveTarget]=useState(''),[tags,setTags]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const request=(url,options)=>api('/radio'+url,{token,...options});
  const reload=async()=>{try{setFolders((await request('/asset-folders')).folders||[]);setError('');}catch(e){setError(e.message);}};
  useEffect(()=>{void reload();},[token]);
@@ -22,7 +22,8 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  },[assets,folder,query,sort]);
  const operation=async(fn)=>{setBusy(true);setError('');try{await fn();await refresh();await reload();}catch(e){setError(e.message||'Не удалось выполнить действие');}finally{setBusy(false);}};
  const addFolder=()=>{const title=window.prompt('Название папки');if(title?.trim())void operation(()=>request('/asset-folders',{method:'POST',body:{name:title.trim(),parentId:folder}}));};
- const moveAsset=a=>{const target=window.prompt('Переместить в папку: введите ID папки из списка или оставьте пустым для корня','');if(target===null)return;void operation(()=>request('/assets/'+a.id+'/organize',{method:'PATCH',body:{folderId:target.trim()||null}}));};
+ const moveAsset=a=>{setMoveItem(a);setMoveTarget(a.folderId||'');};
+ const saveMove=()=>{if(!moveItem)return;void operation(async()=>{await request('/assets/'+moveItem.id+'/organize',{method:'PATCH',body:{folderId:moveTarget||null}});setMoveItem(null);});};
  const openTags=a=>{setSelected(a);setTags(Object.fromEntries(keys.map(k=>[k,a.tags?.[k]||''])));};
  const saveTags=()=>{if(!selected)return;void operation(async()=>{await request('/assets/'+selected.id+'/tags',{method:'PATCH',body:{tags}});setSelected(null);});};
  const rescan=a=>void operation(()=>request('/assets/'+a.id+'/rescan-tags',{method:'POST'}));
@@ -39,8 +40,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     <p className="px-2 py-2 text-xs uppercase tracking-widest opacity-55">Папки</p>
     <button className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${!folder?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} onClick={()=>setFolder(null)}>▣ Вся библиотека / корень</button>
     {folders.map(f=><button key={f.id} onClick={()=>setFolder(f.id)} className={`mt-1 block w-full truncate rounded-lg px-3 py-2 text-left text-sm ${folder===f.id?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} title={f.name}>▸ {f.name}</button>)}
-    <p className="mt-5 px-2 text-xs opacity-55">ID папки для перемещения: нажмите на папку</p>
-    {folder&&<button type="button" className="mx-2 mt-2 rounded-lg border border-current/15 px-2 py-1 text-xs" onClick={()=>navigator.clipboard?.writeText(folder)}>Копировать ID папки</button>}
+
    </aside>
    <div className="min-w-0 space-y-3">
     <div className="rounded-xl border border-current/10 bg-white/50 p-3 dark:bg-slate-900/40">
@@ -76,6 +76,20 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     {player}
    </div>
   </div>
+  {moveItem&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={()=>setMoveItem(null)}>
+   <div role="dialog" aria-modal="true" aria-label="Перемещение аудиофайла" onClick={e=>e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-5 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white">
+    <h3 className="text-lg font-bold">Переместить запись</h3>
+    <p className="mt-2 truncate text-sm opacity-65">{name(moveItem)}</p>
+    <label className="mt-4 block text-sm font-semibold">Папка назначения
+     <select value={moveTarget} onChange={e=>setMoveTarget(e.target.value)} className="mt-2 w-full rounded-xl border border-current/15 bg-transparent p-3">
+      <option value="">Корень аудиотеки</option>
+      {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+     </select>
+    </label>
+    <div className="mt-5 flex gap-2"><button disabled={busy} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm text-white" onClick={saveMove}>Переместить</button>
+     <button className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setMoveItem(null)}>Отмена</button></div>
+   </div>
+  </div>}
   {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={()=>setSelected(null)}>
    <div role="dialog" aria-modal="true" aria-label="Редактор метаданных" onClick={e=>e.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white">
     <div className="flex items-center justify-between"><h3 className="text-xl font-bold">Метаданные / ID3</h3><button onClick={()=>setSelected(null)} aria-label="Закрыть">✕</button></div>
