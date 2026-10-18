@@ -545,6 +545,13 @@ export default function Radio() {
           <label className="block space-y-1 text-sm">Новое начало · Москва UTC+3
             <input type="datetime-local" required className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/>
           </label>
+          <div className="flex flex-wrap gap-2" aria-label="Шаг времени">
+            {[0,15,30,45].map(minute=><button type="button" key={minute}
+              className="rounded-lg border border-current/20 px-3 py-2 text-xs"
+              onClick={()=>setMoveTime(current=>current?.slice(0,14)+String(minute).padStart(2,'0'))}>
+              :{String(minute).padStart(2,'0')}
+            </button>)}
+          </div>
           <p className="text-xs opacity-65">Продолжительность сохраняется. Пересечения с другими эфирами запрещены.</p>
           <div className="flex gap-2"><button type="submit" className={btn}>Сохранить перенос</button>
             <button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setMovingSlot(null)}>Отмена</button></div>
