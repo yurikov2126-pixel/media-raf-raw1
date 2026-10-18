@@ -31,6 +31,10 @@ export default function Radio() {
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
   const [movingSlot,setMovingSlot] = useState(null);
+  const [copyingSlot,setCopyingSlot] = useState(null);
+  const [contextSlot,setContextSlot] = useState(null);
+  const touchTimer=useRef(null);
+  const touchPoint=useRef(null);
   const [moveTime,setMoveTime] = useState('');
   const [dragSlotId,setDragSlotId] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
@@ -215,6 +219,28 @@ export default function Radio() {
       // The shared player persists across track changes.
       requestAnimationFrame(() => playerRef.current?.play().catch(() => {}));
     } catch (e) { toast.error(e.message); }
+  };
+  const openSlotMenu = (slot) => { setContextSlot(slot); setMovingSlot(null); setCopyingSlot(null); };
+  const startSlotTouch = (slot,e) => {
+    if(e.touches.length!==1)return;
+    touchPoint.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    window.clearTimeout(touchTimer.current);
+    touchTimer.current=window.setTimeout(()=>{openSlotMenu(slot);touchTimer.current=null;},550);
+  };
+  const cancelSlotTouch = () => {window.clearTimeout(touchTimer.current);touchTimer.current=null;touchPoint.current=null;};
+  useEffect(()=>()=>window.clearTimeout(touchTimer.current),[]);
+  const proposeCopy = slot => {
+    setContextSlot(null);setCopyingSlot(slot);setMovingSlot(null);
+    const time=new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
+    setMoveTime(moscowDate(new Date(Date.now()+86400000))+'T'+time);
+  };
+  const saveCopy = async e => {
+    e.preventDefault();
+    if(!copyingSlot||!moveTime)return;
+    try {
+      await call('/schedule',{method:'POST',body:{playlistId:copyingSlot.playlistId,startLocal:moveTime}});
+      setCopyingSlot(null);await refresh();toast.success('Копия передачи добавлена в сетку');
+    }catch(error){toast.error(error.message);}
   };
   const proposeMove = (slot, day) => {
     if (new Date(slot.startAt).getTime() <= Date.now()) return;
@@ -441,17 +467,40 @@ export default function Radio() {
             {daySlots.map(slot => <div key={slot.id} draggable={new Date(slot.startAt)>new Date()}
               onDragStart={e=>{setDragSlotId(slot.id);e.dataTransfer.effectAllowed='move';}}
               onDragEnd={()=>setDragSlotId(null)}
-              onClick={()=>proposeMove(slot,dayKey)}
+              onContextMenu={e=>{e.preventDefault();openSlotMenu(slot);}}
+              onTouchStart={e=>startSlotTouch(slot,e)}
+              onTouchMove={e=>{if(touchPoint.current && (Math.abs(e.touches[0].clientX-touchPoint.current.x)>12||Math.abs(e.touches[0].clientY-touchPoint.current.y)>12))cancelSlotTouch();}}
+              onTouchEnd={cancelSlotTouch} onTouchCancel={cancelSlotTouch}
+              onClick={()=>{if(!contextSlot)proposeMove(slot,dayKey);}}
               className="mb-2 cursor-grab select-none rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-2 active:cursor-grabbing"
               style={{userSelect:'none',WebkitUserSelect:'none'}}>
               <p className="text-xs font-bold">{new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p>
               <p className="text-xs break-words">{slot.playlist.name}</p>
+              <button type="button" className="mt-2 rounded-md border border-current/20 px-2 py-1 text-xs" aria-label={'Действия с передачей '+slot.playlist.name} onClick={e=>{e.stopPropagation();openSlotMenu(slot);}}>⋯ Действия</button>
               <p className="mt-1 text-[10px] opacity-60">{new Date(slot.startAt)>new Date()?'Перенести ↗':'Эфир прошёл'}</p>
             </div>)}
             {!daySlots.length && <p className="text-xs opacity-40">Свободно</p>}
           </section>;
         })}
       </div>
+      {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
+        <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
+          <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
+          <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
+          <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
+          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
+          <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>setContextSlot(null)}>Закрыть</button>
+        </div>
+      </div>}
+      {copyingSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3">
+        <form onSubmit={saveCopy} className="w-full max-w-md space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 dark:bg-slate-900 dark:text-white">
+          <h3 className="text-lg font-semibold">Копирование передачи</h3>
+          <p className="text-sm opacity-70">{copyingSlot.playlist.name}</p>
+          <label className="block space-y-1 text-sm">Дата и время копии · Москва UTC+3<input required type="datetime-local" className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/></label>
+          <p className="text-xs opacity-60">Оригинальная передача сохранится. Занятые интервалы копировать нельзя.</p>
+          <div className="flex gap-2"><button className={btn}>Создать копию</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>setCopyingSlot(null)}>Отмена</button></div>
+        </form>
+      </div>}
       {movingSlot && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveMove} className="w-full max-w-md rounded-2xl border border-current/15 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-3">
           <h3 className="text-lg font-semibold">Перенести передачу</h3>
