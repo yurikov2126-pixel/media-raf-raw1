@@ -129,7 +129,8 @@ def run(args, token):
     next_sync=0.0
     result_lock=threading.Lock()
     results=[]
-    sync_in_progress=False
+    sync_running=threading.Event()
+    probe_running=threading.Event()
     network_ok=False
     denied=False
 
@@ -140,6 +141,8 @@ def run(args, token):
                 results.append(fresh)
         except (OSError,ValueError,KeyError,RuntimeError) as error:
             print('SYNC_FAILED',type(error).__name__,flush=True)
+        finally:
+            sync_running.clear()
 
     def probe():
         nonlocal network_ok,denied,last_authorized
@@ -156,6 +159,8 @@ def run(args, token):
             network_ok=False
         except (OSError,ValueError,RuntimeError):
             network_ok=False
+        finally:
+            probe_running.clear()
 
     print('WINDOWS HEADPHONES PILOT; NO AMP/ESP32. Stop with Ctrl+C.',flush=True)
     try:
@@ -165,15 +170,15 @@ def run(args, token):
                 if results:
                     snapshot=results[-1]
                     results.clear()
-                    sync_in_progress=False
             if denied or now-last_authorized>args.offline_grace:
                 print('PLAYBACK_PERMISSION_EXPIRED',flush=True)
                 break
-            if now>=last_probe:
-                probe()
-                last_probe=time.monotonic()+5
-            if network_ok and now>=next_sync and not sync_in_progress:
-                sync_in_progress=True
+            if now>=last_probe and not probe_running.is_set():
+                probe_running.set()
+                threading.Thread(target=probe,daemon=True).start()
+                last_probe=now+5
+            if network_ok and now>=next_sync and not sync_running.is_set():
+                sync_running.set()
                 threading.Thread(target=refresh,daemon=True).start()
                 next_sync=now+60
             if primary is None and network_ok:
