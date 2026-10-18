@@ -8,6 +8,7 @@ import 'dotenv/config';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
@@ -25,6 +26,7 @@ const state = { mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:n
 let decoder = null;
 let encoder = null;
 let stopping = false;
+const failedAutoDjAssets = new Map();
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
@@ -69,7 +71,8 @@ async function current() {
     where:{id:settings.playlistId},
     include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
   });
-  const catalog=selectAutoDjAssets(playlist);
+  for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
+  const catalog=selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id));
   if(!catalog.length)return {cursor,asset:null};
   const track=autoDjCursor(catalog,nowMs);
   const next=await prisma.radioScheduleSlot.findFirst({
@@ -105,6 +108,12 @@ async function run() {
     const remaining=Math.max(0,Math.min(cursor.track.durationMs-cursor.track.offsetMs,boundary-Date.now()));
     if(remaining<150) continue;
     const filename=path.join(assetsRoot,path.basename(asset.storageKey));
+    try {await fs.access(filename);} catch(error) {
+      state.lastError='Audio missing: '+asset.id;
+      if(cursor.status==='AUTO_DJ')failedAutoDjAssets.set(asset.id,Date.now()+300000);
+      await new Promise(resolve=>setTimeout(resolve,250));
+      continue;
+    }
     decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
       '-ss',String(cursor.track.offsetMs/1000),'-i',filename,
       '-t',String(remaining/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
@@ -132,10 +141,10 @@ async function run() {
       }catch(error){state.lastError=error.message;}
       finally{polling=false;}
     },3000):null;
-    let ended=false;
+    let ended=false, exitCode=null;
     child.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
     child.on('error',e=>{state.lastError=e.message;});
-    child.on('close',()=>{ended=true;});
+    child.on('close',code=>{ended=true;exitCode=code;});
     try {
       for await(const chunk of child.stdout) {
         if(stopping) break;
@@ -145,6 +154,8 @@ async function run() {
     if(watchdog)clearInterval(watchdog);
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
+    if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)
+      failedAutoDjAssets.set(asset.id,Date.now()+300000);
   }
 }
 
