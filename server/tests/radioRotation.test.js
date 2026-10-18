@@ -81,3 +81,25 @@ describe('radio artist repeat protection',()=>{
   expect(result.artists).toEqual({});
  });
 });
+
+describe('category ordering priorities',()=>{
+ const catalog=[
+  {id:'calm',playDurationMs:60000},
+  {id:'energy',playDurationMs:60000},
+  {id:'pop',playDurationMs:60000}
+ ];
+ const rotation={...DEFAULT_ROTATION,enabled:true,tags:{calm:'CALM',energy:'ENERGY',pop:'POP'},
+  categoryPriority:{ENERGY:5,POP:3,CALM:1}};
+ it('prioritizes high categories within a daypart without dropping assets',()=>{
+  const plan=rotationPlan(catalog,rotation,Date.parse('2026-10-18T12:00:00Z'));
+  expect(plan.items.map(x=>x.id)).toEqual(['energy','pop']);
+ });
+ it('rejects invalid priorities',()=>{
+  expect(()=>validateRotation({...rotation,categoryPriority:{ENERGY:6}})).toThrow();
+  expect(()=>validateRotation({...rotation,categoryPriority:{UNLISTED:3}})).toThrow();
+ });
+ it('preserves legacy configurations without priority field',()=>{
+  const legacy={...DEFAULT_ROTATION};delete legacy.categoryPriority;
+  expect(validateRotation(legacy).categoryPriority).toEqual({});
+ });
+});

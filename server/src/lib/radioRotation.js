@@ -8,7 +8,7 @@ export const DAYPARTS=[
   {id:'DAY',start:11,end:18},
   {id:'EVENING',start:18,end:24},
 ];
-export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,dayparts:{
+export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},dayparts:{
   NIGHT:['CALM','INSTRUMENTAL','OTHER'],
   MORNING:['ENERGY','POP','OTHER'],
   DAY:['POP','ENERGY','INSTRUMENTAL','OTHER'],
@@ -29,6 +29,11 @@ export function validateRotation(input) {
     if(!/^[a-z0-9_-]{1,120}$/i.test(id)||typeof name!=='string'||name.length>100)throw new TypeError('Некорректный исполнитель');
     if(name.trim())artists[id]=name.trim();
   }
+  const categoryPriority={};
+  for(const [category,value] of Object.entries(input.categoryPriority||{})){
+    if(!CATEGORIES.includes(category)||!Number.isInteger(value)||value<1||value>5)throw new TypeError('Приоритет категории: 1–5');
+    categoryPriority[category]=value;
+  }
   const dayparts={};
   for(const {id} of DAYPARTS){
     const choices=input.dayparts[id];
@@ -37,12 +42,12 @@ export function validateRotation(input) {
       throw new TypeError('Недопустимые категории периода '+id);
     dayparts[id]=choices;
   }
-  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,dayparts};
+  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,categoryPriority,dayparts};
 }
 export async function readRotation(db=prisma){
   const row=await db.setting.findUnique({where:{key:KEY}});
   try {return validateRotation({...DEFAULT_ROTATION,...JSON.parse(row?.value||'{}')});}
-  catch {return {enabled:false,tags:{},artists:{},artistGap:0,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
+  catch {return {enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
 }
 export async function writeRotation(data,db=prisma){
   const rotation=validateRotation(data);
