@@ -4,6 +4,7 @@ import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
+import RadioSourceControl from '../components/RadioSourceControl.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
@@ -279,6 +280,7 @@ export default function Radio() {
     </header>
     {tab === 'home' ? <>
       <RadioBroadcastDashboard token={token} />
+      <RadioSourceControl token={token} />
       <RadioAutoDjSettings token={token} playlists={playlists} />
       <RadioRotationSettings token={token} assets={assets} />
       <RadioJingleSettings token={token} assets={assets} />
