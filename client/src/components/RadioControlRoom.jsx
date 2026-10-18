@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../api/client.js';
+import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 const z='Europe/Moscow';
 const displayTime=value=>value?new Date(value).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit'}):'—';
 const duration=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
@@ -85,6 +86,7 @@ export default function RadioControlRoom({token,onOpen}){
       <span className="text-xl" aria-hidden>{icon}</span>{label}<span className="ml-auto opacity-40">→</span></button>)}
    </div>
   </section>
+  <RadioUpcomingQueue entries={data?.upcoming} onSchedule={()=>onOpen('schedule')}/>
   <div className="text-right"><button type="button" onClick={()=>setDetails(v=>!v)} className="rounded-xl border border-current/10 px-4 py-2 text-xs opacity-75">{details?'Скрыть сведения':'Дополнительные сведения о состоянии'}</button></div>
   {details&&<section className="rounded-xl border border-current/10 p-4 text-sm"><p>Статус: {data?.cursor?.status||'—'} · Поток: {data?.stream?.status||'—'} · Воспроизведение: {worker?.mode||'—'}</p><p className="mt-2 opacity-65">Данные поступают от существующих API. Мониторинг не включает эфир и не управляет усилителем.</p></section>}
  </div>;
