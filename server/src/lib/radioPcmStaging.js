@@ -20,15 +20,15 @@ export class RadioPcmStaging {
       !Number.isSafeInteger(frameIndex)||frameIndex<0||!Number.isFinite(nowMs))
       return this.reject('INVALID_PCM');
     if(this.lastAt!==null&&(nowMs<this.lastAt||nowMs-this.lastAt>this.staleAfterMs)){
-      this.reset();this.discontinuities++; // never join unrelated epochs
+      this.clearQueue();this.discontinuities++; // never join unrelated epochs
       return this.reject('STALE_PCM_EPOCH');
     }
     if(this.nextIndex!==null && frameIndex!==this.nextIndex){
-      this.reset();this.discontinuities++;
+      this.clearQueue();this.discontinuities++;
       return this.reject('PCM_DISCONTINUITY');
     }
     if(this.queue.length>=this.maxFrames){
-      this.overflows++;this.reset();
+      this.overflows++;this.clearQueue();
       return this.reject('PCM_OVERFLOW');
     }
     this.queue.push({pcm:Buffer.from(pcm),frameIndex});
@@ -36,6 +36,7 @@ export class RadioPcmStaging {
     this.lastAt=nowMs;this.accepted++;
     return {accepted:true,bufferedMs:this.queue.length*this.frameMs};
   }
+  clearQueue(){this.queue=[];this.nextIndex=null;this.lastAt=null;}
   reject(reason){this.rejected++;return {accepted:false,reason};}
   // Explicit dequeue is for isolated harnesses only. Do not wire to on-air output.
   shift(){return this.queue.shift()||null;}
