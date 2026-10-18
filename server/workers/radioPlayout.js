@@ -130,8 +130,8 @@ async function run() {
     // A new per-track decoder receives the latest settings. The shared encoder
     // remains alive and scheduled boundaries keep priority over DSP effects.
     let dsp;
-    try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0};}
-    state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs};
+    try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0,crossfadeMs:0};}
+    state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs,crossfadeMs:dsp.crossfadeMs};
     const filter=audioProcessingFilter(dsp,remaining/1000);
     const blend=cursor.status==='AUTO_DJ'?cursor.track.blend:null;
     let args;
