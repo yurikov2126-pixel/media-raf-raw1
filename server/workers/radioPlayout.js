@@ -24,6 +24,7 @@ import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEve
 import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
 import { LivePcmIntake } from '../src/lib/radioLivePcmIntake.js';
 import { LivePcmSessionGate } from '../src/lib/radioLivePcmSession.js';
+import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -46,6 +47,7 @@ let frozenRotation=null;
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
 const liveIntake=new LivePcmIntake();
 const liveSessions=new LivePcmSessionGate();
+const gatewayClock=new PcmGatewayClock();
 state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()};
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED==='true';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
@@ -330,7 +332,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
-    try{const token=liveSessions.start(owner);liveIntake.reset();
+    try{const token=liveSessions.start(owner);liveIntake.reset();gatewayClock.reset();
       res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
     }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
@@ -338,11 +340,11 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='DELETE'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     if(!liveSessions.stop(req.headers['x-radio-session-token'])){res.writeHead(403).end();return;}
-    liveIntake.reset();res.writeHead(204).end();return;
+    liveIntake.reset();gatewayClock.reset();res.writeHead(204).end();return;
   }
   if(req.url==='/live-pcm/status' && req.method==='GET'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot()}));
+    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot()}));
     return;
   }
   if(req.url==='/live-pcm/ingest' && req.method==='POST'){
@@ -363,7 +365,12 @@ const server=http.createServer((req,res)=>{
     req.on('end',()=>{
       if(received!==size){res.writeHead(400).end();return;}
       if(!liveSessions.valid(sessionToken)){res.writeHead(403).end();return;}
-      try{const result=liveIntake.accept(Buffer.concat(chunks));
+      try{
+        const frameIndex=Number(req.headers['x-radio-pcm-frame-index']);
+        if(!Number.isSafeInteger(frameIndex)||frameIndex<0||!req.headers['x-radio-pcm-frame-index'])throw new TypeError('Missing frame index');
+        const pcm=Buffer.concat(chunks);
+        gatewayClock.validate({pcm,frameIndex});
+        const result=liveIntake.accept(pcm);
         liveSessions.touch(sessionToken,received);
         state.livePcmIntake={enabled:true,connectedToEncoder:false,...liveIntake.snapshot()};
         res.writeHead(202,{'Content-Type':'application/json','Cache-Control':'no-store'});
