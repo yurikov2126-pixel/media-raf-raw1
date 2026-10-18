@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {DEFAULT_ROTATION,validateRotation,rotationPlan} from '../src/lib/radioRotation.js';
+import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation} from '../src/lib/radioRotation.js';
 const assets=[
 {id:'x',name:'Energetic',playDurationMs:60000},
 {id:'y',name:'Calm',playDurationMs:90000},
@@ -8,6 +8,20 @@ const assets=[
 const cfg={...DEFAULT_ROTATION,enabled:true,tags:{x:'ENERGY',y:'CALM',z:'POP'}};
 const ms=(time)=>Date.parse(time);
 describe('station daypart rotation',()=>{
+ it('returns isolated defaults when persisted config is invalid',async()=>{
+  const db={setting:{findUnique:async()=>({value:'not-json'})}};
+  const first=await readRotation(db);
+  first.dayparts.MORNING.push('CALM');
+  first.tags.x='POP';
+  const second=await readRotation(db);
+  expect(second.dayparts.MORNING).not.toContain('CALM');
+  expect(second.tags.x).toBeUndefined();
+ });
+ it('handles Moscow midnight and night-to-morning rollover',()=>{
+  expect(rotationPlan(assets,cfg,ms('2026-10-18T20:59:59Z')).daypart).toBe('EVENING');
+  expect(rotationPlan(assets,cfg,ms('2026-10-18T21:00:00Z')).daypart).toBe('NIGHT');
+  expect(rotationPlan(assets,cfg,ms('2026-10-19T04:00:00Z')).daypart).toBe('MORNING');
+ });
  it('is opt-in',()=>expect(rotationPlan(assets,DEFAULT_ROTATION,ms('2026-10-18T05:00:00Z'))).toBeNull());
  it('selects only approved categories for morning in Moscow',()=>{
   const plan=rotationPlan(assets,cfg,ms('2026-10-18T05:00:00Z'));
