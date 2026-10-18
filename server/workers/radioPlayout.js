@@ -19,7 +19,6 @@ import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
-import { reserveCrossfadePair, safeCrossfadeDuration } from '../src/lib/radioQueueCrossfade.js';
 import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
@@ -124,9 +123,6 @@ async function current() {
     // Dry-run only: never initiate a second decoder without PCM handover.
     // A reserved candidate is not recorded as playback.
     const dsp=await readAudioProcessing();
-    const reservation=reserveCrossfadePair(music,history,rotationSettings.cooldownMinutes,nowMs,selected.id);
-    const overlapMs=eligible&&reservation.status==='READY'
-      ?safeCrossfadeDuration(reservation.first,reservation.second,dsp.crossfadeMs,until,nowMs):0;
     const preflight=await preflightNextTracks({items:music,history,
       cooldownMinutes:rotationSettings.cooldownMinutes,nowMs,preferredId:selected.id,
       requestedMs:dsp.crossfadeMs,untilMs:until,assetsRoot});
