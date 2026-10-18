@@ -15,6 +15,7 @@ import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 import { readJingles, writeJingles, planJingleBreaks } from '../lib/radioJingles.js';
+import {readSourceControl,writeSourceControl,resolveSourcePriority} from '../lib/radioSourceControl.js';
 
 const router = Router();
 router.use(auth);
@@ -458,6 +459,30 @@ router.get('/playout-history.csv', safe(async(_req,res)=>{
 router.get('/playout-history', safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   res.json({events:(await readPlayoutHistory()).slice(-50).reverse()});
+}));
+router.get('/source-control', safe(async(_req,res)=>{
+ const settings=await readSourceControl();
+ const autoDj=await readAutoDjSettings();
+ const now=new Date();
+ const scheduled=await prisma.radioScheduleSlot.findFirst({
+  where:{startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
+  select:{id:true,startAt:true,endAt:true,name:true}
+ });
+ res.setHeader('Cache-Control','no-store');
+ // Browser/WebRTC studio is not yet connected to PCM Worker; never report live audio as ready.
+ const decision=resolveSourcePriority({settings,scheduled:!!scheduled,
+  liveConnected:false,autoDjEnabled:autoDj.enabled});
+ res.json({settings,decision,scheduled,livePcmConnected:false,activeSwitching:false});
+}));
+router.put('/source-control', safe(async(req,res)=>{
+ try{
+  const current=await readSourceControl();
+  const settings=await writeSourceControl({...current,...req.body});
+  res.json({settings,activeSwitching:false});
+ }catch(error){
+  if(error instanceof TypeError)return res.status(400).json({error:error.message});
+  throw error;
+ }
 }));
 router.get('/jingles', safe(async(_req,res)=>{
  res.setHeader('Cache-Control','no-store');
