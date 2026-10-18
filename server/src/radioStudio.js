@@ -199,6 +199,18 @@ export function initRadioStudio(io) {
         // Do not expose another admin's identity or raw session tokens.
         journal:snapshot.journal.slice(-20),changeApplied:false,connectedToEncoder:false});
     });
+    socket.on('radio:studio:private-preview',async callback=>{
+      if(typeof callback!=='function')return;
+      if(socket.id!==presenter||uplinkOwner!==socket.id||gateway?.running!==true)
+        return callback({ok:false,reason:'PRESENTER_SESSION_REQUIRED'});
+      try{
+        const preview=await workerRequest('GET','/live-pcm/private-preview');
+        if(typeof preview?.wavBase64!=='string'||preview.wavBase64.length>270000)
+          throw new Error('PREVIEW_INVALID');
+        callback({ok:true,wavBase64:preview.wavBase64,durationMs:preview.durationMs,
+          connectedToEncoder:false,changeApplied:false});
+      }catch{return callback({ok:false,reason:'PREVIEW_UNAVAILABLE'});}
+    });
     socket.on('radio:studio:uplink:status',callback=>{
       callback?.({enabled:browserUplinkEnabled,connectedToEncoder:false,
         mode:gatewayEnabled?'ISOLATED_PCM_INTAKE':'VALIDATION_ONLY',

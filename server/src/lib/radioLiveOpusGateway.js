@@ -93,7 +93,7 @@ export function workerRequest(method,path,body=null,headers={}){
         'content-type':'application/octet-stream','content-length':body.length,
       }:{})}},res=>{
         const chunks=[];let length=0;
-        res.on('data',b=>{length+=b.length;if(length>65536)res.destroy(new Error('RESPONSE_TOO_LARGE'));else chunks.push(b);});
+        res.on('data',b=>{length+=b.length;if(length>300000)res.destroy(new Error('RESPONSE_TOO_LARGE'));else chunks.push(b);});
         res.on('error',reject);
         res.on('end',()=>{
           if(res.statusCode<200||res.statusCode>=300)return reject(new Error('WORKER_HTTP_'+res.statusCode));
