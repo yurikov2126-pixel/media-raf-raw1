@@ -35,7 +35,7 @@ import { RadioPublicLiveGate } from '../src/lib/radioPublicLiveGate.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
-import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
+import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -166,7 +166,7 @@ async function current() {
   // Public LIVE and scheduled slots always have priority and never receive jingles here.
   if(JINGLE_PLAYOUT_ENABLED&&!jinglePending&&musicSinceJingle>0){
     const jingles=await readJingles();
-    if(jingles.enabled&&jingles.dayparts.includes(rotation?.daypart??rotationSettings?.daypart??'DAY')
+    if(jingles.enabled&&jingles.dayparts.includes(rotation?.daypart??(() => {const hour=new Date(nowMs+3*3600000).getUTCHours();return hour<7?'NIGHT':hour<11?'MORNING':hour<18?'DAY':'EVENING';})())
       &&jingles.assetIds.length&&musicSinceJingle%jingles.everyTracks===0){
       const nextSlot=await prisma.radioScheduleSlot.findFirst({
         where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
