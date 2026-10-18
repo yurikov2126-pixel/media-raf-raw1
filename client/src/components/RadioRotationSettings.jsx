@@ -3,7 +3,7 @@ import {api} from '../api/client.js';
 const categories={ENERGY:'Энергичная',POP:'Поп-музыка',CALM:'Спокойная',INSTRUMENTAL:'Инструментальная',OTHER:'Другая'};
 const partNames={NIGHT:'Ночь · 00–07',MORNING:'Утро · 07–11',DAY:'День · 11–18',EVENING:'Вечер · 18–24'};
 export default function RadioRotationSettings({token,assets=[]}){
- const [settings,setSettings]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
+ const [musicPlan,setMusicPlan]=useState(null),[settings,setSettings]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
  const load=useCallback(async()=>{try{setSettings((await api('/radio/rotation',{token})).rotation);}catch(e){setError(e.message);}},[token]);
  useEffect(()=>{load();},[load]);
  const save=async(e)=>{e.preventDefault();setSaving(true);setError('');setNote('');
@@ -53,6 +53,18 @@ export default function RadioRotationSettings({token,assets=[]}){
    <p className="text-xs opacity-65">В строгом режиме недавно звучавшие композиции не выбираются. Когда все записи находятся в паузе — эфир ждёт, пока освободится хотя бы одна. Crossfade в строгой очереди отключён; эфиры по расписанию всегда имеют приоритет.</p>
    <p className="text-xs opacity-65">Недавно воспроизведённые треки ставятся ближе к концу новой музыкальной программы. Правило действует при формировании периода, а не обрывает текущую песню; при маленькой библиотеке повторы всё ещё возможны.</p>
    <p className="text-xs opacity-65">Если записей недостаточно для выбранного интервала, Auto-DJ продолжит эфир с максимально возможным разделением исполнителей. Это правило действует в пределах каждой ротации, включая переход от её последней композиции к первой.</p>
+   <section className="rounded-xl border border-current/15 p-3 space-y-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+     <h4 className="font-semibold text-sm">Далее в эфире · прогноз</h4>
+     <button type="button" onClick={async()=>{try{setMusicPlan((await api('/radio/music-plan',{token})).plan);}catch(e){setError(e.message);}}}
+       className="rounded-lg border border-current/20 px-3 py-2 text-xs">Обновить план</button>
+    </div>
+    {musicPlan&&<div className="space-y-1 text-xs">
+     <p className="opacity-65">Режим: {musicPlan.mode} · {partNames[musicPlan.daypart]||'без музыкального периода'}</p>
+     {musicPlan.tracks?.length?musicPlan.tracks.map((t,i)=><p key={t.id+'-'+i}>{i+1}. {t.name} · {categories[t.category]||'Другая'}</p>):<p className="opacity-60">Нет доступной программы для прогноза</p>}
+     <p className="opacity-60">Это расчёт по сохранённым данным, не гарантия реального эфира.</p>
+    </div>}
+   </section>
    <details className="rounded-xl border border-current/15 p-3"><summary className="cursor-pointer text-sm font-semibold">Назначить категории аудиозаписям ({assets.length})</summary>
     <div className="mt-3 max-h-72 space-y-2 overflow-auto">{assets.map(a=><label key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
      <span className="min-w-0 truncate">{a.name}</span>
