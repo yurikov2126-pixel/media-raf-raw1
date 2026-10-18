@@ -239,16 +239,23 @@ async function current() {
 function stopDecoder() {
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
 }
+// Schedule authority is polled independently: database latency must not block the 20-ms audio clock.
+const liveScheduleTimer=PUBLIC_LIVE_ENABLED?setInterval(async()=>{
+  if(!publicLive.onAir)return;
+  try{
+    const scheduled=await prisma.radioScheduleSlot.findFirst({
+      where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+      select:{id:true},
+    });
+    if(scheduled)publicLive.stop('SCHEDULE_PRIORITY');
+  }catch{publicLive.stop('SCHEDULE_CHECK_FAILED');}
+},1000):null;
+liveScheduleTimer?.unref?.();
+
 async function run() {
-  let lastLiveScheduleCheck=0;
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
-      if(Date.now()-lastLiveScheduleCheck>1000)try{
-       lastLiveScheduleCheck=Date.now();
-       const scheduled=await prisma.radioScheduleSlot.findFirst({where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
-       if(scheduled){publicLive.stop('SCHEDULE_PRIORITY');continue;}
-      }catch{publicLive.stop('SCHEDULE_CHECK_FAILED');continue;}
       state.mode='LIVE';state.trackId=null;state.slotId=null;
       const frame=publicLive.take(Date.now());
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
