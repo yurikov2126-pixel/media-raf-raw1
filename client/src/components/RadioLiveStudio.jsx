@@ -22,6 +22,8 @@ export default function RadioLiveStudio() {
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
   const [uplinkActive,setUplinkActive]=useState(false);
   const [health,setHealth]=useState(null);
+  const [publicLivePending,setPublicLivePending]=useState(false);
+  const [publicLiveError,setPublicLiveError]=useState('');
   const [handoverResult,setHandoverResult]=useState('Проверка переключения ещё не проводилась');
   const [handoverProposal,setHandoverProposal]=useState(null);
   const recorderRef=useRef(null);
@@ -33,6 +35,7 @@ export default function RadioLiveStudio() {
   const audioRef = useRef(null);
   const roleRef = useRef(null);
   const stop = () => {
+    setPublicLiveError('');
     if(previewUrlRef.current){URL.revokeObjectURL(previewUrlRef.current);previewUrlRef.current=null;}
     setPrivatePreviewUrl(null);
     uplinkRef.current?.close();
@@ -141,6 +144,19 @@ export default function RadioLiveStudio() {
     uplinkRef.current?.close();
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
     recorderRef.current = null;setUplinkActive(false);setUplinkInfo('Тестовый uplink остановлен');
+  };
+  const publicLiveAction=(action)=>{
+    const socket=socketRef.current;
+    if(!socket?.connected)return setPublicLiveError('Нет связи с сервером');
+    setPublicLivePending(true);setPublicLiveError('');
+    socket.timeout(7000).emit('radio:studio:public-live:'+action,(err,result)=>{
+      setPublicLivePending(false);
+      if(err||!result?.ok){
+        const reasons={PUBLIC_LIVE_DISABLED:'Публичный LIVE выключен в настройках сервера',ACTIVE_PRESENTER_REQUIRED:'Сначала запустите студию и передачу Opus',PCM_NOT_READY:'Ожидаем устойчивый поток PCM',SCHEDULE_HAS_PRIORITY:'Сейчас идёт передача по расписанию',WORKER_SWITCH_FAILED:'Worker не подтвердил переключение'};
+        return setPublicLiveError(reasons[result?.reason]||result?.reason||'Таймаут переключения');
+      }
+      setHealth(prev=>prev?{...prev,publicLiveOnAir:action==='start'}:prev);
+    });
   };
   const startUplink=()=>{
     const socket=socketRef.current,stream=streamRef.current;
@@ -308,6 +324,19 @@ export default function RadioLiveStudio() {
       <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
       </div>
     </details>}
+    {role==='presenter'&&<section className="space-y-3 rounded-xl border-2 border-rose-500/30 p-4">
+      <div className="flex items-center justify-between gap-2">
+       <strong>Публичный эфир · MP3</strong>
+       <span className={health?.publicLiveOnAir?'font-bold text-rose-500':'text-xs opacity-65'}>{health?.publicLiveOnAir?'● В ЭФИРЕ':'Auto-DJ / расписание'}</span>
+      </div>
+      <p className="text-sm opacity-75">Подключение микрофона само по себе не переключает слушателей. Переключение действует только после подтверждения Worker.</p>
+      {!health?.publicLiveEnabled&&<p className="text-xs text-amber-600 dark:text-amber-400">Публичный LIVE не разрешён на сервере. Тестовый режим продолжает работать.</p>}
+      <div className="flex flex-wrap gap-2">
+       <button type="button" disabled={publicLivePending||!health?.publicLiveEnabled||!uplinkActive||health?.publicLiveOnAir} onClick={()=>publicLiveAction('start')} className="rounded-xl bg-rose-600 px-4 py-2 font-semibold text-white disabled:opacity-40">● В эфир</button>
+       <button type="button" disabled={publicLivePending||!health?.publicLiveOnAir} onClick={()=>publicLiveAction('stop')} className="rounded-xl border border-current/20 px-4 py-2 font-semibold disabled:opacity-40">Завершить эфир / Auto-DJ</button>
+      </div>
+      {publicLiveError&&<p role="alert" className="text-sm text-rose-500">{publicLiveError}</p>}
+    </section>}
     <RadioStudioTrialChecklist health={health} role={role}/>
     <div className="grid gap-3 xl:grid-cols-2">
     {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={uplinkActive&&health?.decoderRunning===true}/>}
