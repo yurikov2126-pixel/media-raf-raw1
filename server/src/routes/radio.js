@@ -9,6 +9,7 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
 import { readRotation, writeRotation } from '../lib/radioRotation.js';
+import { readPlayoutHistory } from '../lib/radioPlayoutHistory.js';
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 
@@ -425,6 +426,10 @@ router.put('/audio-processing', safe(async (req,res) => {
         if(error instanceof TypeError)return res.status(400).json({error:error.message});
         throw error;
     }
+}));
+router.get('/playout-history', safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json({events:(await readPlayoutHistory()).slice(-50).reverse()});
 }));
 router.get('/rotation', safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
