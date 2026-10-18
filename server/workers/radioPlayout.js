@@ -135,20 +135,28 @@ async function run() {
     const filter=audioProcessingFilter(dsp,remaining/1000);
     const blend=cursor.status==='AUTO_DJ'?cursor.track.blend:null;
     let args;
-    if(blend){
-      const nextFilename=path.join(assetsRoot,path.basename(blend.nextStorageKey));
-      const fullSeconds=blend.overlapMs/1000;
-      const blendStart=blend.blendPosition/1000;
+    let usableBlend=blend;
+    if(usableBlend){
+      const candidate=path.join(assetsRoot,path.basename(usableBlend.nextStorageKey));
+      try {await fs.access(candidate);}
+      catch {
+        state.lastError='Crossfade: next audio unavailable '+usableBlend.nextId;
+        usableBlend=null;
+      }
+    }
+    if(usableBlend){
+      const nextFilename=path.join(assetsRoot,path.basename(usableBlend.nextStorageKey));
+      const fullSeconds=usableBlend.overlapMs/1000;
+      const blendStart=usableBlend.blendPosition/1000;
       // Build the complete overlap and discard its elapsed portion. Starting the
       // filter at zero would otherwise restart gain curves after Worker recovery.
-      const firstSeek=(cursor.track.seekMs-blend.blendPosition)/1000;
-      const secondSeek=(blend.nextSeekMs-blend.blendPosition)/1000;
+      const firstSeek=(cursor.track.seekMs-usableBlend.blendPosition)/1000;
+      const secondSeek=(usableBlend.nextSeekMs-usableBlend.blendPosition)/1000;
       args=['-hide_banner','-loglevel','error','-nostdin','-re',
         '-ss',String(firstSeek),'-t',String(fullSeconds),'-i',filename,
         '-re','-ss',String(secondSeek),'-t',String(fullSeconds),'-i',nextFilename,
-        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1=tri:c2=tri[m]',
-        '-map','[m]','-ss',String(blendStart),'-t',String(remaining/1000),
-        '-f','s16le','-ac','2','-ar','48000','pipe:1'];
+        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1=tri:c2=tri,atrim=start='+blendStart+':duration='+(remaining/1000)+',asetpts=PTS-STARTPTS[m]',
+        '-map','[m]','-f','s16le','-ac','2','-ar','48000','pipe:1'];
     } else {
       args=['-hide_banner','-loglevel','error','-nostdin','-re',
         '-ss',String((cursor.track.seekMs??cursor.track.offsetMs)/1000),'-i',filename,
