@@ -44,13 +44,13 @@ export default function RadioBroadcastDashboard({token}) {
     <div className="rounded-2xl border border-current/10 bg-white/5 p-4 flex flex-wrap justify-between items-center gap-3">
       <div><h3 className="font-semibold">Единый серверный playout</h3>
         <p className="text-xs opacity-60">Отдельный worker · общий MP3-поток · тестовый режим</p></div>
-      <div className="text-right"><p className={'font-semibold '+tone(!!worker)}>{worker ? ({SCHEDULED:'Вещание по сетке',SILENCE:'Тишина по сетке',STARTING:'Запускается',ERROR:'Ошибка'}[worker.mode]||worker.mode) : 'Не запущен / нет связи'}</p>
+      <div className="text-right"><p className={'font-semibold '+tone(!!worker)}>{worker ? ({SCHEDULED:'Вещание по сетке',AUTO_DJ:'Авто-DJ · музыка',SILENCE:'Тишина / ожидание',STARTING:'Запускается',ERROR:'Ошибка'}[worker.mode]||worker.mode) : 'Не запущен / нет связи'}</p>
       <p className="text-xs opacity-60">Приёмников: {worker?.connected ?? '—'} · Фреймов: {worker?.frames ?? '—'}</p></div>
       {worker?.lastError && <p className="w-full text-xs text-rose-600 dark:text-rose-400" role="alert">{worker.lastError}</p>}
     </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {[
-        ['Серверный курсор',cursor?.status==='SCHEDULED'?'В сетке':'Нет передачи',!!report],
+        ['Серверный курсор',cursor?.status==='SCHEDULED'?'В сетке':cursor?.status==='AUTO_DJ'?'Авто-DJ':'Нет передачи',!!report],
         ['Поток MP3 · пилот',stream?.status==='STREAMING'?'Передаётся':'Ожидание',stream?.status==='STREAMING'],
         ['HTTP-приёмники',String(stream?.listeners ?? '—')+' / '+(stream?.maxListeners??'—'),(stream?.listeners||0)>0],
         ['Радиокомпьютеры',String(online)+' онлайн из '+(report?.devices?.length??'—'),online>0]

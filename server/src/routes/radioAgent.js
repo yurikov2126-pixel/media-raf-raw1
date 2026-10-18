@@ -3,6 +3,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { resolveRadioCursor } from '../lib/radioTimeline.js';
+import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../lib/radioAutoDj.js';
 import { servePilotStream, stationStreamHealth, stationSnapshot } from '../lib/radioStreamPilot.js';
 import { streamWorker, workerHealth } from '../lib/radioWorkerProxy.js';
 import { auth, requireRole } from '../middleware/auth.js';
@@ -81,6 +82,15 @@ router.get('/dashboard', ...admin, safe(async (_req,res) => {
     upcoming:upcoming.map(s=>({id:s.id,startAt:s.startAt,endAt:s.endAt,name:s.playlist.name})),
     amplifier:{connected:false},liveStudio:{integration:'SEPARATE_WEBRTC_PILOT'}});
 }));
+async function getAutoDj() {
+  const config=await readAutoDjSettings();
+  if(!config.enabled||!config.playlistId)return {enabled:false,playlistId:null,tracks:[]};
+  const playlist=await prisma.radioPlaylist.findUnique({where:{id:config.playlistId},include:{items:{orderBy:{position:'asc'},include:{asset:true}}}});
+  const tracks=selectAutoDjAssets(playlist);
+  return {enabled:tracks.length>0,playlistId:config.playlistId,tracks};
+}
+const autoDjTrack = asset => ({id:asset.id,name:asset.name,sha256:asset.sha256,
+  byteSize:asset.byteSize,durationMs:asset.durationMs,url:'/api/radio-agent/agent/assets/'+asset.id});
 router.get('/agent/now-playing', deviceAuth, safe(async(req,res) => {
   const now = new Date();
   const slots = await prisma.radioScheduleSlot.findMany({
@@ -93,7 +103,11 @@ router.get('/agent/now-playing', deviceAuth, safe(async(req,res) => {
     orderBy: { startAt: 'asc' }, take: 2,
   });
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ timezone: 'Europe/Moscow', cursor: resolveRadioCursor(slots, now.getTime()) });
+  const cursor=resolveRadioCursor(slots,now.getTime());
+  const dj=cursor.status==='IDLE' && !cursor.slot ? await getAutoDj():null;
+  const active=dj?.enabled?autoDjCursor(dj.tracks,now.getTime()):null;
+  res.json({ timezone:'Europe/Moscow',
+    cursor:active?{status:'AUTO_DJ',at:now.toISOString(),slot:null,track:active}:cursor });
 }));
 
 router.get('/agent/snapshot', deviceAuth, safe(async(req,res) => {
@@ -105,18 +119,25 @@ router.get('/agent/snapshot', deviceAuth, safe(async(req,res) => {
     playlistId:slot.playlistId,playlistName:slot.playlist.name,
     tracks:slot.playlist.items.map(({asset})=>({id:asset.id,name:asset.name,sha256:asset.sha256,
       byteSize:asset.byteSize,durationMs:asset.durationMs,url:'/api/radio-agent/agent/assets/'+asset.id})) }));
-  const json=JSON.stringify(entries);
+  const dj=await getAutoDj();
+  const autoDj={enabled:dj.enabled,playlistId:dj.playlistId,
+    tracks:dj.tracks.map(autoDjTrack)};
+  const json=JSON.stringify({entries,autoDj});
   const revision=digest(json);
   res.setHeader('Cache-Control','no-store');
   res.json({ revision, generatedAt:new Date().toISOString(),timezone:'Europe/Moscow',mode:req.radioDevice.playbackAllowed ? 'PILOT' : 'SYNC_ONLY',
-    playbackEnabled:!!req.radioDevice.playbackAllowed, slots:entries });
+    playbackEnabled:!!req.radioDevice.playbackAllowed, slots:entries,autoDj });
 }));
 router.get('/agent/assets/:id', deviceAuth, safe(async(req,res) => {
   // Allow only files currently referenced in the approved schedule.
   const start=new Date(Date.now()-3600000),end=new Date(Date.now()+14*86400000);
   const use=await prisma.radioPlaylistItem.findFirst({ where:{assetId:req.params.id,
     playlist:{status:'APPROVED',slots:{some:{startAt:{lt:end},endAt:{gt:start}}}}} });
-  if(!use) return res.status(404).json({error:'Запись не включена в актуальную эфирную сетку'});
+  if(!use) {
+    const dj=await getAutoDj();
+    if(!dj.enabled || !dj.tracks.some(asset=>asset.id===req.params.id))
+      return res.status(404).json({error:'Запись не включена в разрешённую эфирную сетку'});
+  }
   const asset=await prisma.radioAsset.findUnique({where:{id:req.params.id}});
   if(!asset) return res.status(404).json({error:'Запись не найдена'});
   res.setHeader('Cache-Control','private, no-store');

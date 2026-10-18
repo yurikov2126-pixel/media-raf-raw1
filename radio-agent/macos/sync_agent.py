@@ -31,6 +31,12 @@ def sync(base, token, destination):
     for slot in snapshot['slots']:
         for item in slot['tracks']:
             assets[item['id']]=item
+    # The Auto-DJ catalog is pre-fetched even when playout is disabled.
+    # No local audio starts here; sync_agent remains a download-only process.
+    autodj = snapshot.get('autoDj') or {}
+    if autodj.get('enabled') is True:
+        for item in autodj.get('tracks', []):
+            assets[item['id']] = item
     for asset_id,item in assets.items():
         digest=item['sha256']
         if not isinstance(digest,str) or len(digest)!=64 or not all(c in '0123456789abcdef' for c in digest):

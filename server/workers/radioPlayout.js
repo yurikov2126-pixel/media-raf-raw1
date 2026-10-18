@@ -8,9 +8,11 @@ import 'dotenv/config';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
+import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -20,10 +22,11 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
-const state = { mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0 };
+const state = { mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
 let encoder = null;
 let stopping = false;
+const failedAutoDjAssets = new Map();
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
@@ -52,15 +55,35 @@ function startEncoder() {
 
 const silence=Buffer.alloc(48000*2*2/5);
 async function current() {
-  const now=new Date();
+  const now=new Date(),nowMs=now.getTime();
   const slots=await prisma.radioScheduleSlot.findMany({
     where:{startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
     include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:true}}}}},
     orderBy:{startAt:'asc'},take:1
   });
-  const cursor=resolveRadioCursor(slots,now.getTime());
-  const asset=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
-  return {cursor,asset};
+  const cursor=resolveRadioCursor(slots,nowMs);
+  const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
+  if(scheduled || cursor.slot) return {cursor,asset:scheduled};
+  const settings=await readAutoDjSettings();
+  state.autoDjEnabled=settings.enabled;
+  if(!settings.enabled||!settings.playlistId)return {cursor,asset:null};
+  const playlist=await prisma.radioPlaylist.findUnique({
+    where:{id:settings.playlistId},
+    include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+  });
+  for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
+  const catalog=selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id));
+  if(!catalog.length)return {cursor,asset:null};
+  const track=autoDjCursor(catalog,nowMs);
+  const next=await prisma.radioScheduleSlot.findFirst({
+    where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+    select:{startAt:true},orderBy:{startAt:'asc'}
+  });
+  const until=next?next.startAt.getTime():Infinity;
+  if(!track || until-nowMs<150)return {cursor,asset:null};
+  return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,track,
+    until: Number.isFinite(until)?new Date(until).toISOString():null},
+    asset:catalog[track.index]};
 }
 function stopDecoder() {
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
@@ -80,28 +103,59 @@ async function run() {
       }
       continue;
     }
-    state.mode='SCHEDULED';state.trackId=asset.id;
-    const remaining=Math.max(0,Math.min(cursor.track.durationMs-cursor.track.offsetMs,
-      new Date(cursor.slot.endAt).getTime()-Date.now()));
+    state.mode=cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;
+    const boundary=cursor.status==='AUTO_DJ'?(cursor.until?Date.parse(cursor.until):Infinity):Date.parse(cursor.slot.endAt);
+    const remaining=Math.max(0,Math.min(cursor.track.durationMs-cursor.track.offsetMs,boundary-Date.now()));
     if(remaining<150) continue;
     const filename=path.join(assetsRoot,path.basename(asset.storageKey));
+    try {await fs.access(filename);} catch(error) {
+      state.lastError='Audio missing: '+asset.id;
+      if(cursor.status==='AUTO_DJ')failedAutoDjAssets.set(asset.id,Date.now()+300000);
+      await new Promise(resolve=>setTimeout(resolve,250));
+      continue;
+    }
     decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
       '-ss',String(cursor.track.offsetMs/1000),'-i',filename,
       '-t',String(remaining/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
       {stdio:['ignore','pipe','pipe']});
     const child=decoder;
-    let ended=false;
+    // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
+    // Interrupt the decoder promptly; the shared encoder stays alive.
+    let polling=false;
+    const watchdog=cursor.status==='AUTO_DJ'?setInterval(async()=>{
+      if(polling||stopping||decoder!==child)return;
+      polling=true;
+      try {
+        const settings=await readAutoDjSettings();
+        const scheduled=await prisma.radioScheduleSlot.findFirst({
+          where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+          select:{id:true}
+        });
+        if(!settings.enabled||!settings.playlistId||scheduled)child.kill('SIGTERM');
+        else {
+          const playlist=await prisma.radioPlaylist.findUnique({
+            where:{id:settings.playlistId},select:{status:true}
+          });
+          if(playlist?.status!=='APPROVED')child.kill('SIGTERM');
+        }
+      }catch(error){state.lastError=error.message;}
+      finally{polling=false;}
+    },3000):null;
+    let ended=false, exitCode=null;
     child.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
     child.on('error',e=>{state.lastError=e.message;});
-    child.on('close',()=>{ended=true;});
+    child.on('close',code=>{ended=true;exitCode=code;});
     try {
       for await(const chunk of child.stdout) {
         if(stopping) break;
         if(!encoder.stdin.write(chunk)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
       }
     } catch(e) {state.lastError=e.message;}
+    if(watchdog)clearInterval(watchdog);
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
+    if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)
+      failedAutoDjAssets.set(asset.id,Date.now()+300000);
   }
 }
 
