@@ -15,6 +15,16 @@ export function initRadioStudio(io) {
   const gatewayEnabled=browserUplinkEnabled&&process.env.RADIO_BROWSER_PCM_GATEWAY_ENABLED==='true';
   let gateway=null;
   const closeGateway=()=>{const current=gateway;gateway=null;void current?.stop();};
+  // Server-side lease: a disappeared presenter must not hold a decoder or Worker session indefinitely.
+  const leaseTimer=setInterval(()=>{
+    if(!uplinkOwner)return;
+    const snapshot=uplink.snapshot();
+    if(snapshot.active && (!gatewayEnabled || gateway?.running))return;
+    const oldOwner=uplinkOwner;
+    closeGateway();uplink.reset();uplinkOwner=null;
+    io.to(oldOwner).emit('radio:studio:uplink:ended',{reason:'UPLINK_LEASE_EXPIRED'});
+  },1000);
+  leaseTimer.unref?.();
   const devices = io.of('/radio-device');
   devices.use(async (socket, next) => {
     try {
@@ -92,9 +102,11 @@ export function initRadioStudio(io) {
       try {
         const packet=Buffer.isBuffer(chunk)?chunk:Buffer.alloc(0);
         // Verify sequence before sending anything into FFmpeg.
-        if(!Number.isSafeInteger(sequence)||sequence!==uplink.sequence||
-          !packet.length||packet.length>uplink.maxChunkBytes)
-          return callback?.({ok:false,reason:'INVALID_OR_OUT_OF_ORDER'});
+        if(!uplink.snapshot().active || !Number.isSafeInteger(sequence)||sequence!==uplink.sequence||
+          !packet.length||packet.length>uplink.maxChunkBytes){
+          closeGateway();uplink.reset();uplinkOwner=null;
+          return callback?.({ok:false,reason:'INVALID_OR_STALE_OR_OUT_OF_ORDER'});
+        }
         if(gatewayEnabled){
           if(!gateway?.running)throw new Error('GATEWAY_INACTIVE');
           await gateway.write(packet);
