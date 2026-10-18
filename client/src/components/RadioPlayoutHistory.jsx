@@ -9,7 +9,7 @@ export default function RadioPlayoutHistory({token}){
   setExporting(true);
   try{
    const rows=[['Дата','ID','Название','Режим','PCM мс','Смешивание'],...events.map(e=>[e.startedAt,e.id,e.name,e.mode,e.generatedMs||0,e.mixed?'Да':'Нет'])];
-   const content='\\uFEFF'+rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\\r\\n');
+   const content='\uFEFF'+rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
    const blob=new Blob([content],{type:'text/csv;charset=utf-8'});
    const url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download='radio-playout-history-last-50.csv';a.click();URL.revokeObjectURL(url);
