@@ -6,6 +6,7 @@ import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioControlRoom from '../components/RadioControlRoom.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
+import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
@@ -272,10 +273,16 @@ export default function Radio() {
       toast.success('Передача перенесена');
     }catch(error){toast.error(error.message);}
   };
+  const openWorkspace = next => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if(next === 'home')url.searchParams.delete('tab');else url.searchParams.set('tab',next);
+    window.history.replaceState(window.history.state,'',url.toString());
+  };
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
-  return <RadioWorkspaceShell tab={tab} onSelect={setTab} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
-    {tab === 'home' && <RadioControlRoom token={token} onOpen={setTab} />}
+  return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
+    {tab === 'home' && <RadioControlRoom token={token} onOpen={openWorkspace} />}
     {tab === 'automation' && <section className="space-y-5">
       <RadioSourceControl token={token}/>
       <RadioAutoDjSettings token={token} playlists={playlists}/>
