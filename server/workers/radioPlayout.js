@@ -18,7 +18,7 @@ import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
-import { chooseQueuedTrack } from '../src/lib/radioEventQueue.js';
+import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -102,7 +102,9 @@ async function current() {
   // generated playback history changes the selection of an already playing track.
   if(rotation && rotationSettings.strictCooldown && rotationSettings.cooldownMinutes>0){
     const history=await readPlayoutHistory();
-    const selected=chooseQueuedTrack(music,history,rotationSettings.cooldownMinutes,nowMs);
+    const eligible=chooseQueuedTrack(music,history,rotationSettings.cooldownMinutes,nowMs);
+    const selected=eligible||selectExhaustionFallback(music,history,nowMs,rotationSettings.allowCooldownFallback);
+    state.cooldownException=!!selected&&!eligible;
     const next=await prisma.radioScheduleSlot.findFirst({
       where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
       select:{startAt:true},orderBy:{startAt:'asc'}
@@ -112,7 +114,7 @@ async function current() {
       state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
       return {cursor,asset:null};
     }
-    state.queueStatus='PLAYING';
+    state.queueStatus=eligible?'PLAYING':'FALLBACK_REPEAT';
     const index=music.findIndex(item=>item.id===selected.id);
     return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
       track:{id:selected.id,name:selected.name,index,seekMs:selected.cue.inMs,
