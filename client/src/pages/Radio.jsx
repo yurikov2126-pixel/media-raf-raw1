@@ -456,38 +456,6 @@ export default function Radio() {
         <span className="text-xs opacity-60">Перетаскивайте карточку на нужный день</span>
         <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()+7*86400000)))}>Следующая →</button>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7" aria-label="Недельная сетка вещания">
-        {Array.from({ length: 7 }, (_, index) => {
-          const day = new Date(new Date(date + 'T00:00:00+03:00').getTime()+index*86400000);
-          const dayKey=moscowDate(day);
-          const daySlots = slots.filter(slot => moscowDate(new Date(slot.startAt)) === dayKey);
-          return <section key={dayKey} data-radio-day={dayKey} className={"rounded-xl border p-3 min-h-32 "+(dragSlotId?'border-blue-500/40 bg-blue-500/5':'border-current/10 bg-white/5')}
-            onDragOver={e=>{if(dragSlotId)e.preventDefault();}}
-            onDrop={e=>{e.preventDefault();const slot=slots.find(s=>s.id===dragSlotId);setDragSlotId(null);if(slot)proposeMove(slot,dayKey);}}>
-            <h3 className="text-sm font-semibold mb-3">{day.toLocaleDateString('ru-RU', { timeZone: STATION_ZONE, weekday: 'short', day: '2-digit', month: '2-digit' })}</h3>
-            {daySlots.map(slot => <div key={slot.id} draggable={new Date(slot.startAt)>new Date()}
-              onDragStart={e=>{setDragSlotId(slot.id);e.dataTransfer.effectAllowed='move';}}
-              onDragEnd={()=>setDragSlotId(null)}
-              onContextMenu={e=>{e.preventDefault();openSlotMenu(slot);}}
-              onTouchStart={e=>startSlotTouch(slot,e)}
-              onTouchMove={e=>{if(touchPoint.current && (Math.abs(e.touches[0].clientX-touchPoint.current.x)>12||Math.abs(e.touches[0].clientY-touchPoint.current.y)>12))cancelSlotTouch();}}
-              onTouchEnd={e=>{const pos=e.changedTouches[0];const start=touchPoint.current;
-                const target=document.elementFromPoint(pos.clientX,pos.clientY)?.closest('[data-radio-day]');
-                cancelSlotTouch();
-                if(start && (Math.abs(pos.clientX-start.x)>18||Math.abs(pos.clientY-start.y)>18) && target?.dataset.radioDay && new Date(slot.startAt)>new Date())proposeMove(slot,target.dataset.radioDay);
-              }} onTouchCancel={cancelSlotTouch}
-              onClick={()=>{if(!contextSlot)proposeMove(slot,dayKey);}}
-              className="mb-2 cursor-grab select-none rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-2 active:cursor-grabbing"
-              style={{userSelect:'none',WebkitUserSelect:'none'}}>
-              <p className="text-xs font-bold">{new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p>
-              <p className="text-xs break-words">{slot.playlist.name}</p>
-              <button type="button" className="mt-2 rounded-md border border-current/20 px-2 py-1 text-xs" aria-label={'Действия с передачей '+slot.playlist.name} onClick={e=>{e.stopPropagation();openSlotMenu(slot);}}>⋯ Действия</button>
-              <p className="mt-1 text-[10px] opacity-60">{new Date(slot.startAt)>new Date()?'Перенести ↗':'Эфир прошёл'}</p>
-            </div>)}
-            {!daySlots.length && <p className="text-xs opacity-40">Свободно</p>}
-          </section>;
-        })}
-      </div>
       {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
         <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
           <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
