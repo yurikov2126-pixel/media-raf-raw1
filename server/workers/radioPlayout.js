@@ -26,6 +26,7 @@ import { LivePcmIntake } from '../src/lib/radioLivePcmIntake.js';
 import { LivePcmSessionGate } from '../src/lib/radioLivePcmSession.js';
 import { RadioTimedPcmPlayout } from '../src/lib/radioTimedPcmPlayout.js';
 import { RadioIsolatedPcmLab } from '../src/lib/radioIsolatedPcmLab.js';
+import { RadioPcmLabSoakTelemetry } from '../src/lib/radioPcmLabSoakTelemetry.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
@@ -55,6 +56,7 @@ const TIMED_PCM_SHADOW_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_TIMED_
 const timedShadow=new RadioTimedPcmPlayout();
 const PCM_MIX_LAB_ENABLED=TIMED_PCM_SHADOW_ENABLED&&process.env.RADIO_PCM_MIX_LAB_ENABLED==='true';
 const pcmMixLab=new RadioIsolatedPcmLab();
+const soakTelemetry=new RadioPcmLabSoakTelemetry();
 // No switch command is exposed: this is passive safety telemetry only.
 const switchShadow=new RadioWorkerSwitchShadow();
 let shadowTicks=0;
@@ -62,7 +64,11 @@ const shadowTimer=TIMED_PCM_SHADOW_ENABLED?setInterval(()=>{
   if(!liveSessions.snapshot().active)return;
   const nowMs=Date.now();
   const result=timedShadow.tick(nowMs);
-  if(PCM_MIX_LAB_ENABLED){const lab=pcmMixLab.tick(nowMs);if(!lab.ok)state.pcmMixLabLastError=lab.reason;}
+  if(PCM_MIX_LAB_ENABLED){
+    const lab=pcmMixLab.tick(nowMs);
+    soakTelemetry.tick(nowMs,lab);
+    if(!lab.ok)state.pcmMixLabLastError=lab.reason;
+  }
   shadowTicks++;
   // Deliberately discard the simulated output: NEVER forward to station encoder.
   if(!result.ok)state.timedPcmShadowLastError=result.reason;
@@ -355,7 +361,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
-    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();if(PCM_MIX_LAB_ENABLED)pcmMixLab.reset();
+    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();if(PCM_MIX_LAB_ENABLED){pcmMixLab.reset();soakTelemetry.reset();}
       res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
     }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
@@ -367,7 +373,7 @@ const server=http.createServer((req,res)=>{
   }
   if(req.url==='/live-pcm/status' && req.method==='GET'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot(),timedShadow:shadowStatus(),switchShadow:switchShadow.snapshot(),pcmMixLab:{enabled:PCM_MIX_LAB_ENABLED,...pcmMixLab.snapshot()}}));
+    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot(),timedShadow:shadowStatus(),switchShadow:switchShadow.snapshot(),pcmMixLab:{enabled:PCM_MIX_LAB_ENABLED,...pcmMixLab.snapshot()},pcmSoak:{enabled:PCM_MIX_LAB_ENABLED,...soakTelemetry.snapshot()}}));
     return;
   }
   if(req.url==='/live-pcm/ingest' && req.method==='POST'){
@@ -397,7 +403,11 @@ const server=http.createServer((req,res)=>{
         if(TIMED_PCM_SHADOW_ENABLED){
           const receivedAt=Date.now();
           const staged=timedShadow.push({pcm,frameIndex},receivedAt);
-          if(PCM_MIX_LAB_ENABLED){const lab=pcmMixLab.push({pcm,frameIndex},receivedAt);if(!lab.ok)state.pcmMixLabLastError=lab.reason;}
+          if(PCM_MIX_LAB_ENABLED){
+            const lab=pcmMixLab.push({pcm,frameIndex},receivedAt);
+            soakTelemetry.receive(lab,pcmMixLab.snapshot(receivedAt).bufferedMs);
+            if(!lab.ok)state.pcmMixLabLastError=lab.reason;
+          }
           // Shadow failure never alters legacy intake/output: diagnostics only.
           if(!staged.ok)state.timedPcmShadowLastError=staged.reason;
         }
