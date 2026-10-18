@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { BrowserOpusUplink } from './lib/radioBrowserOpusUplink.js';
 import { RadioLiveOpusGateway, workerRequest } from './lib/radioLiveOpusGateway.js';
 import { evaluateRadioPresenterReadiness } from './lib/radioPresenterReadiness.js';
+import { readRadioScheduleAuthority, scheduleAwareReadiness } from './lib/radioScheduleAuthority.js';
 
 // Only signaling passes via Socket.IO; audio flows peer-to-peer over WebRTC.
 // Pilot supports one presenter and one listening browser at a time.
@@ -138,16 +139,19 @@ export function initRadioStudio(io) {
           workerReachable=true;
         }catch{ /* No Worker details or credentials are exposed to the browser. */ }
       }
+      let authority=null;
+      try{authority=await readRadioScheduleAuthority(prisma);}catch{ /* fail closed on DB errors */ }
       const readiness=evaluateRadioPresenterReadiness({
         workerStatus,presenterAuthorized:connected,presenterConnected:connected,
         gatewayRunning:activeGateway,
-        // Fail closed: actual schedule arbitration is not wired to this diagnostic yet.
-        scheduledActive:true,scheduledSourceReady:false,
+        // If schedule authority cannot be read, never permit even diagnostic readiness.
+        scheduledActive:authority?.known===true?authority.active:true,
+        scheduledSourceReady:authority?.known===true?authority.sourceReady:false,
       });
+      const verified=scheduleAwareReadiness({authority,readiness});
       callback({ok:true,observedAt:Date.now(),pilotEnabled:gatewayEnabled,
         workerReachable,transportConnected:connected,decoderRunning:activeGateway,
-        ...readiness,blockers:[...new Set([...readiness.blockers,
-          'SCHEDULE_AUTHORITY_UNAVAILABLE',
+        ...verified,blockers:[...new Set([...verified.blockers,
           ...(!workerReachable?['WORKER_UNAVAILABLE']:[])])],
         changeApplied:false,liveOutputConnected:false});
     });
