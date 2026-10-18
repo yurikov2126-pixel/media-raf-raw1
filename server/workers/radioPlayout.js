@@ -30,6 +30,7 @@ import { RadioPcmLabSoakTelemetry } from '../src/lib/radioPcmLabSoakTelemetry.js
 import { RadioPrivatePcmPreview } from '../src/lib/radioPrivatePcmPreview.js';
 import { RadioPrivateLivePcmQueue } from '../src/lib/radioPrivateLivePcmQueue.js';
 import { RadioIsolatedMixOutput } from '../src/lib/radioIsolatedMixOutput.js';
+import { RadioIsolatedMusicSample } from '../src/lib/radioIsolatedMusicSample.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
@@ -65,7 +66,10 @@ const privatePreview=new RadioPrivatePcmPreview();
 const PRIVATE_LIVE_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_PRIVATE_LIVE_MONITOR_ENABLED==='true';
 const privateLive=new RadioPrivateLivePcmQueue();
 const ISOLATED_MIX_ENABLED=PRIVATE_LIVE_ENABLED&&process.env.RADIO_ISOLATED_MIX_OUTPUT_ENABLED==='true';
-const isolatedMix=new RadioIsolatedMixOutput();
+const ISOLATED_REAL_MUSIC_ENABLED=ISOLATED_MIX_ENABLED&&process.env.RADIO_ISOLATED_REAL_MUSIC_ENABLED==='true';
+const isolatedMusicSample=ISOLATED_REAL_MUSIC_ENABLED?
+  RadioIsolatedMusicSample.fromFile(process.env.RADIO_ISOLATED_MUSIC_PCM_FILE):null;
+const isolatedMix=new RadioIsolatedMixOutput({musicSample:isolatedMusicSample});
 // No switch command is exposed: this is passive safety telemetry only.
 const switchShadow=new RadioWorkerSwitchShadow();
 let shadowTicks=0;
