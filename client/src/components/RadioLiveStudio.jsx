@@ -52,6 +52,11 @@ export default function RadioLiveStudio() {
     socketRef.current = socket;
     socket.on('connect', () => { setStatus('Сервер подключён'); socket.emit('radio:studio:state', setState); });
     socket.on('connect_error', () => setError('Не удалось подключить канал студии'));
+    socket.on('radio:studio:uplink:ended', ({ reason } = {}) => {
+      uplinkRef.current?.close();
+      if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+      setError(reason === 'UPLINK_LEASE_EXPIRED' ? 'Тестовый аудиоканал остановлен: истекло время ожидания ведущего' : 'Тестовый аудиоканал остановлен сервером');
+    });
     socket.on('radio:studio:state', setState);
     socket.on('radio:studio:ended', () => { stop(); setStatus('Ведущий завершил эфир'); });
     socket.on('radio:studio:listener-left', () => { peerRef.current?.close(); peerRef.current = null; setStatus('Приёмник отключился'); });
