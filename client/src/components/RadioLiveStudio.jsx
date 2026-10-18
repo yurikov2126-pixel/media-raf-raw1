@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from '../store/auth.jsx';
 import RadioUsbInputPanel from './RadioUsbInputPanel.jsx';
 import RadioPrivateLiveMonitor from './RadioPrivateLiveMonitor.jsx';
+import RadioStudioTrialChecklist from './RadioStudioTrialChecklist.jsx';
 
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 export default function RadioLiveStudio() {
@@ -287,6 +288,7 @@ export default function RadioLiveStudio() {
       <p className="text-xs opacity-75" role="status">{handoverResult}</p>
       <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
     </div>}
+    <RadioStudioTrialChecklist health={health} role={role}/>
     {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
     {role==='presenter'&&<RadioPrivateLiveMonitor mode="mix" socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
     {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 p-3">
