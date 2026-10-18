@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioControlRoom from '../components/RadioControlRoom.jsx';
+import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
 import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
@@ -293,7 +294,7 @@ export default function Radio() {
       <RadioCueEditor token={token} assets={assets}/>
     </section>}
     {tab === 'assets' && <section className="space-y-4">
-      <h2 className="text-xl font-bold">Библиотека записей</h2>
+      <RadioSectionIntro eyebrow="МЕДИАТЕКА" title="Библиотека записей" description="Вся музыка и звуковые материалы станции. Предпрослушивание, загрузки и управление треками в одном рабочем разделе." metrics={[{label:'Записей',value:assets.length},{label:'Очередь загрузки',value:files.length}]}/>
       <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
         <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
         <div className="mt-4 space-y-3">
@@ -337,7 +338,7 @@ export default function Radio() {
     </section>}
     {tab === 'playlists' && <section className="space-y-4">
       <RadioPlaylistReview token={token} onChanged={refresh} />
-      <h2 className="text-xl font-bold">Конструктор радиопрограмм</h2>
+      <RadioSectionIntro eyebrow="ПОДГОТОВКА" title="Конструктор радиопрограмм" description="Создавайте программы из записей, формируйте порядок воспроизведения, согласовывайте и размещайте в сетке." metrics={[{label:'Плейлистов',value:playlists.length},{label:'Утверждено',value:playlists.filter(p=>p.status==='APPROVED').length},{label:'Папок',value:folders.length}]}/>
       {wizard === 0 ? <button className={btn} onClick={() => { reset(); setWizard(1); }}>+ Создать плейлист</button> : <form onSubmit={e => { e.preventDefault(); if (wizard===1) setWizard(2); else if (wizard===2) { setSelected(ids=>[...ids,...pickIds.filter(id=>!ids.includes(id))]); setPickIds([]); setWizard(3); } else savePlaylist(); }} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <p className="text-xs opacity-60">Шаг {wizard} из 3 · {editing ? 'Редактирование' : 'Новый плейлист'}</p>
         {wizard===1 && <>
@@ -422,7 +423,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
-      <h2 className="text-xl font-bold">Сетка вещания</h2>
+      <RadioSectionIntro eyebrow="РАСПИСАНИЕ / МОСКВА UTC+3" title="Сетка вещания" description="Управляйте радиопередачами в календаре, переносите события и проверяйте эфирные конфликты." metrics={[{label:'Событий за период',value:slots.length},{label:'Утверждённых программ',value:playlists.filter(p=>p.status==='APPROVED').length}]}/>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
       <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
@@ -495,7 +496,7 @@ export default function Radio() {
       </article>)}
     </section>}
     {tab==='equipment' && <section className="rounded-2xl border border-current/10 p-5 space-y-4">
-      <h2 className="text-xl font-bold">Оборудование · Windows Radio Agent</h2>
+      <RadioSectionIntro eyebrow="ИНФРАСТРУКТУРА" title="Оборудование" description="Радиокомпьютеры, связь и тестовый вывод звука. Управление школьным усилителем и ESP32 здесь не активируется." metrics={[{label:'Устройств',value:radioDevices.length},{label:'Активных',value:radioDevices.filter(d=>!d.revokedAt).length}]}/>
       <p className="text-sm opacity-70">Подключение пока только для синхронизации файлов и расписания. Воспроизведение и управление ESP32/AA-300 отключены.</p>
       <div className="flex gap-2 flex-wrap">
         <button className={btn} onClick={registerRadioDevice}>+ Зарегистрировать радиокомпьютер</button>
