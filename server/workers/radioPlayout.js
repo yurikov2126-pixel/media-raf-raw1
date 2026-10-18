@@ -16,8 +16,8 @@ import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
-import { readRotation, rotationPlan } from '../src/lib/radioRotation.js';
-import { recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
+import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
+import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -32,6 +32,7 @@ let decoder = null;
 let encoder = null;
 let stopping = false;
 const failedAutoDjAssets = new Map();
+let frozenRotation=null;
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
@@ -79,7 +80,21 @@ async function current() {
   for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
-  const rotation=rotationPlan(catalog,await readRotation(),nowMs);
+  const rotationSettings=await readRotation();
+  const candidate=rotationPlan(catalog,rotationSettings,nowMs);
+  // Keep the plan stable for this daypart, including its crossfade boundaries.
+  // Changes in the history must not move the station cursor mid-song.
+  const key=candidate?[candidate.anchorMs,candidate.endMs,rotationSettings.cooldownMinutes,
+    catalog.map(a=>a.id+':'+a.playDurationMs).join(',')].join('|'):null;
+  if(key!==frozenRotation?.key){
+    frozenRotation=null;
+    if(candidate){
+      const history=rotationSettings.cooldownMinutes?await readPlayoutHistory():[];
+      const items=prioritizeUnplayed(candidate.items,history,rotationSettings.cooldownMinutes,nowMs);
+      frozenRotation={key,plan:{...candidate,items}};
+    }
+  }
+  const rotation=frozenRotation?.plan||null;
   const music=rotation?.items||catalog;
   const clock=rotation?nowMs-rotation.anchorMs:nowMs;
   const dsp=await readAudioProcessing();
