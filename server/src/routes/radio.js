@@ -466,7 +466,7 @@ router.get('/source-control', safe(async(_req,res)=>{
  const now=new Date();
  const scheduled=await prisma.radioScheduleSlot.findFirst({
   where:{startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
-  select:{id:true,startAt:true,endAt:true,name:true}
+  select:{id:true,startAt:true,endAt:true}
  });
  res.setHeader('Cache-Control','no-store');
  // Browser/WebRTC studio is not yet connected to PCM Worker; never report live audio as ready.
