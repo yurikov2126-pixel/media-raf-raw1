@@ -46,6 +46,11 @@ export default function RadioBroadcastDashboard({token}) {
         <p className="text-xs opacity-60">Отдельный worker · общий MP3-поток · тестовый режим</p></div>
       <div className="text-right"><p className={'font-semibold '+tone(!!worker)}>{worker ? ({SCHEDULED:'Вещание по сетке',AUTO_DJ:'Авто-DJ · музыка',SILENCE:'Тишина / ожидание',STARTING:'Запускается',ERROR:'Ошибка'}[worker.mode]||worker.mode) : 'Не запущен / нет связи'}</p>
       <p className="text-xs opacity-60">Приёмников: {worker?.connected ?? '—'} · Фреймов: {worker?.frames ?? '—'}</p></div>
+      <div className="w-full rounded-xl border border-current/10 p-3 text-sm">
+        <p className="font-semibold">Авто-DJ · диагностика</p>
+        <p className="mt-1">{!report?.autoDj?.configured?'Выключен в настройках':!report.autoDj.ready?'Плейлист недоступен или не содержит действительных записей':worker?.mode==='AUTO_DJ'?'Воспроизводится серверным Worker':worker?.mode==='SCHEDULED'?'Ожидает завершения передачи':!worker?'Плейлист готов, но серверный Worker недоступен':worker?.mode==='SILENCE'?'Плейлист готов, но Worker выдаёт тишину. Проверьте версию процесса и логи.':'Плейлист готов, проверяем запуск'}</p>
+        <p className="mt-1 text-xs opacity-65">Готовых записей: {report?.autoDj?.trackCount ?? '—'} · Настройка и работа процесса отслеживаются отдельно</p>
+      </div>
       {worker?.lastError && <p className="w-full text-xs text-rose-600 dark:text-rose-400" role="alert">{worker.lastError}</p>}
     </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -64,7 +69,7 @@ export default function RadioBroadcastDashboard({token}) {
           <h3 className="font-semibold">Сейчас по сетке</h3>
           <span className="text-xs rounded-full border border-current/20 px-2 py-1">{cursor?.status==='SCHEDULED'?'PLAYOUT':'STANDBY'}</span>
         </div>
-        <p className="text-2xl font-semibold">{cursor?.slot?.name || 'Передача не запланирована'}</p>
+        <p className="text-2xl font-semibold">{cursor?.slot?.name || (cursor?.status==='AUTO_DJ'?'Авто-DJ · музыкальная ротация':'Передача не запланирована')}</p>
         <p className="opacity-70">{track?.name || 'В текущем слоте нет активного трека'}</p>
         <div>
           <div className="h-2 overflow-hidden bg-current/10 rounded-full">
