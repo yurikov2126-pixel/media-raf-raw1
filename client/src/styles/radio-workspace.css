@@ -1,0 +1,29 @@
+/* Broadcast workspace refinements; scoped to Radio only. */
+.radio-workspace{isolation:isolate}
+.radio-workspace input,.radio-workspace select,.radio-workspace textarea{min-width:0;color:inherit}
+.radio-workspace input[type="checkbox"]{accent-color:#6366f1}
+.radio-workspace select option{color:#111827;background:#fff}
+.dark .radio-workspace select option{color:#f8fafc;background:#1e293b}
+.radio-workspace button{touch-action:manipulation}
+.radio-workspace button:disabled{cursor:not-allowed}
+.radio-workspace :is(button,input,select,textarea):focus-visible{outline:2px solid #818cf8;outline-offset:2px}
+.radio-workspace main>section{min-width:0}
+.radio-workspace main>section>h2:first-child{font-size:1.25rem;letter-spacing:-.025em}
+.radio-workspace main>section>div{min-width:0}
+.radio-workspace main>section>section{min-width:0}
+.radio-workspace main table{min-width:100%;border-collapse:separate;border-spacing:0}
+.radio-workspace main table :is(th,td){padding:.65rem .75rem}
+.radio-workspace main table tr:hover{background:rgb(99 102 241 / .045)}
+.radio-workspace main :is(.overflow-auto,.overflow-x-auto){scrollbar-width:thin}
+.radio-workspace main :is(.rounded-2xl,.rounded-xl){scroll-margin-top:6.5rem}
+.radio-workspace main button{transition:background-color .15s,border-color .15s,box-shadow .15s}
+.radio-workspace main button:not(:disabled):active{transform:translateY(1px)}
+@media (max-width:639px){
+ .radio-workspace main{overflow-x:hidden}
+ .radio-workspace main>section{max-width:100%}
+ .radio-workspace main input[type="datetime-local"]{max-width:100%}
+ .radio-workspace main :is(.text-3xl,.text-2xl){overflow-wrap:anywhere}
+}
+@media (prefers-reduced-motion:reduce){
+ .radio-workspace *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}

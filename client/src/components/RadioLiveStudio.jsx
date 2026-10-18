@@ -244,16 +244,27 @@ export default function RadioLiveStudio() {
     streamRef.current?.getAudioTracks().forEach(track => { track.enabled = muted; });
     setMuted(!muted);
   };
-  return <section className="space-y-4 rounded-2xl border border-current/10 p-5">
-    <h2 className="text-xl font-bold">Эфирная студия · тест WebRTC</h2>
-    <p className="text-sm opacity-70">Первый этап: один ведущий с микрофоном и один приёмник в браузере Mac. Только тестовые наушники, без усилителя и ESP32.</p>
-    <p className="text-sm">Состояние: {status} · {state.live ? 'Ведущий в эфире' : 'Эфир свободен'}</p>
+  return <section className="space-y-5">
+    <div className="rounded-2xl border border-current/10 bg-slate-900 p-5 text-white sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-[11px] uppercase tracking-[.2em] text-indigo-300">LIVE STUDIO / PILOT</p>
+          <h2 className="mt-2 text-2xl font-bold">Эфирная студия</h2>
+          <p className="mt-2 max-w-2xl text-sm text-slate-300">Рабочий стол ведущего: USB-вход RØDECaster Duo, связь с сервером и приватный аудиомонитор.</p>
+        </div>
+        <span className="rounded-full bg-amber-400/15 px-3 py-2 text-xs font-semibold text-amber-200">Тестовый тракт · без школьной акустики</span>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-3 text-xs">
+        <span className="rounded-lg bg-white/10 px-3 py-2">Подключение: {status}</span>
+        <span className="rounded-lg bg-white/10 px-3 py-2">Ведущий: {state.live?'подключён':'нет подключения'}</span>
+        <span className="rounded-lg bg-white/10 px-3 py-2">PCM Worker: {health?.workerReachable?'доступен':'нет подтверждения'}</span>
+      </div>
+    </div>
     <RadioUsbInputPanel selectedId={selectedInputId} stream={inputStream} locked={role==='presenter'} onSelect={id=>{
       setSelectedInputId(id);
       try{if(id)localStorage.setItem('radio:studio:input-id',id);else localStorage.removeItem('radio:studio:input-id');}catch{ /* optional local preference */ }
     }}/>
     {error && <p role="alert" className="text-red-500">{error}</p>}
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2 rounded-xl border border-current/10 bg-white/60 p-4 dark:bg-slate-900/50">
       {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 text-white px-4 py-2">Начать эфир с микрофона</button>
         <button type="button" onClick={listen} disabled={!state.live || state.listener} className="rounded-xl border border-current/20 px-4 py-2">Принимать эфир на этом устройстве</button></>}
       {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={recorderRef.current?stopUplink:startUplink}>{recorderRef.current?'Остановить тест Opus':'Тест передачи Opus'}</button>}
@@ -261,7 +272,9 @@ export default function RadioLiveStudio() {
       {role && <button type="button" onClick={stop} className="rounded-xl border border-red-500/30 px-4 py-2 text-red-500">Завершить тест</button>}
     </div>
     {role==='presenter'&&<p className="text-xs opacity-65">{uplinkInfo}. Тестовые блоки проверяются и отбрасываются сервером; PCM и общий эфир не меняются.</p>}
-    <div className="rounded-xl border border-current/10 bg-black/5 dark:bg-white/5 p-3 space-y-2" aria-live="polite">
+    <details className="rounded-xl border border-current/10 p-3">
+      <summary className="cursor-pointer text-sm font-semibold">Техническая диагностика шлюза</summary>
+      <div className="mt-3 space-y-2 rounded-lg bg-black/5 p-3 dark:bg-white/5" aria-live="polite">
       <div className="flex items-center justify-between gap-2">
         <strong className="text-sm">Диагностика аудиошлюза</strong>
         <span className="text-xs opacity-70">Только наблюдение · не публичный эфир</span>
@@ -278,8 +291,11 @@ export default function RadioLiveStudio() {
         </div>
         <p className="text-xs opacity-70">Ограничения: {health.blockers?.length?health.blockers.join(' · '):'нет данных'}</p>
       </>}
-    </div>
-    {role==='presenter'&&<div className="rounded-xl border border-current/10 p-3 space-y-2">
+      </div>
+    </details>
+    {role==='presenter'&&<details className="rounded-xl border border-current/10 p-3">
+      <summary className="cursor-pointer text-sm font-semibold">Расширенная проверка переключений</summary>
+      <div className="mt-3 space-y-2">
       <strong className="text-sm">Проверка переключения · без выхода в эфир</strong>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={()=>runHandoverCheck('prepare')} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Подготовить переход</button>
@@ -287,11 +303,14 @@ export default function RadioLiveStudio() {
       </div>
       <p className="text-xs opacity-75" role="status">{handoverResult}</p>
       <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
-    </div>}
+      </div>
+    </details>}
     <RadioStudioTrialChecklist health={health} role={role}/>
+    <div className="grid gap-3 xl:grid-cols-2">
     {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
     {role==='presenter'&&<RadioPrivateLiveMonitor mode="mix" socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
-    {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 p-3">
+    </div>
+    {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 bg-white/50 p-4 dark:bg-slate-900/50">
       <strong className="text-sm">Приватное PCM-прослушивание · без выхода в эфир</strong>
       <p className="text-xs opacity-65">Запросите последний фрагмент реального входящего звука (до 1 секунды). Используйте наушники — возможна обратная связь через USB.</p>
       <button type="button" onClick={requestPrivatePreview} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Получить тестовый WAV-фрагмент</button>

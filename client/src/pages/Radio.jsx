@@ -4,8 +4,11 @@ import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
+import RadioControlRoom from '../components/RadioControlRoom.jsx';
+import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
+import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
+import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
-import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
 import RadioJingleSettings from '../components/RadioJingleSettings.jsx';
@@ -27,10 +30,10 @@ export default function Radio() {
   const toast = useToast();
   const location = useLocation();
   const { addFiles, tasks: uploadTasks } = useRadioUploads();
-  const [tab, setTab] = useState(() => ['playlists','schedule','assets','equipment','studio','history'].includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'home');
+  const [tab, setTab] = useState(() => RADIO_WORKSPACE_TABS.includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'home');
   useEffect(() => {
     const requested = new URLSearchParams(location.search).get('tab');
-    if (['playlists','schedule','assets','equipment','studio','history'].includes(requested)) setTab(requested);
+    if (RADIO_WORKSPACE_TABS.includes(requested)) setTab(requested);
   }, [location.search]);
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -270,50 +273,31 @@ export default function Radio() {
       toast.success('Передача перенесена');
     }catch(error){toast.error(error.message);}
   };
+  const openWorkspace = next => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if(next === 'home')url.searchParams.delete('tab');else url.searchParams.set('tab',next);
+    window.history.replaceState(window.history.state,'',url.toString());
+  };
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
-  return <main className="p-4 md:p-8 space-y-6 max-w-6xl mx-auto">
-    <header className="space-y-2">
-      <p className="text-xs uppercase tracking-widest opacity-60">MEDIA · РАФ · RAW</p>
-      <h1 className="text-3xl font-bold">Радио</h1>
-      <p className="opacity-70">Центр управления радиовещанием колледжа</p>
-    </header>
-    {tab === 'home' ? <>
-      <RadioBroadcastDashboard token={token} />
-      <RadioSourceControl token={token} />
-      <RadioAutoDjSettings token={token} playlists={playlists} />
-      <RadioRotationSettings token={token} assets={assets} />
-      <RadioJingleSettings token={token} assets={assets} />
-      <RadioPlayoutHistory token={token} />
-      <RadioAudioProcessing token={token} />
-      <RadioCueEditor token={token} assets={assets} />
-      <section className="rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2" aria-live="polite">
-        <div className="flex justify-between gap-3 items-center flex-wrap">
-          <h2 className="font-semibold">Эфирная система</h2>
-          <span className="rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-300 px-3 py-1 text-xs font-medium">Настройка</span>
-        </div>
-        <p className="text-sm opacity-70">Воспроизведение и управление оборудованием ещё не активированы.</p>
-      </section>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {[
-          ['schedule','Сетка вещания','Единое расписание радиопрограмм и управления усилителем'],
-          ['playlists','Плейлисты','Подготовка и согласование радиопередач'],
-          ['studio','Эфирная студия','Прямые трансляции с мобильных устройств'],
-          ['equipment','Оборудование','Windows Radio Agent, ESP32, усилитель AA-300'],
-          ['history','История эфира','Отчёты о воспроизведении и событиях'],
-        ].map(([id,title,description]) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className="text-left rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
-            <h2 className="font-semibold">{title}</h2>
-            <p className="text-sm opacity-70">{description}</p>
-            <p className="text-xs opacity-50">{id === 'schedule' || id === 'playlists' ? 'Открыть раздел →' : 'В разработке'}</p>
-          </button>
-        ))}
-      </div>
-      <button type="button" onClick={() => setTab('assets')} className="rounded-xl border border-current/15 px-4 py-2 text-sm">Аудиотека →</button>
-    </> : <button type="button" onClick={() => setTab('home')} className="rounded-xl border border-current/15 px-4 py-2 text-sm">← Назад к Радио</button>}
+  return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
+    {tab === 'home' && <RadioControlRoom token={token} onOpen={openWorkspace} />}
+    {tab === 'automation' && <section className="space-y-5">
+      <RadioSourceControl token={token}/>
+      <RadioAutoDjSettings token={token} playlists={playlists}/>
+      <RadioRotationSettings token={token} assets={assets}/>
+      <RadioJingleSettings token={token} assets={assets}/>
+    </section>}
+    {tab === 'processing' && <section className="space-y-5">
+      <RadioAudioProcessing token={token}/>
+      <RadioCueEditor token={token} assets={assets}/>
+    </section>}
     {tab === 'assets' && <section className="space-y-4">
-      <h2 className="text-xl font-bold">Библиотека записей</h2>
-      <div className="rounded-2xl border border-current/15 p-4 space-y-3">
+      <RadioSectionIntro eyebrow="МЕДИАТЕКА" title="Библиотека записей" description="Вся музыка и звуковые материалы станции. Предпрослушивание, загрузки и управление треками в одном рабочем разделе." metrics={[{label:'Записей',value:assets.length},{label:'Очередь загрузки',value:files.length}]}/>
+      <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
+        <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
+        <div className="mt-4 space-y-3">
         <div onDragEnter={e => { e.preventDefault(); setDropActive(true); }}
           onDragOver={e => { e.preventDefault(); setDropActive(true); }}
           onDragLeave={e => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget)) setDropActive(false); }}
@@ -336,7 +320,8 @@ export default function Radio() {
           Загружено: {uploadProgress.completed} / {uploadProgress.total}
           <progress className="block w-full" max={uploadProgress.total} value={uploadProgress.completed}/>
         </div>}
-      </div>
+        </div>
+      </details>
       <div className="rounded-2xl border border-current/10 p-4 space-y-2">
         <p className="font-semibold">Общий плеер</p>
         <p className="text-sm opacity-70">{assets.find(a=>a.id===playingId)?.name || 'Выберите запись ниже'}</p>
@@ -353,7 +338,7 @@ export default function Radio() {
     </section>}
     {tab === 'playlists' && <section className="space-y-4">
       <RadioPlaylistReview token={token} onChanged={refresh} />
-      <h2 className="text-xl font-bold">Конструктор радиопрограмм</h2>
+      <RadioSectionIntro eyebrow="ПОДГОТОВКА" title="Конструктор радиопрограмм" description="Создавайте программы из записей, формируйте порядок воспроизведения, согласовывайте и размещайте в сетке." metrics={[{label:'Плейлистов',value:playlists.length},{label:'Утверждено',value:playlists.filter(p=>p.status==='APPROVED').length},{label:'Папок',value:folders.length}]}/>
       {wizard === 0 ? <button className={btn} onClick={() => { reset(); setWizard(1); }}>+ Создать плейлист</button> : <form onSubmit={e => { e.preventDefault(); if (wizard===1) setWizard(2); else if (wizard===2) { setSelected(ids=>[...ids,...pickIds.filter(id=>!ids.includes(id))]); setPickIds([]); setWizard(3); } else savePlaylist(); }} className="rounded-2xl border border-current/10 p-4 space-y-3">
         <p className="text-xs opacity-60">Шаг {wizard} из 3 · {editing ? 'Редактирование' : 'Новый плейлист'}</p>
         {wizard===1 && <>
@@ -438,15 +423,17 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
-      <h2 className="text-xl font-bold">Сетка вещания</h2>
+      <RadioSectionIntro eyebrow="РАСПИСАНИЕ / МОСКВА UTC+3" title="Сетка вещания" description="Управляйте радиопередачами в календаре, переносите события и проверяйте эфирные конфликты." metrics={[{label:'Событий за период',value:slots.length},{label:'Утверждённых программ',value:playlists.filter(p=>p.status==='APPROVED').length}]}/>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
+      <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
+        <summary className="cursor-pointer text-sm font-semibold">＋ Добавить передачу в расписание</summary>
       <form onSubmit={e=>{e.preventDefault();
         const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');
         if (!playlistId) { toast.error('Выберите утверждённый плейлист'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
         action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}}));
-      }} className="rounded-2xl border border-current/10 p-4 space-y-3">
+      }} className="mt-4 space-y-3">
         <h3 className="font-semibold">Добавить передачу</h3>
         <select required className={inputStyle} value={slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '')} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
@@ -465,6 +452,7 @@ export default function Radio() {
         </fieldset>}
         <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
       </form>
+      </details>
       <div className="flex items-center justify-between gap-2">
         <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()-7*86400000)))}>← Предыдущая неделя</button>
         <span className="text-xs opacity-60">Перетаскивайте карточку на нужный день</span>
@@ -508,7 +496,7 @@ export default function Radio() {
       </article>)}
     </section>}
     {tab==='equipment' && <section className="rounded-2xl border border-current/10 p-5 space-y-4">
-      <h2 className="text-xl font-bold">Оборудование · Windows Radio Agent</h2>
+      <RadioSectionIntro eyebrow="ИНФРАСТРУКТУРА" title="Оборудование" description="Радиокомпьютеры, связь и тестовый вывод звука. Управление школьным усилителем и ESP32 здесь не активируется." metrics={[{label:'Устройств',value:radioDevices.length},{label:'Активных',value:radioDevices.filter(d=>!d.revokedAt).length}]}/>
       <p className="text-sm opacity-70">Подключение пока только для синхронизации файлов и расписания. Воспроизведение и управление ESP32/AA-300 отключены.</p>
       <div className="flex gap-2 flex-wrap">
         <button className={btn} onClick={registerRadioDevice}>+ Зарегистрировать радиокомпьютер</button>
@@ -532,9 +520,6 @@ export default function Radio() {
       </div>)}
     </section>}
     {tab==='studio' && <RadioLiveStudio />}
-    {tab==='history' && <section className="rounded-2xl border border-current/10 p-6 space-y-2">
-      <h2 className="text-xl font-bold">История эфира</h2>
-      <p className="opacity-70">В разработке.</p>
-    </section>}
-  </main>;
+    {tab==='history' && <RadioPlayoutHistory token={token}/>}
+  </RadioWorkspaceShell>;
 }
