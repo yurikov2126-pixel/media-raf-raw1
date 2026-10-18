@@ -14,6 +14,7 @@ import { previewMusicQueue } from '../lib/radioMusicPlanner.js';
 import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.js';
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
+import { readJingles, writeJingles, planJingleBreaks } from '../lib/radioJingles.js';
 
 const router = Router();
 router.use(auth);
@@ -457,6 +458,40 @@ router.get('/playout-history.csv', safe(async(_req,res)=>{
 router.get('/playout-history', safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   res.json({events:(await readPlayoutHistory()).slice(-50).reverse()});
+}));
+router.get('/jingles', safe(async(_req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ res.json({settings:await readJingles()});
+}));
+router.put('/jingles', safe(async(req,res)=>{
+ try{
+  const input=req.body;
+  // Only existing radio assets can be included in a station jingle library.
+  const settings=await readJingles();
+  const proposed={...settings,...input};
+  if(!Array.isArray(proposed.assetIds))return res.status(400).json({error:'Неверный список джинглов'});
+  const count=await prisma.radioAsset.count({where:{id:{in:proposed.assetIds}}});
+  if(count!==new Set(proposed.assetIds).size)return res.status(400).json({error:'Выберите существующие аудиозаписи'});
+  res.json({settings:await writeJingles(proposed)});
+ }catch(error){
+  if(error instanceof TypeError)return res.status(400).json({error:error.message});
+  throw error;
+ }
+}));
+router.get('/jingles/preview', safe(async(_req,res)=>{
+ const settings=await readJingles();
+ const rotation=await readRotation();
+ const auto=await readAutoDjSettings();
+ const playlist=auto.playlistId?await prisma.radioPlaylist.findUnique({
+  where:{id:auto.playlistId},include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+ }):null;
+ const planned=playlist?.status==='APPROVED'
+  ?previewMusicQueue({assets:playlist.items.map(i=>i.asset),settings:{rotation,cues:await readCues()},history:await readPlayoutHistory()})
+  :{daypart:null,tracks:[]};
+ const library=settings.assetIds.length?await prisma.radioAsset.findMany({where:{id:{in:settings.assetIds}}}):[];
+ res.setHeader('Cache-Control','no-store');
+ res.json({active:false,daypart:planned.daypart,breaks:planJingleBreaks({tracks:planned.tracks,settings,daypart:planned.daypart,assets:library}),
+  note:'Только прогноз: автоматическая вставка в PCM Worker пока не включена'});
 }));
 router.get('/rotation/preview', safe(async(_req,res)=>{
   const settings=await readRotation();
