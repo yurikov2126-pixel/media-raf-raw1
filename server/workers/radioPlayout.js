@@ -17,6 +17,7 @@ import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudi
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan } from '../src/lib/radioRotation.js';
+import { recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -195,13 +196,24 @@ async function run() {
     child.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
+    let emittedBytes=0;
+    const playbackStartedAt=new Date().toISOString();
     try {
       for await(const chunk of child.stdout) {
         if(stopping) break;
+        emittedBytes+=chunk.length;
         if(!encoder.stdin.write(chunk)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
       }
     } catch(e) {state.lastError=e.message;}
     if(watchdog)clearInterval(watchdog);
+    // Log only PCM that actually reached the persistent encoder, not planned selections.
+    // The event measures generated playout, NOT acoustic proof at the listener.
+    if(emittedBytes>=48000*2*2 && cursor.track?.id){
+      try {await recordPlayoutEvent({id:asset.id,name:asset.name,mode:state.mode,
+        startedAt:playbackStartedAt,generatedMs:Math.round(emittedBytes/(48000*2*2)*1000),
+        slotId:cursor.slot?.id||null});}
+      catch(error){state.lastError='Playback journal: '+error.message;}
+    }
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
     if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)
