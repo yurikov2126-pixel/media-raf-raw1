@@ -11,6 +11,8 @@ export default function RadioLiveStudio() {
   const [muted, setMuted] = useState(false);
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
   const [health,setHealth]=useState(null);
+  const [handoverResult,setHandoverResult]=useState('Проверка переключения ещё не проводилась');
+  const [handoverProposal,setHandoverProposal]=useState(null);
   const recorderRef=useRef(null);
   const uplinkRef=useRef(null);
   const [error, setError] = useState('');
@@ -53,7 +55,7 @@ export default function RadioLiveStudio() {
     socketRef.current = socket;
     socket.on('connect', () => { setStatus('Сервер подключён'); socket.emit('radio:studio:state', setState); });
     socket.on('connect_error', () => setError('Не удалось подключить канал студии'));
-    socket.on('disconnect',()=>setHealth(null));
+    socket.on('disconnect',()=>{setHealth(null);setHandoverProposal(null);});
     const healthTimer=setInterval(()=>{
       if(!socket.connected)return;
       socket.timeout(2000).emit('radio:studio:health',(err,result)=>{
@@ -184,6 +186,21 @@ export default function RadioLiveStudio() {
       } catch (e) { fail(e.message); }
     });
   };
+  const runHandoverCheck=(kind)=>{
+    const socket=socketRef.current;
+    if(!socket?.connected)return setHandoverResult('Нет соединения с сервером');
+    if(kind==='verify'&&!handoverProposal)return setHandoverResult('Сначала выполните подготовку');
+    const event=kind==='verify'?'radio:studio:handover:verify':'radio:studio:handover:prepare';
+    const onResult=(err,response)=>{
+      if(err||!response){setHandoverProposal(null);setHandoverResult('Проверка недоступна');return;}
+      if(kind==='prepare')setHandoverProposal(response.ok?response.proposalId:null);
+      if(kind==='verify')setHandoverProposal(null);
+      setHandoverResult(response.ok?'Проверка успешно пройдена (только симуляция, эфир не переключён)':
+        'Проверка отклонена: '+(response.reason||'нет данных'));
+    };
+    if(kind==='verify')socket.timeout(3500).emit(event,{proposalId:handoverProposal},onResult);
+    else socket.timeout(3500).emit(event,onResult);
+  };
   const toggleMute = () => {
     streamRef.current?.getAudioTracks().forEach(track => { track.enabled = muted; });
     setMuted(!muted);
@@ -219,6 +236,15 @@ export default function RadioLiveStudio() {
         <p className="text-xs opacity-70">Ограничения: {health.blockers?.length?health.blockers.join(' · '):'нет данных'}</p>
       </>}
     </div>
+    {role==='presenter'&&<div className="rounded-xl border border-current/10 p-3 space-y-2">
+      <strong className="text-sm">Проверка переключения · без выхода в эфир</strong>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={()=>runHandoverCheck('prepare')} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Подготовить переход</button>
+        <button type="button" disabled={!handoverProposal} onClick={()=>runHandoverCheck('verify')} className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-40">Повторная проверка</button>
+      </div>
+      <p className="text-xs opacity-75" role="status">{handoverResult}</p>
+      <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
+    </div>}
     <audio ref={audioRef} autoPlay controls className="w-full"/>
     {role==='listener' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>audioRef.current?.play().catch(e=>setError(e.message))}>Включить звук</button>}
     <p className="text-xs opacity-60">Нужен HTTPS и разрешение микрофона. В разных сетях прямое соединение может не установиться без TURN-сервера.</p>
