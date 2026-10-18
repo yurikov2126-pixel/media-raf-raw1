@@ -159,6 +159,25 @@ function broadcastStart(body) {
 router.get('/status', requireRole('ADMIN'), (_req, res) => res.json({
     enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
+router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
+ const page=Math.max(1,Math.min(100000,Number.parseInt(req.query.page,10)||1));
+ const limit=[25,50,100].includes(Number(req.query.limit))?Number(req.query.limit):50;
+ const folderId=typeof req.query.folderId==='string'&&req.query.folderId.length<100?req.query.folderId:null;
+ const query=String(req.query.query||'').trim().slice(0,120);
+ const order=req.query.sort==='duration'?{durationMs:'desc'}:
+   req.query.sort==='recent'?{createdAt:'desc'}:{name:'asc'};
+ const where={folderId,...(query?{OR:[
+   {name:{contains:query,mode:'insensitive'}},
+   {tags:{path:['title'],string_contains:query}},
+   {tags:{path:['artist'],string_contains:query}},
+   {tags:{path:['album'],string_contains:query}},
+ ]}:{})};
+ const [total,assets]=await prisma.$transaction([
+   prisma.radioAsset.count({where}),
+   prisma.radioAsset.findMany({where,orderBy:[order,{id:'asc'}],skip:(page-1)*limit,take:limit}),
+ ]);
+ res.json({assets,total,page,limit,pages:Math.max(1,Math.ceil(total/limit))});
+}));
 router.get('/assets', requireRole('ADMIN'), safe(async (_req, res) => {
     res.json({ assets: await prisma.radioAsset.findMany({ orderBy: { createdAt: 'desc' }, take: 300 }) });
 }));
@@ -236,6 +255,18 @@ router.delete('/asset-folders/:id',requireRole('ADMIN'),safe(async (req,res)=>{
    return res.status(409).json({error:'Переместите вложенные файлы и папки перед удалением'});
  await prisma.radioAssetFolder.delete({where:{id:folder.id}});
  res.json({ok:true});
+}));
+router.post('/assets/bulk-move',requireRole('ADMIN'),safe(async(req,res)=>{
+ const assetIds=req.body?.assetIds,folderId=req.body?.folderId||null;
+ if(!Array.isArray(assetIds)||assetIds.length<1||assetIds.length>200||
+   assetIds.some(x=>typeof x!=='string')||new Set(assetIds).size!==assetIds.length)
+   return res.status(400).json({error:'Выберите не более 200 уникальных файлов'});
+ if(folderId&&!await prisma.radioAssetFolder.findUnique({where:{id:folderId}}))
+   return res.status(404).json({error:'Папка назначения не найдена'});
+ const exists=await prisma.radioAsset.count({where:{id:{in:assetIds}}});
+ if(exists!==assetIds.length)return res.status(409).json({error:'Не все файлы найдены'});
+ const result=await prisma.radioAsset.updateMany({where:{id:{in:assetIds}},data:{folderId}});
+ res.json({ok:true,moved:result.count});
 }));
 router.patch('/assets/:id/organize',requireRole('ADMIN'),safe(async (req,res)=>{
  const folderId=req.body?.folderId||null;
