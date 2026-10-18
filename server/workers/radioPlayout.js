@@ -23,6 +23,7 @@ import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
 import { LivePcmIntake } from '../src/lib/radioLivePcmIntake.js';
+import { LivePcmSessionGate } from '../src/lib/radioLivePcmSession.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -44,6 +45,7 @@ const failedAutoDjAssets = new Map();
 let frozenRotation=null;
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
 const liveIntake=new LivePcmIntake();
+const liveSessions=new LivePcmSessionGate();
 state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()};
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED==='true';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
@@ -325,13 +327,28 @@ async function run() {
 
 const server=http.createServer((req,res)=>{
   if(!authorized(req)) {res.writeHead(403).end();return;}
+  if(req.url==='/live-pcm/session' && req.method==='POST'){
+    if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
+    const owner=String(req.headers['x-radio-session-owner']||'').trim();
+    try{const token=liveSessions.start(owner);liveIntake.reset();
+      res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
+    }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
+  }
+  if(req.url==='/live-pcm/session' && req.method==='DELETE'){
+    if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
+    if(!liveSessions.stop(req.headers['x-radio-session-token'])){res.writeHead(403).end();return;}
+    liveIntake.reset();res.writeHead(204).end();return;
+  }
   if(req.url==='/live-pcm/status' && req.method==='GET'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()}));
+    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot()}));
     return;
   }
   if(req.url==='/live-pcm/ingest' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
+    const sessionToken=req.headers['x-radio-session-token'];
+    if(!liveSessions.valid(sessionToken)){res.writeHead(403).end();return;}
     const type=req.headers['content-type'];
     const size=Number(req.headers['content-length']);
     if(type!=='application/octet-stream'||!Number.isSafeInteger(size)||size<4||size>19200||size%4){
@@ -345,7 +362,9 @@ const server=http.createServer((req,res)=>{
     });
     req.on('end',()=>{
       if(received!==size){res.writeHead(400).end();return;}
+      if(!liveSessions.valid(sessionToken)){res.writeHead(403).end();return;}
       try{const result=liveIntake.accept(Buffer.concat(chunks));
+        liveSessions.touch(sessionToken,received);
         state.livePcmIntake={enabled:true,connectedToEncoder:false,...liveIntake.snapshot()};
         res.writeHead(202,{'Content-Type':'application/json','Cache-Control':'no-store'});
         res.end(JSON.stringify({accepted:true,...result,connectedToEncoder:false}));
