@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
+import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -22,7 +23,7 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
-const state = { version:'autodj-v2', mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
+const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
 let encoder = null;
 let stopping = false;
@@ -114,9 +115,15 @@ async function run() {
       await new Promise(resolve=>setTimeout(resolve,250));
       continue;
     }
+    // A new per-track decoder receives the latest settings. The shared encoder
+    // remains alive and scheduled boundaries keep priority over DSP effects.
+    let dsp;
+    try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0};}
+    state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs};
+    const filter=audioProcessingFilter(dsp,remaining/1000);
     decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
       '-ss',String(cursor.track.offsetMs/1000),'-i',filename,
-      '-t',String(remaining/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
+      '-t',String(remaining/1000),'-vn',...(filter?['-af',filter]:[]),'-f','s16le','-ac','2','-ar','48000','pipe:1'],
       {stdio:['ignore','pipe','pipe']});
     const child=decoder;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
