@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../store/auth.jsx';
+import RadioUsbInputPanel from './RadioUsbInputPanel.jsx';
 
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 export default function RadioLiveStudio() {
@@ -9,6 +10,10 @@ export default function RadioLiveStudio() {
   const [state, setState] = useState({ live: false, listener: false });
   const [role, setRole] = useState(null);
   const [muted, setMuted] = useState(false);
+  const [selectedInputId,setSelectedInputId]=useState(()=>{
+    try{return localStorage.getItem('radio:studio:input-id')||'';}catch{return '';}
+  });
+  const [inputStream,setInputStream]=useState(null);
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
   const [health,setHealth]=useState(null);
   const [handoverResult,setHandoverResult]=useState('Проверка переключения ещё не проводилась');
@@ -29,6 +34,7 @@ export default function RadioLiveStudio() {
     socket?.emit('radio:studio:leave');
     peerRef.current?.close(); peerRef.current = null;
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null;
+    setInputStream(null);
     if (audioRef.current) { audioRef.current.srcObject = null; audioRef.current.pause(); }
     roleRef.current = null; setRole(null); setMuted(false);
   };
@@ -102,10 +108,20 @@ export default function RadioLiveStudio() {
     setError('');
     const socket = socketRef.current;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...(selectedInputId?{deviceId:{exact:selectedInputId}}:{}),
+          echoCancellation:false,noiseSuppression:false,autoGainControl:false,
+          channelCount:{ideal:2},
+        }, video: false,
+      });
       socket.emit('radio:studio:present', response => {
         if (!response?.ok) { stream.getTracks().forEach(t => t.stop()); setError(response?.error || 'Не удалось начать эфир'); return; }
-        streamRef.current = stream; roleRef.current = 'presenter'; setRole('presenter'); setStatus('В эфире · ожидаем приёмник');
+        streamRef.current = stream;setInputStream(stream);
+        stream.getAudioTracks().forEach(track=>track.addEventListener('ended',()=>{
+          if(streamRef.current===stream){stop();setError('Аудиоустройство отключилось. Подключите микшер и начните новую сессию.');}
+        },{once:true}));
+        roleRef.current = 'presenter'; setRole('presenter'); setStatus('В эфире · ожидаем приёмник');
       });
     } catch (e) { setError('Микрофон недоступен: ' + e.message); }
   };
@@ -209,6 +225,10 @@ export default function RadioLiveStudio() {
     <h2 className="text-xl font-bold">Эфирная студия · тест WebRTC</h2>
     <p className="text-sm opacity-70">Первый этап: один ведущий с микрофоном и один приёмник в браузере Mac. Только тестовые наушники, без усилителя и ESP32.</p>
     <p className="text-sm">Состояние: {status} · {state.live ? 'Ведущий в эфире' : 'Эфир свободен'}</p>
+    <RadioUsbInputPanel selectedId={selectedInputId} stream={inputStream} locked={role==='presenter'} onSelect={id=>{
+      setSelectedInputId(id);
+      try{if(id)localStorage.setItem('radio:studio:input-id',id);else localStorage.removeItem('radio:studio:input-id');}catch{ /* optional local preference */ }
+    }}/>
     {error && <p role="alert" className="text-red-500">{error}</p>}
     <div className="flex flex-wrap gap-2">
       {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 text-white px-4 py-2">Начать эфир с микрофона</button>
