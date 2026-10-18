@@ -35,7 +35,7 @@ export function validateRotation(input) {
 export async function readRotation(db=prisma){
   const row=await db.setting.findUnique({where:{key:KEY}});
   try {return validateRotation({...DEFAULT_ROTATION,...JSON.parse(row?.value||'{}')});}
-  catch {return structuredClone(DEFAULT_ROTATION);}
+  catch {return {enabled:false,tags:{},dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
 }
 export async function writeRotation(data,db=prisma){
   const rotation=validateRotation(data);
