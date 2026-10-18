@@ -77,7 +77,12 @@ router.get('/dashboard', ...admin, safe(async (_req,res) => {
     orderBy:{startAt:'asc'},take:6,include:{playlist:{select:{name:true}}},
   });
   res.setHeader('Cache-Control','no-store');
-  res.json({serverTime:new Date().toISOString(),timezone:'Europe/Moscow',
+  const autoDj=await getAutoDj();
+  const autoDjConfigured=await readAutoDjSettings();
+  res.json({autoDj:{configured:autoDjConfigured.enabled,ready:autoDj.enabled,
+    playlistId:autoDjConfigured.playlistId,trackCount:autoDj.tracks.length,
+    reason:!autoDjConfigured.enabled?'DISABLED':autoDj.enabled?'READY':'PLAYLIST_UNAVAILABLE'},
+    serverTime:new Date().toISOString(),timezone:'Europe/Moscow',
     stream:stationStreamHealth(),cursor,devices,
     upcoming:upcoming.map(s=>({id:s.id,startAt:s.startAt,endAt:s.endAt,name:s.playlist.name})),
     amplifier:{connected:false},liveStudio:{integration:'SEPARATE_WEBRTC_PILOT'}});

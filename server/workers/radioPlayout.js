@@ -22,7 +22,7 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
-const state = { mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
+const state = { version:'autodj-v2', mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
 let encoder = null;
 let stopping = false;
