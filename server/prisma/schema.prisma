@@ -1336,3 +1336,10 @@ model RadioDevice {
   revokedAt   DateTime?
   playbackAllowed Boolean @default(false)
 }
+
+// DB-triggered monotonic fencing revision for all radio schedule and playlist mutations.
+model RadioScheduleRevision {
+  id        Int      @id
+  revision  BigInt   @default(0)
+  updatedAt DateTime @default(now())
+}
