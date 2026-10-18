@@ -27,6 +27,7 @@ try{
  session=start.sessionToken;
  if(typeof session!=='string')throw new Error('Worker returned no session token');
  decoder=createOpusPcmDecoder();
+ const exited=new Promise((resolve,reject)=>{decoder.once('close',resolve);decoder.once('error',reject);});
  let stderr='';
  decoder.stderr.on('data',b=>{stderr=(stderr+b.toString()).slice(-2000);});
  createReadStream(file).pipe(decoder.stdin);
@@ -36,7 +37,7 @@ try{
    'x-radio-pcm-frame-index':String(frameIndex)});
   packets++;frames+=pcm.length/4;
  }
- const exitCode=await new Promise(resolve=>decoder.once('close',resolve));
+ const exitCode=await exited;
  if(exitCode!==0)throw new Error('Decoder failed (code '+exitCode+'): '+stderr);
  console.log('Offline PCM intake verified: '+packets+' packets / '+frames+' frames. Not connected to broadcast.');
 }finally{
