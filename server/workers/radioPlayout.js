@@ -17,7 +17,7 @@ import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudi
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
-import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
+import { readPlayoutHistory, recordPlayoutEvents } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
@@ -257,8 +257,8 @@ async function run() {
         if(stopping) break;
         const output=pcmStaging?pcmStaging.push(chunk):chunk;
         if(!output?.length)continue;
-        emittedBytes+=output.length;
         if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+        emittedBytes+=output.length;
       }
     } catch(e) {state.lastError=e.message;}
     if(pcmStaging){
@@ -274,7 +274,7 @@ async function run() {
       const events=playbackAttributions({track:{id:asset.id,name:asset.name},
         blend:usableBlend,generatedMs,startedAt:playbackStartedAt,
         mode:cursor.status,slotId:cursor.slot?.id||null});
-      try {for(const event of events)await recordPlayoutEvent(event);}
+      try {await recordPlayoutEvents(events);}
       catch(error){state.lastError='Playback journal: '+error.message;}
     }
     if(!ended) child.kill('SIGTERM');
