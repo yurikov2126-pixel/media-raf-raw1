@@ -21,6 +21,7 @@ import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutH
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { reserveCrossfadePair, safeCrossfadeDuration } from '../src/lib/radioQueueCrossfade.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
+import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -34,6 +35,8 @@ const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTIN
 let decoder = null;
 let encoder = null;
 let stopping = false;
+const PCM_STAGING_ENABLED=process.env.RADIO_PCM_STAGING_ENABLED==='true';
+state.pcmStaging={enabled:PCM_STAGING_ENABLED,frameBytes:4,droppedTailBytes:0,processedBytes:0};
 const failedAutoDjAssets = new Map();
 let frozenRotation=null;
 
@@ -249,14 +252,22 @@ async function run() {
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
     let emittedBytes=0;
+    const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
     try {
       for await(const chunk of child.stdout) {
         if(stopping) break;
-        emittedBytes+=chunk.length;
-        if(!encoder.stdin.write(chunk)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+        const output=pcmStaging?pcmStaging.push(chunk):chunk;
+        if(!output?.length)continue;
+        emittedBytes+=output.length;
+        if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
       }
     } catch(e) {state.lastError=e.message;}
+    if(pcmStaging){
+      pcmStaging.finish();
+      state.pcmStaging.processedBytes+=pcmStaging.totalBytes;
+      state.pcmStaging.droppedTailBytes+=pcmStaging.droppedTailBytes;
+    }
     if(watchdog)clearInterval(watchdog);
     // Log only PCM that actually reached the persistent encoder, not planned selections.
     // The event measures generated playout, NOT acoustic proof at the listener.
