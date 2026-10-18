@@ -229,6 +229,12 @@ export default function Radio() {
   };
   const cancelSlotTouch = () => {window.clearTimeout(touchTimer.current);touchTimer.current=null;touchPoint.current=null;};
   useEffect(()=>()=>window.clearTimeout(touchTimer.current),[]);
+  const selectTimelineTime = (slot, dayKey, hour, minute=0) => {
+    setContextSlot(null);
+    setCopyingSlot(null);
+    setMovingSlot(slot);
+    setMoveTime(dayKey+'T'+String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0'));
+  };
   const proposeCopy = slot => {
     setContextSlot(null);setCopyingSlot(slot);setMovingSlot(null);
     const time=new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
@@ -426,7 +432,7 @@ export default function Radio() {
       <h2 className="text-xl font-bold">Сетка вещания</h2>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
-      <form onSubmit={e=>{e.preventDefault();
+      <form id="radio-add-slot" onSubmit={e=>{e.preventDefault();
         const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');
         if (!playlistId) { toast.error('Выберите утверждённый плейлист'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
@@ -492,6 +498,7 @@ export default function Radio() {
           <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
           <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
+          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>selectTimelineTime(contextSlot,moscowDate(new Date(contextSlot.startAt)),Number(new Intl.DateTimeFormat('en-GB',{timeZone:STATION_ZONE,hour:'2-digit',hourCycle:'h23'}).format(new Date(contextSlot.startAt))))}>◷ Изменить точное время</button>}
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>setContextSlot(null)}>Закрыть</button>
         </div>
@@ -507,7 +514,7 @@ export default function Radio() {
       </div>}
       <div className="space-y-2 rounded-2xl border border-current/10 p-3">
         <h3 className="font-semibold">Почасовая шкала · Москва</h3>
-        <p className="text-xs opacity-60">Касание часа откроет перенос выбранной передачи; длительное нажатие на передачу открывает действия.</p>
+        <p className="text-xs opacity-60">Нажмите на свободную ячейку для планирования на выбранный час, или выберите точное время переноса в контекстном меню передачи.</p>
         <div className="max-h-[65vh] overflow-auto rounded-xl border border-current/10">
           <div className="min-w-[680px]">
             <div className="sticky top-0 z-10 grid grid-cols-[52px_repeat(7,minmax(88px,1fr))] bg-slate-100 text-xs font-semibold text-slate-950 dark:bg-slate-900 dark:text-white">
@@ -521,6 +528,7 @@ export default function Radio() {
                 const dayKey=moscowDate(d);
                 const matches=slots.filter(slot=>moscowDate(new Date(slot.startAt))===dayKey&&Number(new Intl.DateTimeFormat('en-GB',{timeZone:STATION_ZONE,hour:'2-digit',hourCycle:'h23'}).format(new Date(slot.startAt)))===hour);
                 return <div key={dayIndex} className="min-w-0 border-l border-current/10 p-1">
+                  <button type="button" className="mb-1 w-full rounded-md border border-dashed border-current/10 px-1 py-1 text-left text-[10px] opacity-55 hover:border-blue-500 hover:opacity-100" onClick={()=>{setSlotTime(dayKey+'T'+String(hour).padStart(2,'0')+':00');setTab('schedule');document.getElementById('radio-add-slot')?.scrollIntoView({behavior:'smooth',block:'center'});}} aria-label={'Запланировать эфир '+dayKey+' '+hour+':00'}>＋ {String(hour).padStart(2,'0')}:00</button>
                   {matches.map(slot=><button type="button" key={slot.id} onClick={()=>openSlotMenu(slot)} className="mb-1 block w-full truncate rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-1.5 text-left text-xs" title={slot.playlist.name}>
                     {new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'})} {slot.playlist.name}
                   </button>)}
