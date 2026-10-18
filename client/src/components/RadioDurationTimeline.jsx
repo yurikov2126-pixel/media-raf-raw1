@@ -1,61 +1,64 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
-const HOUR_PX = 56;
-const DAY_MS = 86400000;
-const ZONE_MS = 3 * 3600000;
-const time = date => new Date(date).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
-const dayLabel = date => new Date(date).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow',weekday:'short',day:'2-digit',month:'2-digit'});
-const fmt = ms => { const min = Math.round(ms / 60000); return min >= 60 ? Math.floor(min/60)+' ч '+String(min%60).padStart(2,'0')+' мин' : min+' мин'; };
+const DAY = 86400000;
+const zone = 'Europe/Moscow';
+const clock = value => new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
+const dayName = value => new Date(value).toLocaleDateString('ru-RU',{timeZone:zone,weekday:'short',day:'numeric'});
+const duration = ms => {const n=Math.ceil(ms/60000);return n>=60?Math.floor(n/60)+' ч '+String(n%60).padStart(2,'0')+' мин':n+' мин';};
+const midnight = text => Date.parse(text+'T00:00:00+03:00');
 
-/**
- * Time-proportional weekly view. Absolute UTC timestamps are converted to
- * Moscow's fixed UTC+03 station clock; overnight shows on both affected days.
- */
-export default function RadioDurationTimeline({ weekStart, slots, onOpen }) {
-  const base = Date.parse(weekStart+'T00:00:00+03:00');
-  const days = useMemo(()=>Array.from({length:7},(_,i)=>{
-    const start=base+i*DAY_MS, end=start+DAY_MS;
-    const entries=slots.flatMap(slot=>{
-      const from=Date.parse(slot.startAt), to=Date.parse(slot.endAt);
-      if(!(from<end && to>start && Number.isFinite(from) && Number.isFinite(to)))return[];
-      return [{slot,top:Math.max(0,(Math.max(from,start)-start)/3600000*HOUR_PX),
-        height:Math.max(3,(Math.min(to,end)-Math.max(from,start))/3600000*HOUR_PX),
-        continuation:from<start}];
-    });
-    return {date:new Date(start),start,entries};
-  }),[base,slots]);
-  const now=Date.now();
-  const hourLine=(now-base)/3600000*HOUR_PX;
-  return <section className="space-y-2 rounded-2xl border border-current/10 p-3" aria-label="Сетка вещания по длительности">
-    <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <h3 className="font-semibold">Недельная шкала эфиров</h3>
-      <span className="text-xs opacity-65">Москва UTC+3 · масштаб: 1 час = {HOUR_PX} пикселей</span>
+export default function RadioDurationTimeline({weekStart,slots=[],onOpen}) {
+  const [selected,setSelected]=useState(0);
+  const days=useMemo(()=>Array.from({length:7},(_,i)=>{
+    const start=midnight(weekStart)+i*DAY, end=start+DAY;
+    const entries=slots.filter(s=>Date.parse(s.startAt)<end && Date.parse(s.endAt)>start)
+      .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt));
+    return {start,end,entries};
+  }),[weekStart,slots]);
+  const day=days[selected]||days[0];
+  const today=Date.now();
+  const summary=days.map(d=>d.entries.length);
+  return <section className="space-y-3 rounded-2xl border border-current/15 bg-white/5 p-3 sm:p-4" aria-label="Расписание эфиров">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="font-semibold">Расписание эфиров</h3>
+      <span className="text-xs opacity-65">Москва · UTC+3</span>
     </div>
-    <p className="text-xs opacity-65">Длина каждой карточки равна времени вещания. Передачи через полночь продолжаются в следующем дне. Нажмите на передачу для действий.</p>
-    <div className="max-h-[65vh] overflow-auto rounded-xl border border-current/10">
-      <div className="min-w-[780px]">
-        <div className="sticky top-0 z-20 grid grid-cols-[54px_repeat(7,minmax(102px,1fr))] border-b border-current/10 bg-slate-100 text-xs font-semibold text-slate-950 dark:bg-slate-900 dark:text-white">
-          <span className="p-2">UTC+3</span>
-          {days.map(day=><span key={day.start} className="border-l border-current/10 p-2">{dayLabel(day.start)}</span>)}
-        </div>
-        <div className="grid grid-cols-[54px_repeat(7,minmax(102px,1fr))]">
-          <div className="relative" style={{height:24*HOUR_PX}}>
-            {Array.from({length:24},(_,h)=><span key={h} className="absolute left-1 text-[10px] tabular-nums opacity-65" style={{top:h*HOUR_PX}}>{String(h).padStart(2,'0')}:00</span>)}
-          </div>
-          {days.map(day=><div key={day.start} className="relative border-l border-current/10" style={{height:24*HOUR_PX,backgroundImage:'repeating-linear-gradient(to bottom, transparent 0px, transparent '+(HOUR_PX-1)+'px, currentColor '+(HOUR_PX-1)+'px, currentColor '+HOUR_PX+'px)',backgroundSize:'100% '+HOUR_PX+'px'}}>
-            <div className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{background:'var(--text-primary, currentColor)'}}/>
-            {day.entries.map(({slot,top,height,continuation})=><button key={slot.id} type="button"
-              onClick={()=>onOpen(slot)}
-              title={slot.playlist.name+' · '+time(slot.startAt)+'–'+time(slot.endAt)+' · '+fmt(new Date(slot.endAt)-new Date(slot.startAt))}
-              className="absolute left-1 right-1 z-10 overflow-hidden rounded-lg border-l-4 border-blue-500 bg-blue-500/20 px-1.5 py-1 text-left text-[10px] leading-tight text-slate-900 shadow-sm hover:bg-blue-500/30 focus:outline focus:outline-2 focus:outline-blue-500 dark:text-white"
-              style={{top:top+1,height:Math.max(4,height-2)}} aria-label={'Действия: '+slot.playlist.name}>
-              <span className="block font-bold">{continuation?'↳ ':''}{time(slot.startAt)} · {fmt(new Date(slot.endAt)-new Date(slot.startAt))}</span>
-              <span className="block break-words font-medium">{slot.playlist.name}</span>
-            </button>)}
-            {now>=day.start&&now<day.start+DAY_MS&&<div className="absolute left-0 right-0 z-10 border-t-2 border-red-500 pointer-events-none" style={{top:(now-day.start)/3600000*HOUR_PX}} aria-hidden="true"/>}
-          </div>)}
-        </div>
-      </div>
+    <div className="grid grid-cols-7 gap-1.5" role="tablist" aria-label="Выберите день недели">
+      {days.map((d,i)=><button key={d.start} type="button" role="tab" aria-selected={selected===i}
+        onClick={()=>setSelected(i)}
+        className={'min-w-0 rounded-xl border px-1 py-2 text-center transition-colors '+(selected===i?'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-300':'border-current/15 hover:bg-white/10')}>
+        <span className="block truncate text-[11px] font-semibold capitalize">{dayName(d.start).split(' ')[0]}</span>
+        <span className="block text-base font-bold tabular-nums">{new Date(d.start).toLocaleDateString('ru-RU',{timeZone:zone,day:'numeric'})}</span>
+        <span className="block text-[10px] opacity-60">{summary[i]||'—'}</span>
+      </button>)}
+    </div>
+    <div role="tabpanel" className="space-y-2">
+      {!day.entries.length && <div className="rounded-xl border border-dashed border-current/20 p-7 text-center text-sm opacity-65">В этот день эфиров нет</div>}
+      {day.entries.map((slot,i)=>{
+        const from=Date.parse(slot.startAt),to=Date.parse(slot.endAt);
+        const displayStart=Math.max(from,day.start),displayEnd=Math.min(to,day.end);
+        const previous=i?Date.parse(day.entries[i-1].endAt):day.start;
+        const gap=displayStart-Math.max(previous,day.start);
+        const running=today>=from&&today<to;
+        return <div key={slot.id+'-'+selected} className="space-y-2">
+          {gap>=60000 && <div className="flex items-center gap-2 px-2 text-xs opacity-60"><span className="h-px flex-1 bg-current/15"/><span>Свободно · {duration(gap)}</span><span className="h-px flex-1 bg-current/15"/></div>}
+          <button type="button" onClick={()=>onOpen(slot)} className={'flex min-h-20 w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors sm:p-4 '+(running?'border-red-500/50 bg-red-500/10':'border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/15')}>
+            <div className="w-[66px] shrink-0 text-center">
+              <div className="text-base font-bold tabular-nums">{clock(displayStart)}</div>
+              <div className="text-xs opacity-60">{clock(displayEnd)}</div>
+            </div>
+            <span className="h-11 w-1 shrink-0 rounded-full bg-blue-500"/>
+            <div className="min-w-0 flex-1">
+              <div className="break-words text-sm font-semibold">{slot.playlist?.name||'Передача'}</div>
+              <div className="mt-1 text-xs opacity-65">{duration(to-from)}{from<day.start?' · продолжение':''}{to>day.end?' · до следующего дня':''}</div>
+              {running&&<div className="mt-1 text-xs font-medium text-red-500">В эфире</div>}
+            </div>
+            <span className="text-xl opacity-65" aria-hidden="true">⋯</span>
+          </button>
+        </div>;
+      })}
+      {day.entries.length>0 && Math.max(0,day.end-Date.parse(day.entries[day.entries.length-1].endAt))>=60000&&
+        <p className="py-2 text-center text-xs opacity-60">После последнего эфира — свободное время</p>}
     </div>
   </section>;
 }
