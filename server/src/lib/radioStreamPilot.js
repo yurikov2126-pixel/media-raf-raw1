@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { prisma } from './prisma.js';
 import { resolveRadioCursor } from './radioTimeline.js';
+import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from './radioAutoDj.js';
 
 const root = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const active = new Map();
@@ -18,7 +19,17 @@ export async function stationSnapshot() {
     } } } },
     orderBy: { startAt: 'asc' }, take: 1,
   });
-  return { cursor: resolveRadioCursor(slots, now.getTime()), slot: slots[0] || null };
+  const cursor=resolveRadioCursor(slots,now.getTime());
+  if(cursor.slot)return {cursor,slot:slots[0]||null};
+  const settings=await readAutoDjSettings();
+  if(!settings.enabled||!settings.playlistId)return {cursor,slot:null};
+  const playlist=await prisma.radioPlaylist.findUnique({
+    where:{id:settings.playlistId},
+    include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+  });
+  const assets=selectAutoDjAssets(playlist);
+  const track=autoDjCursor(assets,now.getTime());
+  return {cursor:track?{status:'AUTO_DJ',slot:null,track,at:now.toISOString()}:cursor,slot:null};
 }
 
 export function stationStreamHealth() {
