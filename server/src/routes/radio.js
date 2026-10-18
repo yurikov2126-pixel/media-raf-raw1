@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
 
 const router = Router();
 router.use(auth);
@@ -395,6 +396,23 @@ router.post('/playlists/:id/return', safe(async (req, res) => {
         error: {missing:'Плейлист не найден',locked:'Плейлист не ожидает проверки','not-student':'Возврат предусмотрен только для студентов'}[result],
     });
     res.json({ playlist: result });
+}));
+router.get('/autodj', safe(async (_req,res) => {
+    res.json({settings:await readAutoDjSettings()});
+}));
+router.put('/autodj', safe(async (req,res) => {
+    const {enabled,playlistId}=req.body||{};
+    if(typeof enabled!=='boolean'||(playlistId!==null&&typeof playlistId!=='string'))
+        return res.status(400).json({error:'Укажите enabled и playlistId'});
+    if(enabled) {
+        if(!playlistId)return res.status(400).json({error:'Выберите утверждённый плейлист'});
+        const playlist=await prisma.radioPlaylist.findUnique({where:{id:playlistId},
+          include:{items:{include:{asset:true}}}});
+        if(!playlist||playlist.status!=='APPROVED'||!playlist.items.length)
+          return res.status(400).json({error:'Авто-DJ требует утверждённый непустой плейлист'});
+    }
+    await writeAutoDjSettings({enabled,playlistId:playlistId||null});
+    res.json({settings:await readAutoDjSettings()});
 }));
 router.get('/schedule', safe(async (req, res) => {
     const from = new Date(req.query.from), to = new Date(req.query.to);
