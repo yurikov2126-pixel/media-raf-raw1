@@ -213,6 +213,7 @@ export default function RadioLiveStudio() {
           <span>PCM Worker: {health.workerReachable?'доступен':'не доступен'}</span>
           <span>Буфер симулятора: {Number.isFinite(health.bufferedMs)?health.bufferedMs+' мс':'нет данных'}</span>
           <span>Возраст PCM: {Number.isFinite(health.pcmAgeMs)?Math.round(health.pcmAgeMs)+' мс':'нет данных'}</span>
+          <span>Расписание: {health.scheduleKnown===false?'нет данных':health.scheduledActive?'занято':'свободно'}</span>
           <span>Переключение эфира: запрещено</span>
         </div>
         <p className="text-xs opacity-70">Ограничения: {health.blockers?.length?health.blockers.join(' · '):'нет данных'}</p>
