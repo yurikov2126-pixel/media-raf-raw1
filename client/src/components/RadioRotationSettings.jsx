@@ -3,7 +3,7 @@ import {api} from '../api/client.js';
 const categories={ENERGY:'Энергичная',POP:'Поп-музыка',CALM:'Спокойная',INSTRUMENTAL:'Инструментальная',OTHER:'Другая'};
 const partNames={NIGHT:'Ночь · 00–07',MORNING:'Утро · 07–11',DAY:'День · 11–18',EVENING:'Вечер · 18–24'};
 export default function RadioRotationSettings({token,assets=[]}){
- const [musicPlan,setMusicPlan]=useState(null),[settings,setSettings]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
+ const [preview,setPreview]=useState(null),[musicPlan,setMusicPlan]=useState(null),[settings,setSettings]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
  const load=useCallback(async()=>{try{setSettings((await api('/radio/rotation',{token})).rotation);}catch(e){setError(e.message);}},[token]);
  useEffect(()=>{load();},[load]);
  const save=async(e)=>{e.preventDefault();setSaving(true);setError('');setNote('');
