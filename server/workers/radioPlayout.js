@@ -146,9 +146,8 @@ async function run() {
       args=['-hide_banner','-loglevel','error','-nostdin','-re',
         '-ss',String(firstSeek),'-t',String(fullSeconds),'-i',filename,
         '-re','-ss',String(secondSeek),'-t',String(fullSeconds),'-i',nextFilename,
-        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1=tri:c2=tri[m]',
-        '-map','[m]','-ss',String(blendStart),'-t',String(remaining/1000),
-        '-f','s16le','-ac','2','-ar','48000','pipe:1'];
+        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1=tri:c2=tri,atrim=start='+blendStart+':duration='+(remaining/1000)+',asetpts=PTS-STARTPTS[m]',
+        '-map','[m]','-f','s16le','-ac','2','-ar','48000','pipe:1'];
     } else {
       args=['-hide_banner','-loglevel','error','-nostdin','-re',
         '-ss',String((cursor.track.seekMs??cursor.track.offsetMs)/1000),'-i',filename,
