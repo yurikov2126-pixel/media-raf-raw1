@@ -8,7 +8,6 @@ import RadioControlRoom from '../components/RadioControlRoom.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
 import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
-import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
 import RadioJingleSettings from '../components/RadioJingleSettings.jsx';
