@@ -6,6 +6,7 @@ import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
+import RadioDurationTimeline from '../components/RadioDurationTimeline.jsx';
 import { useRadioUploads } from '../components/RadioUploadManager.jsx';
 
 const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
@@ -505,31 +506,7 @@ export default function Radio() {
           <div className="flex gap-2"><button className={btn}>Создать копию</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>setCopyingSlot(null)}>Отмена</button></div>
         </form>
       </div>}
-      <div className="space-y-2 rounded-2xl border border-current/10 p-3">
-        <h3 className="font-semibold">Почасовая шкала · Москва</h3>
-        <p className="text-xs opacity-60">Касание часа откроет перенос выбранной передачи; длительное нажатие на передачу открывает действия.</p>
-        <div className="max-h-[65vh] overflow-auto rounded-xl border border-current/10">
-          <div className="min-w-[680px]">
-            <div className="sticky top-0 z-10 grid grid-cols-[52px_repeat(7,minmax(88px,1fr))] bg-slate-100 text-xs font-semibold text-slate-950 dark:bg-slate-900 dark:text-white">
-              <span className="p-2">UTC+3</span>
-              {Array.from({length:7},(_,i)=>{const d=new Date(new Date(date+'T00:00:00+03:00').getTime()+i*86400000);return <span key={i} className="border-l border-current/10 p-2">{d.toLocaleDateString('ru-RU',{timeZone:STATION_ZONE,weekday:'short',day:'2-digit',month:'2-digit'})}</span>;})}
-            </div>
-            {Array.from({length:24},(_,hour)=><div key={hour} className="grid min-h-12 grid-cols-[52px_repeat(7,minmax(88px,1fr))] border-t border-current/10">
-              <span className="p-2 text-xs tabular-nums opacity-60">{String(hour).padStart(2,'0')}:00</span>
-              {Array.from({length:7},(_,dayIndex)=>{
-                const d=new Date(new Date(date+'T00:00:00+03:00').getTime()+dayIndex*86400000);
-                const dayKey=moscowDate(d);
-                const matches=slots.filter(slot=>moscowDate(new Date(slot.startAt))===dayKey&&Number(new Intl.DateTimeFormat('en-GB',{timeZone:STATION_ZONE,hour:'2-digit',hourCycle:'h23'}).format(new Date(slot.startAt)))===hour);
-                return <div key={dayIndex} className="min-w-0 border-l border-current/10 p-1">
-                  {matches.map(slot=><button type="button" key={slot.id} onClick={()=>openSlotMenu(slot)} className="mb-1 block w-full truncate rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-1.5 text-left text-xs" title={slot.playlist.name}>
-                    {new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'})} {slot.playlist.name}
-                  </button>)}
-                </div>;
-              })}
-            </div>)}
-          </div>
-        </div>
-      </div>
+      <RadioDurationTimeline weekStart={date} slots={slots} onOpen={openSlotMenu}/>
       {movingSlot && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveMove} className="w-full max-w-md rounded-2xl border border-current/15 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-3">
           <h3 className="text-lg font-semibold">Перенести передачу</h3>
