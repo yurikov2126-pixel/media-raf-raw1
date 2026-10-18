@@ -140,7 +140,7 @@ export default function RadioLiveStudio() {
   const stopUplink = () => {
     uplinkRef.current?.close();
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
-    recorderRef.current = null;
+    recorderRef.current = null;setUplinkActive(false);setUplinkInfo('Тестовый uplink остановлен');
   };
   const startUplink=()=>{
     const socket=socketRef.current,stream=streamRef.current;
