@@ -43,6 +43,13 @@ export default function RadioRotationSettings({token,assets=[]}){
      onChange={e=>setSettings(v=>({...v,strictCooldown:e.target.checked}))}/>
      Строго соблюдать паузу повторов (событийная очередь)
    </label>
+   <label className="flex items-center gap-2 text-sm"><input type="checkbox"
+     disabled={!settings.strictCooldown||!settings.cooldownMinutes}
+     checked={settings.allowCooldownFallback??false}
+     onChange={e=>setSettings(v=>({...v,allowCooldownFallback:e.target.checked}))}/>
+     Не допускать тишину при пустой очереди (разрешить досрочный повтор)
+   </label>
+   <p className="text-xs text-amber-600 dark:text-amber-400">Если включить резервную ротацию, строгий запрет повторов может быть нарушен, когда все записи ещё в паузе. По умолчанию выключено.</p>
    <p className="text-xs opacity-65">В строгом режиме недавно звучавшие композиции не выбираются. Когда все записи находятся в паузе — эфир ждёт, пока освободится хотя бы одна. Crossfade в строгой очереди отключён; эфиры по расписанию всегда имеют приоритет.</p>
    <p className="text-xs opacity-65">Недавно воспроизведённые треки ставятся ближе к концу новой музыкальной программы. Правило действует при формировании периода, а не обрывает текущую песню; при маленькой библиотеке повторы всё ещё возможны.</p>
    <p className="text-xs opacity-65">Если записей недостаточно для выбранного интервала, Auto-DJ продолжит эфир с максимально возможным разделением исполнителей. Это правило действует в пределах каждой ротации, включая переход от её последней композиции к первой.</p>
