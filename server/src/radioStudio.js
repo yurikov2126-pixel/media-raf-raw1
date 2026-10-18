@@ -1,9 +1,11 @@
 import { prisma } from './lib/prisma.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { BrowserOpusUplink } from './lib/radioBrowserOpusUplink.js';
 import { RadioLiveOpusGateway, workerRequest } from './lib/radioLiveOpusGateway.js';
 import { evaluateRadioPresenterReadiness } from './lib/radioPresenterReadiness.js';
 import { readRadioScheduleAuthority, scheduleAwareReadiness } from './lib/radioScheduleAuthority.js';
+import { collectRadioHandoverObservation } from './lib/radioHandoverObservation.js';
+import { RadioHandoverDryRunCoordinator } from './lib/radioHandoverDryRunCoordinator.js';
 
 // Only signaling passes via Socket.IO; audio flows peer-to-peer over WebRTC.
 // Pilot supports one presenter and one listening browser at a time.
@@ -16,7 +18,9 @@ export function initRadioStudio(io) {
   let uplinkOwner=null;
   const gatewayEnabled=browserUplinkEnabled&&process.env.RADIO_BROWSER_PCM_GATEWAY_ENABLED==='true';
   let gateway=null;
-  const closeGateway=()=>{const current=gateway;gateway=null;void current?.stop();};
+  const handoverDryRun=new RadioHandoverDryRunCoordinator();
+  let pilotLease=null;
+  const closeGateway=()=>{handoverDryRun.onPresenterLost('GATEWAY_CLOSED');pilotLease=null;const current=gateway;gateway=null;void current?.stop();};
   // Server-side lease: a disappeared presenter must not hold a decoder or Worker session indefinitely.
   const leaseTimer=setInterval(()=>{
     if(!uplinkOwner)return;
@@ -82,6 +86,7 @@ export function initRadioStudio(io) {
       if(socket.id!==presenter)return callback?.({ok:false,error:'Только текущий ведущий'});
       if(uplinkOwner)return callback?.({ok:false,error:'Другой вход занят'});
       uplinkOwner=socket.id;
+      pilotLease=randomUUID();
       uplink.start();
       if(gatewayEnabled){
         try {
@@ -155,6 +160,45 @@ export function initRadioStudio(io) {
           ...(!workerReachable?['WORKER_UNAVAILABLE']:[])])],
         changeApplied:false,liveOutputConnected:false});
     });
+    const observeHandover=async()=>{
+      const connected=presenter===socket.id&&uplinkOwner===socket.id;
+      const running=connected&&gateway?.running===true;
+      let workerStatus=null;
+      if(!gatewayEnabled||!running)throw new Error('PILOT_NOT_ACTIVE');
+      workerStatus=await workerRequest('GET','/live-pcm/status');
+      return collectRadioHandoverObservation({prisma,workerStatus,connected,gatewayRunning:running,
+        presenterId:connected?socket.id:null,leaseId:connected?pilotLease:null});
+    };
+    socket.on('radio:studio:handover:prepare',async callback=>{
+      if(typeof callback!=='function')return;
+      try{
+        const snapshot=await observeHandover();
+        const result=handoverDryRun.prepare({owner:socket.id,snapshot});
+        callback({ ...result,mode:'DRY_RUN_ONLY',connectedToEncoder:false});
+      }catch{callback({ok:false,reason:'AUTHORITY_OR_WORKER_UNAVAILABLE',changeApplied:false});}
+    });
+    socket.on('radio:studio:handover:verify',async ({proposalId}={},callback)=>{
+      if(typeof callback!=='function')return;
+      try{
+        const snapshot=await observeHandover();
+        callback({...handoverDryRun.verify({owner:socket.id,proposalId,snapshot}),
+          mode:'DRY_RUN_ONLY',connectedToEncoder:false});
+      }catch{
+        handoverDryRun.onPresenterLost('VERIFICATION_UNAVAILABLE');
+        callback({ok:false,reason:'AUTHORITY_OR_WORKER_UNAVAILABLE',changeApplied:false});
+      }
+    });
+    socket.on('radio:studio:handover:cancel',callback=>{
+      if(typeof callback!=='function')return;
+      callback(handoverDryRun.release({owner:socket.id}));
+    });
+    socket.on('radio:studio:handover:journal',callback=>{
+      if(typeof callback!=='function')return;
+      const snapshot=handoverDryRun.snapshot();
+      callback({ok:true,mode:'DRY_RUN_ONLY',pending:snapshot.pending,
+        // Do not expose another admin's identity or raw session tokens.
+        journal:snapshot.journal.slice(-20),changeApplied:false,connectedToEncoder:false});
+    });
     socket.on('radio:studio:uplink:status',callback=>{
       callback?.({enabled:browserUplinkEnabled,connectedToEncoder:false,
         mode:gatewayEnabled?'ISOLATED_PCM_INTAKE':'VALIDATION_ONLY',
@@ -184,6 +228,7 @@ export function initRadioStudio(io) {
       callback?.({ ok: true });
     });
     const leave = () => {
+      handoverDryRun.release({owner:socket.id,reason:'OPERATOR_DISCONNECTED'});
       const wasPresenter = presenter === socket.id;
       if (wasPresenter) { if(uplinkOwner===socket.id){closeGateway();uplink.reset();uplinkOwner=null;} presenter = null; if (listener) signalTo(listener, 'radio:studio:ended'); listener = null; deviceListener = null; }
       else if (listener === socket.id) { listener = null; deviceListener = null; if (presenter) io.to(presenter).emit('radio:studio:listener-left'); }
