@@ -8,7 +8,7 @@ export const DAYPARTS=[
   {id:'DAY',start:11,end:18},
   {id:'EVENING',start:18,end:24},
 ];
-export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,cooldownMinutes:0,dayparts:{
+export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,cooldownMinutes:0,strictCooldown:false,dayparts:{
   NIGHT:['CALM','INSTRUMENTAL','OTHER'],
   MORNING:['ENERGY','POP','OTHER'],
   DAY:['POP','ENERGY','INSTRUMENTAL','OTHER'],
@@ -18,6 +18,7 @@ export function validateRotation(input) {
   if(!input || typeof input.enabled!=='boolean' || !input.tags ||
      typeof input.tags!=='object' || Array.isArray(input.tags) ||
      !input.dayparts || typeof input.dayparts!=='object')throw new TypeError('Некорректные параметры ротации');
+  if(typeof input.strictCooldown!=='boolean')throw new TypeError('Некорректный режим строгого интервала');
   if(!Number.isInteger(input.cooldownMinutes)||input.cooldownMinutes<0||input.cooldownMinutes>240)throw new TypeError('Пауза повторов: от 0 до 240 минут');
   const tags=Object.fromEntries(Object.entries(input.tags).map(([id,tag])=>{
     if(!/^[a-z0-9_-]{1,120}$/i.test(id)||!CATEGORIES.includes(tag))throw new TypeError('Недопустимая категория');
@@ -38,12 +39,12 @@ export function validateRotation(input) {
       throw new TypeError('Недопустимые категории периода '+id);
     dayparts[id]=choices;
   }
-  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,cooldownMinutes:input.cooldownMinutes,dayparts};
+  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,dayparts};
 }
 export async function readRotation(db=prisma){
   const row=await db.setting.findUnique({where:{key:KEY}});
   try {return validateRotation({...DEFAULT_ROTATION,...JSON.parse(row?.value||'{}')});}
-  catch {return {enabled:false,tags:{},artists:{},artistGap:0,cooldownMinutes:0,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
+  catch {return {enabled:false,tags:{},artists:{},artistGap:0,cooldownMinutes:0,strictCooldown:false,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
 }
 export async function writeRotation(data,db=prisma){
   const rotation=validateRotation(data);
