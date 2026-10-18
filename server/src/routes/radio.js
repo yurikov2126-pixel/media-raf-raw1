@@ -9,6 +9,9 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
 import { readRotation, writeRotation, rotationPlan } from '../lib/radioRotation.js';
+import { readPlayoutHistory } from '../lib/radioPlayoutHistory.js';
+import { previewMusicQueue } from '../lib/radioMusicPlanner.js';
+import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.js';
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 
@@ -425,6 +428,35 @@ router.put('/audio-processing', safe(async (req,res) => {
         if(error instanceof TypeError)return res.status(400).json({error:error.message});
         throw error;
     }
+}));
+router.get('/music-plan', safe(async(_req,res)=>{
+  const auto=await readAutoDjSettings();
+  const rotation=await readRotation();
+  const playlist=auto.playlistId?await prisma.radioPlaylist.findUnique({
+    where:{id:auto.playlistId},include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+  }):null;
+  const assets=playlist?.status==='APPROVED'?playlist.items.map(i=>i.asset)
+    .filter(a=>Number.isInteger(a.durationMs)&&a.durationMs>=1000):[];
+  const plan=previewMusicQueue({assets,settings:{rotation,cues:await readCues()},
+    history:await readPlayoutHistory(),limit:10});
+  res.setHeader('Cache-Control','no-store');
+  res.json({plan,approved:playlist?.status==='APPROVED'});
+}));
+router.get('/playout-insights', safe(async(req,res)=>{
+ const hours=Number(req.query.hours||24);
+ if(![1,6,24,72].includes(hours))return res.status(400).json({error:'Допустимые окна: 1, 6, 24, 72 часа'});
+ res.setHeader('Cache-Control','no-store');
+ res.json({insights:summarizePlayout(await readPlayoutHistory(),Date.now(),hours)});
+}));
+router.get('/playout-history.csv', safe(async(_req,res)=>{
+ res.setHeader('Cache-Control','private, no-store');
+ res.setHeader('Content-Type','text/csv; charset=utf-8');
+ res.setHeader('Content-Disposition','attachment; filename="radio-playout-history.csv"');
+ res.send(exportPlayoutCsv(await readPlayoutHistory()));
+}));
+router.get('/playout-history', safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json({events:(await readPlayoutHistory()).slice(-50).reverse()});
 }));
 router.get('/rotation/preview', safe(async(_req,res)=>{
   const settings=await readRotation();

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists} from '../src/lib/radioRotation.js';
+import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists,prioritizeUnplayed} from '../src/lib/radioRotation.js';
 const assets=[
 {id:'x',name:'Energetic',playDurationMs:60000},
 {id:'y',name:'Calm',playDurationMs:90000},
@@ -79,6 +79,26 @@ describe('radio artist repeat protection',()=>{
   const result=await readRotation(db);
   expect(result.artistGap).toBe(0);
   expect(result.artists).toEqual({});
+ });
+});
+
+describe('cooldown priority at daypart formation',()=>{
+ const items=[{id:'a'},{id:'b'},{id:'c'}];
+ const timestamp=Date.parse('2026-10-18T15:00:00Z');
+ it('defers recently generated audio without dropping tracks',()=>{
+  const history=[{id:'a',startedAt:'2026-10-18T14:55:00Z'}];
+  expect(prioritizeUnplayed(items,history,30,timestamp).map(x=>x.id)).toEqual(['b','c','a']);
+ });
+ it('preserves rotation when no eligible history exists',()=>{
+  expect(prioritizeUnplayed(items,[{id:'a',startedAt:'2026-10-18T12:00:00Z'}],30,timestamp)).toEqual(items);
+  expect(prioritizeUnplayed(items,[],0,timestamp)).toEqual(items);
+ });
+ it('validates repeat interval and accepts legacy settings',async()=>{
+  expect(()=>validateRotation({...DEFAULT_ROTATION,cooldownMinutes:-1})).toThrow();
+  expect(()=>validateRotation({...DEFAULT_ROTATION,cooldownMinutes:241})).toThrow();
+  const legacy={...DEFAULT_ROTATION};delete legacy.cooldownMinutes;
+  const db={setting:{findUnique:async()=>({value:JSON.stringify(legacy)})}};
+  expect((await readRotation(db)).cooldownMinutes).toBe(0);
  });
 });
 

@@ -16,7 +16,12 @@ import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
-import { readRotation, rotationPlan } from '../src/lib/radioRotation.js';
+import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
+import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
+import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
+import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
+import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
+import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -30,7 +35,10 @@ const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTIN
 let decoder = null;
 let encoder = null;
 let stopping = false;
+const PCM_STAGING_ENABLED=process.env.RADIO_PCM_STAGING_ENABLED==='true';
+state.pcmStaging={enabled:PCM_STAGING_ENABLED,frameBytes:4,droppedTailBytes:0,processedBytes:0};
 const failedAutoDjAssets = new Map();
+let frozenRotation=null;
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
@@ -78,16 +86,62 @@ async function current() {
   for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
-  const rotation=rotationPlan(catalog,await readRotation(),nowMs);
+  const rotationSettings=await readRotation();
+  const candidate=rotationPlan(catalog,rotationSettings,nowMs);
+  // Keep the plan stable for this daypart, including its crossfade boundaries.
+  // Changes in the history must not move the station cursor mid-song.
+  const key=candidate?[candidate.anchorMs,candidate.endMs,rotationSettings.cooldownMinutes,
+    catalog.map(a=>a.id+':'+a.playDurationMs).join(',')].join('|'):null;
+  if(key!==frozenRotation?.key){
+    frozenRotation=null;
+    if(candidate){
+      const history=rotationSettings.cooldownMinutes?await readPlayoutHistory():[];
+      const items=prioritizeUnplayed(candidate.items,history,rotationSettings.cooldownMinutes,nowMs);
+      frozenRotation={key,plan:{...candidate,items}};
+    }
+  }
+  const rotation=frozenRotation?.plan||null;
   const music=rotation?.items||catalog;
   const clock=rotation?nowMs-rotation.anchorMs:nowMs;
+  // Strict mode advances only after a decoder finishes. Nothing in the
+  // generated playback history changes the selection of an already playing track.
+  if(rotation && rotationSettings.strictCooldown && rotationSettings.cooldownMinutes>0){
+    const history=await readPlayoutHistory();
+    const eligible=chooseQueuedTrack(music,history,rotationSettings.cooldownMinutes,nowMs);
+    const selected=eligible||selectExhaustionFallback(music,history,nowMs,rotationSettings.allowCooldownFallback);
+    state.cooldownException=!!selected&&!eligible;
+    const next=await prisma.radioScheduleSlot.findFirst({
+      where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+      select:{startAt:true},orderBy:{startAt:'asc'}
+    });
+    const until=Math.min(next?next.startAt.getTime():Infinity,rotation.endMs);
+    if(!selected || until-nowMs<150){
+      state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
+      return {cursor,asset:null};
+    }
+    state.queueStatus=eligible?'PLAYING':'FALLBACK_REPEAT';
+    // Dry-run only: never initiate a second decoder without PCM handover.
+    // A reserved candidate is not recorded as playback.
+    const dsp=await readAudioProcessing();
+    const preflight=await preflightNextTracks({items:music,history,
+      cooldownMinutes:rotationSettings.cooldownMinutes,nowMs,preferredId:selected.id,
+      requestedMs:dsp.crossfadeMs,untilMs:until,assetsRoot});
+    state.queueCrossfadePreview={...preflight,active:false};
+    const index=music.findIndex(item=>item.id===selected.id);
+    return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
+      track:{id:selected.id,name:selected.name,index,seekMs:selected.cue.inMs,
+        offsetMs:0,durationMs:selected.playDurationMs},
+      until:Number.isFinite(until)?new Date(until).toISOString():null},
+      asset:selected};
+  }
+  state.queueStatus='TIMELINE';
   const dsp=await readAudioProcessing();
   const blend=dsp.crossfadeMs>0?crossfadePlan(music,clock,dsp.crossfadeMs):null;
   const track=blend?{
     id:blend.track.id,name:blend.track.name,index:blend.index,
     durationMs:blend.track.playDurationMs,offsetMs:0,seekMs:blend.seekMs,
     remainingMs:blend.remainingMs,blend:blend.mode==='BLEND'?{
-      nextId:blend.next.id,nextStorageKey:blend.next.storageKey,
+      nextId:blend.next.id,nextName:blend.next.name,nextStorageKey:blend.next.storageKey,
       nextSeekMs:blend.nextSeekMs,overlapMs:blend.overlapMs,
       blendPosition:blend.blendPosition,
     }:null,
@@ -195,13 +249,34 @@ async function run() {
     child.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
+    let emittedBytes=0;
+    const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
+    const playbackStartedAt=new Date().toISOString();
     try {
       for await(const chunk of child.stdout) {
         if(stopping) break;
-        if(!encoder.stdin.write(chunk)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+        const output=pcmStaging?pcmStaging.push(chunk):chunk;
+        if(!output?.length)continue;
+        emittedBytes+=output.length;
+        if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
       }
     } catch(e) {state.lastError=e.message;}
+    if(pcmStaging){
+      pcmStaging.finish();
+      state.pcmStaging.processedBytes+=pcmStaging.totalBytes;
+      state.pcmStaging.droppedTailBytes+=pcmStaging.droppedTailBytes;
+    }
     if(watchdog)clearInterval(watchdog);
+    // Log only PCM that actually reached the persistent encoder, not planned selections.
+    // The event measures generated playout, NOT acoustic proof at the listener.
+    const generatedMs=emittedBytes/(48000*2*2)*1000;
+    if(generatedMs>=1000){
+      const events=playbackAttributions({track:{id:asset.id,name:asset.name},
+        blend:usableBlend,generatedMs,startedAt:playbackStartedAt,
+        mode:cursor.status,slotId:cursor.slot?.id||null});
+      try {for(const event of events)await recordPlayoutEvent(event);}
+      catch(error){state.lastError='Playback journal: '+error.message;}
+    }
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
     if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)

@@ -8,7 +8,7 @@ export const DAYPARTS=[
   {id:'DAY',start:11,end:18},
   {id:'EVENING',start:18,end:24},
 ];
-export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},dayparts:{
+export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:{
   NIGHT:['CALM','INSTRUMENTAL','OTHER'],
   MORNING:['ENERGY','POP','OTHER'],
   DAY:['POP','ENERGY','INSTRUMENTAL','OTHER'],
@@ -18,6 +18,9 @@ export function validateRotation(input) {
   if(!input || typeof input.enabled!=='boolean' || !input.tags ||
      typeof input.tags!=='object' || Array.isArray(input.tags) ||
      !input.dayparts || typeof input.dayparts!=='object')throw new TypeError('Некорректные параметры ротации');
+  if(typeof input.allowCooldownFallback!=='boolean')throw new TypeError('Некорректная настройка резервного воспроизведения');
+  if(typeof input.strictCooldown!=='boolean')throw new TypeError('Некорректный режим строгого интервала');
+  if(!Number.isInteger(input.cooldownMinutes)||input.cooldownMinutes<0||input.cooldownMinutes>240)throw new TypeError('Пауза повторов: от 0 до 240 минут');
   const tags=Object.fromEntries(Object.entries(input.tags).map(([id,tag])=>{
     if(!/^[a-z0-9_-]{1,120}$/i.test(id)||!CATEGORIES.includes(tag))throw new TypeError('Недопустимая категория');
     return [id,tag];
@@ -42,12 +45,12 @@ export function validateRotation(input) {
       throw new TypeError('Недопустимые категории периода '+id);
     dayparts[id]=choices;
   }
-  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,categoryPriority,dayparts};
+  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,categoryPriority,cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,allowCooldownFallback:input.allowCooldownFallback,dayparts};
 }
 export async function readRotation(db=prisma){
   const row=await db.setting.findUnique({where:{key:KEY}});
   try {return validateRotation({...DEFAULT_ROTATION,...JSON.parse(row?.value||'{}')});}
-  catch {return {enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
+  catch {return {enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
 }
 export async function writeRotation(data,db=prisma){
   const rotation=validateRotation(data);
@@ -112,10 +115,32 @@ export function rotationPlan(assets,config,nowMs=Date.now()){
   const pool=picked.length?picked:assets;
   const seed=dayKey+':'+part.id;
   // Stable pseudo-random order, independent of process restart and asset position.
-  const shuffled=[...pool].sort((a,b)=>hash(seed+a.id)-hash(seed+b.id)||a.id.localeCompare(b.id));
+  const shuffled=[...pool].sort((a,b)=>{
+    const scoreA=config.categoryPriority?.[config.tags[a.id]||'OTHER']||3;
+    const scoreB=config.categoryPriority?.[config.tags[b.id]||'OTHER']||3;
+    return scoreB-scoreA||hash(seed+a.id)-hash(seed+b.id)||a.id.localeCompare(b.id);
+  });
   const arranged=separateArtists(shuffled,config.artists,config.artistGap);
   const ordered=arranged.items;
   const duration=ordered.reduce((n,a)=>n+a.playDurationMs,0);
   return {items:ordered,anchorMs:start,endMs:end,daypart:part.id,
     activeCategories:[...allowed],cycleMs:duration,artistViolations:arranged.violations};
+}
+
+// Move recently generated tracks toward the end of a newly opened daypart.
+// This is a best-effort cooldown, not a hard ban: no track is dropped.
+// Freeze this order for the daypart to avoid changing the time-based cursor mid-track.
+export function prioritizeUnplayed(items,history,minutes,nowMs){
+  if(!minutes||items.length<2)return [...items];
+  const cutoff=nowMs-minutes*60000;
+  const latest=new Map();
+  for(const row of history){
+    const at=Date.parse(row.startedAt);
+    if(Number.isFinite(at)&&at>cutoff&&at<=nowMs)
+      latest.set(row.id,Math.max(latest.get(row.id)||0,at));
+  }
+  return [...items].sort((a,b)=>{
+    const aAt=latest.get(a.id)||0,bAt=latest.get(b.id)||0;
+    return Number(aAt>0)-Number(bAt>0)||aAt-bAt;
+  });
 }
