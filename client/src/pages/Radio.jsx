@@ -294,7 +294,9 @@ export default function Radio() {
     </section>}
     {tab === 'assets' && <section className="space-y-4">
       <h2 className="text-xl font-bold">Библиотека записей</h2>
-      <div className="rounded-2xl border border-current/15 p-4 space-y-3">
+      <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
+        <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
+        <div className="mt-4 space-y-3">
         <div onDragEnter={e => { e.preventDefault(); setDropActive(true); }}
           onDragOver={e => { e.preventDefault(); setDropActive(true); }}
           onDragLeave={e => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget)) setDropActive(false); }}
@@ -317,7 +319,8 @@ export default function Radio() {
           Загружено: {uploadProgress.completed} / {uploadProgress.total}
           <progress className="block w-full" max={uploadProgress.total} value={uploadProgress.completed}/>
         </div>}
-      </div>
+        </div>
+      </details>
       <div className="rounded-2xl border border-current/10 p-4 space-y-2">
         <p className="font-semibold">Общий плеер</p>
         <p className="text-sm opacity-70">{assets.find(a=>a.id===playingId)?.name || 'Выберите запись ниже'}</p>
@@ -422,12 +425,14 @@ export default function Radio() {
       <h2 className="text-xl font-bold">Сетка вещания</h2>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
+      <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
+        <summary className="cursor-pointer text-sm font-semibold">＋ Добавить передачу в расписание</summary>
       <form onSubmit={e=>{e.preventDefault();
         const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');
         if (!playlistId) { toast.error('Выберите утверждённый плейлист'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
         action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}}));
-      }} className="rounded-2xl border border-current/10 p-4 space-y-3">
+      }} className="mt-4 space-y-3">
         <h3 className="font-semibold">Добавить передачу</h3>
         <select required className={inputStyle} value={slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '')} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
@@ -446,6 +451,7 @@ export default function Radio() {
         </fieldset>}
         <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
       </form>
+      </details>
       <div className="flex items-center justify-between gap-2">
         <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()-7*86400000)))}>← Предыдущая неделя</button>
         <span className="text-xs opacity-60">Перетаскивайте карточку на нужный день</span>
