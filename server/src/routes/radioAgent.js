@@ -104,7 +104,7 @@ router.get('/agent/now-playing', deviceAuth, safe(async(req,res) => {
   });
   res.setHeader('Cache-Control', 'no-store');
   const cursor=resolveRadioCursor(slots,now.getTime());
-  const dj=cursor.status==='IDLE'?await getAutoDj():null;
+  const dj=cursor.status==='IDLE' && !cursor.slot ? await getAutoDj():null;
   const active=dj?.enabled?autoDjCursor(dj.tracks,now.getTime()):null;
   res.json({ timezone:'Europe/Moscow',
     cursor:active?{status:'AUTO_DJ',at:now.toISOString(),slot:null,track:active}:cursor });
