@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../store/auth.jsx';
 import RadioUsbInputPanel from './RadioUsbInputPanel.jsx';
+import RadioPrivateLiveMonitor from './RadioPrivateLiveMonitor.jsx';
 
 const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 export default function RadioLiveStudio() {
@@ -286,6 +287,7 @@ export default function RadioLiveStudio() {
       <p className="text-xs opacity-75" role="status">{handoverResult}</p>
       <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
     </div>}
+    {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
     {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 p-3">
       <strong className="text-sm">Приватное PCM-прослушивание · без выхода в эфир</strong>
       <p className="text-xs opacity-65">Запросите последний фрагмент реального входящего звука (до 1 секунды). Используйте наушники — возможна обратная связь через USB.</p>
