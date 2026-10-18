@@ -199,6 +199,21 @@ export function initRadioStudio(io) {
         // Do not expose another admin's identity or raw session tokens.
         journal:snapshot.journal.slice(-20),changeApplied:false,connectedToEncoder:false});
     });
+    socket.on('radio:studio:private-live',async ({after}={},callback)=>{
+      if(typeof callback!=='function')return;
+      if(socket.id!==presenter||uplinkOwner!==socket.id||gateway?.running!==true)
+        return callback({ok:false,reason:'PRESENTER_SESSION_REQUIRED'});
+      if(after!==null&&(!Number.isSafeInteger(after)||after<0||after>999999999999))
+        return callback({ok:false,reason:'INVALID_CURSOR'});
+      try{
+        const cursor=after===null?-1:after;
+        const payload=await workerRequest('GET','/live-pcm/private-live?after='+cursor);
+        if(!payload?.ok||!Array.isArray(payload.frames)||payload.frames.length>8)
+          throw new Error('INVALID_RESPONSE');
+        callback({ok:true,frames:payload.frames,nextSequence:payload.nextSequence,
+          connectedToEncoder:false,changeApplied:false});
+      }catch{return callback({ok:false,reason:'MONITOR_UNAVAILABLE'});}
+    });
     socket.on('radio:studio:private-preview',async callback=>{
       if(typeof callback!=='function')return;
       if(socket.id!==presenter||uplinkOwner!==socket.id||gateway?.running!==true)
