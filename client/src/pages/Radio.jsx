@@ -31,6 +31,10 @@ export default function Radio() {
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
   const [movingSlot,setMovingSlot] = useState(null);
+  const [copyingSlot,setCopyingSlot] = useState(null);
+  const [contextSlot,setContextSlot] = useState(null);
+  const touchTimer=useRef(null);
+  const touchPoint=useRef(null);
   const [moveTime,setMoveTime] = useState('');
   const [dragSlotId,setDragSlotId] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
@@ -215,6 +219,28 @@ export default function Radio() {
       // The shared player persists across track changes.
       requestAnimationFrame(() => playerRef.current?.play().catch(() => {}));
     } catch (e) { toast.error(e.message); }
+  };
+  const openSlotMenu = (slot) => { setContextSlot(slot); setMovingSlot(null); setCopyingSlot(null); };
+  const startSlotTouch = (slot,e) => {
+    if(e.touches.length!==1)return;
+    touchPoint.current={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    window.clearTimeout(touchTimer.current);
+    touchTimer.current=window.setTimeout(()=>{openSlotMenu(slot);touchTimer.current=null;},550);
+  };
+  const cancelSlotTouch = () => {window.clearTimeout(touchTimer.current);touchTimer.current=null;touchPoint.current=null;};
+  useEffect(()=>()=>window.clearTimeout(touchTimer.current),[]);
+  const proposeCopy = slot => {
+    setContextSlot(null);setCopyingSlot(slot);setMovingSlot(null);
+    const time=new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
+    setMoveTime(moscowDate(new Date(Date.now()+86400000))+'T'+time);
+  };
+  const saveCopy = async e => {
+    e.preventDefault();
+    if(!copyingSlot||!moveTime)return;
+    try {
+      await call('/schedule',{method:'POST',body:{playlistId:copyingSlot.playlistId,startLocal:moveTime}});
+      setCopyingSlot(null);await refresh();toast.success('Копия передачи добавлена в сетку');
+    }catch(error){toast.error(error.message);}
   };
   const proposeMove = (slot, day) => {
     if (new Date(slot.startAt).getTime() <= Date.now()) return;
@@ -434,23 +460,75 @@ export default function Radio() {
           const day = new Date(new Date(date + 'T00:00:00+03:00').getTime()+index*86400000);
           const dayKey=moscowDate(day);
           const daySlots = slots.filter(slot => moscowDate(new Date(slot.startAt)) === dayKey);
-          return <section key={dayKey} className={"rounded-xl border p-3 min-h-32 "+(dragSlotId?'border-blue-500/40 bg-blue-500/5':'border-current/10 bg-white/5')}
+          return <section key={dayKey} data-radio-day={dayKey} className={"rounded-xl border p-3 min-h-32 "+(dragSlotId?'border-blue-500/40 bg-blue-500/5':'border-current/10 bg-white/5')}
             onDragOver={e=>{if(dragSlotId)e.preventDefault();}}
             onDrop={e=>{e.preventDefault();const slot=slots.find(s=>s.id===dragSlotId);setDragSlotId(null);if(slot)proposeMove(slot,dayKey);}}>
             <h3 className="text-sm font-semibold mb-3">{day.toLocaleDateString('ru-RU', { timeZone: STATION_ZONE, weekday: 'short', day: '2-digit', month: '2-digit' })}</h3>
             {daySlots.map(slot => <div key={slot.id} draggable={new Date(slot.startAt)>new Date()}
               onDragStart={e=>{setDragSlotId(slot.id);e.dataTransfer.effectAllowed='move';}}
               onDragEnd={()=>setDragSlotId(null)}
-              onClick={()=>proposeMove(slot,dayKey)}
+              onContextMenu={e=>{e.preventDefault();openSlotMenu(slot);}}
+              onTouchStart={e=>startSlotTouch(slot,e)}
+              onTouchMove={e=>{if(touchPoint.current && (Math.abs(e.touches[0].clientX-touchPoint.current.x)>12||Math.abs(e.touches[0].clientY-touchPoint.current.y)>12))cancelSlotTouch();}}
+              onTouchEnd={e=>{const pos=e.changedTouches[0];const start=touchPoint.current;
+                const target=document.elementFromPoint(pos.clientX,pos.clientY)?.closest('[data-radio-day]');
+                cancelSlotTouch();
+                if(start && (Math.abs(pos.clientX-start.x)>18||Math.abs(pos.clientY-start.y)>18) && target?.dataset.radioDay && new Date(slot.startAt)>new Date())proposeMove(slot,target.dataset.radioDay);
+              }} onTouchCancel={cancelSlotTouch}
+              onClick={()=>{if(!contextSlot)proposeMove(slot,dayKey);}}
               className="mb-2 cursor-grab select-none rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-2 active:cursor-grabbing"
               style={{userSelect:'none',WebkitUserSelect:'none'}}>
               <p className="text-xs font-bold">{new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p>
               <p className="text-xs break-words">{slot.playlist.name}</p>
+              <button type="button" className="mt-2 rounded-md border border-current/20 px-2 py-1 text-xs" aria-label={'Действия с передачей '+slot.playlist.name} onClick={e=>{e.stopPropagation();openSlotMenu(slot);}}>⋯ Действия</button>
               <p className="mt-1 text-[10px] opacity-60">{new Date(slot.startAt)>new Date()?'Перенести ↗':'Эфир прошёл'}</p>
             </div>)}
             {!daySlots.length && <p className="text-xs opacity-40">Свободно</p>}
           </section>;
         })}
+      </div>
+      {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
+        <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
+          <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
+          <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
+          <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
+          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
+          <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>setContextSlot(null)}>Закрыть</button>
+        </div>
+      </div>}
+      {copyingSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3">
+        <form onSubmit={saveCopy} className="w-full max-w-md space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 dark:bg-slate-900 dark:text-white">
+          <h3 className="text-lg font-semibold">Копирование передачи</h3>
+          <p className="text-sm opacity-70">{copyingSlot.playlist.name}</p>
+          <label className="block space-y-1 text-sm">Дата и время копии · Москва UTC+3<input required type="datetime-local" className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/></label>
+          <p className="text-xs opacity-60">Оригинальная передача сохранится. Занятые интервалы копировать нельзя.</p>
+          <div className="flex gap-2"><button className={btn}>Создать копию</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>setCopyingSlot(null)}>Отмена</button></div>
+        </form>
+      </div>}
+      <div className="space-y-2 rounded-2xl border border-current/10 p-3">
+        <h3 className="font-semibold">Почасовая шкала · Москва</h3>
+        <p className="text-xs opacity-60">Касание часа откроет перенос выбранной передачи; длительное нажатие на передачу открывает действия.</p>
+        <div className="max-h-[65vh] overflow-auto rounded-xl border border-current/10">
+          <div className="min-w-[680px]">
+            <div className="sticky top-0 z-10 grid grid-cols-[52px_repeat(7,minmax(88px,1fr))] bg-slate-100 text-xs font-semibold text-slate-950 dark:bg-slate-900 dark:text-white">
+              <span className="p-2">UTC+3</span>
+              {Array.from({length:7},(_,i)=>{const d=new Date(new Date(date+'T00:00:00+03:00').getTime()+i*86400000);return <span key={i} className="border-l border-current/10 p-2">{d.toLocaleDateString('ru-RU',{timeZone:STATION_ZONE,weekday:'short',day:'2-digit',month:'2-digit'})}</span>;})}
+            </div>
+            {Array.from({length:24},(_,hour)=><div key={hour} className="grid min-h-12 grid-cols-[52px_repeat(7,minmax(88px,1fr))] border-t border-current/10">
+              <span className="p-2 text-xs tabular-nums opacity-60">{String(hour).padStart(2,'0')}:00</span>
+              {Array.from({length:7},(_,dayIndex)=>{
+                const d=new Date(new Date(date+'T00:00:00+03:00').getTime()+dayIndex*86400000);
+                const dayKey=moscowDate(d);
+                const matches=slots.filter(slot=>moscowDate(new Date(slot.startAt))===dayKey&&Number(new Intl.DateTimeFormat('en-GB',{timeZone:STATION_ZONE,hour:'2-digit',hourCycle:'h23'}).format(new Date(slot.startAt)))===hour);
+                return <div key={dayIndex} className="min-w-0 border-l border-current/10 p-1">
+                  {matches.map(slot=><button type="button" key={slot.id} onClick={()=>openSlotMenu(slot)} className="mb-1 block w-full truncate rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-1.5 text-left text-xs" title={slot.playlist.name}>
+                    {new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'})} {slot.playlist.name}
+                  </button>)}
+                </div>;
+              })}
+            </div>)}
+          </div>
+        </div>
       </div>
       {movingSlot && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveMove} className="w-full max-w-md rounded-2xl border border-current/15 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-3">
