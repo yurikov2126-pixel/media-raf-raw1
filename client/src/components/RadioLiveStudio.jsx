@@ -14,6 +14,9 @@ export default function RadioLiveStudio() {
     try{return localStorage.getItem('radio:studio:input-id')||'';}catch{return '';}
   });
   const [inputStream,setInputStream]=useState(null);
+  const [privatePreviewUrl,setPrivatePreviewUrl]=useState(null);
+  const [privatePreviewInfo,setPrivatePreviewInfo]=useState('');
+  const previewUrlRef=useRef(null);
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
   const [health,setHealth]=useState(null);
   const [handoverResult,setHandoverResult]=useState('Проверка переключения ещё не проводилась');
@@ -27,6 +30,8 @@ export default function RadioLiveStudio() {
   const audioRef = useRef(null);
   const roleRef = useRef(null);
   const stop = () => {
+    if(previewUrlRef.current){URL.revokeObjectURL(previewUrlRef.current);previewUrlRef.current=null;}
+    setPrivatePreviewUrl(null);
     uplinkRef.current?.close();
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
     recorderRef.current=null;setUplinkInfo('Тестовый uplink остановлен');
@@ -217,6 +222,22 @@ export default function RadioLiveStudio() {
     if(kind==='verify')socket.timeout(3500).emit(event,{proposalId:handoverProposal},onResult);
     else socket.timeout(3500).emit(event,onResult);
   };
+  const requestPrivatePreview=()=>{
+    const socket=socketRef.current;
+    if(!socket?.connected)return setPrivatePreviewInfo('Нет подключения');
+    setPrivatePreviewInfo('Запрашиваем последний фрагмент PCM...');
+    socket.timeout(4000).emit('radio:studio:private-preview',(err,result)=>{
+      if(err||!result?.ok)return setPrivatePreviewInfo('Фрагмент недоступен: '+(result?.reason||'таймаут'));
+      try{
+        const raw=atob(result.wavBase64),bytes=new Uint8Array(raw.length);
+        for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+        const url=URL.createObjectURL(new Blob([bytes],{type:'audio/wav'}));
+        if(previewUrlRef.current)URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current=url;setPrivatePreviewUrl(url);
+        setPrivatePreviewInfo('Фрагмент '+result.durationMs+' мс. Только локальное прослушивание, не публичный эфир.');
+      }catch{setPrivatePreviewInfo('Не удалось обработать WAV-фрагмент');}
+    });
+  };
   const toggleMute = () => {
     streamRef.current?.getAudioTracks().forEach(track => { track.enabled = muted; });
     setMuted(!muted);
@@ -264,6 +285,13 @@ export default function RadioLiveStudio() {
       </div>
       <p className="text-xs opacity-75" role="status">{handoverResult}</p>
       <p className="text-xs opacity-60">Это тест контрольной логики. Источник MP3, Auto-DJ и усилитель не переключаются.</p>
+    </div>}
+    {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 p-3">
+      <strong className="text-sm">Приватное PCM-прослушивание · без выхода в эфир</strong>
+      <p className="text-xs opacity-65">Запросите последний фрагмент реального входящего звука (до 1 секунды). Используйте наушники — возможна обратная связь через USB.</p>
+      <button type="button" onClick={requestPrivatePreview} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Получить тестовый WAV-фрагмент</button>
+      <p role="status" className="text-xs opacity-70">{privatePreviewInfo}</p>
+      {privatePreviewUrl&&<audio src={privatePreviewUrl} controls className="w-full"/>}
     </div>}
     <audio ref={audioRef} autoPlay controls className="w-full"/>
     {role==='listener' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>audioRef.current?.play().catch(e=>setError(e.message))}>Включить звук</button>}
