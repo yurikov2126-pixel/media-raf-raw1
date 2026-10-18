@@ -30,6 +30,9 @@ export default function Radio() {
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [movingSlot,setMovingSlot] = useState(null);
+  const [moveTime,setMoveTime] = useState('');
+  const [dragSlotId,setDragSlotId] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
   const [radioDevices, setRadioDevices] = useState([]);
   const [deviceToken, setDeviceToken] = useState('');
@@ -212,6 +215,26 @@ export default function Radio() {
       // The shared player persists across track changes.
       requestAnimationFrame(() => playerRef.current?.play().catch(() => {}));
     } catch (e) { toast.error(e.message); }
+  };
+  const proposeMove = (slot, day) => {
+    if (new Date(slot.startAt).getTime() <= Date.now()) return;
+    const clock = new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
+    setMovingSlot(slot);setMoveTime(day+'T'+clock);
+  };
+  const saveMove = async e => {
+    e.preventDefault();
+    if(!movingSlot || !moveTime)return;
+    const requested = new Date(moveTime+':00+03:00');
+    if(!Number.isFinite(requested.getTime()) || requested.getTime()<=Date.now()){toast.error('Выберите будущее время');return;}
+    const duration = new Date(movingSlot.endAt)-new Date(movingSlot.startAt);
+    const clash = slots.some(s => s.id!==movingSlot.id &&
+      new Date(s.startAt).getTime()<requested.getTime()+duration && new Date(s.endAt)>requested);
+    if(clash){toast.error('Этот интервал пересекается с существующим эфиром');return;}
+    try {
+      await call('/schedule/'+movingSlot.id,{method:'PATCH',body:{startLocal:moveTime}});
+      setMovingSlot(null);setDragSlotId(null);await refresh();
+      toast.success('Передача перенесена');
+    }catch(error){toast.error(error.message);}
   };
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
@@ -401,21 +424,46 @@ export default function Radio() {
         </fieldset>}
         <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
       </form>
-      <div className="grid grid-cols-1 md:grid-cols-7 gap-2" aria-label="Недельная сетка вещания">
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()-7*86400000)))}>← Предыдущая неделя</button>
+        <span className="text-xs opacity-60">Перетаскивайте карточку на нужный день</span>
+        <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()+7*86400000)))}>Следующая →</button>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7" aria-label="Недельная сетка вещания">
         {Array.from({ length: 7 }, (_, index) => {
-          const day = new Date(date + 'T00:00:00+03:00');
-          day.setUTCDate(day.getUTCDate() + index);
-          const daySlots = slots.filter(slot => moscowDate(new Date(slot.startAt)) === moscowDate(day));
-          return <section key={index} className="rounded-xl border border-current/10 bg-white/5 p-3 min-h-32">
+          const day = new Date(new Date(date + 'T00:00:00+03:00').getTime()+index*86400000);
+          const dayKey=moscowDate(day);
+          const daySlots = slots.filter(slot => moscowDate(new Date(slot.startAt)) === dayKey);
+          return <section key={dayKey} className={"rounded-xl border p-3 min-h-32 "+(dragSlotId?'border-blue-500/40 bg-blue-500/5':'border-current/10 bg-white/5')}
+            onDragOver={e=>{if(dragSlotId)e.preventDefault();}}
+            onDrop={e=>{e.preventDefault();const slot=slots.find(s=>s.id===dragSlotId);setDragSlotId(null);if(slot)proposeMove(slot,dayKey);}}>
             <h3 className="text-sm font-semibold mb-3">{day.toLocaleDateString('ru-RU', { timeZone: STATION_ZONE, weekday: 'short', day: '2-digit', month: '2-digit' })}</h3>
-            {daySlots.map(slot => <div key={slot.id} className="mb-2 p-2 rounded-lg border-l-4 border-blue-500 bg-blue-500/10">
+            {daySlots.map(slot => <div key={slot.id} draggable={new Date(slot.startAt)>new Date()}
+              onDragStart={e=>{setDragSlotId(slot.id);e.dataTransfer.effectAllowed='move';}}
+              onDragEnd={()=>setDragSlotId(null)}
+              onClick={()=>proposeMove(slot,dayKey)}
+              className="mb-2 cursor-grab select-none rounded-lg border-l-4 border-blue-500 bg-blue-500/10 p-2 active:cursor-grabbing"
+              style={{userSelect:'none',WebkitUserSelect:'none'}}>
               <p className="text-xs font-bold">{new Date(slot.startAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p>
               <p className="text-xs break-words">{slot.playlist.name}</p>
+              <p className="mt-1 text-[10px] opacity-60">{new Date(slot.startAt)>new Date()?'Перенести ↗':'Эфир прошёл'}</p>
             </div>)}
             {!daySlots.length && <p className="text-xs opacity-40">Свободно</p>}
           </section>;
         })}
       </div>
+      {movingSlot && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3">
+        <form onSubmit={saveMove} className="w-full max-w-md rounded-2xl border border-current/15 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-3">
+          <h3 className="text-lg font-semibold">Перенести передачу</h3>
+          <p className="text-sm opacity-70">{movingSlot.playlist.name}</p>
+          <label className="block space-y-1 text-sm">Новое начало · Москва UTC+3
+            <input type="datetime-local" required className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/>
+          </label>
+          <p className="text-xs opacity-65">Продолжительность сохраняется. Пересечения с другими эфирами запрещены.</p>
+          <div className="flex gap-2"><button type="submit" className={btn}>Сохранить перенос</button>
+            <button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setMovingSlot(null)}>Отмена</button></div>
+        </form>
+      </div>}
       {slots.length===0 && <p className="text-sm opacity-60">В выбранном периоде эфиров нет.</p>}
       {slots.map(s=><article key={s.id} className="rounded-2xl border border-current/10 p-4 flex items-center gap-3 justify-between">
         <div><h3 className="font-semibold">{s.playlist.name}</h3><p className="text-sm opacity-70">{dateLocal(s.startAt)} — {new Date(s.endAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p></div>
