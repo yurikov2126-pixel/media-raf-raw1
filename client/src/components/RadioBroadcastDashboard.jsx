@@ -48,7 +48,7 @@ export default function RadioBroadcastDashboard({token}) {
       <p className="text-xs opacity-60">Приёмников: {worker?.connected ?? '—'} · Фреймов: {worker?.frames ?? '—'}</p></div>
       <div className="w-full rounded-xl border border-current/10 p-3 text-sm">
         <p className="font-semibold">Авто-DJ · диагностика</p>
-        <p className="mt-1">{!report?.autoDj?.configured?'Выключен в настройках':!report.autoDj.ready?'Плейлист недоступен или не содержит действительных записей':worker?.mode==='AUTO_DJ'?'Воспроизводится серверным Worker':worker?.mode==='SCHEDULED'?'Ожидает завершения передачи':!worker?'Плейлист готов, но серверный Worker недоступен':worker?.mode==='SILENCE'?'Плейлист готов, но Worker выдаёт тишину. Проверьте версию процесса и логи.':'Плейлист готов, проверяем запуск'}</p>
+        <p className="mt-1">{!report?.autoDj?.configured?'Выключен в настройках':!report.autoDj.ready?'Плейлист недоступен или не содержит действительных записей':worker?.mode==='AUTO_DJ'?'Воспроизводится серверным Worker':worker?.mode==='SCHEDULED'?'Ожидает завершения передачи':!worker?'Плейлист готов, но серверный Worker недоступен':worker?.version!=='autodj-v2'?'Запущена устаревшая версия Worker. Требуется перезапуск отдельного playout-сервиса после обновления.':worker?.mode==='SILENCE'?'Плейлист готов, но Worker выдаёт тишину. Проверьте логи процесса.':'Плейлист готов, проверяем запуск'}</p>
         <p className="mt-1 text-xs opacity-65">Готовых записей: {report?.autoDj?.trackCount ?? '—'} · Настройка и работа процесса отслеживаются отдельно</p>
       </div>
       {worker?.lastError && <p className="w-full text-xs text-rose-600 dark:text-rose-400" role="alert">{worker.lastError}</p>}
