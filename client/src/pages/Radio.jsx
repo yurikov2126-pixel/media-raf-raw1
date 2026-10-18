@@ -6,6 +6,7 @@ import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
+import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
 import RadioAudioProcessing from '../components/RadioAudioProcessing.jsx';
 import RadioCueEditor from '../components/RadioCueEditor.jsx';
 import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
@@ -277,6 +278,7 @@ export default function Radio() {
     {tab === 'home' ? <>
       <RadioBroadcastDashboard token={token} />
       <RadioAutoDjSettings token={token} playlists={playlists} />
+      <RadioRotationSettings token={token} assets={assets} />
       <RadioAudioProcessing token={token} />
       <RadioCueEditor token={token} assets={assets} />
       <section className="rounded-2xl border border-current/10 bg-white/5 p-5 space-y-2" aria-live="polite">
