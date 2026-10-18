@@ -1,6 +1,7 @@
 import { prisma } from './lib/prisma.js';
 import { createHash } from 'node:crypto';
 import { BrowserOpusUplink } from './lib/radioBrowserOpusUplink.js';
+import { RadioLiveOpusGateway } from './lib/radioLiveOpusGateway.js';
 
 // Only signaling passes via Socket.IO; audio flows peer-to-peer over WebRTC.
 // Pilot supports one presenter and one listening browser at a time.
@@ -11,6 +12,9 @@ export function initRadioStudio(io) {
   const browserUplinkEnabled=process.env.RADIO_BROWSER_OPUS_UPLINK_ENABLED==='true';
   const uplink=new BrowserOpusUplink();
   let uplinkOwner=null;
+  const gatewayEnabled=browserUplinkEnabled&&process.env.RADIO_BROWSER_PCM_GATEWAY_ENABLED==='true';
+  let gateway=null;
+  const closeGateway=()=>{const current=gateway;gateway=null;void current?.stop();};
   const devices = io.of('/radio-device');
   devices.use(async (socket, next) => {
     try {
@@ -61,26 +65,56 @@ export function initRadioStudio(io) {
     const user = await prisma.user.findUnique({ where: { id: socket.userId }, select: { role: true } }).catch(() => null);
     if (user?.role !== 'ADMIN') return;
     socket.on('radio:studio:state', callback => callback?.(state()));
-    socket.on('radio:studio:uplink:start', (callback)=>{
+    socket.on('radio:studio:uplink:start', async callback=>{
       if(!browserUplinkEnabled)return callback?.({ok:false,error:'Тестовый шлюз отключён'});
       if(socket.id!==presenter)return callback?.({ok:false,error:'Только текущий ведущий'});
-      if(uplinkOwner&&uplinkOwner!==socket.id)return callback?.({ok:false,error:'Другой вход занят'});
-      uplink.start();uplinkOwner=socket.id;
-      callback?.({ok:true,connectedToEncoder:false,mode:'VALIDATION_ONLY'});
+      if(uplinkOwner)return callback?.({ok:false,error:'Другой вход занят'});
+      uplinkOwner=socket.id;
+      uplink.start();
+      if(gatewayEnabled){
+        try {
+          const next=new RadioLiveOpusGateway();
+          gateway=next;
+          await next.start();
+          if(uplinkOwner!==socket.id){await next.stop();return callback?.({ok:false,error:'Сессия завершена'});}
+        } catch(error){
+          closeGateway();uplink.reset();uplinkOwner=null;
+          return callback?.({ok:false,error:'PCM шлюз недоступен: '+error.message});
+        }
+      }
+      callback?.({ok:true,connectedToEncoder:false,mode:gatewayEnabled?'ISOLATED_PCM_INTAKE':'VALIDATION_ONLY'});
     });
-    socket.on('radio:studio:uplink:chunk',({chunk,sequence}={},callback)=>{
+    let chunkBusy=false;
+    socket.on('radio:studio:uplink:chunk',async ({chunk,sequence}={},callback)=>{
       if(socket.id!==presenter||uplinkOwner!==socket.id)return callback?.({ok:false,error:'Нет активного входа'});
-      const result=uplink.receive(Buffer.isBuffer(chunk)?chunk:Buffer.alloc(0),sequence);
-      // WebM bytes are validated and discarded; they are NEVER forwarded to PCM or broadcast.
-      callback?.({ok:result.accepted,reason:result.reason||null,nextSequence:result.nextSequence||null});
+      if(chunkBusy)return callback?.({ok:false,reason:'CONCURRENT_CHUNK'});
+      chunkBusy=true;
+      try {
+        const packet=Buffer.isBuffer(chunk)?chunk:Buffer.alloc(0);
+        // Verify sequence before sending anything into FFmpeg.
+        if(!Number.isSafeInteger(sequence)||sequence!==uplink.sequence||
+          !packet.length||packet.length>uplink.maxChunkBytes)
+          return callback?.({ok:false,reason:'INVALID_OR_OUT_OF_ORDER'});
+        if(gatewayEnabled){
+          if(!gateway?.running)throw new Error('GATEWAY_INACTIVE');
+          await gateway.write(packet);
+        }
+        const result=uplink.receive(packet,sequence);
+        callback?.({ok:result.accepted,reason:result.reason||null,nextSequence:result.nextSequence??null});
+        if(!result.accepted){closeGateway();uplink.reset();uplinkOwner=null;}
+      }catch(error){
+        closeGateway();uplink.reset();uplinkOwner=null;
+        callback?.({ok:false,reason:'PCM_GATEWAY_FAILED'});
+      }finally{chunkBusy=false;}
     });
     socket.on('radio:studio:uplink:stop',callback=>{
       if(uplinkOwner!==socket.id)return callback?.({ok:false});
-      uplink.reset();uplinkOwner=null;callback?.({ok:true});
+      closeGateway();uplink.reset();uplinkOwner=null;callback?.({ok:true});
     });
     socket.on('radio:studio:uplink:status',callback=>{
       callback?.({enabled:browserUplinkEnabled,connectedToEncoder:false,
-        mode:'VALIDATION_ONLY',...uplink.snapshot()});
+        mode:gatewayEnabled?'ISOLATED_PCM_INTAKE':'VALIDATION_ONLY',
+        ...uplink.snapshot(),gateway:gateway?.snapshot()||null});
     });
 
     socket.on('radio:studio:present', callback => {
@@ -107,7 +141,7 @@ export function initRadioStudio(io) {
     });
     const leave = () => {
       const wasPresenter = presenter === socket.id;
-      if (wasPresenter) { if(uplinkOwner===socket.id){uplink.reset();uplinkOwner=null;} presenter = null; if (listener) signalTo(listener, 'radio:studio:ended'); listener = null; deviceListener = null; }
+      if (wasPresenter) { if(uplinkOwner===socket.id){closeGateway();uplink.reset();uplinkOwner=null;} presenter = null; if (listener) signalTo(listener, 'radio:studio:ended'); listener = null; deviceListener = null; }
       else if (listener === socket.id) { listener = null; deviceListener = null; if (presenter) io.to(presenter).emit('radio:studio:listener-left'); }
       broadcast();
     };
