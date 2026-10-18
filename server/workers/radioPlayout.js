@@ -24,6 +24,7 @@ import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEve
 import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
 import { LivePcmIntake } from '../src/lib/radioLivePcmIntake.js';
 import { LivePcmSessionGate } from '../src/lib/radioLivePcmSession.js';
+import { RadioTimedPcmPlayout } from '../src/lib/radioTimedPcmPlayout.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
@@ -48,6 +49,20 @@ const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true'
 const liveIntake=new LivePcmIntake();
 const liveSessions=new LivePcmSessionGate();
 const gatewayClock=new PcmGatewayClock();
+const TIMED_PCM_SHADOW_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_TIMED_PCM_SHADOW_ENABLED==='true';
+const timedShadow=new RadioTimedPcmPlayout();
+let shadowTicks=0;
+const shadowTimer=TIMED_PCM_SHADOW_ENABLED?setInterval(()=>{
+  if(!liveSessions.snapshot().active)return;
+  const result=timedShadow.tick(Date.now());
+  shadowTicks++;
+  // Deliberately discard the simulated output: NEVER forward to station encoder.
+  if(!result.ok)state.timedPcmShadowLastError=result.reason;
+},20):null;
+shadowTimer?.unref?.();
+const shadowStatus=()=>({enabled:TIMED_PCM_SHADOW_ENABLED,connectedToEncoder:false,
+  ticks:shadowTicks,...timedShadow.snapshot(Date.now())});
+
 state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()};
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED==='true';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
@@ -332,7 +347,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
-    try{const token=liveSessions.start(owner);liveIntake.reset();gatewayClock.reset();
+    try{const token=liveSessions.start(owner);liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();
       res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
     }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
@@ -344,7 +359,7 @@ const server=http.createServer((req,res)=>{
   }
   if(req.url==='/live-pcm/status' && req.method==='GET'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot()}));
+    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot(),timedShadow:shadowStatus()}));
     return;
   }
   if(req.url==='/live-pcm/ingest' && req.method==='POST'){
@@ -371,6 +386,11 @@ const server=http.createServer((req,res)=>{
         const pcm=Buffer.concat(chunks);
         gatewayClock.validate({pcm,frameIndex});
         const result=liveIntake.accept(pcm);
+        if(TIMED_PCM_SHADOW_ENABLED){
+          const staged=timedShadow.push({pcm,frameIndex},Date.now());
+          // Shadow failure never alters legacy intake/output: diagnostics only.
+          if(!staged.ok)state.timedPcmShadowLastError=staged.reason;
+        }
         liveSessions.touch(sessionToken,received);
         state.livePcmIntake={enabled:true,connectedToEncoder:false,...liveIntake.snapshot()};
         res.writeHead(202,{'Content-Type':'application/json','Cache-Control':'no-store'});
