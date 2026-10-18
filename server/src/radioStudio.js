@@ -81,6 +81,33 @@ export function initRadioStudio(io) {
     const user = await prisma.user.findUnique({ where: { id: socket.userId }, select: { role: true } }).catch(() => null);
     if (user?.role !== 'ADMIN') return;
     socket.on('radio:studio:state', callback => callback?.(state()));
+    socket.on('radio:studio:public-live:start',async callback=>{
+      if(typeof callback!=='function')return;
+      if(process.env.RADIO_PUBLIC_LIVE_ENABLED!=='true')
+        return callback({ok:false,reason:'PUBLIC_LIVE_DISABLED'});
+      if(socket.id!==presenter||uplinkOwner!==socket.id||!gateway?.running||!gateway.session)
+        return callback({ok:false,reason:'ACTIVE_PRESENTER_REQUIRED'});
+      try{
+        const slot=await prisma.radioScheduleSlot.findFirst({
+          where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+          select:{id:true}
+        });
+        if(slot)return callback({ok:false,reason:'SCHEDULE_HAS_PRIORITY'});
+        const result=await workerRequest('POST','/live-pcm/on-air',null,{'x-radio-session-token':gateway.session});
+        callback({ok:result.ok===true,onAir:result.live?.onAir===true,reason:result.reason||null});
+        if(result.ok)io.emit('radio:studio:public-live:changed',{onAir:true});
+      }catch(error){callback({ok:false,reason:'WORKER_SWITCH_FAILED'});}
+    });
+    socket.on('radio:studio:public-live:stop',async callback=>{
+      if(typeof callback!=='function')return;
+      if(socket.id!==presenter||uplinkOwner!==socket.id||!gateway?.running||!gateway.session)
+        return callback({ok:false,reason:'ACTIVE_PRESENTER_REQUIRED'});
+      try{
+        const result=await workerRequest('DELETE','/live-pcm/on-air',null,{'x-radio-session-token':gateway.session});
+        callback({ok:result.ok===true,onAir:false});
+        io.emit('radio:studio:public-live:changed',{onAir:false});
+      }catch{callback({ok:false,reason:'WORKER_SWITCH_FAILED'});}
+    });
     socket.on('radio:studio:uplink:start', async callback=>{
       if(!browserUplinkEnabled)return callback?.({ok:false,error:'Тестовый шлюз отключён'});
       if(socket.id!==presenter)return callback?.({ok:false,error:'Только текущий ведущий'});
@@ -154,7 +181,7 @@ export function initRadioStudio(io) {
         scheduledSourceReady:authority?.known===true?authority.sourceReady:false,
       });
       const verified=scheduleAwareReadiness({authority,readiness});
-      callback({ok:true,observedAt:Date.now(),pilotEnabled:gatewayEnabled,opusEnabled:browserUplinkEnabled,
+      callback({ok:true,observedAt:Date.now(),publicLiveEnabled:process.env.RADIO_PUBLIC_LIVE_ENABLED==='true',publicLiveOnAir:workerStatus?.publicLive?.onAir===true,pilotEnabled:gatewayEnabled,opusEnabled:browserUplinkEnabled,
         pilotMode:!browserUplinkEnabled?'DISABLED':gatewayEnabled?'PCM_GATEWAY':'VALIDATION_ONLY',
         pilotBlocker:!browserUplinkEnabled?'OPUS_UPLINK_DISABLED':!gatewayEnabled?'PCM_GATEWAY_DISABLED':null,
         workerReachable,transportConnected:connected,decoderRunning:activeGateway,
