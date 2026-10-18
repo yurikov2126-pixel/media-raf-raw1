@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {chooseQueuedTrack} from '../src/lib/radioEventQueue.js';
+import {chooseQueuedTrack,selectExhaustionFallback} from '../src/lib/radioEventQueue.js';
 import {DEFAULT_ROTATION,validateRotation} from '../src/lib/radioRotation.js';
 const items=[{id:'a'},{id:'b'},{id:'c'}];
 const now=Date.parse('2026-10-18T12:00:00Z');
@@ -19,5 +19,22 @@ describe('strict event queue',()=>{
   expect(DEFAULT_ROTATION.strictCooldown).toBe(false);
   expect(validateRotation({...DEFAULT_ROTATION,strictCooldown:true}).strictCooldown).toBe(true);
   expect(()=>validateRotation({...DEFAULT_ROTATION,strictCooldown:'true'})).toThrow();
+ });
+});
+describe('queue exhaustion emergency fallback',()=>{
+ const now=Date.parse('2026-10-18T12:00:00Z');
+ const list=[{id:'a'},{id:'b'}];
+ const history=[{id:'a',startedAt:'2026-10-18T11:58:00Z'},{id:'b',startedAt:'2026-10-18T11:50:00Z'}];
+ it('defaults to silence rather than breaking the strict rule',()=>{
+  expect(selectExhaustionFallback(list,history,now,false)).toBeNull();
+ });
+ it('when expressly allowed chooses the least recently played track',()=>{
+  expect(chooseQueuedTrack(list,history,60,now)).toBeNull();
+  expect(selectExhaustionFallback(list,history,now,true).id).toBe('b');
+ });
+ it('does not enable the policy in default rotation settings',()=>{
+  expect(DEFAULT_ROTATION.allowCooldownFallback).toBe(false);
+  expect(validateRotation({...DEFAULT_ROTATION,allowCooldownFallback:true}).allowCooldownFallback).toBe(true);
+  expect(()=>validateRotation({...DEFAULT_ROTATION,allowCooldownFallback:'true'})).toThrow();
  });
 });
