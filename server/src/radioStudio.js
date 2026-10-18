@@ -1,7 +1,8 @@
 import { prisma } from './lib/prisma.js';
 import { createHash } from 'node:crypto';
 import { BrowserOpusUplink } from './lib/radioBrowserOpusUplink.js';
-import { RadioLiveOpusGateway } from './lib/radioLiveOpusGateway.js';
+import { RadioLiveOpusGateway, workerRequest } from './lib/radioLiveOpusGateway.js';
+import { evaluateRadioPresenterReadiness } from './lib/radioPresenterReadiness.js';
 
 // Only signaling passes via Socket.IO; audio flows peer-to-peer over WebRTC.
 // Pilot supports one presenter and one listening browser at a time.
@@ -122,6 +123,33 @@ export function initRadioStudio(io) {
     socket.on('radio:studio:uplink:stop',callback=>{
       if(uplinkOwner!==socket.id)return callback?.({ok:false});
       closeGateway();uplink.reset();uplinkOwner=null;callback?.({ok:true});
+    });
+    socket.on('radio:studio:health',async callback=>{
+      if(typeof callback!=='function')return;
+      // Accessible to authenticated admins only, with no public route or secrets in response.
+      // Without authoritative schedule data, readiness is deliberately blocked.
+      const connected=socket.id===presenter;
+      const activeGateway=connected&&uplinkOwner===socket.id&&gateway?.running===true;
+      let workerStatus=null;
+      let workerReachable=false;
+      if(gatewayEnabled&&activeGateway){
+        try{
+          workerStatus=await workerRequest('GET','/live-pcm/status');
+          workerReachable=true;
+        }catch{ /* No Worker details or credentials are exposed to the browser. */ }
+      }
+      const readiness=evaluateRadioPresenterReadiness({
+        workerStatus,presenterAuthorized:connected,presenterConnected:connected,
+        gatewayRunning:activeGateway,
+        // Fail closed: actual schedule arbitration is not wired to this diagnostic yet.
+        scheduledActive:true,scheduledSourceReady:false,
+      });
+      callback({ok:true,observedAt:Date.now(),pilotEnabled:gatewayEnabled,
+        workerReachable,transportConnected:connected,decoderRunning:activeGateway,
+        ...readiness,blockers:[...new Set([...readiness.blockers,
+          'SCHEDULE_AUTHORITY_UNAVAILABLE',
+          ...(!workerReachable?['WORKER_UNAVAILABLE']:[])])],
+        changeApplied:false,liveOutputConnected:false});
     });
     socket.on('radio:studio:uplink:status',callback=>{
       callback?.({enabled:browserUplinkEnabled,connectedToEncoder:false,
