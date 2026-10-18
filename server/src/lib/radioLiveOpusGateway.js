@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { once } from 'node:events';
 import { createOpusPcmDecoder, pcmPacketize } from './radioOpusPcmGateway.js';
+import { RadioPcmStaging } from './radioPcmStaging.js';
 
 // Server-only, loopback-only live decoding pilot. This DOES NOT connect to station output.
 export class RadioLiveOpusGateway {
@@ -8,6 +9,7 @@ export class RadioLiveOpusGateway {
     this.decoderFactory=decoderFactory;this.request=request;this.maxPendingBytes=maxPendingBytes;
     this.running=false;this.pendingBytes=0;this.packets=0;this.samples=0;
     this.lastError=null;this.session=null;this.decoder=null;
+    this.pcmStaging=new RadioPcmStaging();
   }
   async start() {
     if(this.running)throw new Error('GATEWAY_ALREADY_RUNNING');
@@ -28,9 +30,12 @@ export class RadioLiveOpusGateway {
   async forwardPcm(){
     for await(const {pcm,frameIndex} of pcmPacketize(this.decoder.stdout)){
       if(!this.running)break;
+      const staged=this.pcmStaging.push({pcm,frameIndex});
+      if(!staged.accepted)throw new Error(staged.reason);
       await this.request('POST','/live-pcm/ingest',pcm,{
         'x-radio-session-token':this.session,'x-radio-pcm-frame-index':String(frameIndex),
       });
+      this.pcmStaging.shift(); // staging tracks only in-flight PCM, not playout readiness
       this.packets++;this.samples+=pcm.length/4;
     }
   }
@@ -72,9 +77,10 @@ export class RadioLiveOpusGateway {
       await this.request('DELETE','/live-pcm/session',null,{'x-radio-session-token':token}).catch(()=>{});
     }
     this.pendingBytes=0;
+    this.pcmStaging.clearQueue();
   }
   snapshot(){return {running:this.running,packets:this.packets,samples:this.samples,
-    pendingBytes:this.pendingBytes,lastError:this.lastError,connectedToEncoder:false,mode:'ISOLATED_PCM_INTAKE'};}
+    pendingBytes:this.pendingBytes,lastError:this.lastError,pcm:this.pcmStaging.snapshot(),connectedToEncoder:false,mode:'ISOLATED_PCM_INTAKE'};}
 }
 export function workerRequest(method,path,body=null,headers={}){
   const secret=process.env.RADIO_PLAYOUT_SECRET||'';
