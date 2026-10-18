@@ -1,6 +1,7 @@
 import { notificationTitle as sharedNotificationTitle, notificationPreview as sharedNotificationPreview } from '../lib/notificationDisplay.js';
 import { useAuth } from '../store/auth.jsx';
 import { learningNotificationPath } from '../lib/learningNotificationPath.js';
+import { radioNotificationTarget } from '../lib/radioNotificationTarget.js';
 import SwipeDismissRow from './SwipeDismissRow.jsx';
 import { mentionTitle, mentionPreview } from '../lib/mentionNotification.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -161,17 +162,11 @@ export default function NotificationBell({ align = 'right' }) {
     const handleClick = async (n) => {
         const learning = n.payload?.homeworkId || n.payload?.practicalId;
 
-        // Route first: a rejected mark-read request must never suppress navigation.
-        const radioPayload = typeof n.payload === 'string' ? (() => { try { return JSON.parse(n.payload); } catch { return {}; } })() : (n.payload || {});
-        const radioType = String(n.type || '').toUpperCase();
-        if (radioType.startsWith('RADIO_PLAYLIST_')) {
-            const id = encodeURIComponent(radioPayload.playlistId || '');
-            const url = radioType === 'RADIO_PLAYLIST_SUBMITTED'
-                ? '/app/radio?tab=playlists&playlist=' + id
-                : '/app/radio/playlists/my?playlist=' + id;
+        const radioTarget = radioNotificationTarget(n);
+        if (radioTarget) {
             setOpen(false);
-            nav(url);
-            if (!n.readAt) void markRead(n.id).catch(console.error);
+            nav(radioTarget);
+            if (!n.readAt) void markRead(n.id).catch(error => console.warn('[radio notification] mark-read:', error));
             return;
         }
         if (!n.readAt) await markRead(n.id);
