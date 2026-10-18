@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
+import { readRotation, writeRotation } from '../lib/radioRotation.js';
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 
@@ -424,6 +425,14 @@ router.put('/audio-processing', safe(async (req,res) => {
         if(error instanceof TypeError)return res.status(400).json({error:error.message});
         throw error;
     }
+}));
+router.get('/rotation', safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json({rotation:await readRotation()});
+}));
+router.put('/rotation', safe(async(req,res)=>{
+  try {res.json({rotation:await writeRotation(req.body)});}
+  catch(e){if(e instanceof TypeError)return res.status(400).json({error:e.message});throw e;}
 }));
 router.get('/autodj', safe(async (_req,res) => {
     res.json({settings:await readAutoDjSettings()});
