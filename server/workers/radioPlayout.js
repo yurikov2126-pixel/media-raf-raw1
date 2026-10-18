@@ -240,10 +240,12 @@ function stopDecoder() {
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
 }
 async function run() {
+  let lastLiveScheduleCheck=0;
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
-      try{
+      if(Date.now()-lastLiveScheduleCheck>1000)try{
+       lastLiveScheduleCheck=Date.now();
        const scheduled=await prisma.radioScheduleSlot.findFirst({where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
        if(scheduled){publicLive.stop('SCHEDULE_PRIORITY');continue;}
       }catch{publicLive.stop('SCHEDULE_CHECK_FAILED');continue;}
