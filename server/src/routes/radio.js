@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import {normalizeRadioTags,safeRadioTags} from '../lib/radioAssetTags.js';
 import multer from 'multer';
 import { randomUUID, createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -179,12 +180,14 @@ const uploadAsset = safe(async (req, res) => {
     await fs.writeFile(filePath, file.buffer, { flag: 'wx', mode: 0o600 });
     try {
         // Duration comes from ffprobe, not untrusted client-provided metadata.
-        const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath], { timeout: 15000 });
-        const durationMs = Math.round(Number(stdout.trim()) * 1000);
+        const { stdout } = await run('ffprobe', ['-v','error','-show_format','-show_streams','-of','json',filePath], { timeout: 15000, maxBuffer: 256*1024 });
+        const probe=JSON.parse(stdout);
+        const durationMs = Math.round(Number(probe.format?.duration) * 1000);
+        const tags=normalizeRadioTags(probe);
         if (!Number.isFinite(durationMs) || durationMs < 100 || durationMs > 24 * 3600 * 1000)
             return res.status(422).json({ error: 'Не удалось определить длительность' });
         const asset = await prisma.radioAsset.create({ data: {
-            name: filename, storageKey: key, mimeType: file.mimetype || 'application/octet-stream',
+            name: tags.title ? [tags.artist,tags.title].filter(Boolean).join(' — ').slice(0,140):filename, tags, storageKey: key, mimeType: file.mimetype || 'application/octet-stream',
             byteSize: file.size, durationMs, sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
         } });
         return res.status(201).json({ asset });
@@ -208,6 +211,55 @@ router.get('/assets/:id/audio', requireRole('ADMIN'), streamAudio);
 router.use(requireRole('ADMIN'));
 
 // Asset metadata may be edited without changing the original audio bytes.
+router.get('/asset-folders',requireRole('ADMIN'),safe(async (_req,res)=>{
+ res.json({folders:await prisma.radioAssetFolder.findMany({orderBy:{name:'asc'}})});
+}));
+router.post('/asset-folders',requireRole('ADMIN'),safe(async (req,res)=>{
+ if(!validTitle(req.body?.name))return res.status(400).json({error:'Укажите название папки'});
+ const parentId=req.body?.parentId||null;
+ if(parentId&&!await prisma.radioAssetFolder.findUnique({where:{id:parentId}}))
+   return res.status(404).json({error:'Родительская папка не найдена'});
+ const folder=await prisma.radioAssetFolder.create({data:{name:req.body.name.trim(),parentId}});
+ res.status(201).json({folder});
+}));
+router.patch('/asset-folders/:id',requireRole('ADMIN'),safe(async (req,res)=>{
+ const folder=await prisma.radioAssetFolder.findUnique({where:{id:req.params.id}});
+ if(!folder)return res.status(404).json({error:'Папка не найдена'});
+ if(!validTitle(req.body?.name))return res.status(400).json({error:'Название недопустимо'});
+ const result=await prisma.radioAssetFolder.update({where:{id:folder.id},data:{name:req.body.name.trim()}});
+ res.json({folder:result});
+}));
+router.delete('/asset-folders/:id',requireRole('ADMIN'),safe(async (req,res)=>{
+ const folder=await prisma.radioAssetFolder.findUnique({where:{id:req.params.id}});
+ if(!folder)return res.status(404).json({error:'Папка не найдена'});
+ if(await prisma.radioAsset.count({where:{folderId:folder.id}})||await prisma.radioAssetFolder.count({where:{parentId:folder.id}}))
+   return res.status(409).json({error:'Переместите вложенные файлы и папки перед удалением'});
+ await prisma.radioAssetFolder.delete({where:{id:folder.id}});
+ res.json({ok:true});
+}));
+router.patch('/assets/:id/organize',requireRole('ADMIN'),safe(async (req,res)=>{
+ const folderId=req.body?.folderId||null;
+ if(folderId&&!await prisma.radioAssetFolder.findUnique({where:{id:folderId}}))
+   return res.status(404).json({error:'Папка не найдена'});
+ const updated=await prisma.radioAsset.updateMany({where:{id:req.params.id},data:{folderId}});
+ if(!updated.count)return res.status(404).json({error:'Файл не найден'});
+ res.json({asset:await prisma.radioAsset.findUnique({where:{id:req.params.id}})});
+}));
+router.patch('/assets/:id/tags',requireRole('ADMIN'),safe(async (req,res)=>{
+ const tags=safeRadioTags(req.body?.tags);
+ if(!tags)return res.status(400).json({error:'Неверные теги'});
+ const updated=await prisma.radioAsset.updateMany({where:{id:req.params.id},data:{tags}});
+ if(!updated.count)return res.status(404).json({error:'Файл не найден'});
+ res.json({asset:await prisma.radioAsset.findUnique({where:{id:req.params.id}})});
+}));
+router.post('/assets/:id/rescan-tags',requireRole('ADMIN'),safe(async (req,res)=>{
+ const asset=await prisma.radioAsset.findUnique({where:{id:req.params.id}});
+ if(!asset)return res.status(404).json({error:'Файл не найден'});
+ const full=path.join(root,path.basename(asset.storageKey));
+ const {stdout}=await run('ffprobe',['-v','error','-show_format','-show_streams','-of','json',full],{timeout:15000,maxBuffer:256*1024});
+ const tags=normalizeRadioTags(JSON.parse(stdout));
+ res.json({asset:await prisma.radioAsset.update({where:{id:asset.id},data:{tags}})});
+}));
 router.patch('/assets/:id', safe(async (req, res) => {
     if (!validTitle(req.body?.name)) return res.status(400).json({ error: 'Укажите название до 140 символов' });
     const updated = await prisma.radioAsset.updateMany({

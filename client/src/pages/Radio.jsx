@@ -5,6 +5,8 @@ import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioControlRoom from '../components/RadioControlRoom.jsx';
+import RadioAssetManager from '../components/RadioAssetManager.jsx';
+import RadioScheduleBoard from '../components/RadioScheduleBoard.jsx';
 import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
 import '../styles/radio-workspace.css';
@@ -293,9 +295,7 @@ export default function Radio() {
       <RadioAudioProcessing token={token}/>
       <RadioCueEditor token={token} assets={assets}/>
     </section>}
-    {tab === 'assets' && <section className="space-y-4">
-      <RadioSectionIntro eyebrow="МЕДИАТЕКА" title="Библиотека записей" description="Вся музыка и звуковые материалы станции. Предпрослушивание, загрузки и управление треками в одном рабочем разделе." metrics={[{label:'Записей',value:assets.length},{label:'Очередь загрузки',value:files.length}]}/>
-      <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
+    {tab === 'assets' && <RadioAssetManager assets={assets} token={token} refresh={refresh} preview={preview} rename={renameAsset} remove={deleteAsset} uploadPanel={<><details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
         <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
         <div className="mt-4 space-y-3">
         <div onDragEnter={e => { e.preventDefault(); setDropActive(true); }}
@@ -321,21 +321,11 @@ export default function Radio() {
           <progress className="block w-full" max={uploadProgress.total} value={uploadProgress.completed}/>
         </div>}
         </div>
-      </details>
-      <div className="rounded-2xl border border-current/10 p-4 space-y-2">
+      </details></>} player={<><div className="rounded-2xl border border-current/10 p-4 space-y-2">
         <p className="font-semibold">Общий плеер</p>
         <p className="text-sm opacity-70">{assets.find(a=>a.id===playingId)?.name || 'Выберите запись ниже'}</p>
         <audio ref={playerRef} controls src={audioUrl || undefined} className="w-full" onEnded={() => setPlayingId(null)} />
-      </div>
-      <div className="space-y-2">{assets.map(a => <div key={a.id} className="flex items-center gap-3 justify-between border border-current/10 rounded-xl p-3">
-        <div className="min-w-0"><p className="font-medium truncate">{a.name}</p><p className="text-xs opacity-60">{fmt(a.durationMs)} · {(a.byteSize / 1048576).toFixed(1)} МБ</p></div>
-        <div className="flex flex-wrap gap-2">
-          <button className={btn} onClick={() => preview(a)}>Слушать</button>
-          <button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={() => renameAsset(a)}>Переименовать</button>
-          <button className="rounded-xl border border-red-500/30 px-3 py-2 text-sm text-red-500" onClick={() => deleteAsset(a)}>Удалить</button>
-        </div>
-      </div>)}</div>
-    </section>}
+      </div></>} />}
     {tab === 'playlists' && <section className="space-y-4">
       <RadioPlaylistReview token={token} onChanged={refresh} />
       <RadioSectionIntro eyebrow="ПОДГОТОВКА" title="Конструктор радиопрограмм" description="Создавайте программы из записей, формируйте порядок воспроизведения, согласовывайте и размещайте в сетке." metrics={[{label:'Плейлистов',value:playlists.length},{label:'Утверждено',value:playlists.filter(p=>p.status==='APPROVED').length},{label:'Папок',value:folders.length}]}/>
@@ -423,10 +413,11 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
+      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onCreate={()=>document.getElementById('radio-schedule-create')?.setAttribute('open','')}/>
       <RadioSectionIntro eyebrow="РАСПИСАНИЕ / МОСКВА UTC+3" title="Сетка вещания" description="Управляйте радиопередачами в календаре, переносите события и проверяйте эфирные конфликты." metrics={[{label:'Событий за период',value:slots.length},{label:'Утверждённых программ',value:playlists.filter(p=>p.status==='APPROVED').length}]}/>
       <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
       <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
-      <details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
+      <details id="radio-schedule-create" className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
         <summary className="cursor-pointer text-sm font-semibold">＋ Добавить передачу в расписание</summary>
       <form onSubmit={e=>{e.preventDefault();
         const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');

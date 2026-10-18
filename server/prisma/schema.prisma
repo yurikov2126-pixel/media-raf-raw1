@@ -1268,6 +1268,9 @@ model EditorialTaskWikiLink {
 
 // Radio 2.0: planning only. No device power or playback commands.
 model RadioAsset {
+  folderId String?
+  folder RadioAssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  tags Json?
   id        String   @id @default(cuid())
   name      String
   storageKey String  @unique
@@ -1342,4 +1345,15 @@ model RadioScheduleRevision {
   id        Int      @id
   revision  BigInt   @default(0)
   updatedAt DateTime @default(now())
+}
+
+model RadioAssetFolder {
+  id String @id @default(cuid())
+  name String
+  parentId String?
+  parent RadioAssetFolder? @relation("RadioAssetTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children RadioAssetFolder[] @relation("RadioAssetTree")
+  assets RadioAsset[]
+  createdAt DateTime @default(now())
+  @@index([parentId])
 }
