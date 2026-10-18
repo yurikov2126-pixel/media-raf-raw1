@@ -110,6 +110,28 @@ async function run() {
       '-t',String(remaining/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
       {stdio:['ignore','pipe','pipe']});
     const child=decoder;
+    // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
+    // Interrupt the decoder promptly; the shared encoder stays alive.
+    let polling=false;
+    const watchdog=cursor.status==='AUTO_DJ'?setInterval(async()=>{
+      if(polling||stopping||decoder!==child)return;
+      polling=true;
+      try {
+        const settings=await readAutoDjSettings();
+        const scheduled=await prisma.radioScheduleSlot.findFirst({
+          where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+          select:{id:true}
+        });
+        if(!settings.enabled||!settings.playlistId||scheduled)child.kill('SIGTERM');
+        else {
+          const playlist=await prisma.radioPlaylist.findUnique({
+            where:{id:settings.playlistId},select:{status:true}
+          });
+          if(playlist?.status!=='APPROVED')child.kill('SIGTERM');
+        }
+      }catch(error){state.lastError=error.message;}
+      finally{polling=false;}
+    },3000):null;
     let ended=false;
     child.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
     child.on('error',e=>{state.lastError=e.message;});
@@ -120,6 +142,7 @@ async function run() {
         if(!encoder.stdin.write(chunk)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
       }
     } catch(e) {state.lastError=e.message;}
+    if(watchdog)clearInterval(watchdog);
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
   }
