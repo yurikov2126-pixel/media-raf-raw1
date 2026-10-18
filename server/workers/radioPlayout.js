@@ -22,6 +22,7 @@ import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
+import { LivePcmIntake } from '../src/lib/radioLivePcmIntake.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -41,6 +42,9 @@ const PCM_STAGING_ENABLED=process.env.RADIO_PCM_STAGING_ENABLED==='true';
 state.pcmStaging={enabled:PCM_STAGING_ENABLED,frameBytes:4,droppedTailBytes:0,processedBytes:0};
 const failedAutoDjAssets = new Map();
 let frozenRotation=null;
+const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
+const liveIntake=new LivePcmIntake();
+state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()};
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED==='true';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
 state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
@@ -321,6 +325,34 @@ async function run() {
 
 const server=http.createServer((req,res)=>{
   if(!authorized(req)) {res.writeHead(403).end();return;}
+  if(req.url==='/live-pcm/status' && req.method==='GET'){
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()}));
+    return;
+  }
+  if(req.url==='/live-pcm/ingest' && req.method==='POST'){
+    if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
+    const type=req.headers['content-type'];
+    const size=Number(req.headers['content-length']);
+    if(type!=='application/octet-stream'||!Number.isSafeInteger(size)||size<4||size>19200||size%4){
+      res.writeHead(413).end();return;
+    }
+    const chunks=[];let received=0;
+    req.on('data',buf=>{
+      received+=buf.length;
+      if(received>size){req.destroy();return;}
+      chunks.push(buf);
+    });
+    req.on('end',()=>{
+      if(received!==size){res.writeHead(400).end();return;}
+      try{const result=liveIntake.accept(Buffer.concat(chunks));
+        state.livePcmIntake={enabled:true,connectedToEncoder:false,...liveIntake.snapshot()};
+        res.writeHead(202,{'Content-Type':'application/json','Cache-Control':'no-store'});
+        res.end(JSON.stringify({accepted:true,...result,connectedToEncoder:false}));
+      }catch{res.writeHead(400).end();}
+    });
+    return;
+  }
   if(req.url==='/health') {
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify({...state,connected:listeners.size}));return;
