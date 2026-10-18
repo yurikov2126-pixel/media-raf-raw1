@@ -16,6 +16,7 @@ import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 import { readJingles, writeJingles, planJingleBreaks } from '../lib/radioJingles.js';
+import { workerRequest } from '../lib/radioLiveOpusGateway.js';
 import {readSourceControl,writeSourceControl,resolveSourcePriority} from '../lib/radioSourceControl.js';
 import {planSourceHandover} from '../lib/radioLiveHandover.js';
 
@@ -613,9 +614,19 @@ router.get('/jingles/preview', safe(async(_req,res)=>{
   ?previewMusicQueue({assets:playlist.items.map(i=>i.asset),settings:{rotation,cues:await readCues()},history:await readPlayoutHistory()})
   :{daypart:null,tracks:[]};
  const library=settings.assetIds.length?await prisma.radioAsset.findMany({where:{id:{in:settings.assetIds}}}):[];
+ let worker=null;
+ try{worker=await workerRequest('GET','/health');}catch{ /* public Worker not available */ }
+ const onAir=worker?.jingles||null;
  res.setHeader('Cache-Control','no-store');
- res.json({active:false,daypart:planned.daypart,breaks:planJingleBreaks({tracks:planned.tracks,settings,daypart:planned.daypart,assets:library}),
-  note:'Только прогноз: автоматическая вставка в PCM Worker пока не включена'});
+ res.json({active:Boolean(onAir?.enabled&&settings.enabled),workerAvailable:worker!==null,
+  workerPlayoutEnabled:onAir?.enabled??null,played:onAir?.played??null,
+  musicSinceJingle:onAir?.musicSinceJingle??null,workerMode:worker?.mode??null,
+  daypart:planned.daypart,
+  breaks:planJingleBreaks({tracks:planned.tracks,settings,daypart:planned.daypart,assets:library}),
+  note:worker===null?'Нет ответа от публичного Worker; прогноз не подтверждает фактический эфир':
+   !settings.enabled?'Джинглы отключены в настройках':
+   !onAir?.enabled?'Проигрывание джинглов запрещено настройкой Worker':
+   'Включено для Auto-DJ: джинглы добавляются между композициями, приоритет LIVE и расписания сохраняется'});
 }));
 router.get('/rotation/preview', safe(async(_req,res)=>{
   const settings=await readRotation();
