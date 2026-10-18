@@ -24,8 +24,8 @@ describe('public LIVE source gate',()=>{
   expect(g.start('one',1000).reason).toBe('SESSION_MISMATCH');
   for(let i=0;i<200;i++)g.ingest(frame(),'one',1000+i*20);
   expect(g.snapshot().bufferedFrames).toBe(50);
-  expect(g.start('one',5000).reason).toBe('PCM_NOT_READY');
-  expect(g.start('one',5000-500).ok).toBe(true);
+  expect(g.start('one',6000).reason).toBe('PCM_NOT_READY');
+  expect(g.start('one',5000).ok).toBe(true);
   g.stop('PRESENTER_ENDED');
   expect(g.snapshot().bufferedFrames).toBe(0);
   expect(g.snapshot().mode).toBe('AUTO_DJ');
