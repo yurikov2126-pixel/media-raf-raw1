@@ -19,6 +19,7 @@ import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvent } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
+import { reserveCrossfadePair, safeCrossfadeDuration } from '../src/lib/radioQueueCrossfade.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
@@ -116,6 +117,15 @@ async function current() {
       return {cursor,asset:null};
     }
     state.queueStatus=eligible?'PLAYING':'FALLBACK_REPEAT';
+    // Dry-run only: never initiate a second decoder without PCM handover.
+    // A reserved candidate is not recorded as playback.
+    const dsp=await readAudioProcessing();
+    const reservation=reserveCrossfadePair(music,history,rotationSettings.cooldownMinutes,nowMs,selected.id);
+    const overlapMs=eligible&&reservation.status==='READY'
+      ?safeCrossfadeDuration(reservation.first,reservation.second,dsp.crossfadeMs,until,nowMs):0;
+    state.queueCrossfadePreview={status:overlapMs?'READY':reservation.status,
+      firstId:selected.id,secondId:overlapMs?reservation.second.id:null,
+      overlapMs,active:false};
     const index=music.findIndex(item=>item.id===selected.id);
     return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
       track:{id:selected.id,name:selected.name,index,seekMs:selected.cue.inMs,
