@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../api/client.js';
 export default function RadioSourceControl({token}){
- const [data,setData]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
+ const [handover,setHandover]=useState(null),[data,setData]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
  const load=useCallback(async()=>{try{setData(await api('/radio/source-control',{token}));setError('');}catch(e){setError(e.message);}},[token]);
  useEffect(()=>{load();},[load]);
  const save=async()=>{
@@ -37,6 +37,18 @@ export default function RadioSourceControl({token}){
    onChange={e=>setData(v=>({...v,settings:{...v.settings,autoReturn:e.target.checked}}))}/>Автоматически возвращаться к Авто-DJ при потере связи</label>
   <div className="flex gap-2 flex-wrap"><button disabled={saving} onClick={save} className="rounded-xl bg-blue-600 px-4 py-2 text-white text-sm disabled:opacity-50">Сохранить политику</button>
    <button onClick={load} className="rounded-xl border border-current/20 px-4 py-2 text-sm">Обновить статус</button></div>
+  <div className="rounded-xl border border-current/15 p-3 space-y-2 text-sm">
+   <div className="flex flex-wrap gap-2 items-center justify-between"><h3 className="font-semibold">Предпросмотр переключения источников</h3>
+    <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-xs" onClick={async()=>{
+     try{setHandover((await api('/radio/source-handover/preview',{token})).plan);setError('');}catch(e){setError(e.message);}
+    }}>Проверить сценарий</button></div>
+   {handover&&<div className="space-y-1 text-xs">
+    <p>Расчётный источник: <strong>{handover.target}</strong> · {handover.reason}</p>
+    <p>Действие: {handover.transition} · Соединение ведушего: {handover.connectionFresh?'есть':'нет'} · PCM: {handover.pcmSamplesReceived?'подтверждён':'не подключён'}</p>
+    {handover.timeToScheduleMs!==null&&<p>До ближайшей передачи: {Math.ceil(handover.timeToScheduleMs/1000)} сек.</p>}
+    <p className="opacity-60">Это модель переключения. Передача микрофона в серверный поток не активирована.</p>
+   </div>}
+  </div>
   {error&&<p role="alert" className="text-red-500 text-sm">{error}</p>}
   {note&&<p role="status" className="text-emerald-500 text-sm">{note}</p>}
  </section>;
