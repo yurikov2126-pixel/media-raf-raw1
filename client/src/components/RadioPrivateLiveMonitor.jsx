@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 
 /** Headphone-only 48 kHz stereo PCM player. Never sends audio to the Worker. */
-export default function RadioPrivateLiveMonitor({socket,active}){
+export default function RadioPrivateLiveMonitor({socket,active,mode='voice'}){
   const [enabled,setEnabled]=useState(false);
   const [status,setStatus]=useState('Монитор выключен');
   const monitor=useRef(null);
@@ -23,7 +23,7 @@ export default function RadioPrivateLiveMonitor({socket,active}){
     const poll=()=>{
       if(m.stopped||monitor.current!==m)return;
       if(!socket.connected){stop();setStatus('Связь прервана');return;}
-      socket.timeout(2500).emit('radio:studio:private-live',{after:m.cursor},(err,reply)=>{
+      socket.timeout(2500).emit(mode==='mix'?'radio:studio:private-mix':'radio:studio:private-live',{after:m.cursor},(err,reply)=>{
         if(m.stopped||monitor.current!==m)return;
         if(err||!reply?.ok){stop();setStatus('Монитор остановлен: '+(reply?.reason||'таймаут'));return;}
         try{
@@ -53,11 +53,11 @@ export default function RadioPrivateLiveMonitor({socket,active}){
     poll();
   };
   return <div className="space-y-2 rounded-xl border border-current/10 p-3">
-    <strong className="text-sm">Непрерывный тест PCM · только наушники</strong>
+    <strong className="text-sm">{mode==='mix'?'Музыка + голос · изолированный микс':'Непрерывный тест PCM'} · только наушники</strong>
     <p className="text-xs opacity-70">Прослушивание реального входа RØDECaster Duo с сервера. Не подключать USB-возврат к отправляемому миксу.</p>
     <button type="button" disabled={!active} onClick={enabled?stop:start}
       className="rounded-lg border border-current/20 px-3 py-2 text-sm disabled:opacity-50">
-      {enabled?'Остановить монитор':'Слушать приватный PCM'}
+      {enabled?'Остановить монитор':mode==='mix'?'Слушать тестовый микс':'Слушать приватный PCM'}
     </button>
     <p role="status" className="text-xs opacity-70">{status}</p>
   </div>;

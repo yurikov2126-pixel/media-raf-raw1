@@ -29,6 +29,7 @@ import { RadioIsolatedPcmLab } from '../src/lib/radioIsolatedPcmLab.js';
 import { RadioPcmLabSoakTelemetry } from '../src/lib/radioPcmLabSoakTelemetry.js';
 import { RadioPrivatePcmPreview } from '../src/lib/radioPrivatePcmPreview.js';
 import { RadioPrivateLivePcmQueue } from '../src/lib/radioPrivateLivePcmQueue.js';
+import { RadioIsolatedMixOutput } from '../src/lib/radioIsolatedMixOutput.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
@@ -63,6 +64,8 @@ const PRIVATE_PREVIEW_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_PRIVATE
 const privatePreview=new RadioPrivatePcmPreview();
 const PRIVATE_LIVE_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_PRIVATE_LIVE_MONITOR_ENABLED==='true';
 const privateLive=new RadioPrivateLivePcmQueue();
+const ISOLATED_MIX_ENABLED=PRIVATE_LIVE_ENABLED&&process.env.RADIO_ISOLATED_MIX_OUTPUT_ENABLED==='true';
+const isolatedMix=new RadioIsolatedMixOutput();
 // No switch command is exposed: this is passive safety telemetry only.
 const switchShadow=new RadioWorkerSwitchShadow();
 let shadowTicks=0;
@@ -367,7 +370,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
-    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');privatePreview.reset();privateLive.reset();liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();if(PCM_MIX_LAB_ENABLED){pcmMixLab.reset();soakTelemetry.reset();}
+    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');privatePreview.reset();privateLive.reset();isolatedMix.reset();liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();if(PCM_MIX_LAB_ENABLED){pcmMixLab.reset();soakTelemetry.reset();}
       res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
     }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
@@ -391,6 +394,16 @@ const server=http.createServer((req,res)=>{
     res.end(JSON.stringify({wavBase64:wav.toString('base64'),
       durationMs:privatePreview.snapshot().durationMs,
       connectedToEncoder:false,changeApplied:false}));return;
+  }
+  if(req.url?.startsWith('/live-pcm/private-mix?')&&req.method==='GET'){
+    if(!ISOLATED_MIX_ENABLED||!liveSessions.snapshot().active){res.writeHead(404).end();return;}
+    try{
+      const raw=new URL(req.url,'http://localhost').searchParams.get('after');
+      if(raw===null||!/^(-1|[0-9]{1,12})$/.test(raw)){res.writeHead(400).end();return;}
+      const reply=isolatedMix.read({after:raw==='-1'?null:Number(raw),max:8});
+      res.writeHead(reply.ok?200:409,{'Content-Type':'application/json','Cache-Control':'private, no-store'});
+      res.end(JSON.stringify(reply));return;
+    }catch{res.writeHead(400).end();return;}
   }
   if(req.url?.startsWith('/live-pcm/private-live?')&&req.method==='GET'){
     if(!PRIVATE_LIVE_ENABLED||!liveSessions.snapshot().active){res.writeHead(404).end();return;}
@@ -431,6 +444,7 @@ const server=http.createServer((req,res)=>{
         const result=liveIntake.accept(pcm);
         if(PRIVATE_PREVIEW_ENABLED)privatePreview.accept(pcm,Date.now());
         if(PRIVATE_LIVE_ENABLED)privateLive.push(pcm,Date.now());
+        if(ISOLATED_MIX_ENABLED)isolatedMix.accept(pcm,Date.now());
         if(TIMED_PCM_SHADOW_ENABLED){
           const receivedAt=Date.now();
           const staged=timedShadow.push({pcm,frameIndex},receivedAt);
