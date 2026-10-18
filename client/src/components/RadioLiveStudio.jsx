@@ -11,6 +11,7 @@ export default function RadioLiveStudio() {
   const [muted, setMuted] = useState(false);
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
   const recorderRef=useRef(null);
+  const uplinkRef=useRef(null);
   const [error, setError] = useState('');
   const socketRef = useRef(null);
   const peerRef = useRef(null);
@@ -18,7 +19,9 @@ export default function RadioLiveStudio() {
   const audioRef = useRef(null);
   const roleRef = useRef(null);
   const stop = () => {
-    recorderRef.current?.stop();recorderRef.current=null;setUplinkInfo('Тестовый uplink остановлен');
+    uplinkRef.current?.close();
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    recorderRef.current=null;setUplinkInfo('Тестовый uplink остановлен');
     const socket = socketRef.current;
     socket?.emit('radio:studio:leave');
     peerRef.current?.close(); peerRef.current = null;
@@ -76,7 +79,7 @@ export default function RadioLiveStudio() {
         }
       } catch (e) { setError('WebRTC: ' + e.message); }
     });
-    return () => { socket.emit('radio:studio:leave'); socket.disconnect(); peerRef.current?.close();
+    return () => { uplinkRef.current?.close(); if (recorderRef.current?.state === 'recording') recorderRef.current.stop(); socket.emit('radio:studio:leave'); socket.disconnect(); peerRef.current?.close();
       streamRef.current?.getTracks().forEach(t => t.stop()); };
   }, [token]);
   const start = async () => {
@@ -97,31 +100,74 @@ export default function RadioLiveStudio() {
       roleRef.current = 'listener'; setRole('listener'); setStatus('Ожидаем звуковой поток');
     });
   };
+  const stopUplink = () => {
+    uplinkRef.current?.close();
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    recorderRef.current = null;
+  };
   const startUplink=()=>{
     const socket=socketRef.current,stream=streamRef.current;
     if(roleRef.current!=='presenter'||!stream)return setError('Сначала подключите ведущего');
     if(typeof MediaRecorder==='undefined'||!MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
       return setError('Этот браузер не поддерживает WebM/Opus');
+    if (uplinkRef.current) return;
     socket.emit('radio:studio:uplink:start',response=>{
       if(!response?.ok)return setError(response?.error||'Тестовый uplink недоступен');
-      let seq=0,awaiting=false;
-      const recorder=new MediaRecorder(stream,{mimeType:'audio/webm;codecs=opus'});
-      recorderRef.current=recorder;
-      recorder.ondataavailable=async event=>{
-        if(!event.data.size||awaiting)return;
-        awaiting=true;
-        try{
-          const chunk=await event.data.arrayBuffer();
-          socket.emit('radio:studio:uplink:chunk',{chunk,sequence:seq},ack=>{
-            awaiting=false;
-            if(ack?.ok){seq++;setUplinkInfo('Принято WebM/Opus-блоков: '+seq+' (без выхода в эфир)');}
-            else{setError('Тестовый uplink: '+(ack?.reason||'пакет отклонён'));recorder.stop();}
-          });
-        }catch(e){awaiting=false;setError(e.message);recorder.stop();}
+      // MediaRecorder emits continuously. Never silently discard data while an ACK is pending.
+      // A bounded FIFO preserves WebM ordering; overflow or missing ACK stops the entire pilot.
+      const maxPendingChunks = 8, ackTimeoutMs = 5000;
+      const queue = [];
+      let seq = 0, pending = false, closed = false, ackTimer = null;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        clearTimeout(ackTimer);
+        queue.length = 0;
+        uplinkRef.current = null;
+        socket.emit('radio:studio:uplink:stop');
       };
-      recorder.onstop=()=>{socket.emit('radio:studio:uplink:stop');recorderRef.current=null;};
-      recorder.start(250);
-      setUplinkInfo('Тестовый uplink: проверка WebM-блоков');
+      const fail = reason => {
+        setError('Тестовый uplink остановлен: ' + reason);
+        setUplinkInfo('Передача остановлена из-за ошибки');
+        close();
+        if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+      };
+      const drain = () => {
+        if (closed || pending || !queue.length) return;
+        if (!socket.connected) return fail('потеряно соединение с сервером');
+        pending = true;
+        const chunk = queue.shift();
+        ackTimer = setTimeout(() => fail('сервер не подтвердил аудиоблок за 5 секунд'), ackTimeoutMs);
+        socket.emit('radio:studio:uplink:chunk',{chunk,sequence:seq},ack=>{
+          if (closed) return;
+          clearTimeout(ackTimer);
+          pending = false;
+          if (!ack?.ok) return fail(ack?.reason || ack?.error || 'пакет отклонён');
+          seq++;
+          setUplinkInfo('Подтверждено блоков: '+seq+' · в очереди: '+queue.length+' (без выхода в эфир)');
+          drain();
+        });
+      };
+      uplinkRef.current = { close };
+      try {
+        const recorder = new MediaRecorder(stream,{mimeType:'audio/webm;codecs=opus'});
+        recorderRef.current = recorder;
+        recorder.ondataavailable = async event => {
+          if (closed || !event.data.size) return;
+          try {
+            const chunk = await event.data.arrayBuffer();
+            if (closed) return;
+            if (chunk.byteLength > 128 * 1024) return fail('превышен размер аудиоблока');
+            if (queue.length >= maxPendingChunks) return fail('переполнена очередь передачи');
+            queue.push(chunk);
+            drain();
+          } catch (e) { fail(e.message); }
+        };
+        recorder.onerror = () => fail('ошибка MediaRecorder');
+        recorder.onstop = () => { close(); recorderRef.current = null; setUplinkInfo('Тестовый uplink остановлен'); };
+        recorder.start(250);
+        setUplinkInfo('Тестовый uplink: передача WebM/Opus с контролем очереди');
+      } catch (e) { fail(e.message); }
     });
   };
   const toggleMute = () => {
@@ -136,7 +182,7 @@ export default function RadioLiveStudio() {
     <div className="flex flex-wrap gap-2">
       {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 text-white px-4 py-2">Начать эфир с микрофона</button>
         <button type="button" onClick={listen} disabled={!state.live || state.listener} className="rounded-xl border border-current/20 px-4 py-2">Принимать эфир на этом устройстве</button></>}
-      {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={recorderRef.current?()=>recorderRef.current?.stop():startUplink}>{recorderRef.current?'Остановить тест Opus':'Тест передачи Opus'}</button>}
+      {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={recorderRef.current?stopUplink:startUplink}>{recorderRef.current?'Остановить тест Opus':'Тест передачи Opus'}</button>}
       {role === 'presenter' && <button type="button" onClick={toggleMute} className="rounded-xl border border-current/20 px-4 py-2">{muted ? 'Включить микрофон' : 'Выключить микрофон'}</button>}
       {role && <button type="button" onClick={stop} className="rounded-xl border border-red-500/30 px-4 py-2 text-red-500">Завершить тест</button>}
     </div>
