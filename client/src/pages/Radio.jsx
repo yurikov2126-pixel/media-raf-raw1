@@ -7,6 +7,7 @@ import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioBroadcastDashboard from '../components/RadioBroadcastDashboard.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
+import RadioJingleSettings from '../components/RadioJingleSettings.jsx';
 import RadioPlayoutHistory from '../components/RadioPlayoutHistory.jsx';
 import RadioAudioProcessing from '../components/RadioAudioProcessing.jsx';
 import RadioCueEditor from '../components/RadioCueEditor.jsx';
@@ -280,6 +281,7 @@ export default function Radio() {
       <RadioBroadcastDashboard token={token} />
       <RadioAutoDjSettings token={token} playlists={playlists} />
       <RadioRotationSettings token={token} assets={assets} />
+      <RadioJingleSettings token={token} assets={assets} />
       <RadioPlayoutHistory token={token} />
       <RadioAudioProcessing token={token} />
       <RadioCueEditor token={token} assets={assets} />
