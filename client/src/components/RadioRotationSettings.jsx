@@ -32,6 +32,13 @@ export default function RadioRotationSettings({token,assets=[]}){
      {[0,1,2,3,4,5].map(n=><option key={n} value={n}>{n===0?'Без ограничения':n+' комп.'}</option>)}
     </select>
    </label>
+   <label className="block space-y-1 text-sm">Не повторять недавно звучавшие композиции (по истории сервера)
+    <select className="w-full max-w-xs rounded-xl border border-current/20 bg-transparent p-3" value={settings.cooldownMinutes??0}
+     onChange={e=>setSettings(v=>({...v,cooldownMinutes:Number(e.target.value)}))}>
+     {[0,15,30,60,90,120,180,240].map(n=><option key={n} value={n}>{n===0?'Выключено':n+' мин'}</option>)}
+    </select>
+   </label>
+   <p className="text-xs opacity-65">Недавно воспроизведённые треки ставятся ближе к концу новой музыкальной программы. Правило действует при формировании периода, а не обрывает текущую песню; при маленькой библиотеке повторы всё ещё возможны.</p>
    <p className="text-xs opacity-65">Если записей недостаточно для выбранного интервала, Auto-DJ продолжит эфир с максимально возможным разделением исполнителей. Это правило действует в пределах каждой ротации, включая переход от её последней композиции к первой.</p>
    <details className="rounded-xl border border-current/15 p-3"><summary className="cursor-pointer text-sm font-semibold">Назначить категории аудиозаписям ({assets.length})</summary>
     <div className="mt-3 max-h-72 space-y-2 overflow-auto">{assets.map(a=><label key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
