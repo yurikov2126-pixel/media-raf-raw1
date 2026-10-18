@@ -19,3 +19,21 @@ export function chooseQueuedTrack(items,history,minutes,nowMs=Date.now()){
     return (last.get(item.id)||0)<(last.get(best.id)||0)?item:best;
   },null);
 }
+
+/** Explicit emergency policy for an exhausted strict queue.
+ * The newest track is NEVER preferred over the least recently aired track.
+ * Return null unless the administrator explicitly allows this exception.
+ */
+export function selectExhaustionFallback(items,history,nowMs=Date.now(),allow=false){
+  if(!allow||!Array.isArray(items)||!items.length)return null;
+  const last=new Map();
+  for(const event of history){
+    const at=Date.parse(event.startedAt);
+    if(Number.isFinite(at)&&at<=nowMs&&at>0)
+      last.set(event.id,Math.max(last.get(event.id)||0,at));
+  }
+  return items.reduce((best,item)=>{
+    if(!best)return item;
+    return (last.get(item.id)||0)<(last.get(best.id)||0)?item:best;
+  },null);
+}
