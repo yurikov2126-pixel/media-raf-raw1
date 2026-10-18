@@ -374,6 +374,15 @@ async function run() {
       state.pcmStaging.droppedTailBytes+=pcmStaging.droppedTailBytes;
     }
     if(watchdog)clearInterval(watchdog);
+    // Flush natural ffmpeg exit before counting a completed track. Stream EOF
+    // can arrive before the child 'close' event; without this the on-air
+    // jingle interval counter would sometimes never advance.
+    if(!ended&&!stopping&&!publicLive.onAir){
+      await Promise.race([
+        new Promise(resolve=>child.once('close',resolve)),
+        new Promise(resolve=>setTimeout(resolve,350)),
+      ]);
+    }
     // Log only PCM that actually reached the persistent encoder, not planned selections.
     // The event measures generated playout, NOT acoustic proof at the listener.
     const generatedMs=emittedBytes/(48000*2*2)*1000;
