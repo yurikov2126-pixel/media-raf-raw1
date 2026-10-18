@@ -10,16 +10,16 @@ export default function RadioJingleSettings({token,assets=[]}){
  const save=async e=>{
   e.preventDefault();setSaving(true);setError('');setNote('');
   try{const response=await api('/radio/jingles',{token,method:'PUT',body:settings});
-   setSettings(response.settings);setNote('Правила джинглов сохранены. Автоматический вывод в эфир пока не активен.');
+   setSettings(response.settings);setNote('Правила джинглов сохранены. Worker применяет их между треками Auto-DJ, если воспроизведение разрешено на сервере.');
   }catch(e){setError(e.message);}finally{setSaving(false);}
  };
  if(!settings)return <section className="rounded-2xl border border-current/15 p-4 text-sm">{error||'Загрузка настроек джинглов…'}</section>;
  return <section className="rounded-2xl border border-current/15 bg-white/5 p-4 sm:p-5 space-y-4">
   <header><h2 className="font-semibold text-lg">Оформление эфира · Джинглы</h2>
-   <p className="text-xs opacity-60">Библиотека и правила вставок. Пока только предварительное планирование, без фактической подачи звука.</p></header>
+   <p className="text-xs opacity-60">Настройка автоматических вставок в публичный MP3 между композициями Auto-DJ. LIVE и расписание имеют приоритет.</p></header>
   <form className="space-y-3" onSubmit={save}>
    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.enabled}
-    onChange={e=>setSettings(v=>({...v,enabled:e.target.checked}))}/>Учитывать джинглы при планировании</label>
+    onChange={e=>setSettings(v=>({...v,enabled:e.target.checked}))}/>Включить джинглы в эфире Auto-DJ</label>
    <div className="grid sm:grid-cols-2 gap-3">
     <label className="text-sm space-y-1">После каждых N композиций
      <input className="w-full rounded-lg border border-current/20 bg-transparent px-3 py-2" type="number" min="1" max="30" value={settings.everyTracks}
@@ -46,11 +46,13 @@ export default function RadioJingleSettings({token,assets=[]}){
     <button type="submit" disabled={saving||!settings.dayparts.length} className="rounded-xl bg-blue-600 px-4 py-2 text-white text-sm disabled:opacity-40">{saving?'Сохранение…':'Сохранить правила'}</button>
     <button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={async()=>{
      try{setPreview((await api('/radio/jingles/preview',{token})));setError('');}catch(e){setError(e.message);}
-    }}>Предпросмотр вставок</button>
+    }}>Проверить план и эфир</button>
    </div>
   </form>
   {preview&&<div className="rounded-xl border border-current/15 p-3 space-y-2 text-sm">
-   <p className="font-semibold">План джинглов · {partNames[preview.daypart]||'нет активной ротации'}</p>
+   <p className="font-semibold">Джинглы · {partNames[preview.daypart]||'нет активной ротации'}</p>
+   <p className="text-xs">{preview.active?'Вставки включены на Worker':preview.workerAvailable?'Вставки в Worker отключены':'Worker недоступен'}</p>
+   {Number.isFinite(preview.played)&&<p className="text-xs">Воспроизведено: {preview.played} · Музыки с последнего: {preview.musicSinceJingle}</p>}
    {preview.breaks?.length?preview.breaks.map((v,i)=><p key={i} className="text-xs">Перед композицией № {v.beforeTrack+1}: {v.name} ({Math.round(v.durationMs/1000)} с)</p>)
     :<p className="text-xs opacity-60">Для текущей программы вставок нет.</p>}
    <p className="text-xs opacity-60">{preview.note}</p></div>}

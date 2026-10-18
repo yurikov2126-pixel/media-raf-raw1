@@ -35,7 +35,7 @@ import { RadioPublicLiveGate } from '../src/lib/radioPublicLiveGate.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
-import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
+import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -94,7 +94,8 @@ const shadowStatus=()=>({enabled:TIMED_PCM_SHADOW_ENABLED,connectedToEncoder:fal
   ticks:shadowTicks,...timedShadow.snapshot(Date.now())});
 
 state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()};
-const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED==='true';
+// Saved radio jingle settings are the activation switch; ops can explicitly disable at Worker level.
+const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED!=='false';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
 state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
 
@@ -161,6 +162,32 @@ async function current() {
   const rotation=frozenRotation?.plan||null;
   const music=rotation?.items||catalog;
   const clock=rotation?nowMs-rotation.anchorMs:nowMs;
+  // Shared on-air insertion between full music tracks, for BOTH timeline and strict rotation.
+  // Public LIVE and scheduled slots always have priority and never receive jingles here.
+  if(JINGLE_PLAYOUT_ENABLED&&!jinglePending&&musicSinceJingle>0){
+    const jingles=await readJingles();
+    if(jingles.enabled&&jingles.dayparts.includes(rotation?.daypart??(() => {const hour=new Date(nowMs+3*3600000).getUTCHours();return hour<7?'NIGHT':hour<11?'MORNING':hour<18?'DAY':'EVENING';})())
+      &&jingles.assetIds.length&&musicSinceJingle%jingles.everyTracks===0){
+      const nextSlot=await prisma.radioScheduleSlot.findFirst({
+        where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+        select:{startAt:true},orderBy:{startAt:'asc'}
+      });
+      const until=Math.min(nextSlot?.startAt.getTime()??Infinity,rotation?.endMs??Infinity);
+      const candidates=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
+      const selected=chooseJingleAsset(jingles,candidates,jinglesPlayed);
+      if(selected&&until-nowMs>=selected.durationMs+500){
+        try{
+          await fs.access(path.join(assetsRoot,path.basename(selected.storageKey)));
+          jinglePending=true;
+          state.queueStatus='JINGLE';
+          return {cursor:{status:'AUTO_DJ',isJingle:true,at:now.toISOString(),slot:null,
+            track:{id:selected.id,name:selected.name,index:-1,seekMs:0,offsetMs:0,
+              durationMs:selected.durationMs},
+            until:Number.isFinite(until)?new Date(until).toISOString():null},asset:selected};
+        }catch{state.lastError='Jingle file missing: '+selected.id;}
+      }
+    }
+  }
   // Strict mode advances only after a decoder finishes. Nothing in the
   // generated playback history changes the selection of an already playing track.
   if(rotation && rotationSettings.strictCooldown && rotationSettings.cooldownMinutes>0){
@@ -176,28 +203,6 @@ async function current() {
     if(!selected || until-nowMs<150){
       state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
       return {cursor,asset:null};
-    }
-    // Jingles are supported only in strict event queue, never the timeline cursor.
-    // Both the saved configuration AND a separate Worker opt-in are required.
-    if(JINGLE_PLAYOUT_ENABLED){
-      const jingles=await readJingles();
-      if(shouldInsertJingle({settings:jingles,daypart:rotation.daypart,
-        completedMusic:musicSinceJingle,untilMs:until,nowMs})&&!jinglePending){
-        const candidates=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
-        const jingle=chooseJingleAsset(jingles,candidates,jinglesPlayed);
-        if(jingle&&until-nowMs>=jingle.durationMs+500){
-          try{
-            await fs.access(path.join(assetsRoot,path.basename(jingle.storageKey)));
-            jinglePending=true;
-            state.queueStatus='JINGLE';
-            return {cursor:{status:'AUTO_DJ',isJingle:true,at:now.toISOString(),slot:null,
-              track:{id:jingle.id,name:jingle.name,index:-1,seekMs:0,offsetMs:0,
-                durationMs:jingle.durationMs},
-              until:Number.isFinite(until)?new Date(until).toISOString():null},
-              asset:jingle};
-          }catch(error){state.lastError='Jingle file missing: '+jingle.id;}
-        }
-      }
     }
     state.queueStatus=eligible?'PLAYING':'FALLBACK_REPEAT';
     // Dry-run only: never initiate a second decoder without PCM handover.
@@ -369,6 +374,15 @@ async function run() {
       state.pcmStaging.droppedTailBytes+=pcmStaging.droppedTailBytes;
     }
     if(watchdog)clearInterval(watchdog);
+    // Flush natural ffmpeg exit before counting a completed track. Stream EOF
+    // can arrive before the child 'close' event; without this the on-air
+    // jingle interval counter would sometimes never advance.
+    if(!ended&&!stopping&&!publicLive.onAir){
+      await Promise.race([
+        new Promise(resolve=>child.once('close',resolve)),
+        new Promise(resolve=>setTimeout(resolve,350)),
+      ]);
+    }
     // Log only PCM that actually reached the persistent encoder, not planned selections.
     // The event measures generated playout, NOT acoustic proof at the listener.
     const generatedMs=emittedBytes/(48000*2*2)*1000;
