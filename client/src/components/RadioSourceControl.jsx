@@ -3,7 +3,7 @@ import {api} from '../api/client.js';
 export default function RadioSourceControl({token}){
  const [data,setData]=useState(null),[error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
  const load=useCallback(async()=>{try{setData(await api('/radio/source-control',{token}));setError('');}catch(e){setError(e.message);}},[token]);
- useEffect(()=>{load();const interval=setInterval(load,15000);return()=>clearInterval(interval);},[load]);
+ useEffect(()=>{load();},[load]);
  const save=async()=>{
   if(!data)return;
   setSaving(true);setNote('');
