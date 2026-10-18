@@ -25,6 +25,7 @@ import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
 import { LivePcmIntake } from '../src/lib/radioLivePcmIntake.js';
 import { LivePcmSessionGate } from '../src/lib/radioLivePcmSession.js';
 import { RadioTimedPcmPlayout } from '../src/lib/radioTimedPcmPlayout.js';
+import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
@@ -51,6 +52,8 @@ const liveSessions=new LivePcmSessionGate();
 const gatewayClock=new PcmGatewayClock();
 const TIMED_PCM_SHADOW_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_TIMED_PCM_SHADOW_ENABLED==='true';
 const timedShadow=new RadioTimedPcmPlayout();
+// No switch command is exposed: this is passive safety telemetry only.
+const switchShadow=new RadioWorkerSwitchShadow();
 let shadowTicks=0;
 const shadowTimer=TIMED_PCM_SHADOW_ENABLED?setInterval(()=>{
   if(!liveSessions.snapshot().active)return;
@@ -347,7 +350,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
-    try{const token=liveSessions.start(owner);liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();
+    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();
       res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
     }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
@@ -359,7 +362,7 @@ const server=http.createServer((req,res)=>{
   }
   if(req.url==='/live-pcm/status' && req.method==='GET'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot(),timedShadow:shadowStatus()}));
+    res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot(),timedShadow:shadowStatus(),switchShadow:switchShadow.snapshot()}));
     return;
   }
   if(req.url==='/live-pcm/ingest' && req.method==='POST'){
