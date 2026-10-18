@@ -26,12 +26,22 @@ export default function RadioRotationSettings({token,assets=[]}){
       })}/>{label}</label>)}</div>
     </fieldset>)}
    </div>
+   <label className="block space-y-1 text-sm">Минимум других композиций между песнями одного исполнителя
+    <select className="w-full max-w-xs rounded-xl border border-current/20 bg-transparent p-3" value={settings.artistGap??0}
+     onChange={e=>setSettings(v=>({...v,artistGap:Number(e.target.value)}))}>
+     {[0,1,2,3,4,5].map(n=><option key={n} value={n}>{n===0?'Без ограничения':n+' комп.'}</option>)}
+    </select>
+   </label>
+   <p className="text-xs opacity-65">Если записей недостаточно для выбранного интервала, Auto-DJ продолжит эфир с максимально возможным разделением исполнителей. Это правило действует в пределах каждой ротации, включая переход от её последней композиции к первой.</p>
    <details className="rounded-xl border border-current/15 p-3"><summary className="cursor-pointer text-sm font-semibold">Назначить категории аудиозаписям ({assets.length})</summary>
-    <div className="mt-3 max-h-72 space-y-2 overflow-auto">{assets.map(a=><label key={a.id} className="flex items-center justify-between gap-3 text-sm">
+    <div className="mt-3 max-h-72 space-y-2 overflow-auto">{assets.map(a=><label key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
      <span className="min-w-0 truncate">{a.name}</span>
      <select className="max-w-40 rounded-lg border border-current/20 bg-transparent p-2" value={settings.tags[a.id]||'OTHER'} onChange={e=>setSettings(s=>({...s,tags:{...s.tags,[a.id]:e.target.value}}))}>
       {Object.entries(categories).map(([k,v])=><option key={k} value={k}>{v}</option>)}
      </select>
+     <input value={settings.artists?.[a.id]||''} maxLength={100} placeholder="Исполнитель" aria-label={'Исполнитель: '+a.name}
+      onChange={e=>setSettings(v=>({...v,artists:{...v.artists,[a.id]:e.target.value}}))}
+      className="w-32 min-w-0 rounded-lg border border-current/20 bg-transparent p-2 text-xs"/>
     </label>)}</div>
    </details>
    <p className="text-xs opacity-65">Внутри периода порядок композиций меняется по дням, без случайных перестановок после рестарта. На границе периодов музыкальная программа может переключиться на следующую категорию. Это не меняет точные старты передач.</p>

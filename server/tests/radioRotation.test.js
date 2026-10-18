@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation} from '../src/lib/radioRotation.js';
+import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists} from '../src/lib/radioRotation.js';
 const assets=[
 {id:'x',name:'Energetic',playDurationMs:60000},
 {id:'y',name:'Calm',playDurationMs:90000},
@@ -44,5 +44,40 @@ describe('station daypart rotation',()=>{
  it('falls back to complete approved pool when category empty',()=>{
   const p=rotationPlan(assets,cfg,ms('2026-10-18T23:00:00Z'));
   expect(p.items.length).toBeGreaterThan(0);
+ });
+});
+describe('radio artist repeat protection',()=>{
+ const tracks=['a1','b1','c1','a2','d1','e1'].map(id=>({id,playDurationMs:60000}));
+ const artists={a1:'Band A',a2:'band a',b1:'Band B',c1:'Band C',d1:'Band D',e1:'Band E'};
+ it('separates artists around the wrap point when possible',()=>{
+  const result=separateArtists(tracks,artists,2);
+  expect(result.violations).toBe(0);
+  for(let i=0;i<result.items.length;i++){
+   for(let step=1;step<=2;step++){
+    const a=result.items[i],b=result.items[(i+step)%result.items.length];
+    expect((artists[a.id]||'').toLowerCase()).not.toBe((artists[b.id]||'').toLowerCase());
+   }
+  }
+ });
+ it('remains deterministic after restart',()=>{
+  expect(separateArtists(tracks,artists,2)).toEqual(separateArtists(tracks,artists,2));
+ });
+ it('reports impossible spacing without dropping recordings',()=>{
+  const list=[{id:'a1'},{id:'a2'},{id:'b1'}];
+  const result=separateArtists(list,artists,2);
+  expect(result.violations).toBeGreaterThan(0);
+  expect(result.items).toHaveLength(list.length);
+ });
+ it('rejects invalid spacing and artist strings',()=>{
+  expect(()=>validateRotation({...DEFAULT_ROTATION,artistGap:6})).toThrow();
+  expect(()=>validateRotation({...DEFAULT_ROTATION,artists:{x:42}})).toThrow();
+ });
+ it('keeps previous saved configuration compatible',async()=>{
+  const db={setting:{findUnique:async()=>({value:JSON.stringify({
+   enabled:true,tags:{},dayparts:DEFAULT_ROTATION.dayparts
+  })})}};
+  const result=await readRotation(db);
+  expect(result.artistGap).toBe(0);
+  expect(result.artists).toEqual({});
  });
 });
