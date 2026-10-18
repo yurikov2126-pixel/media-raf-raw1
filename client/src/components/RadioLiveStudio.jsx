@@ -10,6 +10,7 @@ export default function RadioLiveStudio() {
   const [role, setRole] = useState(null);
   const [muted, setMuted] = useState(false);
   const [uplinkInfo,setUplinkInfo]=useState('Тестовый uplink выключен');
+  const [health,setHealth]=useState(null);
   const recorderRef=useRef(null);
   const uplinkRef=useRef(null);
   const [error, setError] = useState('');
@@ -52,6 +53,14 @@ export default function RadioLiveStudio() {
     socketRef.current = socket;
     socket.on('connect', () => { setStatus('Сервер подключён'); socket.emit('radio:studio:state', setState); });
     socket.on('connect_error', () => setError('Не удалось подключить канал студии'));
+    socket.on('disconnect',()=>setHealth(null));
+    const healthTimer=setInterval(()=>{
+      if(!socket.connected)return;
+      socket.timeout(2000).emit('radio:studio:health',(err,result)=>{
+        if(err||!result?.ok){setHealth(null);return;}
+        setHealth(result);
+      });
+    },2500);
     socket.on('radio:studio:uplink:ended', ({ reason } = {}) => {
       uplinkRef.current?.close();
       if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
@@ -84,7 +93,7 @@ export default function RadioLiveStudio() {
         }
       } catch (e) { setError('WebRTC: ' + e.message); }
     });
-    return () => { uplinkRef.current?.close(); if (recorderRef.current?.state === 'recording') recorderRef.current.stop(); socket.emit('radio:studio:leave'); socket.disconnect(); peerRef.current?.close();
+    return () => { clearInterval(healthTimer); uplinkRef.current?.close(); if (recorderRef.current?.state === 'recording') recorderRef.current.stop(); socket.emit('radio:studio:leave'); socket.disconnect(); peerRef.current?.close();
       streamRef.current?.getTracks().forEach(t => t.stop()); };
   }, [token]);
   const start = async () => {
@@ -192,6 +201,23 @@ export default function RadioLiveStudio() {
       {role && <button type="button" onClick={stop} className="rounded-xl border border-red-500/30 px-4 py-2 text-red-500">Завершить тест</button>}
     </div>
     {role==='presenter'&&<p className="text-xs opacity-65">{uplinkInfo}. Тестовые блоки проверяются и отбрасываются сервером; PCM и общий эфир не меняются.</p>}
+    <div className="rounded-xl border border-current/10 bg-black/5 dark:bg-white/5 p-3 space-y-2" aria-live="polite">
+      <div className="flex items-center justify-between gap-2">
+        <strong className="text-sm">Диагностика аудиошлюза</strong>
+        <span className="text-xs opacity-70">Только наблюдение · не публичный эфир</span>
+      </div>
+      {!health ? <p className="text-sm opacity-70">Нет актуальных данных диагностики</p> : <>
+        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+          <span>Ведущий: {health.transportConnected?'подключён':'не подключён'}</span>
+          <span>Декодер: {health.decoderRunning?'работает':'остановлен'}</span>
+          <span>PCM Worker: {health.workerReachable?'доступен':'не доступен'}</span>
+          <span>Буфер симулятора: {Number.isFinite(health.bufferedMs)?health.bufferedMs+' мс':'нет данных'}</span>
+          <span>Возраст PCM: {Number.isFinite(health.pcmAgeMs)?Math.round(health.pcmAgeMs)+' мс':'нет данных'}</span>
+          <span>Переключение эфира: запрещено</span>
+        </div>
+        <p className="text-xs opacity-70">Ограничения: {health.blockers?.length?health.blockers.join(' · '):'нет данных'}</p>
+      </>}
+    </div>
     <audio ref={audioRef} autoPlay controls className="w-full"/>
     {role==='listener' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>audioRef.current?.play().catch(e=>setError(e.message))}>Включить звук</button>}
     <p className="text-xs opacity-60">Нужен HTTPS и разрешение микрофона. В разных сетях прямое соединение может не установиться без TURN-сервера.</p>
