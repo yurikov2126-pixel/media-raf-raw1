@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {planPrivatePcmSchedule} from './radioPrivatePcmClock.js';
 
 /** Headphone-only 48 kHz stereo PCM player. Never sends audio to the Worker. */
 export default function RadioPrivateLiveMonitor({socket,active,mode='voice'}){
@@ -18,7 +19,7 @@ export default function RadioPrivateLiveMonitor({socket,active,mode='voice'}){
     if(!Context)return setStatus('Web Audio недоступен');
     const audio=new Context({sampleRate:48000});
     try{await audio.resume();}catch{void audio.close();return setStatus('Не удалось открыть звуковое устройство');}
-    const m={audio,stopped:false,timer:null,cursor:null,nextTime:audio.currentTime+0.3};
+    const m={audio,stopped:false,timer:null,cursor:null,nextTime:audio.currentTime+0.45,rebufferCount:0};
     monitor.current=m;setEnabled(true);setStatus('Подключение к приватному PCM...');
     const poll=()=>{
       if(m.stopped||monitor.current!==m)return;
@@ -41,12 +42,13 @@ export default function RadioPrivateLiveMonitor({socket,active,mode='voice'}){
             }
             const node=audio.createBufferSource();
             node.buffer=buffer;node.connect(audio.destination);
-            if(m.nextTime<audio.currentTime+0.02)throw Error('PLAYBACK_UNDERRUN');
-            if(m.nextTime-audio.currentTime>1.5)throw Error('PLAYBACK_BACKLOG');
+            const planned=planPrivatePcmSchedule({nextTime:m.nextTime,currentTime:audio.currentTime});
+            if(planned.rebuffered){m.rebufferCount++;m.nextTime=planned.time;}
             node.start(m.nextTime);m.nextTime+=0.02;m.cursor=item.sequence;
           }
-          setStatus('Приватное прослушивание · наушники · эфир не затронут');
-          m.timer=setTimeout(poll,reply.frames.length?110:120);
+          setStatus(m.rebufferCount?'Приватное прослушивание · восстановлений буфера: '+m.rebufferCount+' · эфир не затронут':'Приватное прослушивание · наушники · эфир не затронут');
+          // 8 frames = 160ms. Poll faster than that to avoid a deterministic starvation.
+          m.timer=setTimeout(poll,reply.frames.length?35:50);
         }catch(e){stop();setStatus('Монитор остановлен: '+e.message);}
       });
     };
