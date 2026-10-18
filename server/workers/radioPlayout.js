@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
+import { readAudioSettings, decoderAudioFilters } from '../src/lib/radioAudioProcessing.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -114,9 +115,11 @@ async function run() {
       await new Promise(resolve=>setTimeout(resolve,250));
       continue;
     }
+    const audioSettings=await readAudioSettings().catch(error=>{state.lastError=error.message;return {enabled:false};});
+    state.audioProcessing=audioSettings;
     decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
       '-ss',String(cursor.track.offsetMs/1000),'-i',filename,
-      '-t',String(remaining/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
+      '-t',String(remaining/1000),'-vn',...decoderAudioFilters(audioSettings,remaining/1000),'-f','s16le','-ac','2','-ar','48000','pipe:1'],
       {stdio:['ignore','pipe','pipe']});
     const child=decoder;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
