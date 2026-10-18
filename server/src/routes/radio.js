@@ -461,6 +461,32 @@ router.post('/schedule/weekly', safe(async (req, res) => {
     res.status(201).json({ created: result.count, timezone: RADIO_TIMEZONE });
 }));
 
+router.patch('/schedule/:id', safe(async (req, res) => {
+    // Moving a scheduled slot never changes the approved playlist or its duration.
+    const startAt = broadcastStart(req.body || {});
+    if (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now())
+        return res.status(400).json({ error: 'Укажите будущее время начала эфира (Москва UTC+3)' });
+    const result = await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+        const slot = await tx.radioScheduleSlot.findUnique({ where: { id: req.params.id } });
+        if (!slot) return { status: 404, error: 'Эфир не найден' };
+        if (slot.startAt <= new Date()) return { status: 409, error: 'Начавшийся или прошедший эфир переносить нельзя' };
+        const length = slot.endAt.getTime() - slot.startAt.getTime();
+        if (length <= 0 || length > 12 * 3600000)
+            return { status: 409, error: 'Некорректная продолжительность передачи' };
+        const endAt = new Date(startAt.getTime() + length);
+        const conflict = await tx.radioScheduleSlot.findFirst({
+            where: { id: { not: slot.id }, startAt: { lt: endAt }, endAt: { gt: startAt } },
+            select: { id: true },
+        });
+        if (conflict) return { status: 409, error: 'В выбранное время уже запланирован другой эфир' };
+        const updated = await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { startAt, endAt } });
+        return { slot: updated };
+    });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json(result);
+}));
+
 router.delete('/schedule/:id', safe(async (req, res) => {
     const result = await prisma.radioScheduleSlot.deleteMany({ where: { id: req.params.id, startAt: { gt: new Date() } } });
     if (!result.count) return res.status(404).json({ error: 'Будущий эфир не найден' });
