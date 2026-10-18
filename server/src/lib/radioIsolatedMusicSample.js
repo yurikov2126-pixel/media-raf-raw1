@@ -1,4 +1,4 @@
-import {readFileSync} from 'node:fs';
+import {openSync,readSync,closeSync,fstatSync} from 'node:fs';
 import {resolve} from 'node:path';
 
 // Isolated, bounded pre-decoded stereo s16le 48k music sample.
@@ -12,10 +12,15 @@ export class RadioIsolatedMusicSample {
  static fromFile(filePath){
   if(typeof filePath!=='string'||!filePath.trim())throw new TypeError('MUSIC_FILE_REQUIRED');
   const full=resolve(filePath);
-  const {size}=readFileSync(full,{flag:'r'}).length>0?{size:0}:{size:0};
-  void size;
-  const pcm=readFileSync(full);
-  return new RadioIsolatedMusicSample({pcm});
+  const fd=openSync(full,'r');
+  try{
+   const size=fstatSync(fd).size;
+   if(size<3840||size>48_000*4*30||size%3840)throw new TypeError('INVALID_MUSIC_FILE_SIZE');
+   const pcm=Buffer.alloc(size);
+   let received=0;
+   while(received<size){const count=readSync(fd,pcm,received,size-received,received);if(!count)throw new Error('MUSIC_FILE_TRUNCATED');received+=count;}
+   return new RadioIsolatedMusicSample({pcm});
+  }finally{closeSync(fd);}
  }
  reset(){this.offset=0;this.frames=0;}
  next(){
