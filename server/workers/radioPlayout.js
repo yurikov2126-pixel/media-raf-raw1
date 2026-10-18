@@ -22,6 +22,8 @@ import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
 import { chooseQueuedTrack, selectExhaustionFallback } from '../src/lib/radioEventQueue.js';
 import { PcmFrameBuffer } from '../src/lib/radioPcmFrameBuffer.js';
+import { readJingles } from '../src/lib/radioJingles.js';
+import { shouldInsertJingle, chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -39,6 +41,9 @@ const PCM_STAGING_ENABLED=process.env.RADIO_PCM_STAGING_ENABLED==='true';
 state.pcmStaging={enabled:PCM_STAGING_ENABLED,frameBytes:4,droppedTailBytes:0,processedBytes:0};
 const failedAutoDjAssets = new Map();
 let frozenRotation=null;
+const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED==='true';
+let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
+state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
@@ -119,6 +124,28 @@ async function current() {
       state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
       return {cursor,asset:null};
     }
+    // Jingles are supported only in strict event queue, never the timeline cursor.
+    // Both the saved configuration AND a separate Worker opt-in are required.
+    if(JINGLE_PLAYOUT_ENABLED){
+      const jingles=await readJingles();
+      if(shouldInsertJingle({settings:jingles,daypart:rotation.daypart,
+        completedMusic:musicSinceJingle,untilMs:until,nowMs})&&!jinglePending){
+        const candidates=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
+        const jingle=chooseJingleAsset(jingles,candidates,jinglesPlayed);
+        if(jingle&&until-nowMs>=jingle.durationMs+500){
+          try{
+            await fs.access(path.join(assetsRoot,path.basename(jingle.storageKey)));
+            jinglePending=true;
+            state.queueStatus='JINGLE';
+            return {cursor:{status:'AUTO_DJ',isJingle:true,at:now.toISOString(),slot:null,
+              track:{id:jingle.id,name:jingle.name,index:-1,seekMs:0,offsetMs:0,
+                durationMs:jingle.durationMs},
+              until:Number.isFinite(until)?new Date(until).toISOString():null},
+              asset:jingle};
+          }catch(error){state.lastError='Jingle file missing: '+jingle.id;}
+        }
+      }
+    }
     state.queueStatus=eligible?'PLAYING':'FALLBACK_REPEAT';
     // Dry-run only: never initiate a second decoder without PCM handover.
     // A reserved candidate is not recorded as playback.
@@ -174,13 +201,14 @@ async function run() {
       }
       continue;
     }
-    state.mode=cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;
+    state.mode=cursor.isJingle?'JINGLE':cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;
     const boundary=cursor.status==='AUTO_DJ'?(cursor.until?Date.parse(cursor.until):Infinity):Date.parse(cursor.slot.endAt);
     const remaining=Math.max(0,Math.min(cursor.track.remainingMs??(cursor.track.durationMs-cursor.track.offsetMs),boundary-Date.now()));
     if(remaining<150) continue;
     const filename=path.join(assetsRoot,path.basename(asset.storageKey));
     try {await fs.access(filename);} catch(error) {
       state.lastError='Audio missing: '+asset.id;
+      if(cursor.isJingle)jinglePending=false;
       if(cursor.status==='AUTO_DJ')failedAutoDjAssets.set(asset.id,Date.now()+300000);
       await new Promise(resolve=>setTimeout(resolve,250));
       continue;
@@ -277,6 +305,13 @@ async function run() {
       try {await recordPlayoutEvents(events);}
       catch(error){state.lastError='Playback journal: '+error.message;}
     }
+    if(cursor.isJingle){
+      jinglePending=false;
+      if(generatedMs>=1000&&exitCode===0){jinglesPlayed++;musicSinceJingle=0;}
+    } else if(cursor.status==='AUTO_DJ'&&generatedMs>=1000&&exitCode===0){
+      musicSinceJingle++;
+    }
+    state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:jinglesPlayed,musicSinceJingle};
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
     if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)
