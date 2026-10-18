@@ -16,6 +16,7 @@ import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProc
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 import { readJingles, writeJingles, planJingleBreaks } from '../lib/radioJingles.js';
 import {readSourceControl,writeSourceControl,resolveSourcePriority} from '../lib/radioSourceControl.js';
+import {planSourceHandover} from '../lib/radioLiveHandover.js';
 
 const router = Router();
 router.use(auth);
@@ -459,6 +460,21 @@ router.get('/playout-history.csv', safe(async(_req,res)=>{
 router.get('/playout-history', safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   res.json({events:(await readPlayoutHistory()).slice(-50).reverse()});
+}));
+router.get('/source-handover/preview', safe(async(_req,res)=>{
+ const now=new Date();
+ const [settings,auto,next,scheduled]=await Promise.all([
+  readSourceControl(),readAutoDjSettings(),
+  prisma.radioScheduleSlot.findFirst({where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+   orderBy:{startAt:'asc'},select:{startAt:true}}),
+  prisma.radioScheduleSlot.findFirst({where:{startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
+   select:{id:true}})
+ ]);
+ const plan=planSourceHandover({settings,autoDjEnabled:auto.enabled,
+  scheduled:!!scheduled,scheduledAt:next?.startAt?.toISOString()||null,
+  liveConnected:false,pcmSamplesReceived:false,nowMs:now.getTime()});
+ res.setHeader('Cache-Control','no-store');
+ res.json({plan,simulated:true});
 }));
 router.get('/source-control', safe(async(_req,res)=>{
  const settings=await readSourceControl();
