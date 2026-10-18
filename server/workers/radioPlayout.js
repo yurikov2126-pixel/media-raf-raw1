@@ -27,6 +27,7 @@ import { LivePcmSessionGate } from '../src/lib/radioLivePcmSession.js';
 import { RadioTimedPcmPlayout } from '../src/lib/radioTimedPcmPlayout.js';
 import { RadioIsolatedPcmLab } from '../src/lib/radioIsolatedPcmLab.js';
 import { RadioPcmLabSoakTelemetry } from '../src/lib/radioPcmLabSoakTelemetry.js';
+import { RadioPrivatePcmPreview } from '../src/lib/radioPrivatePcmPreview.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
@@ -57,6 +58,8 @@ const timedShadow=new RadioTimedPcmPlayout();
 const PCM_MIX_LAB_ENABLED=TIMED_PCM_SHADOW_ENABLED&&process.env.RADIO_PCM_MIX_LAB_ENABLED==='true';
 const pcmMixLab=new RadioIsolatedPcmLab();
 const soakTelemetry=new RadioPcmLabSoakTelemetry();
+const PRIVATE_PREVIEW_ENABLED=LIVE_PCM_INTAKE_ENABLED&&process.env.RADIO_PRIVATE_PCM_PREVIEW_ENABLED==='true';
+const privatePreview=new RadioPrivatePcmPreview();
 // No switch command is exposed: this is passive safety telemetry only.
 const switchShadow=new RadioWorkerSwitchShadow();
 let shadowTicks=0;
@@ -361,7 +364,7 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
-    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();if(PCM_MIX_LAB_ENABLED){pcmMixLab.reset();soakTelemetry.reset();}
+    try{const token=liveSessions.start(owner);switchShadow.cancel('SESSION_REPLACED');privatePreview.reset();liveIntake.reset();gatewayClock.reset();if(TIMED_PCM_SHADOW_ENABLED)timedShadow.reset();if(PCM_MIX_LAB_ENABLED){pcmMixLab.reset();soakTelemetry.reset();}
       res.writeHead(201,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({sessionToken:token,connectedToEncoder:false}));
     }catch(error){res.writeHead(error instanceof TypeError?400:409).end();}return;
@@ -369,12 +372,22 @@ const server=http.createServer((req,res)=>{
   if(req.url==='/live-pcm/session' && req.method==='DELETE'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     if(!liveSessions.stop(req.headers['x-radio-session-token'])){res.writeHead(403).end();return;}
-    liveIntake.reset();gatewayClock.reset();res.writeHead(204).end();return;
+    privatePreview.reset();liveIntake.reset();gatewayClock.reset();res.writeHead(204).end();return;
   }
   if(req.url==='/live-pcm/status' && req.method==='GET'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
     res.end(JSON.stringify({enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot(),session:liveSessions.snapshot(),gatewayClock:gatewayClock.snapshot(),timedShadow:shadowStatus(),switchShadow:switchShadow.snapshot(),pcmMixLab:{enabled:PCM_MIX_LAB_ENABLED,...pcmMixLab.snapshot()},pcmSoak:{enabled:PCM_MIX_LAB_ENABLED,...soakTelemetry.snapshot()}}));
     return;
+  }
+  if(req.url==='/live-pcm/private-preview' && req.method==='GET'){
+    if(!PRIVATE_PREVIEW_ENABLED||!liveSessions.snapshot().active){res.writeHead(404).end();return;}
+    const wav=privatePreview.exportWav();
+    if(!wav){res.writeHead(409).end();return;}
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'private, no-store',
+      'X-Content-Type-Options':'nosniff'});
+    res.end(JSON.stringify({wavBase64:wav.toString('base64'),
+      durationMs:privatePreview.snapshot().durationMs,
+      connectedToEncoder:false,changeApplied:false}));return;
   }
   if(req.url==='/live-pcm/ingest' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
@@ -400,6 +413,7 @@ const server=http.createServer((req,res)=>{
         const pcm=Buffer.concat(chunks);
         gatewayClock.validate({pcm,frameIndex});
         const result=liveIntake.accept(pcm);
+        if(PRIVATE_PREVIEW_ENABLED)privatePreview.accept(pcm,Date.now());
         if(TIMED_PCM_SHADOW_ENABLED){
           const receivedAt=Date.now();
           const staged=timedShadow.push({pcm,frameIndex},receivedAt);
