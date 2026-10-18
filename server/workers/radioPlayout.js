@@ -57,7 +57,7 @@ const shadowTimer=TIMED_PCM_SHADOW_ENABLED?setInterval(()=>{
   const result=timedShadow.tick(Date.now());
   shadowTicks++;
   // Deliberately discard the simulated output: NEVER forward to station encoder.
-  if(!result.ok)timedShadow.failures && clearInterval(shadowTimer);
+  if(!result.ok)state.timedPcmShadowLastError=result.reason;
 },20):null;
 shadowTimer?.unref?.();
 const shadowStatus=()=>({enabled:TIMED_PCM_SHADOW_ENABLED,connectedToEncoder:false,
