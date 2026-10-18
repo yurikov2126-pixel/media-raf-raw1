@@ -16,6 +16,7 @@ import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 import { crossfadePlan } from '../src/lib/radioCrossfade.js';
+import { readRotation, rotationPlan } from '../src/lib/radioRotation.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -77,8 +78,11 @@ async function current() {
   for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
+  const rotation=rotationPlan(catalog,await readRotation(),nowMs);
+  const music=rotation?.items||catalog;
+  const clock=rotation?nowMs-rotation.anchorMs:nowMs;
   const dsp=await readAudioProcessing();
-  const blend=dsp.crossfadeMs>0?crossfadePlan(catalog,nowMs,dsp.crossfadeMs):null;
+  const blend=dsp.crossfadeMs>0?crossfadePlan(music,clock,dsp.crossfadeMs):null;
   const track=blend?{
     id:blend.track.id,name:blend.track.name,index:blend.index,
     durationMs:blend.track.playDurationMs,offsetMs:0,seekMs:blend.seekMs,
@@ -87,16 +91,16 @@ async function current() {
       nextSeekMs:blend.nextSeekMs,overlapMs:blend.overlapMs,
       blendPosition:blend.blendPosition,
     }:null,
-  }:cueCursor(catalog,nowMs);
+  }:cueCursor(music,clock);
   const next=await prisma.radioScheduleSlot.findFirst({
     where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
     select:{startAt:true},orderBy:{startAt:'asc'}
   });
-  const until=next?next.startAt.getTime():Infinity;
+  const until=Math.min(next?next.startAt.getTime():Infinity,rotation?.endMs??Infinity);
   if(!track || until-nowMs<150)return {cursor,asset:null};
   return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,track,
     until: Number.isFinite(until)?new Date(until).toISOString():null},
-    asset:catalog[track.index]};
+    asset:music[track.index]};
 }
 function stopDecoder() {
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
