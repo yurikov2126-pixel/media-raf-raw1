@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
@@ -16,8 +17,13 @@ const moscowDate = date => new Intl.DateTimeFormat('sv-SE', { timeZone: STATION_
 export default function Radio() {
   const { token } = useAuth();
   const toast = useToast();
+  const location = useLocation();
   const { addFiles, tasks: uploadTasks } = useRadioUploads();
   const [tab, setTab] = useState(() => ['playlists','schedule','assets','equipment','studio','history'].includes(new URLSearchParams(window.location.search).get('tab')) ? new URLSearchParams(window.location.search).get('tab') : 'home');
+  useEffect(() => {
+    const requested = new URLSearchParams(location.search).get('tab');
+    if (['playlists','schedule','assets','equipment','studio','history'].includes(requested)) setTab(requested);
+  }, [location.search]);
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [folders, setFolders] = useState([]);
