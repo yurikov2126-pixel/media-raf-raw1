@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
+import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 
 const router = Router();
 router.use(auth);
@@ -396,6 +397,19 @@ router.post('/playlists/:id/return', safe(async (req, res) => {
         error: {missing:'Плейлист не найден',locked:'Плейлист не ожидает проверки','not-student':'Возврат предусмотрен только для студентов'}[result],
     });
     res.json({ playlist: result });
+}));
+router.get('/audio-processing', safe(async (_req,res) => {
+    res.setHeader('Cache-Control','no-store');
+    res.json({settings:await readAudioProcessing()});
+}));
+router.put('/audio-processing', safe(async (req,res) => {
+    try {
+        const settings=await writeAudioProcessing(req.body);
+        res.json({settings});
+    } catch(error) {
+        if(error instanceof TypeError)return res.status(400).json({error:error.message});
+        throw error;
+    }
 }));
 router.get('/autodj', safe(async (_req,res) => {
     res.json({settings:await readAutoDjSettings()});
