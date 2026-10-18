@@ -208,6 +208,7 @@ async function run() {
     const filename=path.join(assetsRoot,path.basename(asset.storageKey));
     try {await fs.access(filename);} catch(error) {
       state.lastError='Audio missing: '+asset.id;
+      if(cursor.isJingle)jinglePending=false;
       if(cursor.status==='AUTO_DJ')failedAutoDjAssets.set(asset.id,Date.now()+300000);
       await new Promise(resolve=>setTimeout(resolve,250));
       continue;
