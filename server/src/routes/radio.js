@@ -461,6 +461,26 @@ router.post('/schedule/weekly', safe(async (req, res) => {
     res.status(201).json({ created: result.count, timezone: RADIO_TIMEZONE });
 }));
 
+router.post('/schedule/:id/copy', safe(async (req, res) => {
+    const startAt = broadcastStart(req.body || {});
+    if (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now()) return res.status(400).json({ error: 'Укажите будущее время копии по Москве' });
+    const result = await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+        const original = await tx.radioScheduleSlot.findUnique({ where: { id: req.params.id }, include: { playlist: true } });
+        if (!original) return { status: 404, error: 'Исходная передача не найдена' };
+        if (original.playlist.status !== 'APPROVED') return { status: 409, error: 'Плейлист больше не утверждён' };
+        const length = original.endAt.getTime() - original.startAt.getTime();
+        if (length <= 0 || length > 12 * 3600000) return { status: 409, error: 'Недопустимая продолжительность' };
+        const endAt = new Date(startAt.getTime() + length);
+        const clash = await tx.radioScheduleSlot.findFirst({ where: { startAt: { lt: endAt }, endAt: { gt: startAt } }, select: { id: true } });
+        if (clash) return { status: 409, error: 'Интервал уже занят' };
+        const slot = await tx.radioScheduleSlot.create({ data: { playlistId: original.playlistId, startAt, endAt, createdBy: req.user.id } });
+        return { slot };
+    });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.status(201).json(result);
+}));
+
 router.patch('/schedule/:id', safe(async (req, res) => {
     // Moving a scheduled slot never changes the approved playlist or its duration.
     const startAt = broadcastStart(req.body || {});
