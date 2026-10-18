@@ -14,6 +14,7 @@ import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
+import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -73,9 +74,9 @@ async function current() {
     include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
   });
   for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
-  const catalog=selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id));
+  const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
-  const track=autoDjCursor(catalog,nowMs);
+  const track=cueCursor(catalog,nowMs);
   const next=await prisma.radioScheduleSlot.findFirst({
     where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
     select:{startAt:true},orderBy:{startAt:'asc'}
@@ -122,7 +123,7 @@ async function run() {
     state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs};
     const filter=audioProcessingFilter(dsp,remaining/1000);
     decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
-      '-ss',String(cursor.track.offsetMs/1000),'-i',filename,
+      '-ss',String((cursor.track.seekMs??cursor.track.offsetMs)/1000),'-i',filename,
       '-t',String(remaining/1000),'-vn',...(filter?['-af',filter]:[]),'-f','s16le','-ac','2','-ar','48000','pipe:1'],
       {stdio:['ignore','pipe','pipe']});
     const child=decoder;

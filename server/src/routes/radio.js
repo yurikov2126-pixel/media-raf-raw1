@@ -9,6 +9,7 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
+import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 
 const router = Router();
 router.use(auth);
@@ -397,6 +398,19 @@ router.post('/playlists/:id/return', safe(async (req, res) => {
         error: {missing:'Плейлист не найден',locked:'Плейлист не ожидает проверки','not-student':'Возврат предусмотрен только для студентов'}[result],
     });
     res.json({ playlist: result });
+}));
+router.get('/audio-cues', safe(async (_req,res)=>{
+    res.setHeader('Cache-Control','no-store');
+    res.json({cues:await readCues()});
+}));
+router.put('/audio-cues/:assetId', safe(async (req,res)=>{
+    const asset=await prisma.radioAsset.findUnique({where:{id:req.params.assetId},select:{durationMs:true}});
+    if(!asset)return res.status(404).json({error:'Аудиофайл не найден'});
+    try {
+      const cue=validateCue(req.body,asset.durationMs);
+      await writeCue(req.params.assetId,cue);
+      res.json({cue});
+    }catch(error){if(error instanceof TypeError)return res.status(400).json({error:error.message});throw error;}
 }));
 router.get('/audio-processing', safe(async (_req,res) => {
     res.setHeader('Cache-Control','no-store');
