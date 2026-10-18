@@ -11,6 +11,7 @@ import path from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
+import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -20,7 +21,7 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
-const state = { mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0 };
+const state = { mode:'STARTING',trackId:null,slotId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
 let encoder = null;
 let stopping = false;
@@ -52,15 +53,34 @@ function startEncoder() {
 
 const silence=Buffer.alloc(48000*2*2/5);
 async function current() {
-  const now=new Date();
+  const now=new Date(),nowMs=now.getTime();
   const slots=await prisma.radioScheduleSlot.findMany({
     where:{startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
     include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:true}}}}},
     orderBy:{startAt:'asc'},take:1
   });
-  const cursor=resolveRadioCursor(slots,now.getTime());
-  const asset=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
-  return {cursor,asset};
+  const cursor=resolveRadioCursor(slots,nowMs);
+  const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
+  if(scheduled || cursor.slot) return {cursor,asset:scheduled};
+  const settings=await readAutoDjSettings();
+  state.autoDjEnabled=settings.enabled;
+  if(!settings.enabled||!settings.playlistId)return {cursor,asset:null};
+  const playlist=await prisma.radioPlaylist.findUnique({
+    where:{id:settings.playlistId},
+    include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+  });
+  const catalog=selectAutoDjAssets(playlist);
+  if(!catalog.length)return {cursor,asset:null};
+  const track=autoDjCursor(catalog,nowMs);
+  const next=await prisma.radioScheduleSlot.findFirst({
+    where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+    select:{startAt:true},orderBy:{startAt:'asc'}
+  });
+  const until=next?next.startAt.getTime():Infinity;
+  if(!track || until-nowMs<150)return {cursor,asset:null};
+  return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,track,
+    until: Number.isFinite(until)?new Date(until).toISOString():null},
+    asset:catalog[track.index]};
 }
 function stopDecoder() {
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
@@ -80,9 +100,9 @@ async function run() {
       }
       continue;
     }
-    state.mode='SCHEDULED';state.trackId=asset.id;
-    const remaining=Math.max(0,Math.min(cursor.track.durationMs-cursor.track.offsetMs,
-      new Date(cursor.slot.endAt).getTime()-Date.now()));
+    state.mode=cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;
+    const boundary=cursor.status==='AUTO_DJ'?(cursor.until?Date.parse(cursor.until):Infinity):Date.parse(cursor.slot.endAt);
+    const remaining=Math.max(0,Math.min(cursor.track.durationMs-cursor.track.offsetMs,boundary-Date.now()));
     if(remaining<150) continue;
     const filename=path.join(assetsRoot,path.basename(asset.storageKey));
     decoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
