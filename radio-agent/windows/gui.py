@@ -82,6 +82,7 @@ class RadioAgentApp(tk.Tk):
         self.esp32_ip = tk.StringVar(value=prefs.get("esp32_ip",os.environ.get("RADIO_ESP32_IP","")))
         self.esp32_secret = tk.StringVar(value=os.environ.get("RADIO_ESP32_SECRET",""))
         self.esp32_status = tk.StringVar(value="Не проверен")
+        self.esp32_platform_status = tk.StringVar(value="Ожидает настройки")
         self.auto_start = tk.BooleanVar(value=startup_enabled())
         self.agreed = tk.BooleanVar(value=False)
         self.pending_update = None
@@ -112,6 +113,7 @@ class RadioAgentApp(tk.Tk):
         linkbar.pack(fill="x",pady=(8,2))
         ttk.Button(linkbar,text="Проверить связь",command=self.test_esp32).pack(side="left")
         ttk.Label(linkbar,textvariable=self.esp32_status,style="Main.TLabel").pack(side="left",padx=12)
+        ttk.Label(esp,textvariable=self.esp32_platform_status,style="Main.TLabel").pack(anchor="w",pady=(4,0))
         ttk.Label(esp,text="Реле GPIO 13 не управляется; только безопасная диагностика",style="Main.TLabel").pack(anchor="w")
         ttk.Checkbutton(wrap,text="Открывать агент при входе в Windows (без запуска эфира)",
                         variable=self.auto_start,command=self.configure_startup).pack(anchor="w",pady=(8,1))
@@ -233,13 +235,21 @@ class RadioAgentApp(tk.Tk):
         host=self.esp32_ip.get().strip()
         token=self.token.get().strip()
         server=self.server.get().strip()
-        if host and token.startswith("rr_") and server.startswith("https://"):
-            def work():
-                try:
-                    report_status(server,token,host)
-                except Exception as error:
-                    self.messages.put(("esp32_report_error",type(error).__name__))
-            threading.Thread(target=work,daemon=True).start()
+        if host:
+            if not token.startswith("rr_"):
+                self.messages.put(("esp32_report_state","Нет токена Windows Agent (rr_). Введите токен радиокомпьютера для отправки статуса на сайт."))
+            elif not server.startswith("https://"):
+                self.messages.put(("esp32_report_state","Укажите HTTPS-адрес сервера"))
+            else:
+                def work():
+                    try:
+                        report_status(server,token,host)
+                        self.messages.put(("esp32_report_ok",None))
+                    except Exception as error:
+                        code=getattr(error,"code",None)
+                        detail="HTTP "+str(code) if code else type(error).__name__
+                        self.messages.put(("esp32_report_error",detail))
+                threading.Thread(target=work,daemon=True).start()
         self.after(6500,self.report_esp32_status)
 
     def test_esp32(self):
@@ -325,8 +335,12 @@ class RadioAgentApp(tk.Tk):
                     self.esp32_status.set("На связи · SAFE_PILOT")
                 elif action == "idle_esp32_error":
                     self.esp32_status.set("Нет связи: "+value)
+                elif action == "esp32_report_ok":
+                    self.esp32_platform_status.set("Передано на сайт")
+                elif action == "esp32_report_state":
+                    self.esp32_platform_status.set(value)
                 elif action == "esp32_report_error":
-                    self.messages.put(("log","Отчёт ESP32 на платформу: "+value))
+                    self.esp32_platform_status.set("Ошибка отправки: "+value)
                 elif action == "esp32_ok":
                     self.esp32_status.set(value)
                     self.messages.put(("log","ESP32: heartbeat доставлен"))
