@@ -25,8 +25,8 @@ jobs:
       run:
         working-directory: radio-agent/windows
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Verify release version before publishing
@@ -50,7 +50,7 @@ jobs:
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name "MediaRafRaw-RadioAgent" --icon brand.ico --add-data "brand.ico;." --paths . gui.py
           if (!(Test-Path "dist/MediaRafRaw-RadioAgent.exe")) { throw "EXE missing" }
       - name: Archive Windows EXE
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: MediaRafRaw-RadioAgent-Windows-x64
           path: radio-agent/windows/dist/MediaRafRaw-RadioAgent.exe
