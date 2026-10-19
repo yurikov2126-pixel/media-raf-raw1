@@ -124,7 +124,8 @@ router.get('/agent/amplifier-intent',deviceAuth,safe(async(req,res)=>{
   const permit=!!req.radioDevice.playbackAllowed&&!!result.requested&&
     !result.policy.emergencyOff&&devices.length===1;
   res.json({permit,leaseMs:permit?8000:0,esp32Ip:devices.length===1?devices[0].ip:null,
-    reason:result.reason,hardwareExpected:'POWER_CONTROL_V1',
+    reason:result.reason,policyMode:result.policy.mode,
+    emergencyOff:result.policy.emergencyOff===true,hardwareExpected:'POWER_CONTROL_V1',
     evaluatedAt:new Date().toISOString()});
 }));
 router.get('/amplifier',...admin,safe(async(_req,res)=>{
