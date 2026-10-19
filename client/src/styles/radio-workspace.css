@@ -34,8 +34,6 @@
 .radio-workspace .radio-studio-hero{color:#f8fafc}
 .radio-workspace .radio-on-air-card :is(h1,h2,h3,h4),
 .radio-workspace .radio-studio-hero :is(h1,h2,h3,h4){color:#fff!important}
-.radio-workspace .radio-on-air-card :is(p,span,div),
-.radio-workspace .radio-studio-hero :is(p,span,div){color:inherit}
 .radio-workspace .radio-on-air-card .text-slate-300,
 .radio-workspace .radio-studio-hero .text-slate-300{color:#cbd5e1}
 .radio-workspace .radio-on-air-card .text-slate-400,
