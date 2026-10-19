@@ -29,6 +29,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify release tag matches application version
+        if: startsWith(github.ref, 'refs/tags/radio-agent-v')
+        shell: pwsh
+        run: |
+          $expected = "${{ github.ref_name }}".Replace("radio-agent-v", "")
+          $found = python -c "import ast; p=ast.parse(open('gui.py', encoding='utf-8').read()); print(next(n.value.value for n in p.body if isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='AGENT_VERSION' for x in n.targets)))"
+          if ($found.Trim() -ne $expected) { throw "Release tag version $expected does not match AGENT_VERSION $found" }
       - name: Compile and test Windows agent logic
         shell: pwsh
         run: |
