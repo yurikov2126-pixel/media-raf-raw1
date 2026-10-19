@@ -587,6 +587,30 @@ async function run() {
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
     if(state.playout?.trackId===asset.id)state.playout=null;
+    // A short song can end between the 3-second schedule watchdog polls.
+    // Recover any scheduled show that started during this AutoDJ track, even
+    // when its original wall-clock end has already passed. Otherwise current()
+    // would seek into the middle of the show's playlist and skip early tracks.
+    if(cursor.status==='AUTO_DJ' && !cursor.isJingle && !pendingScheduledHandover &&
+       !stopping && !publicLive.onAir){
+      try{
+        const settings=await readAutoDjSettings();
+        if(settings.finishTrackBeforeSchedule){
+          const now=new Date();
+          const missed=await prisma.radioScheduleSlot.findFirst({
+            where:{startAt:{gt:new Date(playedStart),lte:now},
+              playlist:{status:'APPROVED'}},
+            select:{id:true,startAt:true,endAt:true},
+            orderBy:{startAt:'asc'}
+          });
+          if(missed){
+            pendingScheduledHandover={id:missed.id,
+              originalStartMs:missed.startAt.getTime(),
+              originalEndMs:missed.endAt.getTime()};
+          }
+        }
+      }catch(error){state.lastError='Scheduled handover recovery: '+error.message;}
+    }
     if(cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping && !publicLive.onAir){
       const h=pendingScheduledHandover;pendingScheduledHandover=null;
       // Honor explicit schedule changes made while the song was playing.
