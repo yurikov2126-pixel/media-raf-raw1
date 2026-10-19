@@ -2,7 +2,7 @@ import { prisma } from './prisma.js';
 
 const KEY='radio_rotation_v1';
 export const id3Artist = asset => typeof asset?.tags?.artist==='string' ? asset.tags.artist.trim() : '';
-export const normalizeArtist = name => String(name||'').normalize('NFKC').trim().replace(/\\s+/g,' ').toLocaleLowerCase('ru-RU');
+export const normalizeArtist = name => String(name||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU');
 export const CATEGORIES=['ENERGY','POP','CALM','INSTRUMENTAL','OTHER'];
 export const DAYPARTS=[
   {id:'NIGHT',start:0,end:7},
@@ -86,6 +86,13 @@ export function separateArtists(items,artists={},gap=0){
     if(value<score){best=candidate;score=value;}
   }
   return {items:best,violations:score};
+}
+/** Only the selected approved Auto-DJ playlist may contribute rotation tracks. */
+export function rotationPlaylistAssets(playlist){
+  if(playlist?.status!=='APPROVED')return [];
+  return (playlist.items||[]).map(item=>item.asset)
+    .filter(asset=>asset&&Number.isInteger(asset.durationMs)&&asset.durationMs>0)
+    .map(asset=>({...asset,playDurationMs:asset.durationMs}));
 }
 export function rotationPlan(assets,config,nowMs=Date.now()){
   if(!config.enabled||!assets.length)return null;
