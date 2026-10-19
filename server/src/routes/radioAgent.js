@@ -29,6 +29,7 @@ async function deviceAuth(req,res,next) {
 
 // ESP32 inventory is configuration only; never exposes a mains relay control.
 const ESP32_REGISTRY_KEY='radio_esp32_registry_v1';
+const ESP32_STATUS_KEY='radio_esp32_status_v1';
 async function readEsp32Registry(){
   const row=await prisma.setting.findUnique({where:{key:ESP32_REGISTRY_KEY}});
   try{
@@ -36,9 +37,45 @@ async function readEsp32Registry(){
     return Array.isArray(value)?value.filter(d=>d&&typeof d.id==='string').slice(0,50):[];
   }catch{return [];}
 }
+async function readEsp32Status(){
+  const row=await prisma.setting.findUnique({where:{key:ESP32_STATUS_KEY}});
+  try{
+    const value=JSON.parse(row?.value||'{}');
+    return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+  }catch{return {};}
+}
 router.get('/esp32',...admin,safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
-  res.json({devices:await readEsp32Registry()});
+  const [devices,status]=await Promise.all([readEsp32Registry(),readEsp32Status()]);
+  const now=Date.now();
+  res.json({devices:devices.map(d=>{
+    const t=status[d.id];
+    const fresh=!!t&&Number.isFinite(Date.parse(t.observedAt))&&now-Date.parse(t.observedAt)<12000&&now>=Date.parse(t.observedAt);
+    return {...d,telemetry:fresh?{...t,online:t.heartbeatFresh===true}:null,
+      connectivity:fresh&&t.heartbeatFresh===true?'ONLINE':'OFFLINE'};
+  })});
+}));
+router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
+  const ip=req.body?.ip;
+  const status=req.body?.status;
+  if(!validLanIpv4(ip)||!status||typeof status!=='object'||Array.isArray(status))
+    return res.status(400).json({error:'Некорректная телеметрия ESP32'});
+  const devices=await readEsp32Registry();
+  const device=devices.find(d=>d.ip===ip);
+  if(!device)return res.status(404).json({error:'ESP32 не зарегистрирован'});
+  if(status.device!=='MEDIA_RAF_RAW_ESP32'||status.mode!=='SAFE_PILOT'||status.relayOutputEnabled!==false||
+    status.relayGpio!==13||typeof status.heartbeatFresh!=='boolean'||
+    !['CENTRAL','LOCAL_RESERVE','STOPPED','DISCONNECTED'].includes(status.agentMode))
+    return res.status(400).json({error:'Ожидается безопасная телеметрия SAFE_PILOT'});
+  const last=await readEsp32Status();
+  last[device.id]={observedAt:new Date().toISOString(),agentMode:status.agentMode,
+    heartbeatFresh:status.heartbeatFresh,heartbeatCount:Number(status.heartbeatCount)||0,
+    leaseValid:status.leaseValid===true,relayOutputEnabled:false,
+    reporterId:req.radioDevice.id};
+  await prisma.setting.upsert({where:{key:ESP32_STATUS_KEY},
+    create:{key:ESP32_STATUS_KEY,value:JSON.stringify(last)},
+    update:{value:JSON.stringify(last)}});
+  res.json({ok:true});
 }));
 router.post('/esp32',...admin,safe(async(req,res)=>{
   const name=typeof req.body?.name==='string'?req.body.name.trim():'';
