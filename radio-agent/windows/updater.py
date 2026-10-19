@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-RELEASE_API = "https://api.github.com/repos/yurikov2126-pixel/media-raf-raw1/releases/latest"
+RELEASE_API = "https://api.github.com/repos/yurikov2126-pixel/media-raf-raw1/releases?per_page=20"
 APP_ASSET = "MediaRafRaw-RadioAgent.exe"
 MAX_BYTES = 100 * 1024 * 1024
 
@@ -49,7 +49,9 @@ def check_latest(installed_version):
         "User-Agent": "MediaRafRaw-RadioAgent-Updater",
     })
     with urlopen(request, timeout=8) as response:
-        return select_update(json.load(response), installed_version)
+        releases = json.load(response)
+        candidates = [u for release in releases if (u := select_update(release, installed_version))]
+        return max(candidates, key=lambda update: version_tuple(update["version"]), default=None)
 
 
 def stage_update(update, folder):
