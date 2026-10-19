@@ -29,15 +29,17 @@ export default function RadioControlRoom({token,onOpen}){
  const trackMs=playout?.durationMs||track?.durationMs||0;
  const fraction=playout&&trackMs>0?Math.min(100,Math.max(0,100*playedMs/trackMs)):0;
  const isWorking=onAir?.available&&onAir.mode!=='ERROR'&&onAir.mode!=='SILENCE';
- const cards=[
-  ['Сервер вещания',onAir?.available?modes[onAir.mode]||onAir.mode:'Нет подтверждения',Boolean(onAir?.available)],
-  ['Слушателей',onAir?.listenerCount??'—',Boolean(onAir?.available)],
-  ['Записей Auto-DJ',data?.autoDj?.trackCount??'—',data?.autoDj?.ready===true],
-  ['Режим источника',onAir?.mode?modes[onAir.mode]||onAir.mode:'—',Boolean(onAir?.available)],
- ];
+ const upcoming=onAir?.upcomingSlot||data?.upcoming?.[0]||null;
+ const untilUpcoming=upcoming?.startAt?Math.max(0,new Date(upcoming.startAt).getTime()-now):null;
  return <div className="space-y-4">
-  <RadioAmplifierControl token={token}/>
-  <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
+  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-current/10 bg-white/75 p-3 text-sm dark:bg-slate-900/70">
+    <span><strong>Эфир:</strong> {onAir?.available?modes[onAir.mode]||onAir.mode:'Нет связи'}</span>
+    <span><strong>Слушателей:</strong> {onAir?.listenerCount??'—'}</span>
+    <span><strong>Следующая передача:</strong> {upcoming?displayTime(upcoming.startAt):'Не назначена'}</span>
+    <span className="tabular-nums">{untilUpcoming!==null?'Через '+duration(untilUpcoming):''}</span>
+    <button className="ml-auto rounded-lg border border-current/15 px-3 py-1.5 text-xs" type="button" onClick={refresh}>Обновить ↻</button>
+  </div>
+  <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,1fr)]">
    <section className="radio-on-air-card relative overflow-hidden rounded-2xl border border-white/15 bg-slate-900 p-5 text-white shadow-xl sm:p-6">
     <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-indigo-400/15 blur-3xl"/>
     <div className="relative flex flex-wrap items-center justify-between gap-3">
@@ -64,9 +66,9 @@ export default function RadioControlRoom({token,onOpen}){
      {audioError&&<p className="text-xs text-rose-300">{audioError}</p>}
     </div>
     <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
-     <p className="text-xs uppercase tracking-widest text-slate-400">Следом в эфире</p>
+     <p className="text-xs uppercase tracking-widest text-slate-400">Далее</p>
      {onAir?.nextTrack?<p className="text-sm font-semibold">{[onAir.nextTrack.artist,onAir.nextTrack.title].filter(Boolean).join(' — ')||onAir.nextTrack.name} <span className="font-normal text-slate-400">(прогноз Auto-DJ)</span></p>:<p className="text-xs text-slate-400">Следующая композиция пока не определена</p>}
-     {onAir?.upcomingSlot&&<p className="text-xs text-slate-300">Ближайший блок сетки: {onAir.upcomingSlot.name} · {displayTime(onAir.upcomingSlot.startAt)}{onAir.upcomingSlot.firstTrack?' · '+onAir.upcomingSlot.firstTrack:''}</p>}
+     {upcoming&&<p className="text-xs text-slate-300">Ближайший блок сетки: {upcoming.name||upcoming.playlist?.name||"Передача"} · {displayTime(upcoming.startAt)} · через {duration(untilUpcoming)}{upcoming.firstTrack?" · "+upcoming.firstTrack:""}</p>}
     </div>
     {error&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{error}</p>}
     {onAir?.mode==="ERROR"&&onAir?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">Ошибка вещания. Подробности доступны в технической диагностике.</p>}
@@ -82,29 +84,22 @@ export default function RadioControlRoom({token,onOpen}){
      <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">{new Date(now).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p>
      <p className="mt-1 text-sm opacity-60">{new Date(now).toLocaleDateString('ru-RU',{timeZone:z,weekday:'long',day:'numeric',month:'long'})}</p>
     </div>
-     <div className="mt-6 grid grid-cols-2 gap-2 text-sm">
-      <div className="rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">Режим станции</p><p className="mt-1 font-semibold">{onAir?.available?modes[onAir.mode]||onAir.mode:'Нет данных'}</p></div>
-      <div className="rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">Слушателей</p><p className="mt-1 font-semibold tabular-nums">{onAir?.listenerCount??'—'}</p></div>
-      <div className="col-span-2 rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">Сейчас звучит</p><p className="mt-1 line-clamp-2 font-semibold">{track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:onAir?.mode==='SILENCE'?'Тишина / ожидание':'Название не подтверждено'}</p></div>
-     </div>
-    <div className="mt-5 border-t border-current/10 pt-4">
-     <p className="text-xs font-semibold uppercase tracking-wider opacity-55">Следующее событие</p>
-     {data?.upcoming?.length?<div className="mt-2 space-y-1"><p className="text-lg font-semibold">{data.upcoming[0].name||data.upcoming[0].playlist?.name||'Передача'}</p>
-       <p className="text-sm opacity-65">{displayTime(data.upcoming[0].startAt)} · Через {duration(Math.max(0,new Date(data.upcoming[0].startAt).getTime()-now))}</p></div>:<p className="mt-2 text-sm opacity-65">Ближайшие передачи не найдены</p>}
+    <div className="mt-5 rounded-xl border border-current/10 p-3">
+     <p className="text-xs font-semibold uppercase tracking-wider opacity-55">Ближайшая передача</p>
+     {upcoming?<p className="mt-1 text-sm font-semibold">{upcoming.name||upcoming.playlist?.name||'Передача'} · {displayTime(upcoming.startAt)}</p>:<p className="mt-1 text-sm opacity-60">В сетке нет ближайших передач</p>}
+     <p className="mt-1 text-sm tabular-nums opacity-75">{untilUpcoming!==null?'Начало через '+duration(untilUpcoming):'Ожидание расписания'}</p>
     </div>
    </section>
   </div>
-  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-   {cards.map(([title,value,healthy])=><section key={title} className="min-w-0 rounded-2xl border border-current/10 bg-white/90 text-slate-900 p-4 dark:bg-slate-800/85 dark:text-slate-100">
-    <span className="text-xs opacity-60">{title}</span>
-    <div className="mt-3 flex items-center gap-2"><span className={`h-2 w-2 shrink-0 rounded-full ${healthy?'bg-emerald-500':'bg-amber-500'}`}/>
-     <strong className="min-w-0 truncate text-lg">{value}</strong></div>
-   </section>)}
-  </div>
+  <RadioAmplifierControl token={token}/>
+  <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-current/10 bg-white/75 p-4 text-sm dark:bg-slate-900/60">
+    <div><strong>LIVE-микшер</strong><p className="mt-1 text-xs opacity-65">Входы, мониторинг, маршрутизация и эфирная диагностика</p></div>
+    <button type="button" onClick={()=>onOpen('studio')} className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white">Открыть LIVE-микшер ↗</button>
+  </section>
   <section className="rounded-2xl border border-current/10 bg-white/60 p-4 dark:bg-slate-800/55">
    <div className="flex flex-wrap items-center justify-between gap-3">
     <div><h3 className="font-semibold">Подготовка эфира</h3><p className="text-xs opacity-60">Рабочие инструменты на отдельных экранах — без перегруженной главной страницы</p></div>
-    <button type="button" onClick={refresh} className="rounded-xl border border-current/15 px-3 py-2 text-sm">Обновить ↻</button>
+
    </div>
    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
     {[['playlists','☷','Собрать плейлист'],['assets','♫','Открыть аудиотеку'],['automation','⟳','Настроить Auto-DJ'],['history','◷','Посмотреть историю']].map(([id,icon,label])=>
