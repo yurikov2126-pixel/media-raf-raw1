@@ -263,7 +263,7 @@ async function current() {
       where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
       select:{startAt:true},orderBy:{startAt:'asc'}
     });
-    const until=Math.min(next?next.startAt.getTime():Infinity,rotation.endMs);
+    const until=Math.min(settings.finishTrackBeforeSchedule?Infinity:next?next.startAt.getTime():Infinity,rotation.endMs);
     if(!selected || until-nowMs<150){
       state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
       return {cursor,asset:null};
@@ -575,7 +575,7 @@ async function run() {
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
     if(state.playout?.trackId===asset.id)state.playout=null;
-    if(cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping){
+    if(cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping && !publicLive.onAir){
       const h=pendingScheduledHandover;pendingScheduledHandover=null;
       // Honor explicit schedule changes made while the song was playing.
       const validHandover=await prisma.radioScheduleSlot.findUnique({where:{id:h.id},
