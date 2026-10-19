@@ -415,9 +415,6 @@ export default function Radio() {
     </section>}
     {tab==='schedule' && <section className="space-y-4">
       <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onCreate={()=>document.getElementById('radio-schedule-create')?.setAttribute('open','')}/>
-      <RadioSectionIntro eyebrow="РАСПИСАНИЕ / МОСКВА UTC+3" title="Сетка вещания" description="Управляйте радиопередачами в календаре, переносите события и проверяйте эфирные конфликты." metrics={[{label:'Событий за период',value:slots.length},{label:'Утверждённых программ',value:playlists.filter(p=>p.status==='APPROVED').length}]}/>
-      <p className="text-sm opacity-70">Время радиостанции: Москва (UTC+3)</p>
-      <label className="text-sm block">Начало периода <input type="date" className={inputStyle} value={date} onChange={e=>setDate(e.target.value)} /></label>
       <details id="radio-schedule-create" className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
         <summary className="cursor-pointer text-sm font-semibold">＋ Добавить передачу в расписание</summary>
       <form onSubmit={e=>{e.preventDefault();
@@ -426,7 +423,6 @@ export default function Radio() {
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
         action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}}));
       }} className="mt-4 space-y-3">
-        <h3 className="font-semibold">Добавить передачу</h3>
         <select required className={inputStyle} value={slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '')} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
           {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -445,17 +441,13 @@ export default function Radio() {
         <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
       </form>
       </details>
-      <div className="flex items-center justify-between gap-2">
-        <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()-7*86400000)))}>← Предыдущая неделя</button>
-        <span className="text-xs opacity-60">Перетаскивайте карточку на нужный день</span>
-        <button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setDate(d=>moscowDate(new Date(new Date(d+'T00:00:00+03:00').getTime()+7*86400000)))}>Следующая →</button>
-      </div>
       {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
         <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
           <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
           <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
+          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-rose-500/40 px-4 py-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>{const slot=contextSlot;setContextSlot(null);if(window.confirm('Удалить передачу из сетки?')) action(()=>call('/schedule/'+slot.id,{method:'DELETE'}));}}>Удалить передачу</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>setContextSlot(null)}>Закрыть</button>
         </div>
       </div>}
@@ -468,7 +460,10 @@ export default function Radio() {
           <div className="flex gap-2"><button className={btn}>Создать копию</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>setCopyingSlot(null)}>Отмена</button></div>
         </form>
       </div>}
-      <RadioDurationTimeline weekStart={date} slots={slots} onOpen={openSlotMenu}/>
+      <details className="rounded-2xl border border-current/15 p-3">
+        <summary className="cursor-pointer text-sm font-semibold">Временная шкала · дополнительный вид</summary>
+        <div className="mt-3"><RadioDurationTimeline weekStart={date} slots={slots} onOpen={openSlotMenu}/></div>
+      </details>
       {movingSlot && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveMove} className="w-full max-w-md rounded-2xl border border-current/15 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-3">
           <h3 className="text-lg font-semibold">Перенести передачу</h3>
@@ -481,11 +476,6 @@ export default function Radio() {
             <button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setMovingSlot(null)}>Отмена</button></div>
         </form>
       </div>}
-      {slots.length===0 && <p className="text-sm opacity-60">В выбранном периоде эфиров нет.</p>}
-      {slots.map(s=><article key={s.id} className="rounded-2xl border border-current/10 p-4 flex items-center gap-3 justify-between">
-        <div><h3 className="font-semibold">{s.playlist.name}</h3><p className="text-sm opacity-70">{dateLocal(s.startAt)} — {new Date(s.endAt).toLocaleTimeString('ru-RU',{timeZone: STATION_ZONE,hour:'2-digit',minute:'2-digit'})}</p></div>
-        {new Date(s.startAt)>new Date() && <button className="rounded-lg border border-red-500/30 px-3 py-2 text-red-500 text-sm" onClick={()=>{if(window.confirm('Удалить эфир?')) action(()=>call('/schedule/'+s.id,{method:'DELETE'}));}}>Удалить</button>}
-      </article>)}
     </section>}
     {tab==='equipment' && <section className="rounded-2xl border border-current/10 p-5 space-y-4">
       <RadioSectionIntro eyebrow="ИНФРАСТРУКТУРА" title="Оборудование" description="Радиокомпьютеры, ESP32 и настройка локальной инфраструктуры. Управление питанием усилителя пока не активировано." metrics={[{label:'Устройств',value:radioDevices.length},{label:'Активных',value:radioDevices.filter(d=>!d.revokedAt).length}]}/>
