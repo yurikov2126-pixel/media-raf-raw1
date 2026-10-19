@@ -50,3 +50,131 @@
  .radio-workspace .radio-studio-hero :is(h1,h2,h3){line-height:1.22}
  .radio-workspace .radio-on-air-card :is(button,a){min-height:40px}
 }
+
+
+/* Radio visual system: follow the platform's violet/pink/cyan palette and
+   its data-theme switch. All selectors remain scoped to the Radio workspace. */
+.radio-workspace{
+  --radio-surface:rgba(255,255,255,.88);
+  --radio-surface-raised:rgba(255,255,255,.96);
+  --radio-surface-soft:rgba(245,243,255,.90);
+  --radio-ink:#181529;
+  --radio-subtle:#514b68;
+  --radio-line:rgba(68,51,109,.24);
+  --radio-accent:#6d28d9;
+  --radio-accent-hover:#5b21b6;
+  --radio-glow:rgba(124,58,237,.14);
+  --radio-focus:#7c3aed;
+  color:var(--radio-ink);
+}
+[data-theme="dark"] .radio-workspace,.dark .radio-workspace{
+  --radio-surface:rgba(20,20,36,.90);
+  --radio-surface-raised:rgba(28,27,47,.96);
+  --radio-surface-soft:rgba(37,32,62,.92);
+  --radio-ink:#f6f3ff;
+  --radio-subtle:#c2bbd6;
+  --radio-line:rgba(189,171,236,.28);
+  --radio-accent:#8b5cf6;
+  --radio-accent-hover:#a78bfa;
+  --radio-glow:rgba(167,139,250,.16);
+  --radio-focus:#c4b5fd;
+}
+[data-theme="light"] .radio-workspace{
+  --radio-surface:rgba(255,255,255,.88);
+  --radio-surface-raised:rgba(255,255,255,.96);
+  --radio-surface-soft:rgba(245,243,255,.90);
+  --radio-ink:#181529;
+  --radio-subtle:#514b68;
+  --radio-line:rgba(68,51,109,.24);
+  --radio-accent:#6d28d9;
+  --radio-accent-hover:#5b21b6;
+  --radio-glow:rgba(124,58,237,.14);
+  --radio-focus:#7c3aed;
+}
+.radio-workspace .radio-shell{
+  background:radial-gradient(ellipse at 85% 0%,var(--radio-glow),transparent 52%),var(--bg-elev-1);
+  color:var(--radio-ink);
+  border:1px solid var(--radio-line);
+}
+.radio-workspace .radio-shell-header{
+  background:var(--radio-surface-raised);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-sidebar{
+  background:var(--radio-surface);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-sidebar button:not([aria-current="page"]):hover{
+  background:var(--radio-surface-soft);
+}
+.radio-workspace main :is(section,article).radio-panel{
+  background:var(--radio-surface);
+  border:1px solid var(--radio-line);
+  color:var(--radio-ink);
+  box-shadow:0 8px 26px rgba(31,22,54,.055);
+}
+.radio-workspace main :is(.radio-panel,.radio-surface) .radio-secondary{
+  color:var(--radio-subtle);
+}
+.radio-workspace main :is(button,input,textarea,select){
+  accent-color:var(--radio-accent);
+}
+.radio-workspace main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),textarea,select){
+  background:var(--radio-surface-raised);
+  border-color:var(--radio-line);
+  color:var(--radio-ink);
+}
+.radio-workspace main :is(input,textarea)::placeholder{color:var(--radio-subtle);opacity:1}
+.radio-workspace main :is(button,input,select,textarea,a):focus-visible{
+  outline:2px solid var(--radio-focus);
+  outline-offset:2px;
+}
+.radio-workspace main button:not(:disabled){
+  border-color:var(--radio-line);
+}
+.radio-workspace main button:not(:disabled):not([class*="bg-"]):hover{
+  background:var(--radio-surface-soft);
+}
+.radio-workspace main button:disabled{opacity:.56;cursor:not-allowed}
+.radio-workspace main :is(.opacity-40,.opacity-50,.opacity-55,.opacity-60){
+  opacity:.77;
+}
+.radio-workspace main :is(.text-xs,.text-sm){line-height:1.5}
+.radio-workspace main table :is(th,td){border-color:var(--radio-line)}
+.radio-workspace main table thead{background:var(--radio-surface-soft)}
+.radio-workspace main table tbody tr:hover{background:var(--radio-glow)}
+.radio-workspace main :is(.radio-on-air-card,.radio-studio-hero){
+  background:linear-gradient(135deg,#131126 0%,#1c1740 70%,#282054 100%);
+  color:#f8f7ff;
+  border-color:rgba(196,181,253,.35);
+}
+.radio-workspace main :is(.radio-on-air-card,.radio-studio-hero) :is(.opacity-40,.opacity-50,.opacity-55,.opacity-60){
+  opacity:.8;
+}
+.radio-workspace main :is(.radio-on-air-card,.radio-studio-hero) button.bg-white{
+  color:#16112f!important;
+}
+.radio-workspace main .radio-alert{background:rgba(244,63,94,.10);border:1px solid rgba(225,29,72,.38)}
+@media(hover:hover){
+ .radio-workspace main .radio-panel:hover{border-color:var(--radio-accent)}
+}
+
+/* Reusable layers shared by schedule, library, playlists, automation, and logs. */
+.radio-workspace .radio-surface-soft{
+  background:var(--radio-surface-soft);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-surface-raised{
+  background:var(--radio-surface-raised);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace main :is(.radio-surface-soft,.radio-surface-raised) :is(button,input,select,textarea){
+  border-color:var(--radio-line);
+}
+.radio-workspace :is(.radio-surface-soft,.radio-surface-raised) .opacity-60{
+  opacity:.82;
+}

@@ -14,7 +14,7 @@ export default function RadioJingleSettings({token,assets=[]}){
   }catch(e){setError(e.message);}finally{setSaving(false);}
  };
  if(!settings)return <section className="rounded-2xl border border-current/15 p-4 text-sm">{error||'Загрузка настроек джинглов…'}</section>;
- return <section className="rounded-2xl border border-current/15 bg-white/5 p-4 sm:p-5 space-y-4">
+ return <section className="rounded-2xl border border-current/15 radio-surface-soft p-4 sm:p-5 space-y-4">
   <header><h2 className="font-semibold text-lg">Оформление эфира · Джинглы</h2>
    <p className="text-xs opacity-60">Настройка автоматических вставок в публичный MP3 между композициями Auto-DJ. LIVE и расписание имеют приоритет.</p></header>
   <form className="space-y-3" onSubmit={save}>

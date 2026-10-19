@@ -30,7 +30,7 @@ export default function RadioAutoDjSettings({ token, playlists=[] }) {
     } catch(e){setError(e.message);}
     finally{setSaving(false);}
   };
-  return <section className="space-y-3 rounded-2xl border border-current/15 bg-white/5 p-4 sm:p-5">
+  return <section className="space-y-3 rounded-2xl border border-current/15 radio-surface-soft p-4 sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h3 className="text-lg font-semibold">Авто-DJ · музыка между передачами</h3>

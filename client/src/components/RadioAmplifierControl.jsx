@@ -14,10 +14,10 @@ export default function RadioAmplifierControl({token}){
   catch(e){setError(e.message||'Не удалось изменить режим');}
   finally{setBusy(false);}
  };
- return <section className="rounded-2xl border border-current/15 p-4 space-y-3">
+ return <section className="radio-panel rounded-2xl p-4 space-y-3">
   <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold text-lg">Усилитель · ESP32</h3>
 </div>
-  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-current/10 bg-white/60 p-3 text-sm dark:bg-slate-900/50" aria-live="polite">
+  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-current/10 p-3 text-sm" aria-live="polite">
     <span className="font-bold">{state?.physicalRelay==='ON_COMMANDED'?'● Команда ВКЛ':state?.physicalRelay==='OFF_COMMANDED'?'○ Команда ВЫКЛ':'Состояние реле неизвестно'}</span>
     <span>Режим: <strong>{state?.policy?.emergencyOff?'СТОП':state?.policy?.mode==='AUTO'?'Авто':'Ручной'}</strong></span>
     <span className={state?.connection==='ONLINE'?'text-emerald-600 dark:text-emerald-400':'text-amber-600'}>{state?.connection==='ONLINE'?'● ESP32 на связи':'○ ESP32 не в сети'}</span>
@@ -25,8 +25,8 @@ export default function RadioAmplifierControl({token}){
     <button type="button" className="ml-auto rounded-lg border border-current/20 px-3 py-1.5 text-xs" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(v=>!v)}>{settingsOpen?'Скрыть настройки':'Настройки ⚙'}</button>
   </div>
   <div className="flex flex-wrap gap-2">
-   <button disabled={busy||!state} className={'rounded-xl px-4 py-2 text-sm border '+(state?.policy?.mode==='AUTO'?'bg-indigo-600 text-white':'border-current/20')} onClick={()=>change({mode:'AUTO',manualOn:false})}>Автоматически</button>
-   <button disabled={busy||!state} className={'rounded-xl px-4 py-2 text-sm border '+(state?.policy?.mode==='MANUAL'?'bg-indigo-600 text-white':'border-current/20')} onClick={()=>change({mode:'MANUAL'})}>Вручную</button>
+   <button disabled={busy||!state} className={'rounded-xl px-4 py-2 text-sm border '+(state?.policy?.mode==='AUTO'?'bg-violet-700 text-white':'border-current/20')} onClick={()=>change({mode:'AUTO',manualOn:false})}>Автоматически</button>
+   <button disabled={busy||!state} className={'rounded-xl px-4 py-2 text-sm border '+(state?.policy?.mode==='MANUAL'?'bg-violet-700 text-white':'border-current/20')} onClick={()=>change({mode:'MANUAL'})}>Вручную</button>
    {state?.policy?.mode==='MANUAL'&&<button disabled={busy} className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>change({manualOn:!state.policy.manualOn})}>{state.policy.manualOn?'Запрос: ВЫКЛ':'Запрос: ВКЛ'}</button>}
    <button disabled={busy||!state} className="rounded-xl border border-rose-500/40 px-4 py-2 text-rose-600 text-sm font-semibold" onClick={()=>change({emergencyOff:!state.policy.emergencyOff,manualOn:false})}>{state?.policy?.emergencyOff?'Снять аварийную блокировку':'Аварийный СТОП'}</button>
   </div>

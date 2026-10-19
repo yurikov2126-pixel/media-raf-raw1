@@ -10,7 +10,7 @@ export default function RadioUpcomingQueue({entries,onSchedule}){
    <button type="button" onClick={onSchedule} className="rounded-xl border border-current/15 px-3 py-2 text-xs font-semibold hover:bg-indigo-500/10">Открыть сетку →</button>
   </div>
   {queue.length?<ol className="mt-4 space-y-2">
-    {queue.map((event,index)=><li key={event.id||index} className="flex min-w-0 items-center gap-3 rounded-xl border border-current/10 bg-white/55 p-3 dark:bg-slate-900/40">
+    {queue.map((event,index)=><li key={event.id||index} className="flex min-w-0 items-center gap-3 rounded-xl border border-current/10 radio-surface-soft5 p-3 dark:bg-slate-900/40">
      <div className="flex w-16 shrink-0 flex-col items-center rounded-lg bg-indigo-500/10 px-2 py-2 text-indigo-700 dark:text-indigo-300">
       <strong className="text-sm tabular-nums">{time(event.startAt)}</strong>
       <span className="text-[10px] whitespace-nowrap">{day(event.startAt)}</span>

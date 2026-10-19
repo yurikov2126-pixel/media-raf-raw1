@@ -37,7 +37,7 @@ export default function RadioPlaylistReview({ token, onChanged }) {
     } catch (error) { toast.error(error.message); }
     finally { setBusy(null); }
   };
-  return <section className="space-y-3 rounded-2xl border border-current/15 bg-white/5 p-3 sm:p-5">
+  return <section className="space-y-3 rounded-2xl border border-current/15 radio-surface-soft p-3 sm:p-5">
     <div className="flex items-center justify-between gap-2">
       <h2 className="font-semibold">Проверка студенческих плейлистов <span className="opacity-60">({pending.length})</span></h2>
       <button type="button" onClick={()=>load().catch(e=>toast.error(e.message))}

@@ -16,7 +16,7 @@ export default function RadioPlayoutHistory({token}){
   }catch(e){setError(e.message);}finally{setExporting(false);}
  };
  useEffect(()=>{reload();const interval=setInterval(reload,30000);return()=>clearInterval(interval);},[reload]);
- return <section className="rounded-2xl border border-current/15 bg-white/5 p-4 sm:p-5 space-y-3">
+ return <section className="rounded-2xl border border-current/15 radio-surface-soft p-4 sm:p-5 space-y-3">
   <div className="flex items-center justify-between gap-2"><h3 className="font-semibold text-lg">История серверного эфира</h3><button type="button" onClick={reload} className="rounded-xl border border-current/20 px-3 py-2 text-xs">Обновить</button></div>
   <div className="flex flex-wrap items-center gap-2">
     <label className="text-xs">Период <select className="rounded-lg border border-current/20 bg-transparent p-2" value={hours} onChange={e=>setHours(Number(e.target.value))}>
