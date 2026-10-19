@@ -61,36 +61,27 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPO: ${{ github.repository }}
         run: |
-          $version = python release_version.py
-          $version = $version.Trim()
-          if ($version -notmatch '^[0-9]+[.][0-9]+[.][0-9]+
+          $ErrorActionPreference = 'Stop'
+          $version = (python release_version.py).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to read application version' }
           $tag = "radio-agent-v$version"
-          if ("${{ github.ref }}".StartsWith("refs/tags/") -and "${{ github.ref_name }}" -ne $tag) {
-            throw "Tag does not match AGENT_VERSION"
+          if ("${{ github.ref }}".StartsWith('refs/tags/')) {
+            python release_version.py --expect-tag "${{ github.ref_name }}"
+            if ($LASTEXITCODE -ne 0) { throw 'Tag and application version mismatch' }
           }
-          gh release view $tag --repo "${{ github.repository }}" *> $null
+          # Existing published version is immutable; do not overwrite binaries.
+          gh release view $tag --repo $env:RELEASE_REPO --json tagName 2>$null
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $tag already exists: do not overwrite an existing published version."
+            Write-Host "Release $tag already exists. Skipping."
             exit 0
           }
-          # Reject reuse of an existing (possibly incorrect) version tag.
-          gh api "repos/${{ github.repository }}/git/ref/tags/$tag" *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Tag $tag already exists but has no release. Manual review required." }
-          # Create tag on THIS verified main commit, not on an arbitrary branch.
-          gh release create $tag "dist/MediaRafRaw-RadioAgent.exe#MediaRafRaw-RadioAgent.exe" --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "MEDIA · РАФ · RAW — Radio Agent $version" --notes "Windows Radio Agent $version. VLC required. Relay remains in safe pilot; firmware and hardware safety checks required." --latest
-) { throw "Invalid AGENT_VERSION $version" }
-          $tag = "radio-agent-v$version"
-          if ("${{ github.ref }}".StartsWith("refs/tags/") -and "${{ github.ref_name }}" -ne $tag) {
-            throw "Tag does not match AGENT_VERSION"
-          }
-          gh release view $tag --repo "${{ github.repository }}" *> $null
+          # Never create a release for a reused tag pointing to old code.
+          gh api "repos/$env:RELEASE_REPO/git/ref/tags/$tag" 2>$null
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $tag already exists: do not overwrite an existing published version."
-            exit 0
+            throw "Tag $tag exists without a release. Manual verification required."
           }
-          # Reject reuse of an existing (possibly incorrect) version tag.
-          gh api "repos/${{ github.repository }}/git/ref/tags/$tag" *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Tag $tag already exists but has no release. Manual review required." }
-          # Create tag on THIS verified main commit, not on an arbitrary branch.
-          gh release create $tag "dist/MediaRafRaw-RadioAgent.exe#MediaRafRaw-RadioAgent.exe" --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "MEDIA · РАФ · RAW — Radio Agent $version" --notes "Windows Radio Agent $version. VLC required. Relay remains in safe pilot; firmware and hardware safety checks required." --latest
+          gh release create $tag "dist/MediaRafRaw-RadioAgent.exe#MediaRafRaw-RadioAgent.exe" --repo $env:RELEASE_REPO --target $env:RELEASE_SHA --title "MEDIA RAF RAW - Radio Agent $version" --notes "Windows Radio Agent $version. VLC required. Hardware amplifier control must be armed explicitly." --latest
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release publishing failed" }
