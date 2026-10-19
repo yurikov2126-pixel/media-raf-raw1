@@ -1,4 +1,4 @@
-import {useMemo,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 const zone='Europe/Moscow';
 const dayKey=date=>new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 const clock=value=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
@@ -8,8 +8,10 @@ const colors=['radio-schedule-event-indigo','radio-schedule-event-teal','radio-s
 export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot,onDropSlot,onCreate}){
  const [view,setView]=useState('week');
  const [dragId,setDragId]=useState(null);
+ const [nowMs,setNowMs]=useState(Date.now());
+ useEffect(()=>{const timer=setInterval(()=>setNowMs(Date.now()),30000);return ()=>clearInterval(timer);},[]);
  const dates=useMemo(()=>Array.from({length:7},(_,i)=>addDays(date,i)),[date]);
- const entries=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt).sort((a,b)=>new Date(a.startAt)-new Date(b.startAt)),[slots]);
+ const entries=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt&&new Date(s.endAt).getTime()>nowMs).sort((a,b)=>new Date(a.startAt)-new Date(b.startAt)),[slots,nowMs]);
  const groups=useMemo(()=>Object.fromEntries(dates.map(day=>[day,entries.filter(item=>dayKey(new Date(item.startAt))===day)])),[dates,entries]);
  const now=dayKey(new Date());
  const timeConflict=event=>entries.some(item=>item.id!==event.id&&new Date(item.startAt)<new Date(event.endAt)&&new Date(event.startAt)<new Date(item.endAt));
@@ -33,7 +35,7 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
       <span className="mt-1 block text-[10px] opacity-70">{groups[day].length} событий</span>
      </div>
      <div className="radio-schedule-day-body min-h-64 space-y-2 p-2">
-      {groups[day].map((event,j)=><button key={event.id} type="button" draggable={new Date(event.startAt)>new Date()} onDragStart={e=>{setDragId(event.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',event.id);}} onDragEnd={()=>setDragId(null)} onClick={()=>onSelectSlot(event)} title="Перетащите на другой день или нажмите для действий" className={`radio-schedule-event w-full rounded-xl border p-2.5 text-left transition ${colors[index%colors.length]}`}>
+      {groups[day].map((event,j)=><button key={event.id} type="button" draggable={new Date(event.startAt)>new Date()} onDragStart={e=>{setDragId(event.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',event.id);}} onDragEnd={()=>setDragId(null)} onClick={()=>onSelectSlot(event)} onContextMenu={e=>{e.preventDefault();onSelectSlot(event);}} title="Перетащите на другой день или нажмите для действий" className={`radio-schedule-event w-full rounded-xl border p-2.5 text-left transition ${colors[index%colors.length]}`}>
        <span className="block text-xs font-bold tabular-nums">{clock(event.startAt)} — {clock(event.endAt)}</span>
        <span className="mt-1 block break-words text-xs font-semibold">{event.playlist?.name||event.name||'Передача'}</span>
        {timeConflict(event)&&<span className="mt-1 block text-[10px] font-bold text-rose-500">⚠ Пересечение</span>}
@@ -43,7 +45,7 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
     </div>)}
    </div>
   </div>:<div className="overflow-hidden rounded-2xl border border-current/10 radio-surface-soft">
-   {entries.length?entries.map(event=><button type="button" key={event.id} onClick={()=>onSelectSlot(event)} className="flex w-full items-center gap-3 border-b border-current/10 p-3 text-left last:border-0 hover:bg-indigo-500/10">
+   {entries.length?entries.map(event=><button type="button" key={event.id} onClick={()=>onSelectSlot(event)} onContextMenu={e=>{e.preventDefault();onSelectSlot(event);}} className="flex w-full items-center gap-3 border-b border-current/10 p-3 text-left last:border-0 hover:bg-indigo-500/10">
     <span className="w-24 shrink-0 text-xs font-semibold tabular-nums">{readable(event.startAt)}</span>
     <span className="w-24 shrink-0 text-xs tabular-nums">{clock(event.startAt)}</span>
     <span className="min-w-0 flex-1 truncate text-sm font-medium">{event.playlist?.name||event.name||'Передача'}</span>
