@@ -13,4 +13,5 @@ def save_settings(data_dir,values):
     path=Path(data_dir)/"settings.json"
     path.parent.mkdir(parents=True,exist_ok=True)
     allowed={key:str(values.get(key,"")) for key in ("server","vlc","esp32_ip")}
+    allowed["power_arm"]=values.get("power_arm") is True
     path.write_text(json.dumps(allowed,ensure_ascii=False,indent=2),encoding="utf-8")
