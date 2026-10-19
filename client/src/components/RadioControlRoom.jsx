@@ -6,25 +6,27 @@ const displayTime=value=>value?new Date(value).toLocaleTimeString('ru-RU',{timeZ
 const duration=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 const modes={SCHEDULED:'По расписанию',AUTO_DJ:'Auto-DJ',SILENCE:'Ожидание / тишина',ERROR:'Ошибка',STARTING:'Запуск'};
 export default function RadioControlRoom({token,onOpen}){
- const [data,setData]=useState(null),[worker,setWorker]=useState(null),[error,setError]=useState('');
+ const [data,setData]=useState(null),[worker,setWorker]=useState(null),[onAir,setOnAir]=useState(null),[error,setError]=useState('');
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
  const refresh=useCallback(async()=>{
   try{
    const report=await api('/radio-agent/dashboard',{token});setData(report);setError('');
+   try{setOnAir(await api('/radio-agent/dashboard/now-playing',{token}));}
+   catch{setOnAir(null);}
    try{setWorker(await api('/radio-agent/dashboard/worker',{token}));}
    catch{setWorker(null);}
-  }catch(e){setError(e.message||'Мониторинг недоступен');setData(null);setWorker(null);}
+  }catch(e){setError(e.message||'Мониторинг недоступен');setData(null);setWorker(null);setOnAir(null);}
  },[token]);
  useEffect(()=>{void refresh();const interval=setInterval(refresh,5000);return()=>clearInterval(interval);},[refresh]);
  useEffect(()=>{const interval=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(interval);},[]);
- const track=data?.cursor?.track;
- const current=data?.cursor?.slot;
- const offset=track?.offsetMs||0;
- const fraction=track?.durationMs>0?Math.min(100,Math.max(0,100*offset/track.durationMs)):0;
- const isWorking=worker&&worker.mode!=='ERROR'&&worker.mode!=='SILENCE';
+ const track=onAir?.track;
+ const current=onAir?.slot;
+ // Calculated cursor offsets are not playout clock offsets; never show a false progress bar.
+ const fraction=0;
+ const isWorking=onAir?.available&&onAir.mode!=='ERROR'&&onAir.mode!=='SILENCE';
  const cards=[
-  ['Сервер вещания',worker?modes[worker.mode]||worker.mode:'Нет связи',Boolean(worker)],
-  ['Слушателей',worker?.connected??'—',Boolean(worker)],
+  ['Сервер вещания',onAir?.available?modes[onAir.mode]||onAir.mode:'Нет подтверждения',Boolean(onAir?.available)],
+  ['Слушателей',onAir?.listenerCount??'—',Boolean(onAir?.available)],
   ['Записей Auto-DJ',data?.autoDj?.trackCount??'—',data?.autoDj?.ready===true],
   ['Радиокомпьютеров',data?.devices?.filter(d=>d.lastSeenAt&&now-new Date(d.lastSeenAt).getTime()<90000).length??'—',Boolean(data)],
  ];
@@ -35,21 +37,19 @@ export default function RadioControlRoom({token,onOpen}){
     <div className="relative flex flex-wrap items-center justify-between gap-3">
      <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-slate-400">Сейчас в эфире</p>
      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isWorking?'bg-emerald-500/20 text-emerald-300':'bg-amber-500/15 text-amber-300'}`}>
-      <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-current"/>{worker?modes[worker.mode]||worker.mode:'Связь не подтверждена'}
+      <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-current"/>{onAir?.available?modes[onAir.mode]||onAir.mode:'Связь не подтверждена'}
      </span>
     </div>
     <h2 className="relative mt-6 min-h-16 max-w-2xl text-2xl font-bold leading-tight sm:text-3xl">
-     {current?.name|| (data?.cursor?.status==='AUTO_DJ'?'Музыкальная ротация':'Нет подтверждённой передачи')}
+     {onAir?.available?(current?.name||(onAir.mode==='LIVE'?'Прямой эфир':onAir.mode==='JINGLE'?'Джингл':onAir.mode==='AUTO_DJ'?'Auto-DJ':onAir.mode==='SILENCE'?'Пауза вещания':onAir.mode)):'Нет подтверждения от эфирного сервера'}
     </h2>
-    <p className="relative mt-2 truncate text-base text-slate-300">{track?.name||'Информация о текущей записи появится после запуска Worker'}</p>
-    <div className="relative mt-6 h-2 overflow-hidden rounded-full bg-white/15" role="progressbar" aria-label="Прогресс записи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction)}>
-     <div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{width:fraction+'%'}}/>
-    </div>
-    <div className="relative mt-2 flex justify-between text-xs font-medium tabular-nums text-slate-400">
-     <span>{track?duration(offset):'—'}</span><span>{track?duration(track.durationMs):'—'}</span>
+    <p className="relative mt-2 truncate text-base text-slate-300">{onAir?.available?(track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:(onAir.trackId?'Не удалось найти запись в медиатеке':'Нет музыкальной записи')):'Не показываем расчётный трек вместо реального'}</p>
+    <div className="relative mt-5 rounded-xl bg-white/10 p-3 text-xs text-slate-300">
+     Источник: публичный MP3 Worker · Данные обновляются каждые 5 секунд.
+     {onAir?.available&&<span className="mt-1 block">Прогресс записи не показан: Worker пока не предоставляет подтверждённую позицию воспроизведения.</span>}
     </div>
     {error&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{error}</p>}
-    {worker?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{worker.lastError}</p>}
+    {onAir?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{onAir.lastError}</p>}
     <div className="relative mt-6 flex flex-wrap gap-2">
      <button onClick={()=>onOpen('studio')} type="button" className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-200">Открыть студию ↗</button>
      <button onClick={()=>onOpen('schedule')} type="button" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Сетка вещания</button>
@@ -88,6 +88,6 @@ export default function RadioControlRoom({token,onOpen}){
   </section>
   <RadioUpcomingQueue entries={data?.upcoming} onSchedule={()=>onOpen('schedule')}/>
   <div className="text-right"><button type="button" onClick={()=>setDetails(v=>!v)} className="rounded-xl border border-current/10 px-4 py-2 text-xs opacity-75">{details?'Скрыть сведения':'Дополнительные сведения о состоянии'}</button></div>
-  {details&&<section className="rounded-xl border border-current/10 p-4 text-sm"><p>Статус: {data?.cursor?.status||'—'} · Поток: {data?.stream?.status||'—'} · Воспроизведение: {worker?.mode||'—'}</p><p className="mt-2 opacity-65">Данные поступают от существующих API. Мониторинг не включает эфир и не управляет усилителем.</p></section>}
+  {details&&<section className="rounded-xl border border-current/10 p-4 text-sm"><p>Центральный Worker: {onAir?.mode||'недоступен'} · Расчётный курсор: {data?.cursor?.status||'—'} · Поток: {data?.stream?.status||'—'}</p><p className="mt-2 opacity-65">Данные поступают от существующих API. Мониторинг не включает эфир и не управляет усилителем.</p></section>}
  </div>;
 }
