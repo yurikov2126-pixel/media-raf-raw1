@@ -122,3 +122,24 @@ export function prioritizeUnplayed(items,history,minutes,nowMs){
     return Number(aAt>0)-Number(bAt>0)||aAt-bAt;
   });
 }
+
+/** Move the best artist-spaced candidate to the front at the actual playback
+ * boundary. A daily shuffled list alone cannot enforce gap across restarts,
+ * jingles, scheduled programmes or strict-cooldown history selection.
+ * Missing artist tags are not treated as a single artist.
+ */
+export function preferArtistGap(items, recentArtists=[], gap=0){
+  if(!Array.isArray(items)||items.length<2||!Number.isInteger(gap)||gap<1)return [...items];
+  const recent=recentArtists.slice(-gap).map(normalizeArtist);
+  const penalty=item=>{
+    const artist=normalizeArtist(id3Artist(item));
+    if(!artist)return 0;
+    return recent.reduce((sum,name,index)=>sum+(name===artist?(index+1):0),0);
+  };
+  let bestIndex=0,bestScore=penalty(items[0]);
+  for(let i=1;i<items.length&&bestScore>0;i++){
+    const score=penalty(items[i]);
+    if(score<bestScore){bestScore=score;bestIndex=i;}
+  }
+  return bestIndex===0?[...items]:[items[bestIndex],...items.slice(0,bestIndex),...items.slice(bestIndex+1)];
+}
