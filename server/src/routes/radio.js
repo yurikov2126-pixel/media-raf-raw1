@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
-import { readRotation, writeRotation, rotationPlan } from '../lib/radioRotation.js';
+import { readRotation, writeRotation, rotationPlan, id3Artist, rotationPlaylistAssets } from '../lib/radioRotation.js';
 import { readPlayoutHistory } from '../lib/radioPlayoutHistory.js';
 import { previewMusicQueue } from '../lib/radioMusicPlanner.js';
 import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.js';
@@ -632,6 +632,19 @@ router.get('/jingles/preview', safe(async(_req,res)=>{
    !onAir?.enabled?'Проигрывание джинглов запрещено настройкой Worker':
    'Включено для Auto-DJ: джинглы добавляются между композициями, приоритет LIVE и расписания сохраняется'});
 }));
+router.get('/rotation/assets', safe(async(_req,res)=>{
+  const autoDj=await readAutoDjSettings();
+  const playlist=autoDj.playlistId?await prisma.radioPlaylist.findUnique({
+    where:{id:autoDj.playlistId},
+    include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+  }):null;
+  const tracks=rotationPlaylistAssets(playlist).map(asset=>({
+    id:asset.id,name:asset.name,artist:id3Artist(asset)||null
+  }));
+  res.setHeader('Cache-Control','no-store');
+  res.json({playlistId:playlist?.status==='APPROVED'?playlist.id:null,
+    playlistName:playlist?.status==='APPROVED'?playlist.name:null,tracks});
+}));
 router.get('/rotation/preview', safe(async(_req,res)=>{
   const settings=await readRotation();
   const autoDj=await readAutoDjSettings();
@@ -640,9 +653,7 @@ router.get('/rotation/preview', safe(async(_req,res)=>{
     include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
   }):null;
   if(!playlist||playlist.status!=='APPROVED')return res.json({daypart:null,tracks:[]});
-  const assets=playlist.items.map(item=>item.asset)
-    .filter(asset=>Number.isInteger(asset.durationMs)&&asset.durationMs>0)
-    .map(asset=>({...asset,playDurationMs:asset.durationMs}));
+  const assets=rotationPlaylistAssets(playlist);
   const result=rotationPlan(assets,settings,Date.now());
   res.setHeader('Cache-Control','no-store');
   res.json({daypart:result?.daypart||null,tracks:(result?.items||assets).slice(0,15).map(a=>({
