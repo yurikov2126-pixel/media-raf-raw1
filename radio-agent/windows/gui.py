@@ -19,7 +19,7 @@ from esp32_local import send_heartbeat
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 
-AGENT_VERSION = '0.3.0'
+AGENT_VERSION = '0.3.1'
 
 
 def default_data_dir():
