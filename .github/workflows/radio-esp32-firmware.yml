@@ -1,0 +1,28 @@
+name: Radio ESP32 firmware build
+on:
+  pull_request:
+    paths:
+      - 'radio-agent/esp32/**'
+      - '.github/workflows/radio-esp32-firmware.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'radio-agent/esp32/**'
+      - '.github/workflows/radio-esp32-firmware.yml'
+permissions:
+  contents: read
+jobs:
+  compile-esp32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Create isolated compile-time dummy secrets
+        run: cp radio-agent/esp32/include/secrets.example.h radio-agent/esp32/include/secrets.h
+      - name: Compile firmware with PlatformIO
+        run: |
+          python -m pip install platformio
+          cd radio-agent/esp32
+          python -m platformio run -e esp32dev
