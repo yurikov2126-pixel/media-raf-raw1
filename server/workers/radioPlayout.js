@@ -146,14 +146,15 @@ async function current() {
   const cursor=resolveRadioCursor(slots,nowMs);
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   if(scheduled || cursor.slot){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:scheduled};}
-  // A scheduled show may end a few seconds earlier than its audible tail.
-  // Keep the station silent for a short handoff instead of starting a stray
-  // Auto-DJ/jingle fragment immediately after the grid window closes.
+  // Keep a bounded post-schedule SILENCE guard to drain MP3/decoder buffering.
+  // Do not enqueue an Auto-DJ song or jingle immediately after scheduled end.
+  // A new scheduled slot is checked above and always takes priority.
   const recentlyEnded=await prisma.radioScheduleSlot.findFirst({
-    where:{endAt:{gt:new Date(nowMs-12000),lte:now},playlist:{status:'APPROVED'}},
+    where:{endAt:{gt:new Date(nowMs-45000),lte:now},playlist:{status:'APPROVED'}},
     select:{id:true},orderBy:{endAt:'desc'}
   });
   if(recentlyEnded){
+    discardPrewarm();jinglePending=false;
     musicQueueKey=null;musicQueueNextId=null;
     return {cursor:{status:'IDLE',at:now.toISOString(),slot:null,track:null},asset:null};
   }
