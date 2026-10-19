@@ -17,7 +17,7 @@ import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
-import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
+import { readRotation, rotationPlan, prioritizeUnplayed, preferArtistGap, id3Artist } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvents } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
@@ -69,6 +69,8 @@ let musicQueueKey=null, musicQueueNextId=null;
 let pendingScheduledHandover=null;
 let delayedScheduledSlot=null;
 let lastAutoDjTrackId=null;
+// Track recently emitted artists at decoder completion; avoids async journal races.
+let recentlyAiredArtists=[];
 let resumeAutoDjAfterShow=false;
 // Track natural EOF of the final scheduled item so wall-clock drift cannot replay it.
 let finishedScheduledSlot=null;
@@ -208,6 +210,8 @@ async function current() {
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
   const rotationSettings=await readRotation();
+  const artistGap=rotationSettings.enabled?rotationSettings.artistGap:0;
+  const artistRecent=recentlyAiredArtists.slice(-artistGap);
   // Check the catalog fingerprint before running the potentially expensive
   // artist-spacing rotation. The plan is deterministic within the UTC day.
   const dayKey=new Date(nowMs).toISOString().slice(0,10);
@@ -261,8 +265,14 @@ async function current() {
   // generated playback history changes the selection of an already playing track.
   if(rotation && rotationSettings.strictCooldown && rotationSettings.cooldownMinutes>0){
     const history=await readPlayoutHistory();
-    const eligible=chooseQueuedTrack(music,history,rotationSettings.cooldownMinutes,nowMs);
-    const selected=eligible||selectExhaustionFallback(music,history,nowMs,rotationSettings.allowCooldownFallback);
+    // Honor both cooldown and artist gap. Avoid choosing another song by the
+    // same artist when an eligible alternative exists.
+    const avoided=new Set(artistRecent.map(name=>name.toLocaleLowerCase('ru-RU')));
+    const distinct=music.filter(item=>!avoided.has(id3Artist(item).normalize('NFKC').trim().replace(/\\s+/g,' ').toLocaleLowerCase('ru-RU'))||!id3Artist(item).trim());
+    const eligible=chooseQueuedTrack(distinct,history,rotationSettings.cooldownMinutes,nowMs)
+      ||chooseQueuedTrack(music,history,rotationSettings.cooldownMinutes,nowMs);
+    const selected=eligible||selectExhaustionFallback(
+      distinct.length?distinct:music,history,nowMs,rotationSettings.allowCooldownFallback);
     state.cooldownException=!!selected&&!eligible;
     const next=await prisma.radioScheduleSlot.findFirst({
       where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
@@ -295,8 +305,10 @@ async function current() {
   const nextIndex=lastIndex>=0?(lastIndex+1)%music.length:musicQueueNextId?music.findIndex(a=>a.id===musicQueueNextId):-1;
   const initial=cueCursor(music,clock);
   const index=nextIndex>=0?nextIndex:initial?.index??0;
-  const chosen=music[index];
-  const track=chosen?{id:chosen.id,name:chosen.name,index,offsetMs:0,
+  const candidates=[...music.slice(index),...music.slice(0,index)];
+  const chosen=artistGap?preferArtistGap(candidates,artistRecent,artistGap)[0]:music[index];
+  const chosenIndex=music.findIndex(item=>item.id===chosen?.id);
+  const track=chosen?{id:chosen.id,name:chosen.name,index:chosenIndex,offsetMs:0,
     seekMs:chosen.cue.inMs,durationMs:chosen.playDurationMs}:null;
   const next=await prisma.radioScheduleSlot.findFirst({
     where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
@@ -569,7 +581,11 @@ async function run() {
       // A slow journal write must never create dead air at the next track boundary.
       void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
-    if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){lastAutoDjTrackId=asset.id;}
+    if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){
+      lastAutoDjTrackId=asset.id;
+      recentlyAiredArtists.push(id3Artist(asset));
+      if(recentlyAiredArtists.length>12)recentlyAiredArtists=recentlyAiredArtists.slice(-12);
+    }
     if(cursor.status==='SCHEDULED' && isLastScheduledTrack && exitCode===0 && !truncatedAtBoundary && generatedMs>=1000){
       finishedScheduledSlot={id:cursor.slot.id,endAtMs:Date.parse(cursor.slot.endAt)};
       resumeAutoDjAfterShow=true;
