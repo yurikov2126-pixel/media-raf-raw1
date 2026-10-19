@@ -261,7 +261,7 @@ export default function RadioLiveStudio() {
     setMuted(!muted);
   };
   return <section className="space-y-5">
-    <div className="rounded-2xl border border-current/10 bg-slate-900 p-5 text-white sm:p-6">
+    <div className="radio-studio-hero rounded-2xl border border-white/15 bg-slate-900 p-5 text-white sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><p className="text-[11px] uppercase tracking-[.2em] text-indigo-300">LIVE STUDIO / PILOT</p>
           <h2 className="mt-2 text-2xl font-bold">Эфирная студия</h2>
@@ -283,8 +283,8 @@ export default function RadioLiveStudio() {
     {role==='presenter'&&health?.pilotEnabled===false&&<div role="alert" className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm">
       <strong>Серверное PCM-прослушивание пока недоступно.</strong> {health?.opusEnabled===false?'Opus uplink выключен на API.':'Opus-валидация может работать, но FFmpeg/PCM-шлюз выключен на API.'} Для включения нужен администратор сервера. Уровни L/R показывают только локальный звук микрофона.
     </div>}
-    <div className="flex flex-wrap gap-2 rounded-xl border border-current/10 bg-white/60 p-4 dark:bg-slate-900/50">
-      {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 text-white px-4 py-2">Начать эфир с микрофона</button>
+    <div className="flex flex-wrap gap-2 rounded-xl border border-current/10 bg-white/90 text-slate-900 p-4 dark:bg-slate-900/85 dark:text-slate-100">
+      {!role && <><button type="button" onClick={start} disabled={state.live} className="rounded-xl bg-blue-600 !text-white px-4 py-2 font-semibold">Начать эфир с микрофона</button>
         <button type="button" onClick={listen} disabled={!state.live || state.listener} className="rounded-xl border border-current/20 px-4 py-2">Принимать эфир на этом устройстве</button></>}
       {role === 'presenter' && <button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={uplinkActive?stopUplink:startUplink} disabled={!uplinkActive&&health?.pilotEnabled===false} title={!uplinkActive&&health?.pilotEnabled===false?'Требуется настройка PCM-шлюза на сервере':undefined}>{uplinkActive?'Остановить тест Opus':'Тест передачи Opus'}</button>}
       {role === 'presenter' && <button type="button" onClick={toggleMute} className="rounded-xl border border-current/20 px-4 py-2">{muted ? 'Включить микрофон' : 'Выключить микрофон'}</button>}
@@ -350,7 +350,7 @@ export default function RadioLiveStudio() {
     {role==='presenter'&&<RadioPrivateLiveMonitor socket={socketRef.current} active={uplinkActive&&health?.decoderRunning===true}/>}
     {role==='presenter'&&<RadioPrivateLiveMonitor mode="mix" socket={socketRef.current} active={!!uplinkInfo&&!uplinkInfo.includes('остановлен')&&!uplinkInfo.includes('выключен')}/>}
     </div>
-    {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 bg-white/50 p-4 dark:bg-slate-900/50">
+    {role==='presenter'&&<div className="space-y-2 rounded-xl border border-current/10 bg-white/90 text-slate-900 p-4 dark:bg-slate-900/85 dark:text-slate-100">
       <strong className="text-sm">Приватное PCM-прослушивание · без выхода в эфир</strong>
       <p className="text-xs opacity-65">Запросите последний фрагмент реального входящего звука (до 1 секунды). Используйте наушники — возможна обратная связь через USB.</p>
       <button type="button" disabled={!uplinkActive||health?.decoderRunning!==true} onClick={requestPrivatePreview} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Получить тестовый WAV-фрагмент</button>

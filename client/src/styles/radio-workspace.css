@@ -27,3 +27,26 @@
 @media (prefers-reduced-motion:reduce){
  .radio-workspace *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+/* Local contrast guard: the host layout theme must not repaint radio titles
+   on fixed dark hero surfaces (iOS/PWA and desktop). */
+.radio-workspace .radio-on-air-card,
+.radio-workspace .radio-studio-hero{color:#f8fafc}
+.radio-workspace .radio-on-air-card :is(h1,h2,h3,h4),
+.radio-workspace .radio-studio-hero :is(h1,h2,h3,h4){color:#fff!important}
+.radio-workspace .radio-on-air-card .text-slate-300,
+.radio-workspace .radio-studio-hero .text-slate-300{color:#cbd5e1}
+.radio-workspace .radio-on-air-card .text-slate-400,
+.radio-workspace .radio-studio-hero .text-slate-400{color:#94a3b8}
+.radio-workspace .radio-on-air-card .text-rose-300{color:#fda4af}
+.radio-workspace .radio-studio-hero .bg-white\/10{color:#f8fafc}
+.radio-workspace .radio-on-air-card button.bg-white{color:#0f172a!important}
+.radio-workspace .radio-on-air-card audio{color-scheme:dark}
+.radio-workspace :is(input,textarea,select){color:inherit}
+.radio-workspace :is(input,textarea)::placeholder{color:#64748b}
+.dark .radio-workspace :is(input,textarea)::placeholder{color:#94a3b8}
+@media(max-width:639px){
+ .radio-workspace .radio-on-air-card :is(h1,h2,h3),
+ .radio-workspace .radio-studio-hero :is(h1,h2,h3){line-height:1.22}
+ .radio-workspace .radio-on-air-card :is(button,a){min-height:40px}
+}
