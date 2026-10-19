@@ -70,6 +70,8 @@ let pendingScheduledHandover=null;
 let delayedScheduledSlot=null;
 let lastAutoDjTrackId=null;
 let resumeAutoDjAfterShow=false;
+// Track natural EOF of the final scheduled item so wall-clock drift cannot replay it.
+let finishedScheduledSlot=null;
 state.lastBoundary=null;
 function recordBoundary(event){state.lastBoundary={...event,at:new Date().toISOString()};console.info('RADIO_SOURCE_BOUNDARY',JSON.stringify(state.lastBoundary));}
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
@@ -176,25 +178,23 @@ async function current() {
           endAt:new Date(delayedScheduledSlot.actualEndMs)};
         const shiftedCursor=resolveRadioCursor([shifted],nowMs);
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
-        return {cursor:shiftedCursor,asset};
+        return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1};
       }
       delayedScheduledSlot=null;
     }
   }
   const cursor=resolveRadioCursor(slots,nowMs);
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
-  if(scheduled || cursor.slot){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:scheduled};}
-  // Keep a bounded post-schedule SILENCE guard to drain MP3/decoder buffering.
-  // Do not enqueue an Auto-DJ song or jingle immediately after scheduled end.
-  // A new scheduled slot is checked above and always takes priority.
-  const recentlyEnded=await prisma.radioScheduleSlot.findFirst({
-    where:{endAt:{gt:new Date(nowMs-45000),lte:now},playlist:{status:'APPROVED'}},
-    select:{id:true},orderBy:{endAt:'desc'}
-  });
-  if(recentlyEnded){
-    discardPrewarm();jinglePending=false;
+  const alreadyFinished=cursor.slot?.id===finishedScheduledSlot?.id && nowMs<finishedScheduledSlot.endAtMs;
+  if(cursor.slot && scheduled && !alreadyFinished){
     musicQueueKey=null;musicQueueNextId=null;
-    return {cursor:{status:'IDLE',at:now.toISOString(),slot:null,track:null},asset:null};
+    return {cursor,asset:scheduled,isLastScheduledTrack:cursor.track.index===slots[0].playlist.items.length-1};
+  }
+  // A schedule may have an unfilled wall-clock tail, or the final track may
+  // have naturally ended before its nominal offset. Resume AutoDJ immediately.
+  // The current active schedule (queried above) always outranks older slots.
+  if(cursor.slot){
+    musicQueueKey=null;musicQueueNextId=null;
   }
   const settings=await readAutoDjSettings();
   state.autoDjEnabled=settings.enabled;
@@ -387,8 +387,8 @@ async function run() {
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
       continue;
     }
-    let cursor,asset,nextTrackId;
-    try { ({cursor,asset,nextTrackId}=await current()); }
+    let cursor,asset,nextTrackId,isLastScheduledTrack;
+    try { ({cursor,asset,nextTrackId,isLastScheduledTrack}=await current()); }
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
@@ -485,6 +485,7 @@ async function run() {
       finally{polling=false;}
     },3000):null;
     let ended=false, exitCode=null;
+    let truncatedAtBoundary=false;
     child.stderr.on('data',buf=>{const msg=buf.toString().slice(-500);if(!isIgnorableMediaNotice(msg))state.lastError=msg;});
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
@@ -516,6 +517,7 @@ async function run() {
           emittedBytes+=faded.length;
         }
         if(gated.truncated){
+          truncatedAtBoundary=true;
           recordBoundary({source:'SCHEDULED',reason:'END_AT_PCM_TRUNCATED',slotId:cursor.slot.id,trackId:asset.id,
             droppedBytes:decoded.length-output.length});
           child.kill('SIGTERM');
@@ -567,6 +569,11 @@ async function run() {
       void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
     if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){lastAutoDjTrackId=asset.id;}
+    if(cursor.status==='SCHEDULED' && isLastScheduledTrack && exitCode===0 && !truncatedAtBoundary && generatedMs>=1000){
+      finishedScheduledSlot={id:cursor.slot.id,endAtMs:Date.parse(cursor.slot.endAt)};
+      resumeAutoDjAfterShow=true;
+      recordBoundary({source:'SCHEDULED',reason:'FINAL_TRACK_FINISHED',slotId:cursor.slot.id,trackId:asset.id});
+    }
     if(cursor.isJingle){
       jinglePending=false;
       if(generatedMs>=1000&&exitCode===0){jinglesPlayed++;musicSinceJingle=0;}
