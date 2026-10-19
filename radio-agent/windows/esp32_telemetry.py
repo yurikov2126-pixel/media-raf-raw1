@@ -11,7 +11,7 @@ def report_status(server, token, ip, timeout=3):
         raise ValueError("ESP32 must have a private IPv4")
     with urlopen("http://"+str(address)+"/health",timeout=timeout) as response:
         status=json.load(response)
-    if status.get("device")!="MEDIA_RAF_RAW_ESP32" or status.get("mode")!="SAFE_PILOT" or status.get("relayOutputEnabled") is not False:
+    if status.get("device")!="MEDIA_RAF_RAW_ESP32" or status.get("mode") not in ("SAFE_PILOT","POWER_CONTROL_V1") or not isinstance(status.get("relayOutputEnabled"),bool):
         raise ValueError("Unexpected ESP32 firmware or physical output mode")
     payload=json.dumps({"ip":str(address),"status":status}).encode("utf-8")
     req=Request(server.rstrip("/")+"/api/radio-agent/agent/esp32-status",
