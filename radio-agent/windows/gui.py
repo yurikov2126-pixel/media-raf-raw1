@@ -20,7 +20,7 @@ from esp32_telemetry import report_status
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 
-AGENT_VERSION = '0.3.0'
+AGENT_VERSION = '0.3.2'
 
 
 def default_data_dir():
@@ -62,8 +62,8 @@ class RadioAgentApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("MEDIA · РАФ · RAW — Windows Radio Agent")
-        self.geometry("840x760")
-        self.minsize(650, 630)
+        self.geometry("780x615")
+        self.minsize(620, 490)
         self.configure(bg="#10162d")
         try:
             self.iconbitmap(str(Path(getattr(sys,"_MEIPASS",Path(__file__).parent)) / "brand.ico"))
@@ -94,51 +94,72 @@ class RadioAgentApp(tk.Tk):
         style.configure("Main.TLabel", background="#10162d", foreground="#f8fafc", font=("Segoe UI", 10))
         style.configure("Title.TLabel", background="#10162d", foreground="#f8fafc", font=("Segoe UI", 18, "bold"))
         style.configure("TCheckbutton", background="#10162d", foreground="#f8fafc")
-        style.configure("TEntry", fieldbackground="#f8fafc", foreground="#111827")
+        style.configure("TEntry", fieldbackground="#182443", foreground="#f8fafc", padding=(8,7))
+        style.configure("TNotebook", background="#10162d", borderwidth=0)
+        style.configure("TNotebook.Tab", background="#182443", foreground="#f8fafc", padding=(16,9))
+        style.map("TNotebook.Tab", background=[("selected","#4f46e5")], foreground=[("selected","#ffffff")])
+        style.configure("TButton", background="#293b62", foreground="#ffffff", padding=(11,7))
+        style.map("TButton", background=[("active","#4f46e5")])
         wrap = ttk.Frame(self, padding=22, style="Main.TFrame")
         wrap.pack(fill="both", expand=True)
         ttk.Label(wrap, text="◉  MEDIA · РАФ · RAW  /  RADIO AGENT", style="Title.TLabel").pack(anchor="w")
         ttk.Label(wrap, text="Центральный MP3 → локальный резерв только при потере связи",
                   style="Main.TLabel").pack(anchor="w", pady=(3, 15))
 
-        self.row(wrap, "Адрес сервера", self.server)
-        self.row(wrap, "Токен устройства (не сохраняется)", self.token, secret=True)
-        self.row(wrap, "Путь к VLC", self.vlc, browse=True)
-        self.row(wrap, "Кэш радиостанции", self.data_dir, browse=True, directory=True)
-        esp=ttk.LabelFrame(wrap,text=" ESP32 · локальная инфраструктура ",padding=10)
-        esp.pack(fill="x",pady=(13,3))
-        self.row(esp,"IP ESP32 в сети Studio",self.esp32_ip)
-        self.row(esp,"Секрет сопряжения (не сохраняется)",self.esp32_secret,secret=True)
-        linkbar=ttk.Frame(esp,style="Main.TFrame")
-        linkbar.pack(fill="x",pady=(8,2))
-        ttk.Button(linkbar,text="Проверить связь",command=self.test_esp32).pack(side="left")
-        ttk.Label(linkbar,textvariable=self.esp32_status,style="Main.TLabel").pack(side="left",padx=12)
-        ttk.Label(esp,textvariable=self.esp32_platform_status,style="Main.TLabel").pack(anchor="w",pady=(4,0))
-        ttk.Label(esp,text="Реле GPIO 13 не управляется; только безопасная диагностика",style="Main.TLabel").pack(anchor="w")
-        ttk.Checkbutton(wrap,text="Открывать агент при входе в Windows (без запуска эфира)",
-                        variable=self.auto_start,command=self.configure_startup).pack(anchor="w",pady=(8,1))
-        ttk.Button(wrap,text="Сохранить настройки",command=self.save_preferences).pack(anchor="w",pady=(1,4))
-        ttk.Checkbutton(wrap, text="Тест только в наушниках. Усилитель и ESP32 отключены.",
-                        variable=self.agreed).pack(anchor="w", pady=(12, 7))
-        ttk.Label(wrap, textvariable=self.status, style="Main.TLabel").pack(anchor="w", pady=5)
-        bar = ttk.Frame(wrap, style="Main.TFrame")
-        bar.pack(fill="x", pady=10)
+        tabs = ttk.Notebook(wrap)
+        tabs.pack(fill="both", expand=True, pady=(5, 0))
+        air = ttk.Frame(tabs, style="Main.TFrame", padding=12)
+        links = ttk.Frame(tabs, style="Main.TFrame", padding=12)
+        settings = ttk.Frame(tabs, style="Main.TFrame", padding=12)
+        tabs.add(air, text="  Эфир  ")
+        tabs.add(links, text="  Подключения  ")
+        tabs.add(settings, text="  Настройки  ")
+
+        ttk.Label(air, text="Управление вещанием", style="Title.TLabel").pack(anchor="w", pady=(0, 5))
+        ttk.Label(air, textvariable=self.status, style="Main.TLabel").pack(anchor="w", pady=(0, 9))
+        ttk.Checkbutton(air, text="Тест в наушниках · усилитель не включается",
+                        variable=self.agreed).pack(anchor="w", pady=(0, 9))
+        bar = ttk.Frame(air, style="Main.TFrame")
+        bar.pack(fill="x", pady=(0, 10))
         self.start_btn = ttk.Button(bar, text="▶ Запустить агент", command=self.start)
         self.start_btn.pack(side="left")
         self.stop_btn = ttk.Button(bar, text="■ Остановить", command=self.stop, state="disabled")
         self.stop_btn.pack(side="left", padx=10)
-        update_bar = ttk.Frame(wrap, style="Main.TFrame")
-        update_bar.pack(fill="x", pady=(0, 8))
-        ttk.Label(update_bar, text="Версия " + AGENT_VERSION, style="Main.TLabel").pack(side="left")
-        self.update_btn = ttk.Button(update_bar, text="Проверить обновления", command=self.check_updates)
-        self.update_btn.pack(side="left", padx=12)
-        self.install_btn = ttk.Button(update_bar, text="Перезапустить обновлённую версию",
-                                      command=self.install_update, state="disabled")
-        self.install_btn.pack(side="left")
-        self.log = tk.Text(wrap, height=10, bg="#1e293b", fg="#e2e8f0",
+        ttk.Label(air, text="Журнал событий", style="Main.TLabel").pack(anchor="w")
+        self.log = tk.Text(air, height=13, bg="#182443", fg="#f1f5f9",
                            insertbackground="white", relief="flat", state="disabled",
-                           font=("Consolas", 10), wrap="word")
-        self.log.pack(fill="both", expand=True)
+                           font=("Consolas", 10), wrap="word", padx=10, pady=10)
+        self.log.pack(fill="both", expand=True, pady=(6, 0))
+
+        self.row(links, "Адрес сервера", self.server)
+        self.row(links, "Токен радиокомпьютера (не сохраняется)", self.token, secret=True)
+        self.row(links, "Путь к VLC", self.vlc, browse=True)
+        self.row(links, "Кэш радиостанции", self.data_dir, browse=True, directory=True)
+        ttk.Separator(links).pack(fill="x", pady=15)
+        ttk.Label(links, text="ESP32 · Студийная сеть", style="Title.TLabel").pack(anchor="w")
+        self.row(links, "IP ESP32 в сети Studio", self.esp32_ip)
+        self.row(links, "Секрет сопряжения (не сохраняется)", self.esp32_secret, secret=True)
+        linkbar = ttk.Frame(links, style="Main.TFrame")
+        linkbar.pack(fill="x", pady=(9, 4))
+        ttk.Button(linkbar, text="Проверить связь", command=self.test_esp32).pack(side="left")
+        ttk.Label(linkbar, textvariable=self.esp32_status, style="Main.TLabel").pack(side="left", padx=12)
+        ttk.Label(links, textvariable=self.esp32_platform_status, style="Main.TLabel").pack(anchor="w", pady=(3, 0))
+        ttk.Label(links, text="GPIO 13 · SAFE_PILOT · реле не управляется", style="Main.TLabel").pack(anchor="w", pady=(5, 0))
+        ttk.Button(links, text="Сохранить параметры", command=self.save_preferences).pack(anchor="w", pady=(12, 0))
+
+        ttk.Label(settings, text="Настройки программы", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
+        ttk.Checkbutton(settings, text="Открывать при входе в Windows (без запуска эфира)",
+                        variable=self.auto_start, command=self.configure_startup).pack(anchor="w", pady=7)
+        ttk.Label(settings, text="Версия " + AGENT_VERSION, style="Main.TLabel").pack(anchor="w", pady=(18, 6))
+        update_bar = ttk.Frame(settings, style="Main.TFrame")
+        update_bar.pack(fill="x", pady=(0, 8))
+        self.update_btn = ttk.Button(update_bar, text="Проверить обновления", command=self.check_updates)
+        self.update_btn.pack(side="left")
+        self.install_btn = ttk.Button(settings, text="Перезапустить обновлённую версию",
+                                      command=self.install_update, state="disabled")
+        self.install_btn.pack(anchor="w", pady=8)
+        ttk.Label(settings, text="Настройки сервера, IP и VLC сохраняются. Токены и секреты — только на текущий запуск.",
+                  style="Main.TLabel", wraplength=620).pack(anchor="w", pady=(15, 0))
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(150, self.drain)
         self.after(5000, self.check_updates)
