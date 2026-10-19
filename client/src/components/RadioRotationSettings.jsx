@@ -55,14 +55,14 @@ export default function RadioRotationSettings({token,assets=[]}){
    <p className="text-xs opacity-65">Если записей недостаточно для выбранного интервала, Auto-DJ продолжит эфир с максимально возможным разделением исполнителей. Это правило действует в пределах каждой ротации, включая переход от её последней композиции к первой.</p>
    <section className="rounded-xl border border-current/15 p-3 space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-2">
-     <h4 className="font-semibold text-sm">Далее в эфире · прогноз</h4>
+     <h4 className="font-semibold text-sm">Центральный эфир и прогноз ротации</h4>
      <button type="button" onClick={async()=>{try{setMusicPlan((await api('/radio/music-plan',{token})).plan);}catch(e){setError(e.message);}}}
        className="rounded-lg border border-current/20 px-3 py-2 text-xs">Обновить план</button>
     </div>
     {musicPlan&&<div className="space-y-1 text-xs">
      <p className="opacity-65">Режим: {musicPlan.mode} · {partNames[musicPlan.daypart]||'без музыкального периода'}</p>
      {musicPlan.tracks?.length?musicPlan.tracks.map((t,i)=><p key={t.id+'-'+i}>{i+1}. {t.name} · {categories[t.category]||'Другая'}</p>):<p className="opacity-60">Нет доступной программы для прогноза</p>}
-     <p className="opacity-60">Это расчёт по сохранённым данным, не гарантия реального эфира.</p>
+     <p className="opacity-60">Очередь ниже — прогноз ротации, а не воспроизведение Windows Agent или достоверный текущий трек. Строгий cooldown, джинглы, заморозка плана и локальный резерв могут изменять порядок.</p>
     </div>}
    </section>
    <fieldset className="rounded-xl border border-current/15 p-3 space-y-2">

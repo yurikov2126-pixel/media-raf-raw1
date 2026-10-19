@@ -13,6 +13,7 @@ import { readAutoDjSettings, writeAutoDjSettings } from '../lib/radioAutoDj.js';
 import { readRotation, writeRotation, rotationPlan } from '../lib/radioRotation.js';
 import { readPlayoutHistory } from '../lib/radioPlayoutHistory.js';
 import { previewMusicQueue } from '../lib/radioMusicPlanner.js';
+import { workerRequest } from '../lib/radioLiveOpusGateway.js';
 import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.js';
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
@@ -531,7 +532,21 @@ router.get('/music-plan', safe(async(_req,res)=>{
   const plan=previewMusicQueue({assets,settings:{rotation,cues:await readCues()},
     history:await readPlayoutHistory(),limit:10});
   res.setHeader('Cache-Control','no-store');
-  res.json({plan,approved:playlist?.status==='APPROVED'});
+  // The rotation preview is NOT the playout clock. Expose verified Worker truth alongside it.
+  let playback={available:false,mode:'UNKNOWN',track:null,reason:'WORKER_UNAVAILABLE'};
+  try{
+    const worker=await workerRequest('GET','/health');
+    if(worker&&typeof worker.mode==='string'){
+      const track=typeof worker.trackId==='string'&&worker.trackId
+        ?await prisma.radioAsset.findUnique({where:{id:worker.trackId},select:{id:true,name:true,tags:true}})
+        :null;
+      playback={available:true,mode:worker.mode,track:track?{id:track.id,name:track.name,
+        artist:track.tags?.artist||'',title:track.tags?.title||''}:null,reason:null,
+        workerStartedAt:worker.startedAt||null};
+    }
+  }catch{}
+  res.json({plan,approved:playlist?.status==='APPROVED',playback,
+    sources:{rotation:'PLANNED',playback:'PUBLIC_MP3_WORKER',agent:'LOCAL_STANDBY_INDEPENDENT'}});
 }));
 router.get('/playout-insights', safe(async(req,res)=>{
  const hours=Number(req.query.hours||24);
