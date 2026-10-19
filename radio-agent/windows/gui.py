@@ -139,6 +139,7 @@ class RadioAgentApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(150, self.drain)
         self.after(5000, self.check_updates)
+        self.after(3000,self.idle_esp32_heartbeat)
 
     def row(self, parent, name, variable, secret=False, browse=False, directory=False):
         ttk.Label(parent, text=name, style="Main.TLabel").pack(anchor="w", pady=(6, 2))
@@ -207,6 +208,22 @@ class RadioAgentApp(tk.Tk):
         except (OSError,RuntimeError) as error:
             self.auto_start.set(startup_enabled())
             messagebox.showerror("Автозапуск",str(error))
+
+    def idle_esp32_heartbeat(self):
+        # The Windows app remains alive outside a playback session. A STOPPED
+        # heartbeat proves connectivity but never grants amplifier permission.
+        if not (self.worker and self.worker.is_alive()):
+            host=self.esp32_ip.get().strip()
+            secret=self.esp32_secret.get().strip()
+            if host and secret:
+                def task():
+                    try:
+                        send_heartbeat(host,secret,"STOPPED",False,False)
+                        self.messages.put(("idle_esp32_ok",None))
+                    except Exception as error:
+                        self.messages.put(("idle_esp32_error",type(error).__name__))
+                threading.Thread(target=task,daemon=True).start()
+        self.after(3000,self.idle_esp32_heartbeat)
 
     def test_esp32(self):
         host=self.esp32_ip.get().strip()
@@ -285,6 +302,10 @@ class RadioAgentApp(tk.Tk):
                     if float(self.log.index("end-1c").split(".")[0]) > 300:
                         self.log.delete("1.0", "60.0")
                     self.log.configure(state="disabled")
+                elif action == "idle_esp32_ok":
+                    self.esp32_status.set("На связи · SAFE_PILOT")
+                elif action == "idle_esp32_error":
+                    self.esp32_status.set("Нет связи: "+value)
                 elif action == "esp32_ok":
                     self.esp32_status.set(value)
                     self.messages.put(("log","ESP32: heartbeat доставлен"))
