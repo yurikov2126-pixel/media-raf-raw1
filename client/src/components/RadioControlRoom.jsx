@@ -23,7 +23,8 @@ export default function RadioControlRoom({token,onOpen}){
  const track=onAir?.track;
  const current=onAir?.slot;
  const playout=onAir?.playout?.trackId===track?.id?onAir.playout:null;
- const playedMs=(playout?.seekMs||0)+(playout?.emittedMs||0);
+ const elapsedSinceReport=onAir?.observedAt?Math.min(5000,Math.max(0,now-Date.parse(onAir.observedAt))):0;
+ const playedMs=(playout?.seekMs||0)+(playout?.emittedMs||0)+(playout?.startedAt?elapsedSinceReport:0);
  const trackMs=playout?.durationMs||track?.durationMs||0;
  const fraction=playout&&trackMs>0?Math.min(100,Math.max(0,100*playedMs/trackMs)):0;
  const isWorking=onAir?.available&&onAir.mode!=='ERROR'&&onAir.mode!=='SILENCE';
@@ -31,7 +32,7 @@ export default function RadioControlRoom({token,onOpen}){
   ['Сервер вещания',onAir?.available?modes[onAir.mode]||onAir.mode:'Нет подтверждения',Boolean(onAir?.available)],
   ['Слушателей',onAir?.listenerCount??'—',Boolean(onAir?.available)],
   ['Записей Auto-DJ',data?.autoDj?.trackCount??'—',data?.autoDj?.ready===true],
-  ['Радиокомпьютеров',data?.devices?.filter(d=>d.lastSeenAt&&now-new Date(d.lastSeenAt).getTime()<90000).length??'—',Boolean(data)],
+  ['Режим источника',onAir?.mode?modes[onAir.mode]||onAir.mode:'—',Boolean(onAir?.available)],
  ];
  return <div className="space-y-4">
   <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
@@ -69,6 +70,7 @@ export default function RadioControlRoom({token,onOpen}){
     {onAir?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{onAir.lastError}</p>}
     <div className="relative mt-6 flex flex-wrap gap-2">
      <button onClick={()=>onOpen('studio')} type="button" className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-200">Открыть студию ↗</button>
+     <a href="/radio/live" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Открыть плеер ↗</a>
      <button onClick={()=>onOpen('schedule')} type="button" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Сетка вещания</button>
     </div>
    </section>
