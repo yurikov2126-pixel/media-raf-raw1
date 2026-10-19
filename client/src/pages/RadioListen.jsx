@@ -1,11 +1,11 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useState} from 'react';
+import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
 
 const clock=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 
 export default function RadioListen(){
  const [status,setStatus]=useState(null),[now,setNow]=useState(Date.now());
- const [playing,setPlaying]=useState(false),[error,setError]=useState('');
- const audio=useRef(null);
+ const {audioRef,playing,error,reconnecting,audioEvents}=useRadioStreamRecovery();
  useEffect(()=>{
   let active=true;
   const refresh=async()=>{try{
@@ -31,8 +31,8 @@ export default function RadioListen(){
     <p className="mt-2 text-base text-slate-300">{track?.artist||'MEDIA · РАФ · RAW'}</p>
     <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Прогресс записи" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-indigo-400" style={{width:percent+'%'}}/></div>
     <div className="mt-2 flex justify-between text-xs text-slate-400"><span>{status?.playout?clock(elapsed):'—'}</span><span>{total?clock(total):'—'}</span></div>
-    <audio ref={audio} controls preload="none" src="/api/radio-agent/listen" className="mt-7 w-full" onPlay={()=>{setPlaying(true);setError('');}} onPause={()=>setPlaying(false)} onError={()=>{setPlaying(false);setError('Не удаётся воспроизвести MP3-поток');}} aria-label="Радио MEDIA РАФ RAW"/>
-    <p className="mt-3 text-xs text-slate-400">{playing?'Вы слушаете публичную трансляцию':'Нажмите воспроизведение для прослушивания'} · Информация обновляется каждые 5 секунд</p>
+    <audio ref={audioRef} {...audioEvents} controls preload="none" src="/api/radio-agent/listen" className="mt-7 w-full" aria-label="Радио MEDIA РАФ RAW"/>
+    <p className="mt-3 text-xs text-slate-400">{reconnecting?'Восстанавливаем подключение к эфиру':playing?'Вы слушаете публичную трансляцию':'Нажмите воспроизведение для прослушивания'} · Информация обновляется каждые 5 секунд</p>
     {error&&<p role="alert" className="mt-3 text-sm text-rose-400">{error}</p>}
    </div>
    <p className="text-center text-xs text-slate-500">Звук может отставать от названия и прогресса из-за буферизации MP3.</p>
