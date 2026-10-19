@@ -102,3 +102,13 @@ describe('rotation persistence after ID3 migration',()=>{
   expect(id3Artist({tags:{artist:'Current singer'}})).toBe('Current singer');
  });
 });
+
+describe('artist spacing precomputed ID3 names',()=>{
+ it('preserves every playlist entry including duplicate performers',()=>{
+  const source=Array.from({length:220},(_,i)=>({id:'song-'+i,tags:{artist:'Performer '+(i%23)},durationMs:180000}));
+  const result=separateArtists(source,{},5);
+  expect(result.items).toHaveLength(source.length);
+  expect(new Set(result.items.map(x=>x.id)).size).toBe(source.length);
+  expect(result.violations).toBeGreaterThanOrEqual(0);
+ });
+});
