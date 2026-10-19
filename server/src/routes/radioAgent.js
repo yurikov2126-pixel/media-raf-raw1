@@ -213,7 +213,12 @@ router.get('/listen/now-playing',safe(async(_req,res)=>{
   catch{return res.status(503).json({available:false});}
   const trackId=typeof worker.trackId==='string'?worker.trackId:null;
   const asset=trackId?await prisma.radioAsset.findUnique({where:{id:trackId},select:{name:true,tags:true,durationMs:true}}):null;
+  const nextSlot=worker.mode==='SILENCE'?await prisma.radioScheduleSlot.findFirst({
+    where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+    orderBy:{startAt:'asc'},select:{startAt:true,playlist:{select:{name:true}}}
+  }):null;
   res.json({available:true,mode:worker.mode,
+    nextShow:worker.mode==='SILENCE'&&nextSlot?{name:nextSlot.playlist.name,startAt:nextSlot.startAt.toISOString()}:null,
     track:asset?{name:asset.name,title:asset.tags?.title||null,artist:asset.tags?.artist||null,durationMs:asset.durationMs}:null,
     playout:worker.playout?.trackId===trackId?{startedAt:worker.playout.startedAt,
       emittedMs:worker.playout.emittedMs,seekMs:worker.playout.seekMs,durationMs:worker.playout.durationMs}:null,

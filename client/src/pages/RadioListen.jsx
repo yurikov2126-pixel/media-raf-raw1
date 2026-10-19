@@ -16,7 +16,14 @@ export default function RadioListen(){
  const [muted,setMuted]=useState(false);
  const [busy,setBusy]=useState(false);
  const [sharing,setSharing]=useState(false);
+ const [autoplayBlocked,setAutoplayBlocked]=useState(false);
  const mounted=useRef(true);
+ useEffect(()=>{
+  const audio=audioRef.current;
+  if(!audio)return;
+  // Audible autoplay is best-effort: Safari/Chrome may require a user gesture.
+  audio.play().then(()=>setAutoplayBlocked(false)).catch(()=>setAutoplayBlocked(true));
+ },[audioRef]);
  useEffect(()=>{
   mounted.current=true;
   let active=true;
@@ -38,7 +45,7 @@ export default function RadioListen(){
   const audio=audioRef.current;if(!audio||busy)return;
   if(playing){audio.pause();return;}
   setBusy(true);
-  try{await audio.play();}catch{ /* The stream recovery hook reports playback errors. */ }
+  try{await audio.play();setAutoplayBlocked(false);}catch{setAutoplayBlocked(true);}
   finally{if(mounted.current)setBusy(false);}
  };
  const share=async()=>{
@@ -59,6 +66,10 @@ export default function RadioListen(){
  const elapsed=total?Math.min(total,rawElapsed+(status?.playout&&observed?Math.max(0,Math.min(5000,now-observed)):0)):0;
  const percent=total?Math.max(0,Math.min(100,elapsed/total*100)):0;
  const active=playing&&!reconnecting;
+ const silence=mode==='SILENCE';
+ const showStart=status?.nextShow?.startAt?Date.parse(status.nextShow.startAt):NaN;
+ const untilShow=Number.isFinite(showStart)?Math.max(0,showStart-now):null;
+ const showDate=Number.isFinite(showStart)?new Date(showStart).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):null;
  const tone=mode==='LIVE'?'live':mode==='JINGLE'?'jingle':'music';
  return <main className={'rr-live rr-tone-'+tone}>
   <div className="rr-ambient rr-ambient-a" aria-hidden="true"/><div className="rr-ambient rr-ambient-b" aria-hidden="true"/>
@@ -80,6 +91,7 @@ export default function RadioListen(){
       <h1 title={title}>{title}</h1>
       <p title={artist}>{artist}</p>
      </div>
+     {silence&&<div className="rr-next-show" role="status"><span className="rr-eyebrow">СКОРО В ЭФИРЕ</span>{showDate?<><strong>{status.nextShow.name}</strong><span>{showDate} · МСК{untilShow!==null&&untilShow>0?' · через '+(untilShow>=3600000?Math.floor(untilShow/3600000)+' ч ':'')+Math.ceil((untilShow%3600000)/60000)+' мин':''}</span></>:<span>Ближайших передач пока нет в расписании</span>}</div>}
      <Waves active={active}/>
      <div className="rr-progress" role="progressbar" aria-label="Прогресс текущей записи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}><div style={{width:percent+'%'}}/></div>
      <div className="rr-times"><span>{status?.playout?clock(elapsed):'—:—'}</span><span>{total?clock(total):'—:—'}</span></div>
@@ -89,7 +101,7 @@ export default function RadioListen(){
       <button className="rr-share" type="button" onClick={share} aria-label="Поделиться эфиром" title="Поделиться эфиром">↗</button>
      </div>
      <audio ref={audioRef} {...audioEvents} preload="none" src={STREAM} aria-label="Аудиопоток MEDIA РАФ RAW"/>
-     <div className="rr-status" role="status"><span className={'rr-status-dot '+(active?'active':reconnecting?'waiting':'')}/>{reconnecting?'Восстанавливаем соединение…':active?'Вы слушаете прямой эфир':busy?'Подключаемся…':'Нажмите воспроизведение, чтобы слушать'}</div>
+     <div className="rr-status" role="status"><span className={'rr-status-dot '+(active?'active':reconnecting?'waiting':'')}/>{reconnecting?'Восстанавливаем соединение…':active?'Вы слушаете прямой эфир':busy?'Подключаемся…':autoplayBlocked?'Нажмите ▶, чтобы включить звук — браузер ограничил автозапуск':'Нажмите воспроизведение, чтобы слушать'}</div>
      {error&&<p className="rr-alert" role="alert">{error}</p>}
      {metaError&&<p className="rr-meta-note">Информация о композиции временно недоступна. Аудиопоток работает независимо.</p>}
      {sharing&&<p className="rr-copy-note" role="status">Ссылка скопирована!</p>}
