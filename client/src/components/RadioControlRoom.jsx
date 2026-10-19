@@ -32,7 +32,7 @@ export default function RadioControlRoom({token,onOpen}){
  const upcoming=onAir?.upcomingSlot||data?.upcoming?.[0]||null;
  const untilUpcoming=upcoming?.startAt?Math.max(0,new Date(upcoming.startAt).getTime()-now):null;
  return <div className="space-y-4">
-  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-current/10 bg-white/75 p-3 text-sm dark:bg-slate-900/70">
+  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 radio-panel rounded-2xl border p-3 text-sm dark:bg-slate-900/70">
     <span><strong>Эфир:</strong> {onAir?.available?modes[onAir.mode]||onAir.mode:'Нет связи'}</span>
     <span><strong>Слушателей:</strong> {onAir?.listenerCount??'—'}</span>
     <span><strong>Следующая передача:</strong> {upcoming?displayTime(upcoming.startAt):'Не назначена'}</span>
@@ -78,7 +78,7 @@ export default function RadioControlRoom({token,onOpen}){
      <button onClick={()=>onOpen('schedule')} type="button" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Сетка вещания</button>
     </div>
    </section>
-   <section className="flex flex-col justify-between rounded-2xl border border-current/10 bg-white/90 text-slate-900 p-5 dark:bg-slate-800/90 dark:text-slate-100">
+   <section className="flex flex-col justify-between radio-panel rounded-2xl p-5">
     <div>
      <p className="text-[11px] font-semibold uppercase tracking-widest opacity-55">Время станции · Москва</p>
      <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">{new Date(now).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p>
@@ -92,11 +92,11 @@ export default function RadioControlRoom({token,onOpen}){
    </section>
   </div>
   <RadioAmplifierControl token={token}/>
-  <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-current/10 bg-white/75 p-4 text-sm dark:bg-slate-900/60">
+  <section className="flex flex-wrap items-center justify-between gap-3 radio-panel rounded-2xl border p-4 text-sm dark:bg-slate-900/60">
     <div><strong>LIVE-микшер</strong><p className="mt-1 text-xs opacity-65">Входы, мониторинг, маршрутизация и эфирная диагностика</p></div>
-    <button type="button" onClick={()=>onOpen('studio')} className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white">Открыть LIVE-микшер ↗</button>
+    <button type="button" onClick={()=>onOpen('studio')} className="rounded-xl bg-violet-700 px-4 py-2 font-semibold text-white">Открыть LIVE-микшер ↗</button>
   </section>
-  <section className="rounded-2xl border border-current/10 bg-white/60 p-4 dark:bg-slate-800/55">
+  <section className="radio-panel rounded-2xl p-4">
    <div className="flex flex-wrap items-center justify-between gap-3">
     <div><h3 className="font-semibold">Подготовка эфира</h3><p className="text-xs opacity-60">Рабочие инструменты на отдельных экранах — без перегруженной главной страницы</p></div>
 
