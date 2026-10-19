@@ -44,6 +44,7 @@ export default function Radio() {
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [createScheduleOpen,setCreateScheduleOpen] = useState(false);
   const [movingSlot,setMovingSlot] = useState(null);
   const [copyingSlot,setCopyingSlot] = useState(null);
   const [contextSlot,setContextSlot] = useState(null);
@@ -178,7 +179,7 @@ export default function Radio() {
     } finally { setApprovingId(null); }
   };
   const deletePlaylist = playlist => {
-    if (window.confirm('Удалить плейлист «' + playlist.name + '»? Это невозможно, если он используется в сетке вещания.'))
+    if (window.confirm('Удалить плейлист «' + playlist.name + '»? Аудиофайлы останутся в библиотеке. Плейлист, назначенный в сетку или Auto-DJ, удалить нельзя.'))
       action(() => call('/playlists/' + playlist.id, { method: 'DELETE' }));
   };
   const renameAsset = asset => {
@@ -233,6 +234,10 @@ export default function Radio() {
       // The shared player persists across track changes.
       requestAnimationFrame(() => playerRef.current?.play().catch(() => {}));
     } catch (e) { toast.error(e.message); }
+  };
+  const dropSchedule = (slot,day) => {
+    if(new Date(slot.startAt)<=new Date())return toast.error('Прошедшую или начавшуюся передачу переносить нельзя');
+    proposeMove(slot,day);
   };
   const openSlotMenu = (slot) => { setContextSlot(slot); setMovingSlot(null); setCopyingSlot(null); };
   const startSlotTouch = (slot,e) => {
@@ -414,14 +419,15 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
-      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onCreate={()=>document.getElementById('radio-schedule-create')?.setAttribute('open','')}/>
-      <details id="radio-schedule-create" className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50">
-        <summary className="cursor-pointer text-sm font-semibold">＋ Добавить передачу в расписание</summary>
+      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onCreate={()=>setCreateScheduleOpen(true)}/>
+      {createScheduleOpen && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setCreateScheduleOpen(false);}}>
+        <div role="dialog" aria-modal="true" aria-label="Добавить передачу в расписание" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white">
+        <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-lg">Добавить передачу в расписание</h3><button type="button" aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-1" onClick={()=>setCreateScheduleOpen(false)}>✕</button></div>
       <form onSubmit={e=>{e.preventDefault();
         const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');
         if (!playlistId) { toast.error('Выберите утверждённый плейлист'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
-        action(()=>call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}}));
+        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}});setCreateScheduleOpen(false);},'Передача добавлена в сетку');
       }} className="mt-4 space-y-3">
         <select required className={inputStyle} value={slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '')} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Выберите утверждённый плейлист</option>
@@ -438,9 +444,9 @@ export default function Radio() {
           </div>
           <p className="text-xs opacity-60">Время и дни недели привязаны к часовому поясу радиостанции — Москва (UTC+3), независимо от устройства администратора.</p>
         </fieldset>}
-        <button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button>
+        <div className="flex gap-2"><button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setCreateScheduleOpen(false)}>Отмена</button></div>
       </form>
-      </details>
+      </div></div>}
       {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
         <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
           <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
