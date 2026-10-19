@@ -16,6 +16,7 @@ from tkinter import filedialog, messagebox, ttk
 from central_playout import STOP, run
 from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat
+from esp32_telemetry import report_status
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 
@@ -140,6 +141,7 @@ class RadioAgentApp(tk.Tk):
         self.after(150, self.drain)
         self.after(5000, self.check_updates)
         self.after(3000,self.idle_esp32_heartbeat)
+        self.after(6500,self.report_esp32_status)
 
     def row(self, parent, name, variable, secret=False, browse=False, directory=False):
         ttk.Label(parent, text=name, style="Main.TLabel").pack(anchor="w", pady=(6, 2))
@@ -225,6 +227,21 @@ class RadioAgentApp(tk.Tk):
                 threading.Thread(target=task,daemon=True).start()
         self.after(3000,self.idle_esp32_heartbeat)
 
+    def report_esp32_status(self):
+        # Platform cannot access the LAN directly. Agent publishes ESP32 health
+        # using the ordinary rr_ device token, without sending ESP32 pair secrets.
+        host=self.esp32_ip.get().strip()
+        token=self.token.get().strip()
+        server=self.server.get().strip()
+        if host and token.startswith("rr_") and server.startswith("https://"):
+            def work():
+                try:
+                    report_status(server,token,host)
+                except Exception as error:
+                    self.messages.put(("esp32_report_error",type(error).__name__))
+            threading.Thread(target=work,daemon=True).start()
+        self.after(6500,self.report_esp32_status)
+
     def test_esp32(self):
         host=self.esp32_ip.get().strip()
         secret=self.esp32_secret.get().strip()
@@ -308,6 +325,8 @@ class RadioAgentApp(tk.Tk):
                     self.esp32_status.set("На связи · SAFE_PILOT")
                 elif action == "idle_esp32_error":
                     self.esp32_status.set("Нет связи: "+value)
+                elif action == "esp32_report_error":
+                    self.messages.put(("log","Отчёт ESP32 на платформу: "+value))
                 elif action == "esp32_ok":
                     self.esp32_status.set(value)
                     self.messages.put(("log","ESP32: heartbeat доставлен"))
