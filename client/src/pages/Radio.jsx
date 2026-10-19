@@ -11,6 +11,7 @@ import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
 import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
+import RadioEsp32Registry from '../components/RadioEsp32Registry.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
 import RadioJingleSettings from '../components/RadioJingleSettings.jsx';
@@ -487,8 +488,8 @@ export default function Radio() {
       </article>)}
     </section>}
     {tab==='equipment' && <section className="rounded-2xl border border-current/10 p-5 space-y-4">
-      <RadioSectionIntro eyebrow="ИНФРАСТРУКТУРА" title="Оборудование" description="Радиокомпьютеры, связь и тестовый вывод звука. Управление школьным усилителем и ESP32 здесь не активируется." metrics={[{label:'Устройств',value:radioDevices.length},{label:'Активных',value:radioDevices.filter(d=>!d.revokedAt).length}]}/>
-      <p className="text-sm opacity-70">Подключение пока только для синхронизации файлов и расписания. Воспроизведение и управление ESP32/AA-300 отключены.</p>
+      <RadioSectionIntro eyebrow="ИНФРАСТРУКТУРА" title="Оборудование" description="Радиокомпьютеры, ESP32 и настройка локальной инфраструктуры. Управление питанием усилителя пока не активировано." metrics={[{label:'Устройств',value:radioDevices.length},{label:'Активных',value:radioDevices.filter(d=>!d.revokedAt).length}]}/>
+      <p className="text-sm opacity-70">Радиокомпьютеры: синхронизация, резерв и разрешения на тестовый вывод звука. ESP32: регистрация и подготовка к сопряжению по локальной сети.</p>
       <div className="flex gap-2 flex-wrap">
         <button className={btn} onClick={registerRadioDevice}>+ Зарегистрировать радиокомпьютер</button>
         <button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={loadRadioDevices}>Обновить список</button>
@@ -499,6 +500,7 @@ export default function Radio() {
           <button className={btn} onClick={()=>navigator.clipboard.writeText(deviceToken).then(()=>toast.success('Токен скопирован')).catch(()=>toast.error('Не удалось скопировать'))}>Копировать токен</button>
           <button className="rounded-xl border border-current/20 px-3" onClick={()=>setDeviceToken('')}>Скрыть</button></div>
       </div>}
+      <RadioEsp32Registry token={token}/>
       {radioDevices.map(d=><div key={d.id} className="rounded-xl border border-current/10 p-3 flex items-center justify-between gap-3">
         <div className="min-w-0"><p className="font-semibold text-sm">{d.name}</p>
           <p className="text-xs opacity-60">{d.revokedAt ? 'Отключён' : 'Зарегистрирован'} · Последняя связь: {d.lastSeenAt ? dateLocal(d.lastSeenAt) : 'пока не выходил на связь'}</p></div>
