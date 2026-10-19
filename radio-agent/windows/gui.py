@@ -14,15 +14,17 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from central_playout import STOP, run
+from central_playout import STOP, run, PLAYBACK_STATE
 from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat
 from esp32_telemetry import report_status
+from esp32_power import signed_power,fetch_intent
+import time
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.3.4'
+AGENT_VERSION = '0.3.5'
 
 
 def default_data_dir():
@@ -88,6 +90,11 @@ class RadioAgentApp(tk.Tk):
         self.esp32_status = tk.StringVar(value="Не проверен")
         self.esp32_platform_status = tk.StringVar(value="Ожидает настройки")
         self.auto_start = tk.BooleanVar(value=startup_enabled())
+        self.power_arm = tk.BooleanVar(value=prefs.get("power_arm") is True)
+        self.power_status = tk.StringVar(value="Усилитель: безопасный OFF")
+        self.last_power_intent = None
+        self.last_power_received = 0.0
+        self.power_busy = False
         self.agreed = tk.BooleanVar(value=False)
         self.pending_update = None
         self.update_running = False
@@ -148,7 +155,7 @@ class RadioAgentApp(tk.Tk):
         ttk.Button(linkbar, text="Проверить связь", command=self.test_esp32).pack(side="left")
         ttk.Label(linkbar, textvariable=self.esp32_status, style="Main.TLabel").pack(side="left", padx=12)
         ttk.Label(links, textvariable=self.esp32_platform_status, style="Main.TLabel").pack(anchor="w", pady=(3, 0))
-        ttk.Label(links, text="GPIO 13 · SAFE_PILOT · реле не управляется", style="Main.TLabel").pack(anchor="w", pady=(5, 0))
+        ttk.Label(links, textvariable=self.power_status,style="Main.TLabel").pack(anchor="w",pady=(5,0))
         ttk.Button(links, text="Сохранить параметры", command=self.save_preferences).pack(anchor="w", pady=(12, 0))
 
         ttk.Label(settings, text="Настройки программы", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
@@ -157,6 +164,10 @@ class RadioAgentApp(tk.Tk):
         ttk.Checkbutton(settings, text="Сохранять токены/секреты зашифрованными для текущего пользователя Windows",
                         variable=self.remember_credentials,command=self.save_preferences).pack(anchor="w", pady=7)
         ttk.Label(settings, text="Автозапуск открывает программу. Эфир включается только вручную.",style="Main.TLabel").pack(anchor="w", pady=5)
+        ttk.Checkbutton(settings,text="Разрешить физическое управление реле GPIO13 (HIGH = ВКЛ)",
+                        variable=self.power_arm,command=self.set_power_arm).pack(anchor="w",pady=7)
+        ttk.Label(settings,text="Только для проверенного силового узла. При выключении опции отправляется OFF.",
+                  style="Main.TLabel").pack(anchor="w")
         ttk.Label(settings, text="Версия " + AGENT_VERSION, style="Main.TLabel").pack(anchor="w", pady=(18, 6))
         update_bar = ttk.Frame(settings, style="Main.TFrame")
         update_bar.pack(fill="x", pady=(0, 8))
@@ -173,6 +184,7 @@ class RadioAgentApp(tk.Tk):
         self.after(5000, self.check_updates)
         self.after(3000,self.idle_esp32_heartbeat)
         self.after(6500,self.report_esp32_status)
+        self.after(2100,self.power_tick)
 
     def scroll_tab(self, tabs):
         """Scrollable pane that retains the full width of the current tab."""
@@ -272,7 +284,7 @@ class RadioAgentApp(tk.Tk):
     def save_preferences(self,silent=False):
         try:
             save_settings(default_data_dir(),{"server":self.server.get().strip(),
-                "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip()})
+                "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip(),"power_arm":self.power_arm.get()})
             if self.remember_credentials.get():
                 save_credentials(default_data_dir(),self.token.get().strip(),self.esp32_secret.get().strip())
             else:
@@ -328,6 +340,52 @@ class RadioAgentApp(tk.Tk):
                         self.messages.put(("esp32_report_error",detail))
                 threading.Thread(target=work,daemon=True).start()
         self.after(6500,self.report_esp32_status)
+
+    def set_power_arm(self):
+        if self.power_arm.get() and not messagebox.askyesno("Усилитель 220 В",
+            "Подтвердите: HIGH включает реле GPIO13; силовой узел, защитный автомат, драйвер и OFF при сбросе проверены. Разрешить управление физическим питанием?"):
+            self.power_arm.set(False)
+        self.save_preferences(silent=True)
+        if not self.power_arm.get():
+            self.last_power_intent=None
+            self.power_status.set("Усилитель: управление отключено")
+
+    def power_tick(self):
+        # A failed fetch cannot create a fresh ON authorization. Relay self-OFF
+        # occurs even if the Windows process is killed.
+        if not self.power_busy and self.esp32_ip.get().strip() and len(self.esp32_secret.get().strip())>=32:
+            self.power_busy=True
+            host=self.esp32_ip.get().strip()
+            secret=self.esp32_secret.get().strip()
+            server=self.server.get().strip()
+            token=self.token.get().strip()
+            armed=self.power_arm.get()
+            def job():
+                permit=False
+                try:
+                    if armed and token.startswith("rr_"):
+                        try:
+                            intent=fetch_intent(server,token)
+                            if intent.get("esp32Ip")!=host:
+                                raise ValueError("ESP32 is not registered for this agent")
+                            permit=intent.get("permit") is True and intent.get("hardwareExpected")=="POWER_CONTROL_V1"
+                            self.last_power_intent=permit
+                            self.last_power_received=time.monotonic()
+                        except Exception:
+                            # Only previously authorized local reserve may bridge a
+                            # temporary internet outage; capped to 15 minutes.
+                            state=PLAYBACK_STATE
+                            permit=self.last_power_intent is True and state["mode"]=="LOCAL_RESERVE" and (
+                                time.monotonic()-self.last_power_received<min(state["offlineGrace"],900)) and (
+                                time.monotonic()-state["lastAuthorized"]<min(state["offlineGrace"],900))
+                    signed_power(host,secret,permit,8000 if permit else 0)
+                    self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
+                except Exception as error:
+                    self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
+                finally:
+                    self.messages.put(("power_done",None))
+            threading.Thread(target=job,daemon=True).start()
+        self.after(3000,self.power_tick)
 
     def test_esp32(self):
         host=self.esp32_ip.get().strip()
@@ -419,6 +477,10 @@ class RadioAgentApp(tk.Tk):
                     self.esp32_platform_status.set(value)
                 elif action == "esp32_report_error":
                     self.esp32_platform_status.set("Ошибка отправки: "+value)
+                elif action == "power_status":
+                    self.power_status.set(value)
+                elif action == "power_done":
+                    self.power_busy=False
                 elif action == "esp32_ok":
                     self.esp32_status.set(value)
                     self.messages.put(("log","ESP32: heartbeat доставлен"))
