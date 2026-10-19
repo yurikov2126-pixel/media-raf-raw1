@@ -9,6 +9,9 @@ const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 export default function RadioLiveStudio() {
   const { token } = useAuth();
   const [status, setStatus] = useState('Подключение…');
+  const [mixerTab,setMixerTab]=useState('overview');
+  const [monitorVolume,setMonitorVolume]=useState(80);
+  const [monitorMode,setMonitorMode]=useState('local');
   const [state, setState] = useState({ live: false, listener: false });
   const [role, setRole] = useState(null);
   const [muted, setMuted] = useState(false);
@@ -263,11 +266,11 @@ export default function RadioLiveStudio() {
   return <section className="space-y-5">
     <div className="radio-studio-hero rounded-2xl border border-white/15 bg-slate-900 p-5 text-white sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><p className="text-[11px] uppercase tracking-[.2em] text-indigo-300">LIVE STUDIO / PILOT</p>
+        <div><p className="text-[11px] uppercase tracking-[.2em] text-indigo-300">LIVE / ОПЕРАТОРСКАЯ</p>
           <h2 className="mt-2 text-2xl font-bold">Эфирная студия</h2>
           <p className="mt-2 max-w-2xl text-sm text-slate-300">Рабочий стол ведущего: USB-вход RØDECaster Duo, связь с сервером и приватный аудиомонитор.</p>
         </div>
-        <span className="rounded-full bg-amber-400/15 px-3 py-2 text-xs font-semibold text-amber-200">Тестовый тракт · без школьной акустики</span>
+        <span className="rounded-full bg-amber-400/15 px-3 py-2 text-xs font-semibold text-amber-200">LIVE · готовность определяется статусом сервера</span>
       </div>
       <div className="mt-5 flex flex-wrap gap-3 text-xs">
         <span className="rounded-lg bg-white/10 px-3 py-2">Подключение: {status}</span>
@@ -275,6 +278,15 @@ export default function RadioLiveStudio() {
         <span className="rounded-lg bg-white/10 px-3 py-2">PCM Worker: {health?.workerReachable?'доступен':'нет подтверждения'}</span>
       </div>
     </div>
+    <section className="rounded-2xl border border-current/10 bg-white/80 p-4 text-slate-900 dark:bg-slate-900/80 dark:text-slate-100">
+     <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-bold">LIVE-микшер</h3><p className="text-xs opacity-65">Управление, входы, мониторинг и диагностика · один рабочий стол</p></div><span className={health?.publicLiveOnAir?'rounded-full bg-rose-500/15 px-3 py-1 text-sm font-semibold text-rose-600':'rounded-full border border-current/15 px-3 py-1 text-sm'}>{health?.publicLiveOnAir?'● В ЭФИРЕ':'○ Не в эфире'}</span></div>
+     <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Панели LIVE-микшера">{[['overview','Обзор'],['inputs','Входы'],['monitor','Мониторинг'],['routing','Маршрутизация'],['diagnostics','Диагностика']].map(([id,label])=><button type="button" role="tab" aria-selected={mixerTab===id} key={id} className={'rounded-xl px-3 py-2 text-sm '+(mixerTab===id?'bg-indigo-600 text-white':'border border-current/15')} onClick={()=>setMixerTab(id)}>{label}</button>)}</div>
+     {mixerTab==='overview'&&<div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{[['Ведущий',state.live?'Подключён':'Не подключён'],['Opus uplink',uplinkActive?'Активен':'Остановлен'],['PCM Worker',health?.workerReachable?'Доступен':'Не подтверждён'],['Публичный LIVE',health?.publicLiveOnAir?'В эфире':'Ожидание']].map(([name,value])=><div key={name} className="rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">{name}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>)}</div>}
+     {mixerTab==='inputs'&&<div className="mt-4 text-sm">Источник: {inputStream?.getAudioTracks()[0]?.label||'Не выбран'} · {muted?'Микрофон выключен':'Микрофон не заглушён'} <p className="mt-1 text-xs opacity-65">Настройки входного устройства и измерители уровня расположены непосредственно ниже.</p></div>}
+     {mixerTab==='monitor'&&<div className="mt-4 space-y-3"><label className="block text-sm">Режим прослушивания<select className="mt-1 w-full rounded-lg border border-current/15 bg-transparent p-2" value={monitorMode} onChange={e=>setMonitorMode(e.target.value)}><option value="local">Локальный монитор</option><option value="public">Публичный MP3-поток</option></select></label><label className="block text-sm">Громкость мониторинга: {monitorVolume}%<input className="mt-2 w-full" type="range" min="0" max="100" value={monitorVolume} onChange={e=>{setMonitorVolume(Number(e.target.value));if(audioRef.current)audioRef.current.volume=Number(e.target.value)/100;}}/></label><p className="text-xs opacity-65">Громкость относится только к браузерному аудиоплееру, не меняет уровень выхода станции. Для контроля публичного потока используйте отдельный плеер.</p></div>}
+     {mixerTab==='routing'&&<div className="mt-4 space-y-2 text-sm"><p><strong>Сетка вещания:</strong> имеет приоритет над публичным LIVE.</p><p><strong>LIVE:</strong> переключается только после подтверждения PCM Worker.</p><p><strong>Завершение LIVE:</strong> возврат к управляемому источнику станции.</p><p className="text-xs opacity-65">Эти правила безопасности задаёт сервер; изменение маршрутизации без его поддержки недоступно.</p></div>}
+     {mixerTab==='diagnostics'&&<div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">{[['Соединение',status],['Декодер',health?.decoderRunning?'Работает':'Остановлен'],['PCM',health?.workerReachable?'Доступен':'Недоступен'],['Буфер',health?.bufferedMs!=null?health.bufferedMs+' мс':'—'],['Возраст PCM',health?.pcmAgeMs!=null?Math.round(health.pcmAgeMs)+' мс':'—'],['Расписание',health?.scheduledActive?'Активно':'Не активно']].map(([name,value])=><div key={name} className="rounded-lg border border-current/10 p-3"><span className="block text-xs opacity-60">{name}</span><strong>{value}</strong></div>)}</div>}
+    </section>
     <RadioUsbInputPanel selectedId={selectedInputId} stream={inputStream} locked={role==='presenter'} onSelect={id=>{
       setSelectedInputId(id);
       try{if(id)localStorage.setItem('radio:studio:input-id',id);else localStorage.removeItem('radio:studio:input-id');}catch{ /* optional local preference */ }
