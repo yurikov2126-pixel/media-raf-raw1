@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
+import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
@@ -64,6 +65,8 @@ let frozenRotation=null;
 // Normal Auto-DJ uses a sequential playback cursor, not a running wall clock.
 // This prevents a jingle (and decoder start latency) from consuming the next song.
 let musicQueueKey=null, musicQueueNextId=null;
+state.lastBoundary=null;
+function recordBoundary(event){state.lastBoundary={...event,at:new Date().toISOString()};console.info('RADIO_SOURCE_BOUNDARY',JSON.stringify(state.lastBoundary));}
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
 const liveIntake=new LivePcmIntake();
 const liveSessions=new LivePcmSessionGate();
@@ -358,6 +361,7 @@ async function run() {
       continue;
     }
     state.mode=cursor.isJingle?'JINGLE':cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;state.playout=null;
+    if(cursor.status==='AUTO_DJ' && state.lastBoundary?.source==='SCHEDULED' && Date.now()-Date.parse(state.lastBoundary.at)<50000){recordBoundary({source:'AUTO_DJ',reason:'POST_SCHEDULE_RESUME',trackId:asset.id});}
     state.nextTrackId=cursor.status==='AUTO_DJ'&&!cursor.isJingle?nextTrackId||null:null;
     const boundary=cursor.status==='AUTO_DJ'?(cursor.until?Date.parse(cursor.until):Infinity):Date.parse(cursor.slot.endAt);
     const remaining=Math.max(0,Math.min(cursor.track.remainingMs??(cursor.track.durationMs-cursor.track.offsetMs),boundary-Date.now()));
@@ -446,11 +450,26 @@ async function run() {
     try {
       for await(const chunk of child.stdout) {
         if(stopping||publicLive.onAir) {child.kill('SIGTERM');break;}
-        const output=pcmStaging?pcmStaging.push(chunk):chunk;
-        if(!output?.length)continue;
+        const decoded=pcmStaging?pcmStaging.push(chunk):chunk;
+        if(!decoded?.length)continue;
         if(publicLive.onAir){child.kill('SIGTERM');break;}
-        if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
-        emittedBytes+=output.length;
+        // Stop an oversize or late FFmpeg chunk from spilling across the grid
+        // boundary into the shared MP3 encoder heard by both site and agent.
+        const gated=cursor.status==='SCHEDULED'
+          ?boundScheduledPcm(decoded,Date.parse(cursor.slot.endAt),Date.now())
+          :{pcm:decoded,truncated:false};
+        const output=gated.pcm;
+        if(output.length){
+          if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+          emittedBytes+=output.length;
+        }
+        if(gated.truncated){
+          recordBoundary({source:'SCHEDULED',reason:'END_AT_PCM_TRUNCATED',slotId:cursor.slot.id,trackId:asset.id,
+            droppedBytes:decoded.length-output.length});
+          child.kill('SIGTERM');
+          break;
+        }
+        if(!output.length)continue;
         // Start the next FFmpeg decoder while current PCM is still playing.
         // A bounded OS pipe supplies a warm initial PCM buffer; no second audio
         // source is connected to the station encoder until handoff.
@@ -467,6 +486,9 @@ async function run() {
         }
       }
     } catch(e) {state.lastError=e.message;}
+    if(cursor.status==='SCHEDULED' && !state.lastBoundary?.slotId){
+      recordBoundary({source:'SCHEDULED',reason:'TRACK_ENDED',slotId:cursor.slot.id,trackId:asset.id});
+    }
     if(pcmStaging){
       pcmStaging.finish();
       state.pcmStaging.processedBytes+=pcmStaging.totalBytes;
