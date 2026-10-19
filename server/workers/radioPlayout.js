@@ -45,6 +45,10 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
+// Non-fatal FFmpeg metadata notices must not overwrite real playout errors.
+function isIgnorableMediaNotice(value){
+ return /Incorrect BOM value|Error reading frame GEOB|skipped\s*$/i.test(value);
+}
 const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTING',trackId:null,slotId:null,playout:null,nextTrackId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
 let encoder = null;
@@ -119,7 +123,7 @@ function startEncoder() {
       }
     }
   });
-  encoder.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
+  encoder.stderr.on('data',buf=>{const msg=buf.toString().slice(-500);if(!isIgnorableMediaNotice(msg))state.lastError=msg;});
   encoder.on('error',e=>{state.lastError=e.message;});
   encoder.on('exit',()=>{if(!stopping) process.exitCode=1;});
 }
@@ -353,7 +357,7 @@ async function run() {
       finally{polling=false;}
     },3000):null;
     let ended=false, exitCode=null;
-    child.stderr.on('data',buf=>{state.lastError=buf.toString().slice(-500);});
+    child.stderr.on('data',buf=>{const msg=buf.toString().slice(-500);if(!isIgnorableMediaNotice(msg))state.lastError=msg;});
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
     let emittedBytes=0;
