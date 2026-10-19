@@ -96,7 +96,13 @@ export default function RadioListen(){
     </section>
     <aside className="rr-side">
      <div className="rr-side-intro"><span className="rr-eyebrow">ТВОЯ ВОЛНА</span><h2>Включай.<br/><em>Чувствуй.</em><br/>Создавай.</h2><p>Музыка, авторские программы и голоса студенческого медиацентра — там, где ты.</p></div>
-     <div className="rr-info-card"><span className="rr-eyebrow">ПРЯМО СЕЙЧАС</span><div className="rr-info-row"><span>Формат</span><strong>{modeLabel[mode]||'Радио онлайн'}</strong></div><div className="rr-info-row"><span>Композиция</span><strong>{track?[track.artist,track.title||track.name].filter(Boolean).join(' — '):'Ожидаем метаданные'}</strong></div><div className="rr-info-row"><span>Часовой пояс</span><strong>Москва · UTC+3</strong></div><div className="rr-info-row"><span>Время в студии</span><strong>{new Date(now).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})}</strong></div></div>
+     <div className="rr-invite-card">
+      <span className="rr-eyebrow">РАДИО, КОТОРЫМ ХОЧЕТСЯ ДЕЛИТЬСЯ</span>
+      <div className="rr-invite-art" aria-hidden="true"><span className="rr-invite-orbit rr-invite-orbit-a"/><span className="rr-invite-orbit rr-invite-orbit-b"/><span className="rr-invite-icon">♫</span></div>
+      <h3>Передай волну дальше.</h3>
+      <p>Любимая музыка звучит лучше вместе. Пригласи друзей послушать наш прямой эфир.</p>
+      <button className="rr-invite-action" type="button" onClick={share}>Поделиться эфиром <span aria-hidden="true">↗</span></button>
+     </div>
      <div className="rr-side-footer"><span className="rr-footer-mark">✳</span><p>Здесь звучит то,<br/>что мы создаём вместе.</p></div>
     </aside>
    </div>
