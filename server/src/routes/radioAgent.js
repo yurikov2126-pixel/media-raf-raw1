@@ -6,6 +6,7 @@ import { resolveRadioCursor } from '../lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../lib/radioAutoDj.js';
 import { servePilotStream, stationStreamHealth, stationSnapshot } from '../lib/radioStreamPilot.js';
 import { streamWorker, workerHealth } from '../lib/radioWorkerProxy.js';
+import { workerRequest } from '../lib/radioLiveOpusGateway.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
@@ -62,6 +63,27 @@ router.get('/agent/stream', deviceAuth, (req,res) => {
   return streamWorker(req,res);
 });
 router.get('/dashboard/worker', ...admin, workerHealth);
+router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  let status;
+  try{status=await workerRequest('GET','/health');}
+  catch{return res.status(503).json({available:false,reason:'WORKER_UNAVAILABLE'});}
+  const mode=typeof status?.mode==='string'?status.mode:'UNKNOWN';
+  const trackId=typeof status?.trackId==='string'?status.trackId:null;
+  const slotId=typeof status?.slotId==='string'?status.slotId:null;
+  const [asset,slot]=await Promise.all([
+    trackId?prisma.radioAsset.findUnique({where:{id:trackId},select:{id:true,name:true,durationMs:true,tags:true}}):null,
+    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,playlist:{select:{name:true}}}}):null,
+  ]);
+  res.json({available:true,source:'PUBLIC_MP3_WORKER',mode,
+    track:asset?{id:asset.id,name:asset.name,durationMs:asset.durationMs,
+      title:asset.tags?.title||null,artist:asset.tags?.artist||null}:null,
+    slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача'}:null,
+    trackId,slotId,trackResolved:!trackId||Boolean(asset),observedAt:new Date().toISOString(),
+    listenerCount:Number.isFinite(status?.connected)?status.connected:null,
+    lastError:typeof status?.lastError==='string'?status.lastError:null});
+}));
+
 router.get('/agent/stream-pilot', deviceAuth, safe(async (req,res) => {
   if (!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Тестовое воспроизведение запрещено'});
   await servePilotStream(req,res);
