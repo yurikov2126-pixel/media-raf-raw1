@@ -14,14 +14,14 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
  const timeConflict=event=>entries.some(item=>item.id!==event.id&&new Date(item.startAt)<new Date(event.endAt)&&new Date(event.startAt)<new Date(item.endAt));
  return <section className="space-y-3">
   <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-current/10 bg-white/60 p-4 dark:bg-slate-900/50">
-   <div><p className="text-xs font-semibold uppercase tracking-[.14em] opacity-50">PROGRAM LOG · МОСКВА UTC+3</p>
-    <h3 className="mt-1 font-bold">Эфирная неделя</h3><p className="text-xs opacity-60">{readable(date+'T12:00:00Z')} — {readable(dates[6]+'T12:00:00Z')} · {entries.length} передач</p></div>
+   <div><p className="text-xs font-semibold uppercase tracking-[.14em] opacity-70">Сетка вещания · Москва UTC+3</p>
+    <h3 className="mt-1 font-bold">Эфирная неделя</h3><p className="text-xs opacity-80">{readable(date+'T12:00:00Z')} — {readable(dates[6]+'T12:00:00Z')} · {entries.length} передач</p></div>
    <div className="flex flex-wrap gap-2">
     <button className="rounded-xl border border-current/15 px-3 py-2 text-sm" onClick={()=>onDateChange(addDays(date,-7))} aria-label="Предыдущая неделя">←</button>
     <button className="rounded-xl border border-current/15 px-3 py-2 text-sm" onClick={()=>onDateChange(now)}>Сегодня</button>
     <button className="rounded-xl border border-current/15 px-3 py-2 text-sm" onClick={()=>onDateChange(addDays(date,7))} aria-label="Следующая неделя">→</button>
     <select className="rounded-xl border border-current/15 bg-transparent px-2 text-sm" aria-label="Отображение расписания" value={view} onChange={e=>setView(e.target.value)}><option value="week">Неделя</option><option value="list">Хронология</option></select>
-    <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white" onClick={onCreate}>＋ Передача</button>
+    <button className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white" onClick={onCreate}>＋ Создать передачу</button>
    </div>
   </div>
   {view==='week'?<div className="radio-schedule-grid overflow-x-auto rounded-2xl border radio-surface-soft">
@@ -50,6 +50,6 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
     <span className="opacity-50">›</span>
    </button>):<p className="p-6 text-center text-sm opacity-60">Нет передач на выбранной неделе</p>}
   </div>}
-  <p className="text-xs opacity-55">Сетка показывает уже сохранённые передачи. Изменения времени и конфликты окончательно проверяются сервером. Заполнение свободных часов музыкой Auto-DJ в этом представлении условное.</p>
+  <p className="text-xs opacity-75">Нажмите на передачу для изменения, копирования или удаления. Пустые дни не означают запуск Auto-DJ: здесь показаны только передачи из сетки.</p>
  </section>;
 }
