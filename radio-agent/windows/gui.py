@@ -9,6 +9,7 @@ import os
 import queue
 import sys
 import threading
+import webbrowser
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -161,6 +162,7 @@ class RadioAgentApp(tk.Tk):
         update_bar.pack(fill="x", pady=(0, 8))
         self.update_btn = ttk.Button(update_bar, text="Проверить обновления", command=self.check_updates)
         self.update_btn.pack(side="left")
+        ttk.Button(update_bar,text="Открыть релизы в браузере",command=lambda:webbrowser.open("https://github.com/yurikov2126-pixel/media-raf-raw1/releases")).pack(side="left",padx=8)
         self.install_btn = ttk.Button(settings, text="Перезапустить обновлённую версию",
                                       command=self.install_update, state="disabled")
         self.install_btn.pack(anchor="w", pady=8)
@@ -276,7 +278,7 @@ class RadioAgentApp(tk.Tk):
             else:
                 clear_credentials(default_data_dir())
             if not silent:
-                self.messages.put(("log","Настройки сохранены (без токена и секрета ESP32)"))
+                self.messages.put(("log","Настройки сохранены; секреты "+("зашифрованы Windows DPAPI" if self.remember_credentials.get() else "не сохранены")))
         except OSError:
             self.messages.put(("log","Не удалось сохранить настройки"))
 
