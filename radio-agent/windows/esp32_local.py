@@ -29,7 +29,7 @@ def send_heartbeat(host, secret, mode, audio_ready, platform_authorized, timeout
             if not isinstance(nonce,str) or len(nonce)!=16:
                 raise ValueError("Missing boot nonce")
             key=(host,nonce)
-            seq=_counter.get(key,0)+1
+            seq=max(_counter.get(key,0),int(health.get("heartbeatSequence",0)))+1
             if seq>=2**31:raise ValueError("ESP32 heartbeat sequence overflow")
             data["seq"]=seq
             signed_payload=f"{nonce}:hb:{seq}:{mode}:{int(bool(audio_ready))}:{int(bool(platform_authorized))}"
