@@ -178,3 +178,81 @@
 .radio-workspace :is(.radio-surface-soft,.radio-surface-raised) .opacity-60{
   opacity:.82;
 }
+
+
+/* The schedule grid uses explicit opaque state colors: generic text inheritance
+   and theme class precedence previously made event labels nearly invisible. */
+.radio-workspace .radio-schedule-grid{
+  border-color:var(--radio-line);
+  background:var(--radio-surface-raised);
+}
+.radio-workspace .radio-schedule-columns{
+  --tw-divide-opacity:1;
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-schedule-columns>div{
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-schedule-day{
+  background:var(--radio-surface-soft);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-schedule-day-today{
+  background:#5b21b6;
+  color:#fff;
+  border-color:#7c3aed;
+}
+.radio-workspace .radio-schedule-day-body{
+  background:var(--radio-surface-raised);
+}
+.radio-workspace .radio-schedule-empty{
+  color:var(--radio-subtle);
+  font-weight:500;
+}
+.radio-workspace .radio-schedule-event{
+  color:var(--radio-ink);
+  border-width:1px;
+  box-shadow:0 1px 4px rgba(0,0,0,.04);
+}
+.radio-workspace .radio-schedule-event-indigo{
+  background:#ede9fe;
+  color:#3730a3;
+  border-color:#a5b4fc;
+}
+.radio-workspace .radio-schedule-event-teal{
+  background:#ccfbf1;
+  color:#115e59;
+  border-color:#5eead4;
+}
+.radio-workspace .radio-schedule-event-fuchsia{
+  background:#fae8ff;
+  color:#86198f;
+  border-color:#e879f9;
+}
+.radio-workspace .radio-schedule-event:hover{
+  outline:2px solid var(--radio-focus);
+  outline-offset:1px;
+}
+[data-theme="dark"] .radio-workspace .radio-schedule-event-indigo,
+.dark .radio-workspace .radio-schedule-event-indigo{
+  background:#302753;
+  color:#e9ddff;
+  border-color:#7862bd;
+}
+[data-theme="dark"] .radio-workspace .radio-schedule-event-teal,
+.dark .radio-workspace .radio-schedule-event-teal{
+  background:#123d41;
+  color:#b7fff0;
+  border-color:#2e958a;
+}
+[data-theme="dark"] .radio-workspace .radio-schedule-event-fuchsia,
+.dark .radio-workspace .radio-schedule-event-fuchsia{
+  background:#49244e;
+  color:#ffcefa;
+  border-color:#ad6aa9;
+}
+.radio-workspace .radio-schedule-event :is(span,strong){
+  color:inherit;
+  opacity:1;
+}
