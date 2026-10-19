@@ -15,7 +15,6 @@ import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
-import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvents } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
@@ -57,6 +56,9 @@ const PCM_STAGING_ENABLED=process.env.RADIO_PCM_STAGING_ENABLED==='true';
 state.pcmStaging={enabled:PCM_STAGING_ENABLED,frameBytes:4,droppedTailBytes:0,processedBytes:0};
 const failedAutoDjAssets = new Map();
 let frozenRotation=null;
+// Normal Auto-DJ uses a sequential playback cursor, not a running wall clock.
+// This prevents a jingle (and decoder start latency) from consuming the next song.
+let musicQueueKey=null, musicQueueNextId=null;
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
 const liveIntake=new LivePcmIntake();
 const liveSessions=new LivePcmSessionGate();
@@ -138,10 +140,10 @@ async function current() {
   });
   const cursor=resolveRadioCursor(slots,nowMs);
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
-  if(scheduled || cursor.slot) return {cursor,asset:scheduled};
+  if(scheduled || cursor.slot){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:scheduled};}
   const settings=await readAutoDjSettings();
   state.autoDjEnabled=settings.enabled;
-  if(!settings.enabled||!settings.playlistId)return {cursor,asset:null};
+  if(!settings.enabled||!settings.playlistId){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:null};}
   const playlist=await prisma.radioPlaylist.findUnique({
     where:{id:settings.playlistId},
     include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
@@ -166,6 +168,9 @@ async function current() {
   const rotation=frozenRotation?.plan||null;
   const music=rotation?.items||catalog;
   const clock=rotation?nowMs-rotation.anchorMs:nowMs;
+  const newQueueKey=[settings.playlistId,key||'NO_ROTATION',music.map(a=>a.id+':'+a.playDurationMs).join('|')].join(':');
+  if(newQueueKey!==musicQueueKey){musicQueueKey=newQueueKey;musicQueueNextId=null;}
+
   // Shared on-air insertion between full music tracks, for BOTH timeline and strict rotation.
   // Public LIVE and scheduled slots always have priority and never receive jingles here.
   if(JINGLE_PLAYOUT_ENABLED&&!jinglePending&&musicSinceJingle>0){
@@ -223,18 +228,15 @@ async function current() {
       until:Number.isFinite(until)?new Date(until).toISOString():null},
       asset:selected};
   }
-  state.queueStatus='TIMELINE';
-  const dsp=await readAudioProcessing();
-  const blend=dsp.crossfadeMs>0?crossfadePlan(music,clock,dsp.crossfadeMs):null;
-  const track=blend?{
-    id:blend.track.id,name:blend.track.name,index:blend.index,
-    durationMs:blend.track.playDurationMs,offsetMs:0,seekMs:blend.seekMs,
-    remainingMs:blend.remainingMs,blend:blend.mode==='BLEND'?{
-      nextId:blend.next.id,nextName:blend.next.name,nextStorageKey:blend.next.storageKey,
-      nextSeekMs:blend.nextSeekMs,overlapMs:blend.overlapMs,
-      blendPosition:blend.blendPosition,
-    }:null,
-  }:cueCursor(music,clock);
+  state.queueStatus='SEQUENTIAL';
+  // Full music tracks follow one another from their cue-in points. The old
+  // cueCursor(music, wall-clock) skipped several seconds after every jingle.
+  const nextIndex=musicQueueNextId?music.findIndex(a=>a.id===musicQueueNextId):-1;
+  const initial=cueCursor(music,clock);
+  const index=nextIndex>=0?nextIndex:initial?.index??0;
+  const chosen=music[index];
+  const track=chosen?{id:chosen.id,name:chosen.name,index,offsetMs:0,
+    seekMs:chosen.cue.inMs,durationMs:chosen.playDurationMs}:null;
   const next=await prisma.radioScheduleSlot.findFirst({
     where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
     select:{startAt:true},orderBy:{startAt:'asc'}
@@ -265,6 +267,7 @@ async function run() {
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
+      musicQueueKey=null;musicQueueNextId=null;
       state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;state.nextTrackId=null;
       const frame=publicLive.take(Date.now());
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
@@ -408,6 +411,8 @@ async function run() {
       if(generatedMs>=1000&&exitCode===0){jinglesPlayed++;musicSinceJingle=0;}
     } else if(cursor.status==='AUTO_DJ'&&generatedMs>=1000&&exitCode===0){
       musicSinceJingle++;
+      // Commit the next queue position only for completed songs, never for jingles.
+      if(nextTrackId)musicQueueNextId=nextTrackId;
     }
     state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:jinglesPlayed,musicSinceJingle};
     if(!ended) child.kill('SIGTERM');
