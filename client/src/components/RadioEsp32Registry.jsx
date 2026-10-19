@@ -18,7 +18,7 @@ export default function RadioEsp32Registry({token}){
   }catch(e){setError(e.message||'Не удалось загрузить устройства');}
   finally{setLoading(false);}
  },[token]);
- useEffect(()=>{void refresh();},[refresh]);
+ useEffect(()=>{void refresh();const timer=setInterval(()=>{void refresh();},6500);return ()=>clearInterval(timer);},[refresh]);
  const add=async event=>{
   event.preventDefault();
   if(busy)return;
@@ -64,7 +64,8 @@ export default function RadioEsp32Registry({token}){
     <div className="min-w-0 space-y-1">
      <p className="font-semibold">{d.name}</p>
      <p className="break-all text-xs opacity-75">Wi-Fi · {d.ip} · GPIO {d.gpio}</p>
-     <p className="text-xs text-amber-700 dark:text-amber-300">Только регистрация · Статус связи не проверен · Реле заблокировано</p>
+     <p className={d.connectivity==='ONLINE'?'text-xs text-emerald-700 dark:text-emerald-300':'text-xs text-amber-700 dark:text-amber-300'}>{d.connectivity==='ONLINE'?'● На связи':'○ Нет свежей телеметрии'} · Реле заблокировано</p>
+     {d.telemetry&&<p className="text-xs opacity-75">Эфир: {d.telemetry.agentMode} · Heartbeat: {d.telemetry.heartbeatCount} · Разрешение: {d.telemetry.leaseValid?'действует':'нет'} · Обновлено: {new Date(d.telemetry.observedAt).toLocaleTimeString('ru-RU')}</p>}
     </div>
     <button type="button" disabled={busy} onClick={()=>remove(d)} className="rounded-lg border border-rose-500/30 px-3 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50 dark:text-rose-300">Удалить</button>
    </div>)}</div>}
