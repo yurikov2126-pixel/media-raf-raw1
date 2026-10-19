@@ -146,6 +146,17 @@ async function current() {
   const cursor=resolveRadioCursor(slots,nowMs);
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   if(scheduled || cursor.slot){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:scheduled};}
+  // A scheduled show may end a few seconds earlier than its audible tail.
+  // Keep the station silent for a short handoff instead of starting a stray
+  // Auto-DJ/jingle fragment immediately after the grid window closes.
+  const recentlyEnded=await prisma.radioScheduleSlot.findFirst({
+    where:{endAt:{gt:new Date(nowMs-12000),lte:now},playlist:{status:'APPROVED'}},
+    select:{id:true},orderBy:{endAt:'desc'}
+  });
+  if(recentlyEnded){
+    musicQueueKey=null;musicQueueNextId=null;
+    return {cursor:{status:'IDLE',at:now.toISOString(),slot:null,track:null},asset:null};
+  }
   const settings=await readAutoDjSettings();
   state.autoDjEnabled=settings.enabled;
   if(!settings.enabled||!settings.playlistId){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:null};}
