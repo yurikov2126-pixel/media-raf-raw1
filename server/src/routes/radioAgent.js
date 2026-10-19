@@ -38,7 +38,7 @@ async function readEsp32Registry(){
 function validLanIpv4(value){
   if(typeof value!=='string'||value.length>15)return false;
   const parts=value.split('.');
-  if(parts.length!==4||parts.some(p=>!/^\\d{1,3}$/.test(p)||Number(p)>255||String(Number(p))!==p))return false;
+  if(parts.length!==4||parts.some(p=>!/^\d{1,3}$/.test(p)||Number(p)>255||String(Number(p))!==p))return false;
   const [a,c]=parts.map(Number);
   return a===10||(a===172&&c>=16&&c<=31)||(a===192&&c===168);
 }
