@@ -29,7 +29,10 @@ async function authorizeAgent(authorization){
   });
 }
 let clients=0;
+let stopping=false;
+const streamResponses=new Set();
 const server=http.createServer(async(req,res)=>{
+  if(stopping){res.writeHead(503,{'Cache-Control':'no-store'}).end();return;}
   const pathname=(req.url||'').split('?')[0];
   if(req.method!=='GET'||!['/api/radio-agent/listen','/api/radio-agent/agent/stream','/health'].includes(pathname)){
     res.writeHead(404).end();return;
@@ -50,11 +53,13 @@ const server=http.createServer(async(req,res)=>{
       res.writeHead(503,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});
       res.end('Radio stream unavailable');return;
     }
+    if(stopping){worker.destroy();upstream.destroy();res.writeHead(503).end();return;}
     clients++;
+    streamResponses.add(res);
     res.writeHead(200,{'Content-Type':'audio/mpeg','Cache-Control':'no-store, no-transform',
       'X-Content-Type-Options':'nosniff','X-Accel-Buffering':'no'});
     worker.pipe(res);
-    res.once('close',()=>{clients=Math.max(0,clients-1);worker.destroy();upstream.destroy();});
+    res.once('close',()=>{streamResponses.delete(res);clients=Math.max(0,clients-1);worker.destroy();upstream.destroy();});
     worker.once('error',()=>res.destroy());
   });
   upstream.once('timeout',()=>upstream.destroy(new Error('Upstream timeout')));
@@ -67,4 +72,15 @@ const server=http.createServer(async(req,res)=>{
 });
 server.requestTimeout=0;
 server.listen(port,'127.0.0.1',()=>console.log('Public radio gateway listening on 127.0.0.1:'+port));
-for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());
+// A live MP3 response never ends naturally. Close active streams explicitly
+// before waiting for the HTTP server to finish shutting down.
+function shutdown(){
+  if(stopping)return;
+  stopping=true;
+  server.close(()=>process.exit(0));
+  for(const response of streamResponses)response.destroy();
+  server.closeIdleConnections();
+  // Allow an in-flight device authorization check to finish or time out.
+  setTimeout(()=>{console.error('Gateway forced shutdown after grace period');process.exit(0);},6000).unref();
+}
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,shutdown);
