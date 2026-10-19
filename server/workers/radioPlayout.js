@@ -357,7 +357,7 @@ async function run() {
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
     let emittedBytes=0;
-    state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.seekMs??cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
+    state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
     try {
