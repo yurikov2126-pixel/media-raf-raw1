@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
@@ -34,13 +35,6 @@ async function readEsp32Registry(){
     const value=JSON.parse(row?.value||'[]');
     return Array.isArray(value)?value.filter(d=>d&&typeof d.id==='string').slice(0,50):[];
   }catch{return [];}
-}
-function validLanIpv4(value){
-  if(typeof value!=='string'||value.length>15)return false;
-  const parts=value.split('.');
-  if(parts.length!==4||parts.some(p=>!/^\\d{1,3}$/.test(p)||Number(p)>255||String(Number(p))!==p))return false;
-  const [a,c]=parts.map(Number);
-  return a===10||(a===172&&c>=16&&c<=31)||(a===192&&c===168);
 }
 router.get('/esp32',...admin,safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
