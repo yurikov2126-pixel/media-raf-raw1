@@ -68,14 +68,14 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
   </div>
   {uploadPanel}
   <div className="grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
-   <aside className="rounded-2xl border border-current/10 bg-white/50 p-3 dark:bg-slate-900/40">
+   <aside className="rounded-2xl border border-current/10 radio-surface-soft0 p-3 dark:bg-slate-900/40">
     <p className="px-2 py-2 text-xs uppercase tracking-widest opacity-55">Папки</p>
     <button onDragOver={e=>{e.preventDefault();setDragOver('root');}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(null,e)} className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${dragOver==='root'?'ring-2 ring-indigo-500 ':''}${!folder?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} onClick={()=>setFolder(null)}>▣ Вся библиотека / корень</button>
     {folders.map(f=><button key={f.id} onDragOver={e=>{e.preventDefault();setDragOver(f.id);}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(f.id,e)} onClick={()=>setFolder(f.id)} className={`mt-1 block w-full truncate rounded-lg px-3 py-2 text-left text-sm ${folder===f.id?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} title={f.name}>▸ {f.name}</button>)}
 
    </aside>
    <div className="min-w-0 space-y-3">
-    <div className="rounded-xl border border-current/10 bg-white/50 p-3 dark:bg-slate-900/40">
+    <div className="rounded-xl border border-current/10 radio-surface-soft0 p-3 dark:bg-slate-900/40">
      <div className="flex flex-wrap items-center gap-2 text-xs">{[null,...ancestors].map((f,i)=><button key={f?.id||'root'} onClick={()=>setFolder(f?.id||null)} className="rounded-md px-2 py-1 hover:bg-indigo-500/10">{i?'› ':''}{f?.name||'Корень'}</button>)}</div>
      <div className="mt-3 flex flex-wrap gap-2">
       <input className="min-w-32 flex-1 rounded-xl border border-current/15 bg-transparent px-3 py-2 text-sm" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по названию, исполнителю, альбому, жанру"/>
@@ -91,7 +91,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
      </div>
     </div>
     {error&&<p role="alert" className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-500">{error}</p>}
-    {childFolders.length>0&&<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{childFolders.map(f=><div key={f.id} className="flex items-center gap-1 rounded-xl border border-current/10 bg-white/50 p-2 dark:bg-slate-900/30">
+    {childFolders.length>0&&<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{childFolders.map(f=><div key={f.id} className="flex items-center gap-1 rounded-xl border border-current/10 radio-surface-soft0 p-2 dark:bg-slate-900/30">
      <button className="min-w-0 flex-1 truncate p-2 text-left text-sm" onDragOver={e=>e.preventDefault()} onDrop={e=>dropTo(f.id,e)} onClick={()=>setFolder(f.id)}>📁 {f.name}</button>
      <button title="Переименовать" onClick={()=>{const n=window.prompt('Название папки',f.name);if(n?.trim())void operation(()=>request('/asset-folders/'+f.id,{method:'PATCH',body:{name:n.trim()}}));}}>✎</button>
      <button title="Удалить пустую папку" onClick={()=>{if(window.confirm('Удалить пустую папку?'))void operation(()=>request('/asset-folders/'+f.id,{method:'DELETE'}));}}>×</button>
