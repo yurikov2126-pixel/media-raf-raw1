@@ -19,8 +19,9 @@ from esp32_local import send_heartbeat
 from esp32_telemetry import report_status
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
+from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.3.3'
+AGENT_VERSION = '0.3.4'
 
 
 def default_data_dir():
@@ -75,12 +76,14 @@ class RadioAgentApp(tk.Tk):
         self.server = tk.StringVar(value="https://mediarafraw.ru")
         self.vlc = tk.StringVar(value=find_vlc())
         self.data_dir = tk.StringVar(value=default_data_dir())
-        self.token = tk.StringVar()
+        saved_creds=load_credentials(default_data_dir())
+        self.token = tk.StringVar(value=saved_creds.get("token",""))
+        self.remember_credentials = tk.BooleanVar(value=bool(saved_creds))
         prefs = load_settings(default_data_dir())
         self.server.set(prefs.get("server",self.server.get()))
         self.vlc.set(prefs.get("vlc",self.vlc.get()))
         self.esp32_ip = tk.StringVar(value=prefs.get("esp32_ip",os.environ.get("RADIO_ESP32_IP","")))
-        self.esp32_secret = tk.StringVar(value=os.environ.get("RADIO_ESP32_SECRET",""))
+        self.esp32_secret = tk.StringVar(value=saved_creds.get("esp32_secret",os.environ.get("RADIO_ESP32_SECRET","")))
         self.esp32_status = tk.StringVar(value="Не проверен")
         self.esp32_platform_status = tk.StringVar(value="Ожидает настройки")
         self.auto_start = tk.BooleanVar(value=startup_enabled())
@@ -150,6 +153,9 @@ class RadioAgentApp(tk.Tk):
         ttk.Label(settings, text="Настройки программы", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
         ttk.Checkbutton(settings, text="Открывать при входе в Windows (без запуска эфира)",
                         variable=self.auto_start, command=self.configure_startup).pack(anchor="w", pady=7)
+        ttk.Checkbutton(settings, text="Сохранять токены/секреты зашифрованными для текущего пользователя Windows",
+                        variable=self.remember_credentials,command=self.save_preferences).pack(anchor="w", pady=7)
+        ttk.Label(settings, text="Автозапуск открывает программу. Эфир включается только вручную.",style="Main.TLabel").pack(anchor="w", pady=5)
         ttk.Label(settings, text="Версия " + AGENT_VERSION, style="Main.TLabel").pack(anchor="w", pady=(18, 6))
         update_bar = ttk.Frame(settings, style="Main.TFrame")
         update_bar.pack(fill="x", pady=(0, 8))
@@ -265,6 +271,10 @@ class RadioAgentApp(tk.Tk):
         try:
             save_settings(default_data_dir(),{"server":self.server.get().strip(),
                 "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip()})
+            if self.remember_credentials.get():
+                save_credentials(default_data_dir(),self.token.get().strip(),self.esp32_secret.get().strip())
+            else:
+                clear_credentials(default_data_dir())
             if not silent:
                 self.messages.put(("log","Настройки сохранены (без токена и секрета ESP32)"))
         except OSError:
@@ -367,6 +377,7 @@ class RadioAgentApp(tk.Tk):
         self.stop_btn.configure(state="disabled")
 
     def close(self):
+        self.save_preferences(silent=True)
         if self.worker and self.worker.is_alive():
             self.stop()
             self.after(200, self.close_when_stopped)
