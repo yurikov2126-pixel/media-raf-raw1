@@ -1,0 +1,20 @@
+[Unit]
+Description=MEDIA RAF RAW - Public MP3 Gateway
+After=network-online.target mediaraf-radio-playout.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/mediarafraw.ru/server
+EnvironmentFile=/www/wwwroot/mediarafraw.ru/server/.env
+EnvironmentFile=/etc/mediaraf-radio-playout.env
+ExecStart=/www/server/nodejs/v24.21.0/bin/node workers/radioPublicStreamGateway.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
