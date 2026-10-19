@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run
-from updater import check_latest, stage_update
+from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
@@ -250,8 +250,10 @@ class RadioAgentApp(tk.Tk):
             try:
                 info = check_latest(AGENT_VERSION)
                 self.messages.put(("update_info", info))
-            except Exception:
-                self.messages.put(("log", "Не удалось проверить обновления; агент продолжает работать"))
+            except UpdateCheckError as error:
+                self.messages.put(("log", "Обновления: "+str(error)))
+            except Exception as error:
+                self.messages.put(("log", "Обновления: непредвиденная ошибка "+type(error).__name__))
             finally:
                 self.messages.put(("update_check_done", ""))
         threading.Thread(target=job, daemon=True).start()
@@ -323,7 +325,7 @@ class RadioAgentApp(tk.Tk):
                                 self.messages.put(("log", "Обновление не прошло проверку или загрузку"))
                         threading.Thread(target=stage, daemon=True).start()
                     else:
-                        self.messages.put(("log", "Обновлений нет"))
+                        self.messages.put(("log", "Новых опубликованных релизов нет. Сборки GitHub Actions не являются обновлениями."))
                 elif action == "update_staged":
                     self.pending_update = value
                     self.messages.put(("log", "Обновление готово. Сначала остановите агент, затем перезапустите новую версию."))
