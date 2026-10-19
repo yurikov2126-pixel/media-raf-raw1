@@ -134,8 +134,8 @@ def run(args, token):
     probe_running=threading.Event()
     network_ok=False
     denied=False
-    esp32_host=os.environ.get('RADIO_ESP32_IP','').strip()
-    esp32_secret=os.environ.get('RADIO_ESP32_SECRET','').strip()
+    esp32_host=getattr(args,'esp32_host',os.environ.get('RADIO_ESP32_IP','')).strip()
+    esp32_secret=getattr(args,'esp32_secret',os.environ.get('RADIO_ESP32_SECRET','')).strip()
     last_esp32=0.0
 
     def refresh():
@@ -179,8 +179,8 @@ def run(args, token):
                 try:
                     send_heartbeat(esp32_host,esp32_secret,mode,active or reserve,
                         not denied and now-last_authorized<=args.offline_grace)
-                except (OSError,ValueError,RuntimeError):
-                    pass
+                except Exception as error:
+                    print('ESP32_HEARTBEAT_FAILED',type(error).__name__,flush=True)
             with result_lock:
                 if results:
                     snapshot=results[-1]
