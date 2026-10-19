@@ -62,6 +62,20 @@ router.get('/agent/stream', deviceAuth, (req,res) => {
   if(!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Воспроизведение запрещено'});
   return streamWorker(req,res);
 });
+// Limited public metadata; never expose device tokens, Worker diagnostics or private files.
+router.get('/listen/now-playing',safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  let worker;
+  try{worker=await workerRequest('GET','/health');}
+  catch{return res.status(503).json({available:false});}
+  const trackId=typeof worker.trackId==='string'?worker.trackId:null;
+  const asset=trackId?await prisma.radioAsset.findUnique({where:{id:trackId},select:{name:true,tags:true,durationMs:true}}):null;
+  res.json({available:true,mode:worker.mode,
+    track:asset?{name:asset.name,title:asset.tags?.title||null,artist:asset.tags?.artist||null,durationMs:asset.durationMs}:null,
+    playout:worker.playout?.trackId===trackId?{startedAt:worker.playout.startedAt,
+      emittedMs:worker.playout.emittedMs,seekMs:worker.playout.seekMs,durationMs:worker.playout.durationMs}:null,
+    observedAt:Date.now()});
+}));
 // Browser <audio> does not send bearer headers; public station output is intentionally listen-only.
 router.get('/listen', (req,res)=>streamWorker(req,res));
 router.get('/dashboard/worker', ...admin, workerHealth);
