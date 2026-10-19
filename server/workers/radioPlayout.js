@@ -50,6 +50,11 @@ function isIgnorableMediaNotice(value){
 }
 const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTING',trackId:null,slotId:null,playout:null,nextTrackId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
+let prewarmed=null;
+let prewarming=false;
+state.transitions={prewarmed:0,used:0,missed:0,lastGapMs:null};
+function discardPrewarm(){if(prewarmed){prewarmed.child.kill('SIGTERM');prewarmed=null;}}
+
 let encoder = null;
 let stopping = false;
 const PCM_STAGING_ENABLED=process.env.RADIO_PCM_STAGING_ENABLED==='true';
@@ -247,7 +252,60 @@ async function current() {
     until: Number.isFinite(until)?new Date(until).toISOString():null},
     asset:music[track.index],nextTrackId:music.length>1?music[(track.index+1)%music.length].id:null};
 }
+
+// Prediction is advisory only: the real current() authority is re-checked
+// before a prepared decoder can feed the public encoder.
+async function warmSuccessor({nextTrackId,musicCount,currentTrackId}){
+  if(prewarming||prewarmed||publicLive.onAir||stopping)return;
+  prewarming=true;
+  try{
+    const nowMs=Date.now();
+    const rotation=await readRotation();
+    const jingles=JINGLE_PLAYOUT_ENABLED?await readJingles():null;
+    const partHour=new Date(nowMs+3*3600000).getUTCHours();
+    const daypart=partHour<7?'NIGHT':partHour<11?'MORNING':partHour<18?'DAY':'EVENING';
+    let candidate=null,seekMs=0,durationMs=0;
+    if(jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
+       musicCount>0&&musicCount%jingles.everyTracks===0){
+      const assets=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
+      candidate=chooseJingleAsset(jingles,assets,jinglesPlayed);
+      durationMs=candidate?.durationMs||0;
+    } else {
+      candidate=await prisma.radioAsset.findUnique({where:{id:nextTrackId}});
+      if(candidate){
+        const cues=await readCues();
+        const cue=cueAssets([candidate],cues)[0];
+        seekMs=cue?.cue.inMs||0;
+        durationMs=cue?.playDurationMs||0;
+      }
+    }
+    if(!candidate||durationMs<1000)return;
+    const nextSlot=await prisma.radioScheduleSlot.findFirst({
+      where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
+      select:{startAt:true},orderBy:{startAt:'asc'}
+    });
+    if(nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
+    const filename=path.join(assetsRoot,path.basename(candidate.storageKey));
+    await fs.access(filename);
+    const dsp=await readAudioProcessing();
+    const filter=audioProcessingFilter(dsp,durationMs/1000);
+    const args=['-hide_banner','-loglevel','error','-nostdin','-re',
+      '-ss',String(seekMs/1000),'-i',filename,'-t',String(durationMs/1000),
+      '-vn',...(filter?['-af',filter]:[]),'-f','s16le','-ac','2','-ar','48000','pipe:1'];
+    if(publicLive.onAir||stopping||state.trackId!==currentTrackId)return;
+    const child=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});
+    child.stderr.on('data',()=>{});
+    child.on('error',()=>{if(prewarmed?.child===child)prewarmed=null;});
+    child.on('close',()=>{if(prewarmed?.child===child)prewarmed=null;});
+    prewarmed={child,assetId:candidate.id,seekMs,durationMs,
+      argsKey:JSON.stringify(args)};
+    state.transitions.prewarmed++;
+  }catch(error){state.lastError='Next audio prewarm: '+error.message;}
+  finally{prewarming=false;}
+}
+
 function stopDecoder() {
+  discardPrewarm();
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
 }
 // Schedule authority is polled independently: database latency must not block the 20-ms audio clock.
@@ -267,7 +325,7 @@ async function run() {
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
-      musicQueueKey=null;musicQueueNextId=null;
+      discardPrewarm();musicQueueKey=null;musicQueueNextId=null;
       state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;state.nextTrackId=null;
       const frame=publicLive.take(Date.now());
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
@@ -278,6 +336,7 @@ async function run() {
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
+      discardPrewarm();
       state.mode='SILENCE';state.trackId=null;state.playout=null;state.nextTrackId=null;
       for(let i=0;i<5&&!stopping;i++) {
         if(publicLive.onAir)break;
@@ -335,7 +394,10 @@ async function run() {
         '-t',String(remaining/1000),'-vn',...(filter?['-af',filter]:[]),
         '-f','s16le','-ac','2','-ar','48000','pipe:1'];
     }
-    decoder=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});
+    const prepared=prewarmed;
+    const matches=prepared&&prepared.assetId===asset.id&&prepared.seekMs===(cursor.track.seekMs??cursor.track.offsetMs)&&Math.abs(prepared.durationMs-remaining)<1200&&!prepared.child.killed;
+    if(matches){decoder=prepared.child;prewarmed=null;state.transitions.used++;}
+    else{discardPrewarm();decoder=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});if(prepared)state.transitions.missed++;}
     const child=decoder;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
@@ -364,6 +426,8 @@ async function run() {
     child.on('error',e=>{state.lastError=e.message;});
     child.on('close',code=>{ended=true;exitCode=code;});
     let emittedBytes=0;
+    let warmRequested=false;
+    const playedStart=Date.now();
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
@@ -375,6 +439,16 @@ async function run() {
         if(publicLive.onAir){child.kill('SIGTERM');break;}
         if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
         emittedBytes+=output.length;
+        // Start the next FFmpeg decoder while current PCM is still playing.
+        // A bounded OS pipe supplies a warm initial PCM buffer; no second audio
+        // source is connected to the station encoder until handoff.
+        if(!warmRequested&&cursor.status==='AUTO_DJ'&&(cursor.isJingle?musicQueueNextId:nextTrackId)&&
+          remaining-emittedBytes/(48000*4)*1000<4500){
+          warmRequested=true;
+          void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
+            musicCount:cursor.isJingle?0:musicSinceJingle+1,
+            currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
+        }
         if(state.playout?.trackId===asset.id){
           if(!state.playout.startedAt)state.playout.startedAt=Date.now();
           state.playout.emittedMs=Math.round(emittedBytes/(48000*4)*1000);
@@ -403,8 +477,8 @@ async function run() {
       const events=playbackAttributions({track:{id:asset.id,name:asset.name},
         blend:usableBlend,generatedMs,startedAt:playbackStartedAt,
         mode:cursor.status,slotId:cursor.slot?.id||null});
-      try {await recordPlayoutEvents(events);}
-      catch(error){state.lastError='Playback journal: '+error.message;}
+      // A slow journal write must never create dead air at the next track boundary.
+      void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
     if(cursor.isJingle){
       jinglePending=false;
