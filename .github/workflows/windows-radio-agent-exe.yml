@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/windows-radio-agent-exe-gui
+      - main
     tags:
       - 'radio-agent-v*'
     paths:
@@ -57,10 +57,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish versioned GitHub Release
-        if: startsWith(github.ref, 'refs/tags/radio-agent-v')
+      - name: Publish official versioned GitHub Release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/radio-agent-v'))
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" "dist/MediaRafRaw-RadioAgent.exe#MediaRafRaw-RadioAgent.exe" --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --notes "Windows Radio Agent, manually tested headphones-only pilot. VLC required. Updates are SHA-256 verified and applied only after stopping playback."
+          $version = python -c "import ast; p=ast.parse(open('gui.py', encoding='utf-8').read()); print(next(n.value.value for n in p.body if isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='AGENT_VERSION' for x in n.targets)))"
+          $version = $version.Trim()
+          if ($version -notmatch '^\\d+\\.\\d+\\.\\d+) { throw "Invalid AGENT_VERSION $version" }
+          $tag = "radio-agent-v$version"
+          if ("${{ github.ref }}".StartsWith("refs/tags/") -and "${{ github.ref_name }}" -ne $tag) {
+            throw "Tag does not match AGENT_VERSION"
+          }
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists: do not overwrite an existing published version."
+            exit 0
+          }
+          # Reject reuse of an existing (possibly incorrect) version tag.
+          gh api "repos/${{ github.repository }}/git/ref/tags/$tag" *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Tag $tag already exists but has no release. Manual review required." }
+          # Create tag on THIS verified main commit, not on an arbitrary branch.
+          gh release create $tag "dist/MediaRafRaw-RadioAgent.exe#MediaRafRaw-RadioAgent.exe" --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "MEDIA · РАФ · RAW — Radio Agent $version" --notes "Windows Radio Agent $version. VLC required. Relay remains in safe pilot; firmware and hardware safety checks required." --latest
