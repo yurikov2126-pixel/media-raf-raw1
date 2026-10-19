@@ -27,9 +27,9 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
   return()=>window.removeEventListener('keydown',keydown);
  },[onSelect]);
  const current=items.find(x=>x.id===tab)||items[0];
- return <div className="radio-workspace min-h-[calc(100vh-6rem)] text-current">
+ return <div className="radio-workspace min-h-[calc(100vh-6rem)] text-slate-950 dark:text-slate-100">
   <div className="relative overflow-hidden rounded-3xl border border-current/10 bg-gradient-to-br from-slate-100/70 via-white/50 to-indigo-50/60 dark:from-slate-950/80 dark:via-slate-900/60 dark:to-indigo-950/40 shadow-sm">
-   <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-current/10 bg-white/85 dark:bg-slate-950/85 p-3 sm:p-4 backdrop-blur-xl">
+   <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-current/10 bg-white/95 text-slate-950 dark:bg-slate-950/95 dark:text-slate-100 p-3 sm:p-4 backdrop-blur-xl">
     <button type="button" onClick={()=>setMobileOpen(v=>!v)} aria-label="Разделы радио" aria-expanded={mobileOpen}
       className="lg:hidden rounded-xl border border-current/15 px-3 py-2 text-lg">☰</button>
     <span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 font-black text-white">R</span>
@@ -43,7 +43,7 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
    </header>
    <div className="flex min-w-0">
     {mobileOpen&&<button type="button" aria-label="Закрыть меню разделов" className="absolute inset-0 z-10 bg-black/25 lg:hidden" onClick={()=>setMobileOpen(false)}/>}
-    <aside className={`${mobileOpen?'block':'hidden'} absolute z-20 w-72 border-r border-current/10 bg-white/95 dark:bg-slate-950/95 lg:static lg:block lg:bg-transparent lg:dark:bg-transparent ${compact?'lg:w-20':'lg:w-60'} shrink-0 transition-all`}>
+    <aside className={`${mobileOpen?'block':'hidden'} absolute z-20 w-72 border-r border-current/10 bg-white/95 text-slate-950 dark:bg-slate-950/95 dark:text-slate-100 lg:static lg:block lg:bg-transparent lg:dark:bg-transparent ${compact?'lg:w-20':'lg:w-60'} shrink-0 transition-all`}>
      <nav aria-label="Разделы радиостанции" className="sticky top-20 space-y-1 p-3">
       {items.map(item=><button key={item.id} type="button" onClick={()=>onSelect(item.id)} title={item.hint+' · Alt+'+(items.indexOf(item)+1)}
         aria-current={tab===item.id?'page':undefined} className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 ${tab===item.id?'bg-indigo-600 text-white shadow-md':'hover:bg-black/5 dark:hover:bg-white/10'}`}>
@@ -55,7 +55,7 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
       </button>
      </nav>
     </aside>
-    <main className="min-w-0 flex-1 p-3 sm:p-5 lg:p-6 space-y-5">
+    <main className="min-w-0 flex-1 p-3 sm:p-5 lg:p-6 space-y-5 text-slate-950 dark:text-slate-100">
      <div className="flex flex-wrap items-center justify-between gap-3">
       <div><p className="text-[11px] uppercase tracking-wider opacity-50">Рабочее пространство</p>
       <h1 className="text-xl sm:text-2xl font-bold">{current.label}</h1><p className="text-xs opacity-60">{current.hint}</p></div>
