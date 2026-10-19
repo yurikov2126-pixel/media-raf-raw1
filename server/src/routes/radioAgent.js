@@ -62,6 +62,22 @@ router.get('/agent/stream', deviceAuth, (req,res) => {
   if(!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Воспроизведение запрещено'});
   return streamWorker(req,res);
 });
+// Limited public metadata; never expose device tokens, Worker diagnostics or private files.
+router.get('/listen/now-playing',safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  let worker;
+  try{worker=await workerRequest('GET','/health');}
+  catch{return res.status(503).json({available:false});}
+  const trackId=typeof worker.trackId==='string'?worker.trackId:null;
+  const asset=trackId?await prisma.radioAsset.findUnique({where:{id:trackId},select:{name:true,tags:true,durationMs:true}}):null;
+  res.json({available:true,mode:worker.mode,
+    track:asset?{name:asset.name,title:asset.tags?.title||null,artist:asset.tags?.artist||null,durationMs:asset.durationMs}:null,
+    playout:worker.playout?.trackId===trackId?{startedAt:worker.playout.startedAt,
+      emittedMs:worker.playout.emittedMs,seekMs:worker.playout.seekMs,durationMs:worker.playout.durationMs}:null,
+    observedAt:Date.now()});
+}));
+// Browser <audio> does not send bearer headers; public station output is intentionally listen-only.
+router.get('/listen', (req,res)=>streamWorker(req,res));
 router.get('/dashboard/worker', ...admin, workerHealth);
 router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -71,15 +87,31 @@ router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   const mode=typeof status?.mode==='string'?status.mode:'UNKNOWN';
   const trackId=typeof status?.trackId==='string'?status.trackId:null;
   const slotId=typeof status?.slotId==='string'?status.slotId:null;
-  const [asset,slot]=await Promise.all([
+  const nextTrackId=typeof status?.nextTrackId==='string'?status.nextTrackId:null;
+  const [asset,slot,nextAsset,nextSlot]=await Promise.all([
     trackId?prisma.radioAsset.findUnique({where:{id:trackId},select:{id:true,name:true,durationMs:true,tags:true}}):null,
-    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,playlist:{select:{name:true}}}}):null,
+    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,endAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}):null,
+    nextTrackId?prisma.radioAsset.findUnique({where:{id:nextTrackId},select:{id:true,name:true,tags:true}}):null,
+    prisma.radioScheduleSlot.findFirst({where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},orderBy:{startAt:'asc'},select:{id:true,startAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},take:1,include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}),
   ]);
+  // Scheduled playlists advance by their saved order. They override Auto-DJ projections.
+  let scheduledNext=null;
+  if(mode==='SCHEDULED'&&slot?.playlist?.items?.length){
+    const items=slot.playlist.items;
+    const index=items.findIndex(i=>i.asset.id===trackId);
+    const following=index>=0?items[index+1]?.asset:null;
+    if(following)scheduledNext={id:following.id,name:following.name,
+      title:following.tags?.title||null,artist:following.tags?.artist||null,estimated:true};
+  }
   res.json({available:true,source:'PUBLIC_MP3_WORKER',mode,
     track:asset?{id:asset.id,name:asset.name,durationMs:asset.durationMs,
       title:asset.tags?.title||null,artist:asset.tags?.artist||null}:null,
     slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача'}:null,
     trackId,slotId,trackResolved:!trackId||Boolean(asset),observedAt:new Date().toISOString(),
+    playout:status.playout?.trackId===trackId?status.playout:null,
+    nextTrack:scheduledNext||(mode==='AUTO_DJ'&&nextAsset?{id:nextAsset.id,name:nextAsset.name,title:nextAsset.tags?.title||null,artist:nextAsset.tags?.artist||null,estimated:true}:null),
+    upcomingSlot:nextSlot?{id:nextSlot.id,name:nextSlot.playlist.name,startAt:nextSlot.startAt,
+      firstTrack:nextSlot.playlist.items[0]?.asset?.name||null}:null,
     listenerCount:Number.isFinite(status?.connected)?status.connected:null,
     lastError:typeof status?.lastError==='string'?status.lastError:null});
 }));

@@ -4,10 +4,11 @@ import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 const z='Europe/Moscow';
 const displayTime=value=>value?new Date(value).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit'}):'—';
 const duration=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
-const modes={SCHEDULED:'По расписанию',AUTO_DJ:'Auto-DJ',SILENCE:'Ожидание / тишина',ERROR:'Ошибка',STARTING:'Запуск'};
+const modes={SCHEDULED:'По расписанию',AUTO_DJ:'Auto-DJ',JINGLE:'Джингл',LIVE:'Прямой эфир',SILENCE:'Ожидание / тишина',ERROR:'Ошибка',STARTING:'Запуск'};
 export default function RadioControlRoom({token,onOpen}){
  const [data,setData]=useState(null),[worker,setWorker]=useState(null),[onAir,setOnAir]=useState(null),[error,setError]=useState('');
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
+ const [listening,setListening]=useState(false),[audioError,setAudioError]=useState('');
  const refresh=useCallback(async()=>{
   try{
    const report=await api('/radio-agent/dashboard',{token});setData(report);setError('');
@@ -21,14 +22,17 @@ export default function RadioControlRoom({token,onOpen}){
  useEffect(()=>{const interval=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(interval);},[]);
  const track=onAir?.track;
  const current=onAir?.slot;
- // Calculated cursor offsets are not playout clock offsets; never show a false progress bar.
- const fraction=0;
+ const playout=onAir?.playout?.trackId===track?.id?onAir.playout:null;
+ const elapsedSinceReport=onAir?.observedAt?Math.min(5000,Math.max(0,now-Date.parse(onAir.observedAt))):0;
+ const playedMs=(playout?.seekMs||0)+(playout?.emittedMs||0)+(playout?.startedAt?elapsedSinceReport:0);
+ const trackMs=playout?.durationMs||track?.durationMs||0;
+ const fraction=playout&&trackMs>0?Math.min(100,Math.max(0,100*playedMs/trackMs)):0;
  const isWorking=onAir?.available&&onAir.mode!=='ERROR'&&onAir.mode!=='SILENCE';
  const cards=[
   ['Сервер вещания',onAir?.available?modes[onAir.mode]||onAir.mode:'Нет подтверждения',Boolean(onAir?.available)],
   ['Слушателей',onAir?.listenerCount??'—',Boolean(onAir?.available)],
   ['Записей Auto-DJ',data?.autoDj?.trackCount??'—',data?.autoDj?.ready===true],
-  ['Радиокомпьютеров',data?.devices?.filter(d=>d.lastSeenAt&&now-new Date(d.lastSeenAt).getTime()<90000).length??'—',Boolean(data)],
+  ['Режим источника',onAir?.mode?modes[onAir.mode]||onAir.mode:'—',Boolean(onAir?.available)],
  ];
  return <div className="space-y-4">
   <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
@@ -44,14 +48,29 @@ export default function RadioControlRoom({token,onOpen}){
      {onAir?.available?(current?.name||(onAir.mode==='LIVE'?'Прямой эфир':onAir.mode==='JINGLE'?'Джингл':onAir.mode==='AUTO_DJ'?'Auto-DJ':onAir.mode==='SILENCE'?'Пауза вещания':onAir.mode)):'Нет подтверждения от эфирного сервера'}
     </h2>
     <p className="relative mt-2 truncate text-base text-slate-300">{onAir?.available?(track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:(onAir.trackId?'Не удалось найти запись в медиатеке':'Нет музыкальной записи')):'Не показываем расчётный трек вместо реального'}</p>
-    <div className="relative mt-5 rounded-xl bg-white/10 p-3 text-xs text-slate-300">
-     Источник: публичный MP3 Worker · Данные обновляются каждые 5 секунд.
-     {onAir?.available&&<span className="mt-1 block">Прогресс записи не показан: Worker пока не предоставляет подтверждённую позицию воспроизведения.</span>}
+    <div className="relative mt-5 space-y-2">
+     <div className="h-2 overflow-hidden rounded-full bg-white/15" role="progressbar" aria-label="Прогресс трека" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction)}>
+      <div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{width:fraction+'%'}}/>
+     </div>
+     <div className="flex justify-between text-xs tabular-nums text-slate-400"><span>{playout?duration(playedMs):'—'}</span><span>{trackMs?duration(trackMs):'—'}</span></div>
+     <p className="text-xs text-slate-400">Прогресс основан на данных PCM Worker. Поток слушателя может отставать из-за буферизации.</p>
+    </div>
+    <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+     <p className="text-xs uppercase tracking-widest text-slate-400">Слушать эфир</p>
+     <audio controls preload="none" src="/api/radio-agent/listen" className="w-full" onPlay={()=>{setListening(true);setAudioError('');}} onPause={()=>setListening(false)} onError={()=>{setListening(false);setAudioError('Не удалось подключиться к MP3-потоку');}} aria-label="Прямой MP3 эфир MEDIA RAF RAW"/>
+     <p className="text-xs text-slate-400">{listening?'Воспроизводится публичный MP3':'Нажмите воспроизведение'} · {track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:'Название появится при выборе трека'}</p>
+     {audioError&&<p className="text-xs text-rose-300">{audioError}</p>}
+    </div>
+    <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+     <p className="text-xs uppercase tracking-widest text-slate-400">Следом в эфире</p>
+     {onAir?.nextTrack?<p className="text-sm font-semibold">{[onAir.nextTrack.artist,onAir.nextTrack.title].filter(Boolean).join(' — ')||onAir.nextTrack.name} <span className="font-normal text-slate-400">(прогноз Auto-DJ)</span></p>:<p className="text-xs text-slate-400">Следующая композиция пока не определена</p>}
+     {onAir?.upcomingSlot&&<p className="text-xs text-slate-300">Ближайший блок сетки: {onAir.upcomingSlot.name} · {displayTime(onAir.upcomingSlot.startAt)}{onAir.upcomingSlot.firstTrack?' · '+onAir.upcomingSlot.firstTrack:''}</p>}
     </div>
     {error&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{error}</p>}
     {onAir?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{onAir.lastError}</p>}
     <div className="relative mt-6 flex flex-wrap gap-2">
      <button onClick={()=>onOpen('studio')} type="button" className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-200">Открыть студию ↗</button>
+     <a href="/radio/live" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Открыть плеер ↗</a>
      <button onClick={()=>onOpen('schedule')} type="button" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Сетка вещания</button>
     </div>
    </section>
