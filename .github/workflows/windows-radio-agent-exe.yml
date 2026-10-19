@@ -1,0 +1,48 @@
+name: Windows Radio Agent EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/windows-radio-agent-exe-gui
+    paths:
+      - 'radio-agent/windows/**'
+      - '.github/workflows/windows-radio-agent-exe.yml'
+  pull_request:
+    paths:
+      - 'radio-agent/windows/**'
+      - '.github/workflows/windows-radio-agent-exe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-agent:
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: radio-agent/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test Windows agent logic
+        shell: pwsh
+        run: |
+          python -m compileall -q .
+          python -m unittest discover -p "test_*.py" -v
+      - name: Build standalone GUI EXE
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pyinstaller==6.16.0"
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "MediaRafRaw-RadioAgent" --paths . gui.py
+          if (!(Test-Path "dist/MediaRafRaw-RadioAgent.exe")) { throw "EXE missing" }
+      - name: Archive Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: MediaRafRaw-RadioAgent-Windows-x64
+          path: radio-agent/windows/dist/MediaRafRaw-RadioAgent.exe
+          if-no-files-found: error
+          retention-days: 14
