@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../api/client.js';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
+import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 const z='Europe/Moscow';
 const displayTime=value=>value?new Date(value).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit'}):'—';
 const duration=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
@@ -35,6 +36,7 @@ export default function RadioControlRoom({token,onOpen}){
   ['Режим источника',onAir?.mode?modes[onAir.mode]||onAir.mode:'—',Boolean(onAir?.available)],
  ];
  return <div className="space-y-4">
+  <RadioAmplifierControl token={token}/>
   <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
    <section className="radio-on-air-card relative overflow-hidden rounded-2xl border border-white/15 bg-slate-900 p-5 text-white shadow-xl sm:p-6">
     <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-indigo-400/15 blur-3xl"/>
