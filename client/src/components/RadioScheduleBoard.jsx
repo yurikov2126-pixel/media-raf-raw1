@@ -4,7 +4,7 @@ const dayKey=date=>new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric'
 const clock=value=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
 const readable=value=>new Date(value).toLocaleDateString('ru-RU',{timeZone:zone,weekday:'short',day:'numeric',month:'short'});
 const addDays=(key,days)=>{const date=new Date(key+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10);};
-const colors=['bg-indigo-500/15 border-indigo-500/40 text-indigo-800 dark:text-indigo-200','bg-teal-500/15 border-teal-500/40 text-teal-800 dark:text-teal-200','bg-fuchsia-500/15 border-fuchsia-500/40 text-fuchsia-800 dark:text-fuchsia-200'];
+const colors=['radio-schedule-event-indigo','radio-schedule-event-teal','radio-schedule-event-fuchsia'];
 export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot,onCreate}){
  const [view,setView]=useState('week');
  const dates=useMemo(()=>Array.from({length:7},(_,i)=>addDays(date,i)),[date]);
@@ -24,20 +24,20 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
     <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white" onClick={onCreate}>＋ Передача</button>
    </div>
   </div>
-  {view==='week'?<div className="overflow-x-auto rounded-2xl border border-current/10 radio-surface-soft">
-   <div className="grid min-w-[780px] grid-cols-7 divide-x divide-current/10">
+  {view==='week'?<div className="radio-schedule-grid overflow-x-auto rounded-2xl border radio-surface-soft">
+   <div className="radio-schedule-columns grid min-w-[780px] grid-cols-7 divide-x">
     {dates.map((day,index)=><div key={day} className="min-w-0">
-     <div className={`sticky top-0 z-10 border-b border-current/10 p-3 text-center text-xs font-semibold ${day===now?'bg-indigo-600 text-white':'bg-slate-100 dark:bg-slate-800'}`}>
+     <div className={`sticky top-0 z-10 border-b border-current/10 p-3 text-center text-xs font-semibold ${day===now?'radio-schedule-day-today':'radio-schedule-day'}`}>
       {readable(day+'T12:00:00Z')}
       <span className="mt-1 block text-[10px] opacity-70">{groups[day].length} событий</span>
      </div>
-     <div className="min-h-64 space-y-2 p-2">
-      {groups[day].map((event,j)=><button key={event.id} onClick={()=>onSelectSlot(event)} title="Открыть действия с передачей" className={`w-full rounded-xl border p-2.5 text-left transition hover:ring-2 hover:ring-indigo-400/40 ${colors[index%colors.length]}`}>
+     <div className="radio-schedule-day-body min-h-64 space-y-2 p-2">
+      {groups[day].map((event,j)=><button key={event.id} onClick={()=>onSelectSlot(event)} title="Открыть действия с передачей" className={`radio-schedule-event w-full rounded-xl border p-2.5 text-left transition ${colors[index%colors.length]}`}>
        <span className="block text-xs font-bold tabular-nums">{clock(event.startAt)} — {clock(event.endAt)}</span>
        <span className="mt-1 block break-words text-xs font-semibold">{event.playlist?.name||event.name||'Передача'}</span>
        {timeConflict(event)&&<span className="mt-1 block text-[10px] font-bold text-rose-500">⚠ Пересечение</span>}
       </button>)}
-      {!groups[day].length&&<p className="pt-6 text-center text-xs opacity-35">Auto-DJ / без событий</p>}
+      {!groups[day].length&&<p className="radio-schedule-empty pt-6 text-center text-xs">Auto-DJ / без событий</p>}
      </div>
     </div>)}
    </div>
