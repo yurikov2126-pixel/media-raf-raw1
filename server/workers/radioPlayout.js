@@ -13,7 +13,6 @@ import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
-import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
@@ -445,9 +444,6 @@ async function run() {
     let emittedBytes=0;
     let warmRequested=false;
     const playedStart=Date.now();
-    const fadeIn=cursor.status==='SCHEDULED'||(cursor.status==='AUTO_DJ'&&!usableBlend);
-    const fadeOut=cursor.status==='SCHEDULED'||(cursor.status==='AUTO_DJ'&&!usableBlend&&Number.isFinite(boundary));
-    const fadeTotalBytes=Math.max(0,Math.floor(remaining*PCM_BYTES_PER_MS/4)*4);
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
@@ -464,10 +460,8 @@ async function run() {
           :{pcm:decoded,truncated:false};
         const output=gated.pcm;
         if(output.length){
-          const faded=fadePcmChunk(output,{positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
-            fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut});
-          if(!encoder.stdin.write(faded)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
-          emittedBytes+=faded.length;
+          if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+          emittedBytes+=output.length;
         }
         if(gated.truncated){
           recordBoundary({source:'SCHEDULED',reason:'END_AT_PCM_TRUNCATED',slotId:cursor.slot.id,trackId:asset.id,
