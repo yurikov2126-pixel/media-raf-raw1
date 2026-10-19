@@ -646,7 +646,7 @@ router.get('/rotation/preview', safe(async(_req,res)=>{
   const result=rotationPlan(assets,settings,Date.now());
   res.setHeader('Cache-Control','no-store');
   res.json({daypart:result?.daypart||null,tracks:(result?.items||assets).slice(0,15).map(a=>({
-    id:a.id,name:a.name,category:settings.tags[a.id]||'OTHER'
+    id:a.id,name:a.name,artist:typeof a.tags?.artist==='string'?a.tags.artist:null
   }))});
 }));
 router.get('/rotation', safe(async(_req,res)=>{
