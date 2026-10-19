@@ -4,6 +4,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { resolveRadioCursor } from '../lib/radioTimeline.js';
+import { DEFAULT_AMP_PRE_SECONDS, DEFAULT_AMP_POST_SECONDS, ampSeconds, amplifierScheduleWindow } from '../lib/radioAmplifierWindow.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../lib/radioAutoDj.js';
 import { servePilotStream, stationStreamHealth, stationSnapshot } from '../lib/radioStreamPilot.js';
 import { streamWorker, workerHealth } from '../lib/radioWorkerProxy.js';
@@ -86,20 +87,30 @@ async function ampState(){
   try{
     const v=JSON.parse(row?.value||'{}');
     return {mode:v.mode==='MANUAL'?'MANUAL':'AUTO',manualOn:v.manualOn===true,
-      emergencyOff:v.emergencyOff===true,updatedAt:v.updatedAt||null};
-  }catch{return {mode:'AUTO',manualOn:false,emergencyOff:false,updatedAt:null};}
+      emergencyOff:v.emergencyOff===true,preSeconds:ampSeconds(v.preSeconds,DEFAULT_AMP_PRE_SECONDS),
+      postSeconds:ampSeconds(v.postSeconds,DEFAULT_AMP_POST_SECONDS),updatedAt:v.updatedAt||null};
+  }catch{return {mode:'AUTO',manualOn:false,emergencyOff:false,preSeconds:DEFAULT_AMP_PRE_SECONDS,
+      postSeconds:DEFAULT_AMP_POST_SECONDS,updatedAt:null};}
 }
 async function ampDecision(){
-  const [policy,esp32,devices,autoDj,nextSlot]=await Promise.all([
-    ampState(),readEsp32Status(),readEsp32Registry(),readAutoDjSettings(),
-    prisma.radioScheduleSlot.findFirst({where:{endAt:{gt:new Date()},startAt:{lte:new Date(Date.now()+60000)},playlist:{status:'APPROVED'}},
-      orderBy:{startAt:'asc'},select:{id:true,startAt:true,endAt:true}})
+  const policy=await ampState();
+  const now=Date.now();
+  // Query a superset of the configurable window; then apply one consistent
+  // [start - pre, end + post) predicate to avoid ON→OFF→ON at slot start.
+  const [esp32,devices,autoDj,slots]=await Promise.all([
+    readEsp32Status(),readEsp32Registry(),readAutoDjSettings(),
+    prisma.radioScheduleSlot.findMany({where:{
+      endAt:{gt:new Date(now-policy.postSeconds*1000)},
+      startAt:{lte:new Date(now+policy.preSeconds*1000)},
+      playlist:{status:'APPROVED'}},
+      orderBy:{startAt:'asc'},select:{id:true,startAt:true,endAt:true},take:20})
   ]);
+  const nextSlot=amplifierScheduleWindow(slots,now,policy.preSeconds,policy.postSeconds);
   const device=devices[0]||null,telemetry=device?esp32[device.id]:null;
   const fresh=telemetry&&Date.now()-Date.parse(telemetry.observedAt)<12000&&Date.now()>=Date.parse(telemetry.observedAt);
   const connected=!!fresh&&telemetry.heartbeatFresh===true;
   const requested=policy.emergencyOff?false:policy.mode==='MANUAL'?policy.manualOn:Boolean(nextSlot||autoDj.enabled);
-  return {policy,requested,reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':nextSlot?'Расписание: подготовка за 60 секунд':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
+  return {policy,requested,reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':nextSlot?'Окно расписания (подготовка / эфир / задержка отключения)':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
     connection:connected?'ONLINE':'OFFLINE',agentMode:fresh?telemetry.agentMode:null,
     leaseValid:connected&&telemetry.leaseValid===true,physicalRelay:fresh?telemetry.amplifierPower||'UNKNOWN':'UNKNOWN',gpio:13,
     nextSlotStart:nextSlot?.startAt||null,hardwareReady:connected&&telemetry.relayOutputEnabled===true};
@@ -121,10 +132,12 @@ router.get('/amplifier',...admin,safe(async(_req,res)=>{
   res.json(await ampDecision());
 }));
 router.post('/amplifier/policy',...admin,safe(async(req,res)=>{
-  const {mode,manualOn,emergencyOff}=req.body||{};
-  if(!['AUTO','MANUAL'].includes(mode)||typeof manualOn!=='boolean'||typeof emergencyOff!=='boolean')
+  const {mode,manualOn,emergencyOff,preSeconds,postSeconds}=req.body||{};
+  if(!['AUTO','MANUAL'].includes(mode)||typeof manualOn!=='boolean'||typeof emergencyOff!=='boolean'||
+    !Number.isInteger(preSeconds)||preSeconds<0||preSeconds>600||
+    !Number.isInteger(postSeconds)||postSeconds<0||postSeconds>600)
     return res.status(400).json({error:'Некорректные параметры усилителя'});
-  const policy={mode,manualOn,emergencyOff,updatedAt:new Date().toISOString()};
+  const policy={mode,manualOn,emergencyOff,preSeconds,postSeconds,updatedAt:new Date().toISOString()};
   await prisma.setting.upsert({where:{key:AMP_KEY},create:{key:AMP_KEY,value:JSON.stringify(policy)},update:{value:JSON.stringify(policy)}});
   await prisma.adminAction.create({data:{adminId:req.user.id,action:'RADIO_AMPLIFIER_POLICY',payload:JSON.stringify(policy)}});
   res.json(await ampDecision());
