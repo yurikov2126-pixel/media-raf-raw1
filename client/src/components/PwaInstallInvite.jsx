@@ -50,6 +50,7 @@ export default function PwaInstallInvite() {
     const [iosSteps, setIosSteps] = useState(false);
     const [dismissed, setDismissed] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [exiting, setExiting] = useState(false);
 
     useEffect(() => {
         if (!isMobile() || isStandalone()) return;
@@ -77,8 +78,8 @@ export default function PwaInstallInvite() {
     }, [mode]);
 
     const close = () => {
-        setDismissed(true);
-        setMode(null);
+        setExiting(true);
+        window.setTimeout(() => { setDismissed(true); setMode(null); }, 230);
     };
 
     const install = async () => {
@@ -99,20 +100,38 @@ export default function PwaInstallInvite() {
 
     if (!mode || dismissed) return null;
     return (
-        <aside className="mrr-pwa-invite" role="dialog" aria-label="Установить приложение MEDIA RAF RAW">
-            <div className="mrr-pwa-invite-icon" aria-hidden="true">✦</div>
-            <div className="mrr-pwa-invite-main">
-                <div className="mrr-pwa-invite-title">MEDIA·RAF·RAW всегда под рукой</div>
-                <p className="mrr-pwa-invite-description">
-                    {iosSteps ? 'В Safari нажмите «Поделиться», затем «На экран Домой» и «Добавить».' :
-                        'Добавьте медиацентр на главный экран — открывайте его как приложение.'}
-                </p>
-                <div className="mrr-pwa-invite-actions">
-                    <button type="button" className="mrr-pwa-invite-install" onClick={install} disabled={busy}>
-                        {iosSteps ? 'Как установить на iPhone' : busy ? 'Установка…' : mode === 'ios' ? 'Как добавить' : 'Установить'}
-                    </button>
-                    {iosSteps && <button type="button" className="mrr-pwa-invite-later" onClick={close}>Понятно</button>}
+        <aside className={`mrr-pwa-invite ${exiting ? 'mrr-pwa-invite--exit' : ''}`} role="dialog" aria-label="Установить приложение MEDIA RAF RAW">
+            <div className="mrr-pwa-invite-glow" aria-hidden="true" />
+            <div className="mrr-pwa-invite-heading">
+                <div className="mrr-pwa-invite-icon-shell" aria-hidden="true">
+                    <div className="mrr-pwa-invite-icon">
+                        <img src="/icon-192.png" alt="" width="48" height="48" />
+                    </div>
+                    <span className="mrr-pwa-invite-spark mrr-pwa-invite-spark--one">✦</span>
+                    <span className="mrr-pwa-invite-spark mrr-pwa-invite-spark--two">✧</span>
                 </div>
+                <div className="mrr-pwa-invite-main">
+                    <span className="mrr-pwa-invite-eyebrow"><span className="mrr-pwa-invite-status-dot" /> УДОБНЕЕ КАК ПРИЛОЖЕНИЕ</span>
+                    <div className="mrr-pwa-invite-title">MEDIA·RAF·RAW на твоём экране</div>
+                    <p className="mrr-pwa-invite-description">
+                        {iosSteps ? 'В Safari нажми «Поделиться» → «На экран Домой» → «Добавить».' :
+                            'Открывай медиацентр одним касанием — прямо с рабочего стола.'}
+                    </p>
+                </div>
+            </div>
+            <div className="mrr-pwa-invite-actions">
+                {iosSteps ? (
+                    <button type="button" className="mrr-pwa-invite-install" onClick={close}>
+                        Понятно <span aria-hidden="true">✓</span>
+                    </button>
+                ) : (
+                    <button type="button" className="mrr-pwa-invite-install" onClick={install} disabled={busy}>
+                        <span aria-hidden="true">↗</span>
+                        {busy ? 'Подождите…' : mode === 'ios' ? 'Добавить на экран Домой' : 'Установить приложение'}
+                        <span className="mrr-pwa-invite-install-arrow" aria-hidden="true">→</span>
+                    </button>
+                )}
+                <button type="button" className="mrr-pwa-invite-later" onClick={close}>Не сейчас</button>
             </div>
             <button type="button" className="mrr-pwa-invite-close" onClick={close} aria-label="Закрыть приглашение">×</button>
         </aside>
