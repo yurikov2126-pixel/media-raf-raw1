@@ -32,7 +32,7 @@ def signed_power(ip,secret,permit,lease_ms=8000,timeout=3):
         if not isinstance(boot,str) or len(boot)!=16 or any(c not in "0123456789abcdef" for c in boot):
             raise RuntimeError("Invalid ESP32 boot nonce")
         key=(host,boot)
-        seq=_sequence_by_boot.get(key,0)+1
+        seq=max(_sequence_by_boot.get(key,0),int(health.get("powerSequence",0)))+1
         if seq>=2**31:raise RuntimeError("Sequence exhausted: reboot ESP32")
         message=f"{boot}:{seq}:{1 if permit else 0}:{lease_ms}"
         signature=hmac.new(secret.encode(),message.encode(),hashlib.sha256).hexdigest()
