@@ -82,10 +82,15 @@ export default function RadioControlRoom({token,onOpen}){
      <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">{new Date(now).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p>
      <p className="mt-1 text-sm opacity-60">{new Date(now).toLocaleDateString('ru-RU',{timeZone:z,weekday:'long',day:'numeric',month:'long'})}</p>
     </div>
-    <div className="mt-8 border-t border-current/10 pt-4">
+     <div className="mt-6 grid grid-cols-2 gap-2 text-sm">
+      <div className="rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">Режим станции</p><p className="mt-1 font-semibold">{onAir?.available?modes[onAir.mode]||onAir.mode:'Нет данных'}</p></div>
+      <div className="rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">Слушателей</p><p className="mt-1 font-semibold tabular-nums">{onAir?.listenerCount??'—'}</p></div>
+      <div className="col-span-2 rounded-xl border border-current/10 p-3"><p className="text-xs opacity-60">Сейчас звучит</p><p className="mt-1 line-clamp-2 font-semibold">{track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:onAir?.mode==='SILENCE'?'Тишина / ожидание':'Название не подтверждено'}</p></div>
+     </div>
+    <div className="mt-5 border-t border-current/10 pt-4">
      <p className="text-xs font-semibold uppercase tracking-wider opacity-55">Следующее событие</p>
      {data?.upcoming?.length?<div className="mt-2 space-y-1"><p className="text-lg font-semibold">{data.upcoming[0].name||data.upcoming[0].playlist?.name||'Передача'}</p>
-       <p className="text-sm opacity-65">{displayTime(data.upcoming[0].startAt)}</p></div>:<p className="mt-2 text-sm opacity-65">Ближайшие передачи не найдены</p>}
+       <p className="text-sm opacity-65">{displayTime(data.upcoming[0].startAt)} · Через {duration(Math.max(0,new Date(data.upcoming[0].startAt).getTime()-now))}</p></div>:<p className="mt-2 text-sm opacity-65">Ближайшие передачи не найдены</p>}
     </div>
    </section>
   </div>
