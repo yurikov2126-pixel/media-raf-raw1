@@ -26,6 +26,52 @@ async function deviceAuth(req,res,next) {
   } catch(e) { next(e); }
 }
 
+// ESP32 inventory is configuration only; never exposes a mains relay control.
+const ESP32_REGISTRY_KEY='radio_esp32_registry_v1';
+async function readEsp32Registry(){
+  const row=await prisma.setting.findUnique({where:{key:ESP32_REGISTRY_KEY}});
+  try{
+    const value=JSON.parse(row?.value||'[]');
+    return Array.isArray(value)?value.filter(d=>d&&typeof d.id==='string').slice(0,50):[];
+  }catch{return [];}
+}
+function validLanIpv4(value){
+  if(typeof value!=='string'||value.length>15)return false;
+  const parts=value.split('.');
+  if(parts.length!==4||parts.some(p=>!/^\\d{1,3}$/.test(p)||Number(p)>255||String(Number(p))!==p))return false;
+  const [a,c]=parts.map(Number);
+  return a===10||(a===172&&c>=16&&c<=31)||(a===192&&c===168);
+}
+router.get('/esp32',...admin,safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json({devices:await readEsp32Registry()});
+}));
+router.post('/esp32',...admin,safe(async(req,res)=>{
+  const name=typeof req.body?.name==='string'?req.body.name.trim():'';
+  const ip=typeof req.body?.ip==='string'?req.body.ip.trim():'';
+  const gpio=req.body?.gpio;
+  if(!name||name.length>80||!validLanIpv4(ip)||gpio!==13)
+    return res.status(400).json({error:'Укажите имя, локальный IPv4 и GPIO 13'});
+  const devices=await readEsp32Registry();
+  if(devices.length>=50)return res.status(409).json({error:'Достигнут лимит устройств'});
+  if(devices.some(d=>d.ip===ip))return res.status(409).json({error:'Этот IP уже зарегистрирован'});
+  const device={id:randomBytes(12).toString('hex'),name,ip,gpio:13,
+    firmware:'SAFE_PILOT',controlEnabled:false,createdAt:new Date().toISOString()};
+  devices.push(device);
+  await prisma.setting.upsert({where:{key:ESP32_REGISTRY_KEY},
+    create:{key:ESP32_REGISTRY_KEY,value:JSON.stringify(devices)},
+    update:{value:JSON.stringify(devices)}});
+  res.status(201).json({device});
+}));
+router.delete('/esp32/:id',...admin,safe(async(req,res)=>{
+  const devices=await readEsp32Registry();
+  const updated=devices.filter(d=>d.id!==req.params.id);
+  if(updated.length===devices.length)return res.status(404).json({error:'ESP32 не найден'});
+  await prisma.setting.upsert({where:{key:ESP32_REGISTRY_KEY},
+    create:{key:ESP32_REGISTRY_KEY,value:JSON.stringify(updated)},
+    update:{value:JSON.stringify(updated)}});
+  res.json({ok:true});
+}));
 router.post('/devices', ...admin, safe(async(req,res) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   if (!name || name.length > 100) return res.status(400).json({ error:'Укажите название радиокомпьютера' });
