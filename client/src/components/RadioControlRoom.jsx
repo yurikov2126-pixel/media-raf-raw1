@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../api/client.js';
+import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 const z='Europe/Moscow';
@@ -9,7 +10,7 @@ const modes={SCHEDULED:'По расписанию',AUTO_DJ:'Auto-DJ',JINGLE:'Д�
 export default function RadioControlRoom({token,onOpen}){
  const [data,setData]=useState(null),[worker,setWorker]=useState(null),[onAir,setOnAir]=useState(null),[error,setError]=useState('');
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
- const [listening,setListening]=useState(false),[audioError,setAudioError]=useState('');
+ const {audioRef,playing:listening,error:audioError,reconnecting,audioEvents}=useRadioStreamRecovery();
  const refresh=useCallback(async()=>{
   try{
    const report=await api('/radio-agent/dashboard',{token});setData(report);setError('');
@@ -61,8 +62,8 @@ export default function RadioControlRoom({token,onOpen}){
     </div>
     <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
      <p className="text-xs uppercase tracking-widest text-slate-400">Слушать эфир</p>
-     <audio controls preload="none" src="/api/radio-agent/listen" className="w-full" onPlay={()=>{setListening(true);setAudioError('');}} onPause={()=>setListening(false)} onError={()=>{setListening(false);setAudioError('Не удалось подключиться к MP3-потоку');}} aria-label="Прямой MP3 эфир MEDIA RAF RAW"/>
-     <p className="text-xs text-slate-400">{listening?'Воспроизводится публичный MP3':'Нажмите воспроизведение'} · {track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:'Название появится при выборе трека'}</p>
+     <audio ref={audioRef} {...audioEvents} controls preload="none" src="/api/radio-agent/listen" className="w-full" aria-label="Прямой MP3 эфир MEDIA RAF RAW"/>
+     <p className="text-xs text-slate-400">{reconnecting?'Переподключение к эфиру':listening?'Воспроизводится публичный MP3':'Нажмите воспроизведение'} · {track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:'Название появится при выборе трека'}</p>
      {audioError&&<p className="text-xs text-rose-300">{audioError}</p>}
     </div>
     <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
