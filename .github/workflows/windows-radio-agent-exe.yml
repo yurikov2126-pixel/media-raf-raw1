@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - feature/windows-radio-agent-exe-gui
+    tags:
+      - 'radio-agent-v*'
     paths:
       - 'radio-agent/windows/**'
       - '.github/workflows/windows-radio-agent-exe.yml'
@@ -14,7 +16,7 @@ on:
       - '.github/workflows/windows-radio-agent-exe.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-windows-agent:
@@ -46,3 +48,11 @@ jobs:
           path: radio-agent/windows/dist/MediaRafRaw-RadioAgent.exe
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish versioned GitHub Release
+        if: startsWith(github.ref, 'refs/tags/radio-agent-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" "dist/MediaRafRaw-RadioAgent.exe#MediaRafRaw-RadioAgent.exe" --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --notes "Windows Radio Agent, manually tested headphones-only pilot. VLC required. Updates are SHA-256 verified and applied only after stopping playback."
