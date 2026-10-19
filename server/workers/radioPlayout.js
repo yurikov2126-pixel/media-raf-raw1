@@ -442,10 +442,11 @@ async function run() {
         // Start the next FFmpeg decoder while current PCM is still playing.
         // A bounded OS pipe supplies a warm initial PCM buffer; no second audio
         // source is connected to the station encoder until handoff.
-        if(!warmRequested&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&nextTrackId&&
+        if(!warmRequested&&cursor.status==='AUTO_DJ'&&(cursor.isJingle?musicQueueNextId:nextTrackId)&&
           remaining-emittedBytes/(48000*4)*1000<4500){
           warmRequested=true;
-          void warmSuccessor({nextTrackId,musicCount:musicSinceJingle+1,
+          void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
+            musicCount:cursor.isJingle?0:musicSinceJingle+1,
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
         }
         if(state.playout?.trackId===asset.id){
