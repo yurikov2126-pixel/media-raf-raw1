@@ -154,6 +154,14 @@ async function current() {
   // An opt-in finish-current-track handoff shifts a single scheduled show.
   // Do not re-enter the slot at its original wall-clock offset.
   if(delayedScheduledSlot){
+    // A newly scheduled show takes precedence over an older delayed one.
+    const urgent=slots.find(x=>x.id!==delayedScheduledSlot.id);
+    if(urgent && Date.parse(urgent.startAt)<=nowMs){
+      recordBoundary({source:'SCHEDULED',reason:'NEW_SCHEDULE_PRIORITY',slotId:urgent.id});
+      delayedScheduledSlot=null;
+    }
+  }
+  if(delayedScheduledSlot){
     if(nowMs>=delayedScheduledSlot.actualEndMs){
       recordBoundary({source:'SCHEDULED',reason:'DELAYED_SCHEDULE_FINISHED',
         slotId:delayedScheduledSlot.id});
@@ -569,12 +577,17 @@ async function run() {
     if(state.playout?.trackId===asset.id)state.playout=null;
     if(cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping){
       const h=pendingScheduledHandover;pendingScheduledHandover=null;
-      // Delay is bounded by actual song finish; preserve full show duration.
+      // Honor explicit schedule changes made while the song was playing.
+      const validHandover=await prisma.radioScheduleSlot.findUnique({where:{id:h.id},
+        select:{startAt:true,endAt:true,playlist:{select:{status:true}}}});
+      if(validHandover?.playlist?.status==='APPROVED' && validHandover.endAt.getTime()>h.originalStartMs){
+      // Shift by the actual finish; keep each song and broadcast at time zero.
       delayedScheduledSlot={id:h.id,actualStartMs:Date.now(),
         actualEndMs:Date.now()+(h.originalEndMs-h.originalStartMs)};
       resumeAutoDjAfterShow=true;
       recordBoundary({source:'AUTO_DJ',reason:'FINISHED_BEFORE_SCHEDULE',slotId:h.id,
         delayedByMs:Math.max(0,delayedScheduledSlot.actualStartMs-h.originalStartMs)});
+      }
     }
     if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)
       failedAutoDjAssets.set(asset.id,Date.now()+300000);
