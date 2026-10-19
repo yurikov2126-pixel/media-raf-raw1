@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 
 export default function RadioAutoDjSettings({ token, playlists=[] }) {
-  const [config,setConfig]=useState({enabled:false,playlistId:null});
+  const [config,setConfig]=useState({enabled:false,playlistId:null,finishTrackBeforeSchedule:false});
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
@@ -23,7 +23,7 @@ export default function RadioAutoDjSettings({ token, playlists=[] }) {
     setSaving(true);setError('');setNotice('');
     try {
       const result=await api('/radio/autodj',{
-        token,method:'PUT',body:{enabled:config.enabled,playlistId:config.playlistId||null}
+        token,method:'PUT',body:{enabled:config.enabled,playlistId:config.playlistId||null,finishTrackBeforeSchedule:config.finishTrackBeforeSchedule===true}
       });
       setConfig(result.settings);
       setNotice(config.enabled?'Авто-DJ включён для серверного playout':'Авто-DJ отключён');
@@ -53,7 +53,8 @@ export default function RadioAutoDjSettings({ token, playlists=[] }) {
           {approved.map(p=><option key={p.id} value={p.id}>{p.name} · {p.items.length} записей</option>)}
         </select>
       </label>
-      <p className="text-xs opacity-65">Запланированные эфиры имеют приоритет. Музыка автоматически остановится в момент начала передачи. Физический аудиовыход агента, усилитель и ESP32 здесь не включаются.</p>
+      <label className="flex items-start gap-3 rounded-xl border border-current/15 p-3 text-sm"><input type="checkbox" checked={config.finishTrackBeforeSchedule===true} onChange={e=>setConfig(v=>({...v,finishTrackBeforeSchedule:e.target.checked}))} className="mt-0.5 h-5 w-5 accent-violet-600"/><span><strong className="block">Доиграть композицию перед передачей из сетки</strong><span className="mt-1 block text-xs opacity-80">При включении передача начнётся после завершения звучащего трека Auto-DJ и может опоздать относительно расписания. После передачи Auto-DJ начнёт следующую композицию с начала.</span></span></label>
+      <p className="text-xs opacity-65">При выключенной новой опции запланированные эфиры имеют приоритет. Музыка автоматически остановится в момент начала передачи. Физический аудиовыход агента, усилитель и ESP32 здесь не включаются.</p>
       {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {notice&&<p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">{notice}</p>}
       <button type="submit" disabled={saving||(config.enabled&&!config.playlistId)}
