@@ -8,10 +8,17 @@ import hashlib
 import json
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+import socket
+import ssl
 
 RELEASE_API = "https://api.github.com/repos/yurikov2126-pixel/media-raf-raw1/releases?per_page=20"
 APP_ASSET = "MediaRafRaw-RadioAgent.exe"
 MAX_BYTES = 100 * 1024 * 1024
+
+class UpdateCheckError(RuntimeError):
+    """A safe, user-readable error with no credentials or private URLs."""
+
 
 
 def version_tuple(value):
@@ -47,11 +54,28 @@ def check_latest(installed_version):
     request = Request(RELEASE_API, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "MediaRafRaw-RadioAgent-Updater",
+        "X-GitHub-Api-Version": "2022-11-28",
     })
-    with urlopen(request, timeout=8) as response:
-        releases = json.load(response)
-        candidates = [u for release in releases if (u := select_update(release, installed_version))]
-        return max(candidates, key=lambda update: version_tuple(update["version"]), default=None)
+    try:
+        with urlopen(request, timeout=12) as response:
+            releases = json.load(response)
+    except HTTPError as error:
+        if error.code in (403,429):
+            raise UpdateCheckError("GitHub ограничил запросы (HTTP %d); повторите позже" % error.code) from error
+        if error.code == 404:
+            raise UpdateCheckError("GitHub Releases недоступны (HTTP 404); проверьте адрес репозитория") from error
+        raise UpdateCheckError("GitHub API вернул HTTP %d" % error.code) from error
+    except ssl.SSLError as error:
+        raise UpdateCheckError("Ошибка SSL-сертификата GitHub; проверьте часы Windows и сертификаты") from error
+    except (URLError,TimeoutError,socket.timeout,OSError) as error:
+        raise UpdateCheckError("Нет связи с api.github.com; проверьте интернет, DNS, прокси и файрвол") from error
+    except (ValueError,TypeError) as error:
+        raise UpdateCheckError("GitHub вернул некорректный ответ вместо списка релизов") from error
+    if not isinstance(releases,list):
+        raise UpdateCheckError("Некорректный формат ответа GitHub Releases")
+    candidates = [u for release in releases if isinstance(release,dict)
+                  if (u := select_update(release, installed_version))]
+    return max(candidates, key=lambda update: version_tuple(update["version"]), default=None)
 
 
 def stage_update(update, folder):
