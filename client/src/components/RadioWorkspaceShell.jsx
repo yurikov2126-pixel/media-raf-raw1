@@ -59,7 +59,7 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
      <div className="flex flex-wrap items-center justify-between gap-3">
       <div><p className="text-[11px] uppercase tracking-wider opacity-50">Рабочее пространство</p>
       <h1 className="text-xl sm:text-2xl font-bold">{current.label}</h1><p className="text-xs opacity-60">{current.hint}</p></div>
-      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">LIVE-микшер в тестировании</span>
+
      </div>
      {children}
     </main>
