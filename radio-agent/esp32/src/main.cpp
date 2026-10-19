@@ -62,6 +62,8 @@ void status(){
   doc["heartbeatFresh"]=heartbeatFresh();
   doc["leaseValid"]=powerLeaseValid();
   doc["heartbeatCount"]=heartbeatCount;
+  doc["powerSequence"]=lastSequence;
+  doc["heartbeatSequence"]=lastHeartbeatSequence;
   doc["bootNonce"]=bootNonce;
   String out;serializeJson(doc,out);respond(200,out);
 }
