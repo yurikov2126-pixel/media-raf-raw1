@@ -36,7 +36,7 @@ export default function RadioControlRoom({token,onOpen}){
  ];
  return <div className="space-y-4">
   <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
-   <section className="relative overflow-hidden rounded-2xl border border-current/10 bg-slate-900 p-5 text-white shadow-xl sm:p-6">
+   <section className="radio-on-air-card relative overflow-hidden rounded-2xl border border-white/15 bg-slate-900 p-5 text-white shadow-xl sm:p-6">
     <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-indigo-400/15 blur-3xl"/>
     <div className="relative flex flex-wrap items-center justify-between gap-3">
      <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-slate-400">Сейчас в эфире</p>
@@ -74,7 +74,7 @@ export default function RadioControlRoom({token,onOpen}){
      <button onClick={()=>onOpen('schedule')} type="button" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Сетка вещания</button>
     </div>
    </section>
-   <section className="flex flex-col justify-between rounded-2xl border border-current/10 bg-white/70 p-5 dark:bg-slate-800/70">
+   <section className="flex flex-col justify-between rounded-2xl border border-current/10 bg-white/90 text-slate-900 p-5 dark:bg-slate-800/90 dark:text-slate-100">
     <div>
      <p className="text-[11px] font-semibold uppercase tracking-widest opacity-55">Время станции · Москва</p>
      <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">{new Date(now).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p>
@@ -88,7 +88,7 @@ export default function RadioControlRoom({token,onOpen}){
    </section>
   </div>
   <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-   {cards.map(([title,value,healthy])=><section key={title} className="min-w-0 rounded-2xl border border-current/10 bg-white/60 p-4 dark:bg-slate-800/55">
+   {cards.map(([title,value,healthy])=><section key={title} className="min-w-0 rounded-2xl border border-current/10 bg-white/90 text-slate-900 p-4 dark:bg-slate-800/85 dark:text-slate-100">
     <span className="text-xs opacity-60">{title}</span>
     <div className="mt-3 flex items-center gap-2"><span className={`h-2 w-2 shrink-0 rounded-full ${healthy?'bg-emerald-500':'bg-amber-500'}`}/>
      <strong className="min-w-0 truncate text-lg">{value}</strong></div>
@@ -101,7 +101,7 @@ export default function RadioControlRoom({token,onOpen}){
    </div>
    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
     {[['playlists','☷','Собрать плейлист'],['assets','♫','Открыть аудиотеку'],['automation','⟳','Настроить Auto-DJ'],['history','◷','Посмотреть историю']].map(([id,icon,label])=>
-     <button key={id} type="button" onClick={()=>onOpen(id)} className="flex items-center gap-3 rounded-xl border border-current/10 bg-white/60 px-3 py-4 text-left text-sm font-semibold transition hover:border-indigo-400/50 hover:bg-indigo-500/5 dark:bg-slate-900/40">
+     <button key={id} type="button" onClick={()=>onOpen(id)} className="flex items-center gap-3 rounded-xl border border-current/10 bg-white/90 text-slate-900 px-3 py-4 text-left text-sm font-semibold transition hover:border-indigo-400/50 hover:bg-indigo-500/5 dark:bg-slate-900/70 dark:text-slate-100">
       <span className="text-xl" aria-hidden>{icon}</span>{label}<span className="ml-auto opacity-40">→</span></button>)}
    </div>
   </section>
