@@ -14,6 +14,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run
+from updater import check_latest, stage_update
+
+AGENT_VERSION = '0.2.0'
 
 
 def default_data_dir():
@@ -64,6 +67,8 @@ class RadioAgentApp(tk.Tk):
         self.data_dir = tk.StringVar(value=default_data_dir())
         self.token = tk.StringVar()
         self.agreed = tk.BooleanVar(value=False)
+        self.pending_update = None
+        self.update_running = False
 
         style = ttk.Style(self)
         style.theme_use("clam")
@@ -91,12 +96,21 @@ class RadioAgentApp(tk.Tk):
         self.start_btn.pack(side="left")
         self.stop_btn = ttk.Button(bar, text="■ Остановить", command=self.stop, state="disabled")
         self.stop_btn.pack(side="left", padx=10)
+        update_bar = ttk.Frame(wrap, style="Main.TFrame")
+        update_bar.pack(fill="x", pady=(0, 8))
+        ttk.Label(update_bar, text="Версия " + AGENT_VERSION, style="Main.TLabel").pack(side="left")
+        self.update_btn = ttk.Button(update_bar, text="Проверить обновления", command=self.check_updates)
+        self.update_btn.pack(side="left", padx=12)
+        self.install_btn = ttk.Button(update_bar, text="Перезапустить обновлённую версию",
+                                      command=self.install_update, state="disabled")
+        self.install_btn.pack(side="left")
         self.log = tk.Text(wrap, height=10, bg="#1e293b", fg="#e2e8f0",
                            insertbackground="white", relief="flat", state="disabled",
                            font=("Consolas", 10), wrap="word")
         self.log.pack(fill="both", expand=True)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(150, self.drain)
+        self.after(5000, self.check_updates)
 
     def row(self, parent, name, variable, secret=False, browse=False, directory=False):
         ttk.Label(parent, text=name, style="Main.TLabel").pack(anchor="w", pady=(6, 2))
@@ -148,6 +162,32 @@ class RadioAgentApp(tk.Tk):
         self.worker = threading.Thread(target=task, daemon=True, name="radio-agent")
         self.worker.start()
 
+    def check_updates(self):
+        if self.update_running:
+            return
+        self.update_running = True
+        self.update_btn.configure(state="disabled")
+        def job():
+            try:
+                info = check_latest(AGENT_VERSION)
+                self.messages.put(("update_info", info))
+            except Exception:
+                self.messages.put(("log", "Не удалось проверить обновления; агент продолжает работать"))
+            finally:
+                self.messages.put(("update_check_done", ""))
+        threading.Thread(target=job, daemon=True).start()
+
+    def install_update(self):
+        if self.worker and self.worker.is_alive():
+            messagebox.showwarning("Эфир", "Сначала остановите агент. Обновление во время воспроизведения запрещено.")
+            return
+        if not self.pending_update or not Path(self.pending_update).is_file():
+            return
+        if not messagebox.askyesno("Обновление", "Запустить новую версию? Текущее приложение будет закрыто."):
+            return
+        os.startfile(str(self.pending_update))
+        self.destroy()
+
     def stop(self):
         STOP.set()
         self.status.set("Остановка…")
@@ -183,6 +223,25 @@ class RadioAgentApp(tk.Tk):
                     if float(self.log.index("end-1c").split(".")[0]) > 300:
                         self.log.delete("1.0", "60.0")
                     self.log.configure(state="disabled")
+                elif action == "update_info":
+                    if value:
+                        self.messages.put(("log", "Новая версия " + value["version"] + ": проверяем загрузку…"))
+                        def stage():
+                            try:
+                                file = stage_update(value, Path(default_data_dir()) / "updates")
+                                self.messages.put(("update_staged", str(file)))
+                            except Exception:
+                                self.messages.put(("log", "Обновление не прошло проверку или загрузку"))
+                        threading.Thread(target=stage, daemon=True).start()
+                    else:
+                        self.messages.put(("log", "Обновлений нет"))
+                elif action == "update_staged":
+                    self.pending_update = value
+                    self.messages.put(("log", "Обновление готово. Сначала остановите агент, затем перезапустите новую версию."))
+                    self.install_btn.configure(state="normal")
+                elif action == "update_check_done":
+                    self.update_running = False
+                    self.update_btn.configure(state="normal")
                 elif action == "stopped":
                     self.status.set("Остановлен · оборудование не управляется")
                     self.start_btn.configure(state="normal")
