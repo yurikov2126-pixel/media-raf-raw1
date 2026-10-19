@@ -20,6 +20,7 @@ from sync_agent import sync
 from esp32_local import send_heartbeat
 
 STOP = threading.Event()
+PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900}
 
 
 def get_status(server, token):
@@ -119,6 +120,7 @@ def run(args, token):
         raise PermissionError('Server does not permit test playback')
     snapshot=read_snapshot(snapshotfile)
     last_authorized=time.monotonic()
+    PLAYBACK_STATE.update(mode='STOPPED',lastAuthorized=last_authorized,offlineGrace=args.offline_grace)
     relay=Relay(args.server,token)
     threading.Thread(target=relay.serve_forever,daemon=True).start()
     primary=None
@@ -156,6 +158,7 @@ def run(args, token):
                 denied=True
                 return
             last_authorized=time.monotonic()
+            PLAYBACK_STATE['lastAuthorized']=last_authorized
             network_ok=get_probe(args.server,token)
         except HTTPError as error:
             if error.code in (401,403):
@@ -176,6 +179,7 @@ def run(args, token):
                 active=primary is not None and primary.poll() is None
                 reserve=fallback is not None and fallback.poll() is None
                 mode='CENTRAL' if active else 'LOCAL_RESERVE' if reserve else 'STOPPED'
+                PLAYBACK_STATE['mode']=mode
                 try:
                     send_heartbeat(esp32_host,esp32_secret,mode,active or reserve,
                         not denied and now-last_authorized<=args.offline_grace)
@@ -233,6 +237,7 @@ def run(args, token):
                     fallback_key=None
             STOP.wait(0.5)
     finally:
+        PLAYBACK_STATE['mode']='STOPPED'
         stop_vlc(primary)
         stop_vlc(fallback)
         relay.shutdown()
