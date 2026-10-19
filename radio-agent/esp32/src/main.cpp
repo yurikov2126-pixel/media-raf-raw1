@@ -14,7 +14,7 @@ constexpr uint32_t POWER_LEASE_MAX_MS=9000;
 WebServer server(80);
 String lastMode="DISCONNECTED";
 String bootNonce;
-uint32_t lastHeartbeat=0,heartbeatCount=0,powerExpires=0,lastSequence=0;
+uint32_t lastHeartbeat=0,heartbeatCount=0,powerExpires=0,lastSequence=0,lastHeartbeatSequence=0;
 bool commandedOn=false;
 
 void powerOff(){
@@ -66,18 +66,24 @@ void status(){
   String out;serializeJson(doc,out);respond(200,out);
 }
 void heartbeat(){
-  if(!authorized()){respond(403,"{\"error\":\"UNAUTHORIZED\"}");return;}
   JsonDocument req;
-  if(deserializeJson(req,server.arg("plain"))){respond(400,"{\"error\":\"INVALID_JSON\"}");return;}
+  if(deserializeJson(req,server.arg("plain"))){respond(400,"{\\"error\\":\\"INVALID_JSON\\"}");return;}
   const char* mode=req["mode"]|"";
   if(strcmp(mode,"CENTRAL")!=0 && strcmp(mode,"LOCAL_RESERVE")!=0 && strcmp(mode,"STOPPED")!=0){
-    respond(400,"{\"error\":\"INVALID_MODE\"}");return;
+    respond(400,"{\\"error\\":\\"INVALID_MODE\\"}");return;
   }
+  const uint32_t seq=req["seq"]|uint32_t(0);
+  const bool ready=req["audioReady"]|false, allowed=req["authorizedByPlatform"]|false;
+  const String payload=bootNonce+":hb:"+String(seq)+":"+String(mode)+":"+(ready?"1":"0")+":"+(allowed?"1":"0");
+  if(seq==0 || seq<=lastHeartbeatSequence ||
+     !equalDigest(server.header("X-Radio-Signature"),hmacHex(payload))){
+    respond(403,"{\\"error\\":\\"INVALID_SIGNATURE_OR_REPLAY\\"}");return;
+  }
+  lastHeartbeatSequence=seq;
   lastMode=mode;
   lastHeartbeat=millis();
   heartbeatCount++;
-  // Heartbeats never grant power permission. Only authenticated /power does.
-  respond(202,"{\"ok\":true,\"relayOutputEnabled\":true}");
+  respond(202,"{\\"ok\\":true,\\"relayOutputEnabled\\":true}");
 }
 void powerRequest(){
   JsonDocument req;
