@@ -2487,3 +2487,48 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 }
 @media(min-width:768px){.mrr-pwa-invite{display:none}}
 @media(prefers-reduced-motion:reduce){.mrr-pwa-invite{animation:none}}
+
+/* Branded PWA install invitation v2. The motion stops after entrance. */
+.mrr-pwa-invite {
+  display:flex;flex-direction:column;gap:14px;isolation:isolate;
+  overflow:hidden;padding:19px 18px 16px;
+  background:color-mix(in srgb,var(--bg-elev-1) 94%,transparent);
+  border:1px solid color-mix(in srgb,var(--brand-accent-1,#9b4de5) 33%,var(--border-strong));
+  border-radius:25px;box-shadow:0 20px 55px rgba(5,4,20,.34),0 0 0 1px rgba(255,255,255,.035) inset;
+  animation:mrr-pwa-invite-entrance .54s cubic-bezier(.17,1.15,.31,1) both;
+}
+.mrr-pwa-invite-glow {
+  position:absolute;z-index:-1;pointer-events:none;inset:-100px -100px auto auto;
+  width:280px;height:220px;border-radius:50%;
+  background:radial-gradient(ellipse,rgba(161,76,242,.19),rgba(234,84,163,.08) 55%,transparent 75%);
+}
+.mrr-pwa-invite-heading {display:flex;gap:14px;align-items:center;min-width:0}
+.mrr-pwa-invite-icon-shell {position:relative;flex:none;width:70px;height:75px;display:grid;place-items:center;animation:mrr-pwa-icon-entrance .6s .12s both}
+.mrr-pwa-invite-icon {
+  width:59px;height:59px;display:grid;place-items:center;overflow:hidden;
+  border-radius:18px;background:var(--bg-elev-3);
+  box-shadow:0 8px 20px rgba(89,43,154,.26),0 0 0 5px rgba(158,74,217,.13);
+  transform:rotate(-5deg);
+}
+.mrr-pwa-invite-icon img{width:100%;height:100%;object-fit:cover}
+.mrr-pwa-invite-spark{position:absolute;color:#cd81f5;text-shadow:0 0 12px rgba(169,72,255,.6);pointer-events:none}
+.mrr-pwa-invite-spark--one{top:-3px;right:-3px;font-size:21px;animation:mrr-pwa-spark .6s .36s both}
+.mrr-pwa-invite-spark--two{bottom:4px;left:-5px;font-size:16px;animation:mrr-pwa-spark .6s .52s both}
+.mrr-pwa-invite-eyebrow{display:flex;align-items:center;gap:6px;color:var(--brand-accent-1,#ab67fa);font-size:9px;letter-spacing:.09em;font-weight:800;margin-bottom:6px}
+.mrr-pwa-invite-status-dot{width:6px;height:6px;display:inline-block;border-radius:50%;background:currentColor;box-shadow:0 0 0 4px rgba(159,75,221,.12)}
+.mrr-pwa-invite-title{font-size:17px;line-height:1.25;font-weight:800;letter-spacing:-.025em}
+.mrr-pwa-invite-description{font-size:12px;line-height:1.5;margin:7px 0 0;color:var(--text-secondary)}
+.mrr-pwa-invite-actions{display:flex;gap:9px;flex-wrap:nowrap;align-items:center;animation:mrr-pwa-action-entrance .5s .2s both}
+.mrr-pwa-invite-install{display:flex;align-items:center;justify-content:center;gap:9px;flex:1;min-width:0;min-height:46px;border-radius:15px;padding:11px 12px;font-size:12px;font-weight:750;background:var(--brand-gradient);color:#fff;box-shadow:0 7px 19px rgba(133,63,207,.23);transition:transform .18s,filter .18s}
+.mrr-pwa-invite-install:active{transform:scale(.97);filter:brightness(1.08)}
+.mrr-pwa-invite-install-arrow{font-size:19px;margin-left:auto}
+.mrr-pwa-invite-later{flex:none;font-size:12px;min-height:42px;padding:8px 7px;color:var(--text-secondary);white-space:nowrap}
+.mrr-pwa-invite-close{top:5px;right:6px;font-size:20px;width:27px;height:27px}
+.mrr-pwa-invite--exit{animation:mrr-pwa-invite-leave .23s ease-in both;pointer-events:none}
+@keyframes mrr-pwa-invite-entrance{from{opacity:0;transform:translate3d(0,35px,0) scale(.94);filter:blur(5px)}to{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}}
+@keyframes mrr-pwa-icon-entrance{from{opacity:0;transform:translateY(12px) rotate(-12deg) scale(.75)}to{opacity:1;transform:translateY(0) rotate(0) scale(1)}}
+@keyframes mrr-pwa-spark{from{opacity:0;transform:scale(.3) rotate(-30deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes mrr-pwa-action-entrance{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mrr-pwa-invite-leave{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(22px) scale(.97)}}
+@media(max-width:360px){.mrr-pwa-invite{padding:15px 12px 12px}.mrr-pwa-invite-heading{gap:10px}.mrr-pwa-invite-title{font-size:15px}.mrr-pwa-invite-icon-shell{width:58px}.mrr-pwa-invite-icon{width:51px;height:51px}.mrr-pwa-invite-install{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.mrr-pwa-invite,.mrr-pwa-invite--exit,.mrr-pwa-invite-icon-shell,.mrr-pwa-invite-spark,.mrr-pwa-invite-actions{animation:none!important;filter:none!important}}
