@@ -49,37 +49,40 @@ function hash(s){
  */
 export function separateArtists(items,artists={},gap=0){
   if(gap===0||items.length<2)return {items:[...items],violations:0};
-  const artist=item=>normalizeArtist(id3Artist(item));
-  const penalty=(order)=>{
+  // Decode and normalize every ID3 Artist once per rotation, not in each
+  // pairwise comparison of every trial arrangement.
+  const names=items.map(item=>normalizeArtist(id3Artist(item)));
+  const penalty=order=>{
     let score=0;
     for(let i=0;i<order.length;i++){
-      const current=artist(order[i]);
-      if(!current)continue;
-      for(let distance=1;distance<=Math.min(gap,order.length-1);distance++){
-        if(current===artist(order[(i+distance)%order.length]))score++;
-      }
+      const name=names[order[i]];
+      if(!name)continue;
+      for(let d=1;d<=Math.min(gap,order.length-1);d++)
+        if(name===names[order[(i+d)%order.length]])score++;
     }
     return score;
   };
-  const arrange=(first)=>{
-    const remaining=[...items],result=[remaining.splice(first,1)[0]];
+  const arrange=first=>{
+    const remaining=items.map((_,i)=>i),result=[remaining.splice(first,1)[0]];
     while(remaining.length){
       let best=0,bestCost=Infinity;
+      const recent=result.slice(-gap);
       for(let i=0;i<remaining.length;i++){
-        const name=artist(remaining[i]);
-        const cost=name?result.slice(-gap).filter(other=>artist(other)===name).length:0;
-        if(cost<bestCost){bestCost=cost;best=i;}
+        const name=names[remaining[i]];
+        let cost=0;
+        if(name)for(const past of recent)if(names[past]===name)cost++;
+        if(cost<bestCost){bestCost=cost;best=i;if(cost===0)break;}
       }
       result.push(remaining.splice(best,1)[0]);
     }
     return result;
   };
-  let best=[...items],score=penalty(best);
+  let best=items.map((_,i)=>i),score=penalty(best);
   for(let i=0;i<Math.min(items.length,64)&&score>0;i++){
     const candidate=arrange(i),value=penalty(candidate);
     if(value<score){best=candidate;score=value;}
   }
-  return {items:best,violations:score};
+  return {items:best.map(i=>items[i]),violations:score};
 }
 /** Only the selected approved Auto-DJ playlist may contribute rotation tracks. */
 export function rotationPlaylistAssets(playlist){
