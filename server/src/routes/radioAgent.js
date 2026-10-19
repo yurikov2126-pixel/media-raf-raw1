@@ -80,13 +80,22 @@ router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
     nextTrackId?prisma.radioAsset.findUnique({where:{id:nextTrackId},select:{id:true,name:true,tags:true}}):null,
     prisma.radioScheduleSlot.findFirst({where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},orderBy:{startAt:'asc'},select:{id:true,startAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},take:1,include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}),
   ]);
+  // Scheduled playlists advance by their saved order. They override Auto-DJ projections.
+  let scheduledNext=null;
+  if(mode==='SCHEDULED'&&slot?.playlist?.items?.length){
+    const items=slot.playlist.items;
+    const index=items.findIndex(i=>i.asset.id===trackId);
+    const following=index>=0?items[index+1]?.asset:null;
+    if(following)scheduledNext={id:following.id,name:following.name,
+      title:following.tags?.title||null,artist:following.tags?.artist||null,estimated:true};
+  }
   res.json({available:true,source:'PUBLIC_MP3_WORKER',mode,
     track:asset?{id:asset.id,name:asset.name,durationMs:asset.durationMs,
       title:asset.tags?.title||null,artist:asset.tags?.artist||null}:null,
     slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача'}:null,
     trackId,slotId,trackResolved:!trackId||Boolean(asset),observedAt:new Date().toISOString(),
     playout:status.playout?.trackId===trackId?status.playout:null,
-    nextTrack:nextAsset?{id:nextAsset.id,name:nextAsset.name,title:nextAsset.tags?.title||null,artist:nextAsset.tags?.artist||null,estimated:true}:null,
+    nextTrack:scheduledNext||(mode==='AUTO_DJ'&&nextAsset?{id:nextAsset.id,name:nextAsset.name,title:nextAsset.tags?.title||null,artist:nextAsset.tags?.artist||null,estimated:true}:null),
     upcomingSlot:nextSlot?{id:nextSlot.id,name:nextSlot.playlist.name,startAt:nextSlot.startAt,
       firstTrack:nextSlot.playlist.items[0]?.asset?.name||null}:null,
     listenerCount:Number.isFinite(status?.connected)?status.connected:null,
