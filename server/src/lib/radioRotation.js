@@ -22,12 +22,6 @@ export function validateRotation(input) {
   if(typeof input.strictCooldown!=='boolean')throw new TypeError('Некорректный режим строгого интервала');
   if(!Number.isInteger(input.cooldownMinutes)||input.cooldownMinutes<0||input.cooldownMinutes>240)throw new TypeError('Пауза повторов: от 0 до 240 минут');
   if(!Number.isInteger(input.artistGap)||input.artistGap<0||input.artistGap>5)throw new TypeError('Интервал исполнителей: от 0 до 5 композиций');
-  if(!input.artists||typeof input.artists!=='object'||Array.isArray(input.artists))throw new TypeError('Некорректные исполнители');
-  const artists={};
-  for(const [id,name] of Object.entries(input.artists)){
-    if(!/^[a-z0-9_-]{1,120}$/i.test(id)||typeof name!=='string'||name.length>100)throw new TypeError('Некорректный исполнитель');
-    if(name.trim())artists[id]=name.trim();
-  }
   return {enabled:input.enabled,artistGap:input.artistGap,
     cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,
     allowCooldownFallback:input.allowCooldownFallback};

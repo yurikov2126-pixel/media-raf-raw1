@@ -84,3 +84,21 @@ describe('approved Auto-DJ playlist scope',()=>{
   expect(normalizeArtist('  Band  \t A  ')).toBe('band a');
  });
 });
+
+describe('rotation persistence after ID3 migration',()=>{
+ it('accepts the current UI payload without obsolete artists',()=>{
+  const payload={enabled:true,artistGap:5,cooldownMinutes:90,strictCooldown:false,allowCooldownFallback:false};
+  expect(validateRotation(payload)).toEqual(payload);
+ });
+ it('accepts a roundtrip of validated settings without the removed artists map',async()=>{
+  const saved={enabled:true,artistGap:3,cooldownMinutes:90,strictCooldown:false,allowCooldownFallback:false};
+  const db={setting:{findUnique:async()=>({value:JSON.stringify(saved)})}};
+  expect(await readRotation(db)).toEqual(saved);
+ });
+ it('ignores legacy manual artist data in favor of ID3',()=>{
+  const saved={...DEFAULT_ROTATION,enabled:true,artists:{x:'Old singer'}};
+  const result=validateRotation(saved);
+  expect(result.artists).toBeUndefined();
+  expect(id3Artist({tags:{artist:'Current singer'}})).toBe('Current singer');
+ });
+});
