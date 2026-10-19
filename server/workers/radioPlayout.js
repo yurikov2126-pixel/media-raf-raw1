@@ -185,7 +185,8 @@ async function current() {
   }
   const cursor=resolveRadioCursor(slots,nowMs);
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
-  const alreadyFinished=cursor.slot?.id===finishedScheduledSlot?.id && nowMs<finishedScheduledSlot.endAtMs;
+  const alreadyFinished=!!cursor.slot && !!finishedScheduledSlot &&
+    cursor.slot.id===finishedScheduledSlot.id && nowMs<finishedScheduledSlot.endAtMs;
   if(cursor.slot && scheduled && !alreadyFinished){
     musicQueueKey=null;musicQueueNextId=null;
     return {cursor,asset:scheduled,isLastScheduledTrack:cursor.track.index===slots[0].playlist.items.length-1};
