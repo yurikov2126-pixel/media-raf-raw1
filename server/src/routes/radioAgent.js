@@ -77,6 +77,44 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
     update:{value:JSON.stringify(last)}});
   res.json({ok:true});
 }));
+// Logical amplifier control plane; SAFE_PILOT does not actuate mains GPIO.
+const AMP_KEY='radio_amplifier_policy_v1';
+async function ampState(){
+  const row=await prisma.setting.findUnique({where:{key:AMP_KEY}});
+  try{
+    const v=JSON.parse(row?.value||'{}');
+    return {mode:v.mode==='MANUAL'?'MANUAL':'AUTO',manualOn:v.manualOn===true,
+      emergencyOff:v.emergencyOff===true,updatedAt:v.updatedAt||null};
+  }catch{return {mode:'AUTO',manualOn:false,emergencyOff:false,updatedAt:null};}
+}
+async function ampDecision(){
+  const [policy,esp32,devices,autoDj,nextSlot]=await Promise.all([
+    ampState(),readEsp32Status(),readEsp32Registry(),readAutoDjSettings(),
+    prisma.radioScheduleSlot.findFirst({where:{endAt:{gt:new Date()},startAt:{lte:new Date(Date.now()+60000)},playlist:{status:'APPROVED'}},
+      orderBy:{startAt:'asc'},select:{id:true,startAt:true,endAt:true}})
+  ]);
+  const device=devices[0]||null,telemetry=device?esp32[device.id]:null;
+  const fresh=telemetry&&Date.now()-Date.parse(telemetry.observedAt)<12000&&Date.now()>=Date.parse(telemetry.observedAt);
+  const connected=!!fresh&&telemetry.heartbeatFresh===true;
+  const requested=policy.emergencyOff?false:policy.mode==='MANUAL'?policy.manualOn:Boolean(nextSlot||autoDj.enabled);
+  return {policy,requested,reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':nextSlot?'Расписание: подготовка за 60 секунд':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
+    connection:connected?'ONLINE':'OFFLINE',agentMode:fresh?telemetry.agentMode:null,
+    leaseValid:connected&&telemetry.leaseValid===true,physicalRelay:'NOT_CONTROLLED',gpio:13,
+    nextSlotStart:nextSlot?.startAt||null,hardwareReady:false};
+}
+router.get('/amplifier',...admin,safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json(await ampDecision());
+}));
+router.post('/amplifier/policy',...admin,safe(async(req,res)=>{
+  const {mode,manualOn,emergencyOff}=req.body||{};
+  if(!['AUTO','MANUAL'].includes(mode)||typeof manualOn!=='boolean'||typeof emergencyOff!=='boolean')
+    return res.status(400).json({error:'Некорректные параметры усилителя'});
+  const policy={mode,manualOn,emergencyOff,updatedAt:new Date().toISOString()};
+  await prisma.setting.upsert({where:{key:AMP_KEY},create:{key:AMP_KEY,value:JSON.stringify(policy)},update:{value:JSON.stringify(policy)}});
+  await prisma.adminAction.create({data:{adminId:req.user.id,action:'RADIO_AMPLIFIER_POLICY',payload:JSON.stringify(policy)}});
+  res.json(await ampDecision());
+}));
 router.post('/esp32',...admin,safe(async(req,res)=>{
   const name=typeof req.body?.name==='string'?req.body.name.trim():'';
   const ip=typeof req.body?.ip==='string'?req.body.ip.trim():'';
