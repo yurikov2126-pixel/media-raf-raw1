@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from standby_plan import standby_selection
 from sync_agent import sync
+from esp32_local import send_heartbeat
 
 STOP = threading.Event()
 
@@ -133,6 +134,9 @@ def run(args, token):
     probe_running=threading.Event()
     network_ok=False
     denied=False
+    esp32_host=os.environ.get('RADIO_ESP32_IP','').strip()
+    esp32_secret=os.environ.get('RADIO_ESP32_SECRET','').strip()
+    last_esp32=0.0
 
     def refresh():
         try:
@@ -166,6 +170,17 @@ def run(args, token):
     try:
         while not STOP.is_set():
             now=time.monotonic()
+            if esp32_host and esp32_secret and now-last_esp32>=3:
+                last_esp32=now
+                # Safe pilot telemetry only. No relay actuation is possible.
+                active=primary is not None and primary.poll() is None
+                reserve=fallback is not None and fallback.poll() is None
+                mode='CENTRAL' if active else 'LOCAL_RESERVE' if reserve else 'STOPPED'
+                try:
+                    send_heartbeat(esp32_host,esp32_secret,mode,active or reserve,
+                        not denied and now-last_authorized<=args.offline_grace)
+                except (OSError,ValueError,RuntimeError):
+                    pass
             with result_lock:
                 if results:
                     snapshot=results[-1]
