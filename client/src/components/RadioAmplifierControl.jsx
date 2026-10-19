@@ -15,7 +15,7 @@ export default function RadioAmplifierControl({token}){
  return <section className="rounded-2xl border border-current/15 p-4 space-y-3">
   <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold text-lg">Усилитель · ESP32</h3>
     <span className="text-xs rounded-full border border-current/20 px-3 py-1">{state?.connection==='ONLINE'?'● ESP32 на связи':'○ Нет связи с ESP32'}</span></div>
-  <p className="text-sm opacity-75">Физическое реле: <strong>не управляется (SAFE_PILOT)</strong> · GPIO 13</p>
+  <p className="text-sm opacity-75">Физическое реле: <strong>{state?.physicalRelay||"НЕИЗВЕСТНО"}</strong> · GPIO 13 · {state?.hardwareReady?"Управление активно":"Нет подтверждения готовности"}</p>
   <div className="flex flex-wrap gap-2">
    <button disabled={busy||!state} className={'rounded-xl px-4 py-2 text-sm border '+(state?.policy?.mode==='AUTO'?'bg-indigo-600 text-white':'border-current/20')} onClick={()=>change({mode:'AUTO',manualOn:false})}>Автоматически</button>
    <button disabled={busy||!state} className={'rounded-xl px-4 py-2 text-sm border '+(state?.policy?.mode==='MANUAL'?'bg-indigo-600 text-white':'border-current/20')} onClick={()=>change({mode:'MANUAL'})}>Вручную</button>
@@ -23,7 +23,7 @@ export default function RadioAmplifierControl({token}){
    <button disabled={busy||!state} className="rounded-xl border border-rose-500/40 px-4 py-2 text-rose-600 text-sm font-semibold" onClick={()=>change({emergencyOff:!state.policy.emergencyOff,manualOn:false})}>{state?.policy?.emergencyOff?'Снять аварийную блокировку':'Аварийный СТОП'}</button>
   </div>
   <p className="text-sm">Запрос питания: <strong>{state?.requested?'ВКЛ':'ВЫКЛ'}</strong> · {state?.reason||'Загрузка'}.</p>
-  <p className="text-xs opacity-70">Расписание учитывается за 60 секунд; Auto-DJ — при включении. Это расчёт команды, не подтверждение подачи питания. Физическое включение станет доступно только после проверки релейного модуля и силовой части.</p>
+  <p className="text-xs opacity-70">Расписание учитывается за 60 секунд; Auto-DJ — при включении. Запрос является политикой платформы. Состояние ON_COMMANDED/OFF_COMMANDED приходит от ESP32 и подтверждает команду GPIO, но не измеряет наличие питания на клеммах усилителя.</p>
   {error&&<p role="alert" className="text-red-500 text-sm">{error}</p>}
  </section>;
 }
