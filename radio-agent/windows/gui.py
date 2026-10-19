@@ -24,7 +24,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.3.5'
+AGENT_VERSION = '0.3.6'
 
 
 def default_data_dir():
@@ -94,6 +94,8 @@ class RadioAgentApp(tk.Tk):
         self.power_status = tk.StringVar(value="Усилитель: безопасный OFF")
         self.last_power_intent = None
         self.last_power_received = 0.0
+        self.power_off_candidate_since = None
+        self.last_power_was_auto = False
         self.power_busy = False
         self.agreed = tk.BooleanVar(value=False)
         self.pending_update = None
@@ -348,6 +350,8 @@ class RadioAgentApp(tk.Tk):
         self.save_preferences(silent=True)
         if not self.power_arm.get():
             self.last_power_intent=None
+            self.power_off_candidate_since=None
+            self.last_power_was_auto=False
             self.power_status.set("Усилитель: управление отключено")
 
     def power_tick(self):
@@ -369,8 +373,30 @@ class RadioAgentApp(tk.Tk):
                             if intent.get("esp32Ip")!=host:
                                 raise ValueError("ESP32 is not registered for this agent")
                             permit=intent.get("permit") is True and intent.get("hardwareExpected")=="POWER_CONTROL_V1"
+                            # Ignore short false OFFs at the boundary between a
+                            # scheduled show and its audio completion. Explicit
+                            # emergency OFF, MANUAL OFF, revoked playback access and
+                            # disabled hardware arming must always stop immediately.
+                            now=time.monotonic()
+                            auto_transition=(intent.get("policyMode")=="AUTO" and
+                                intent.get("emergencyOff") is False and
+                                intent.get("reason")=="Нет активной трансляции" and
+                                self.last_power_was_auto and self.last_power_intent is True)
+                            if permit:
+                                self.power_off_candidate_since=None
+                                self.last_power_was_auto=intent.get("policyMode")=="AUTO"
+                            elif auto_transition:
+                                if self.power_off_candidate_since is None:
+                                    self.power_off_candidate_since=now
+                                if now-self.power_off_candidate_since<12:
+                                    permit=True
+                                else:
+                                    self.last_power_was_auto=False
+                            else:
+                                self.power_off_candidate_since=None
+                                self.last_power_was_auto=False
                             self.last_power_intent=permit
-                            self.last_power_received=time.monotonic()
+                            self.last_power_received=now
                         except Exception:
                             # Only previously authorized local reserve may bridge a
                             # temporary internet outage; capped to 15 minutes.
