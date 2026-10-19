@@ -63,14 +63,16 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
   const devices=await readEsp32Registry();
   const device=devices.find(d=>d.ip===ip);
   if(!device)return res.status(404).json({error:'ESP32 не зарегистрирован'});
-  if(status.device!=='MEDIA_RAF_RAW_ESP32'||status.mode!=='SAFE_PILOT'||status.relayOutputEnabled!==false||
+  if(status.device!=='MEDIA_RAF_RAW_ESP32'||!['SAFE_PILOT','POWER_CONTROL_V1'].includes(status.mode)||
+    typeof status.relayOutputEnabled!=='boolean'||
     status.relayGpio!==13||typeof status.heartbeatFresh!=='boolean'||
     !['CENTRAL','LOCAL_RESERVE','STOPPED','DISCONNECTED'].includes(status.agentMode))
     return res.status(400).json({error:'Ожидается безопасная телеметрия SAFE_PILOT'});
   const last=await readEsp32Status();
   last[device.id]={observedAt:new Date().toISOString(),agentMode:status.agentMode,
     heartbeatFresh:status.heartbeatFresh,heartbeatCount:Number(status.heartbeatCount)||0,
-    leaseValid:status.leaseValid===true,relayOutputEnabled:false,
+    leaseValid:status.leaseValid===true,relayOutputEnabled:status.relayOutputEnabled===true,
+    amplifierPower:status.amplifierPower||'UNKNOWN',
     reporterId:req.radioDevice.id};
   await prisma.setting.upsert({where:{key:ESP32_STATUS_KEY},
     create:{key:ESP32_STATUS_KEY,value:JSON.stringify(last)},
@@ -99,9 +101,21 @@ async function ampDecision(){
   const requested=policy.emergencyOff?false:policy.mode==='MANUAL'?policy.manualOn:Boolean(nextSlot||autoDj.enabled);
   return {policy,requested,reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':nextSlot?'Расписание: подготовка за 60 секунд':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
     connection:connected?'ONLINE':'OFFLINE',agentMode:fresh?telemetry.agentMode:null,
-    leaseValid:connected&&telemetry.leaseValid===true,physicalRelay:'NOT_CONTROLLED',gpio:13,
-    nextSlotStart:nextSlot?.startAt||null,hardwareReady:false};
+    leaseValid:connected&&telemetry.leaseValid===true,physicalRelay:fresh?telemetry.amplifierPower||'UNKNOWN':'UNKNOWN',gpio:13,
+    nextSlotStart:nextSlot?.startAt||null,hardwareReady:connected&&telemetry.relayOutputEnabled===true};
 }
+router.get('/agent/amplifier-intent',deviceAuth,safe(async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const result=await ampDecision();
+  const devices=await readEsp32Registry();
+  // Agent must be expressly allowed to play; this endpoint does not issue
+  // user-facing manual control tokens or expose any ESP32 pair secrets.
+  const permit=!!req.radioDevice.playbackAllowed&&!!result.requested&&
+    !result.policy.emergencyOff&&devices.length===1;
+  res.json({permit,leaseMs:permit?8000:0,esp32Ip:devices.length===1?devices[0].ip:null,
+    reason:result.reason,hardwareExpected:'POWER_CONTROL_V1',
+    evaluatedAt:new Date().toISOString()});
+}));
 router.get('/amplifier',...admin,safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   res.json(await ampDecision());
