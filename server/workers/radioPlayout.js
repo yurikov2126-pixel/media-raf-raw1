@@ -66,6 +66,10 @@ let frozenRotation=null;
 // Normal Auto-DJ uses a sequential playback cursor, not a running wall clock.
 // This prevents a jingle (and decoder start latency) from consuming the next song.
 let musicQueueKey=null, musicQueueNextId=null;
+let pendingScheduledHandover=null;
+let delayedScheduledSlot=null;
+let lastAutoDjTrackId=null;
+let resumeAutoDjAfterShow=false;
 state.lastBoundary=null;
 function recordBoundary(event){state.lastBoundary={...event,at:new Date().toISOString()};console.info('RADIO_SOURCE_BOUNDARY',JSON.stringify(state.lastBoundary));}
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
@@ -147,6 +151,36 @@ async function current() {
     include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:true}}}}},
     orderBy:{startAt:'asc'},take:1
   });
+  // An opt-in finish-current-track handoff shifts a single scheduled show.
+  // Do not re-enter the slot at its original wall-clock offset.
+  if(delayedScheduledSlot){
+    // A newly scheduled show takes precedence over an older delayed one.
+    const urgent=slots.find(x=>x.id!==delayedScheduledSlot.id);
+    if(urgent && Date.parse(urgent.startAt)<=nowMs){
+      recordBoundary({source:'SCHEDULED',reason:'NEW_SCHEDULE_PRIORITY',slotId:urgent.id});
+      delayedScheduledSlot=null;
+    }
+  }
+  if(delayedScheduledSlot){
+    if(nowMs>=delayedScheduledSlot.actualEndMs){
+      recordBoundary({source:'SCHEDULED',reason:'DELAYED_SCHEDULE_FINISHED',
+        slotId:delayedScheduledSlot.id});
+      delayedScheduledSlot=null;
+    }else if(nowMs>=delayedScheduledSlot.actualStartMs){
+      const delayed=await prisma.radioScheduleSlot.findUnique({
+        where:{id:delayedScheduledSlot.id},
+        include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:true}}}}}
+      });
+      if(delayed?.playlist?.status==='APPROVED'){
+        const shifted={...delayed,startAt:new Date(delayedScheduledSlot.actualStartMs),
+          endAt:new Date(delayedScheduledSlot.actualEndMs)};
+        const shiftedCursor=resolveRadioCursor([shifted],nowMs);
+        const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
+        return {cursor:shiftedCursor,asset};
+      }
+      delayedScheduledSlot=null;
+    }
+  }
   const cursor=resolveRadioCursor(slots,nowMs);
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   if(scheduled || cursor.slot){musicQueueKey=null;musicQueueNextId=null;return {cursor,asset:scheduled};}
@@ -229,7 +263,7 @@ async function current() {
       where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
       select:{startAt:true},orderBy:{startAt:'asc'}
     });
-    const until=Math.min(next?next.startAt.getTime():Infinity,rotation.endMs);
+    const until=Math.min(settings.finishTrackBeforeSchedule?Infinity:next?next.startAt.getTime():Infinity,rotation.endMs);
     if(!selected || until-nowMs<150){
       state.queueStatus=selected?'BOUNDARY':'COOLDOWN_WAIT';
       return {cursor,asset:null};
@@ -252,7 +286,8 @@ async function current() {
   state.queueStatus='SEQUENTIAL';
   // Full music tracks follow one another from their cue-in points. The old
   // cueCursor(music, wall-clock) skipped several seconds after every jingle.
-  const nextIndex=musicQueueNextId?music.findIndex(a=>a.id===musicQueueNextId):-1;
+  const lastIndex=resumeAutoDjAfterShow&&lastAutoDjTrackId?music.findIndex(a=>a.id===lastAutoDjTrackId):-1;
+  const nextIndex=lastIndex>=0?(lastIndex+1)%music.length:musicQueueNextId?music.findIndex(a=>a.id===musicQueueNextId):-1;
   const initial=cueCursor(music,clock);
   const index=nextIndex>=0?nextIndex:initial?.index??0;
   const chosen=music[index];
@@ -262,8 +297,9 @@ async function current() {
     where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
     select:{startAt:true},orderBy:{startAt:'asc'}
   });
-  const until=Math.min(next?next.startAt.getTime():Infinity,rotation?.endMs??Infinity);
+  const until=Math.min(settings.finishTrackBeforeSchedule?Infinity:next?next.startAt.getTime():Infinity,rotation?.endMs??Infinity);
   if(!track || until-nowMs<150)return {cursor,asset:null};
+  if(resumeAutoDjAfterShow){resumeAutoDjAfterShow=false;lastAutoDjTrackId=null;}
   return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,track,
     until: Number.isFinite(until)?new Date(until).toISOString():null},
     asset:music[track.index],nextTrackId:music.length>1?music[(track.index+1)%music.length].id:null};
@@ -426,9 +462,15 @@ async function run() {
         const settings=await readAutoDjSettings();
         const scheduled=await prisma.radioScheduleSlot.findFirst({
           where:{startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},
-          select:{id:true}
+          select:{id:true,startAt:true,endAt:true}
         });
-        if(!settings.enabled||!settings.playlistId||scheduled)child.kill('SIGTERM');
+        if(!settings.enabled||!settings.playlistId)child.kill('SIGTERM');
+        else if(scheduled){
+          if(settings.finishTrackBeforeSchedule && !cursor.isJingle && !publicLive.onAir){
+            pendingScheduledHandover={id:scheduled.id,originalStartMs:scheduled.startAt.getTime(),
+              originalEndMs:scheduled.endAt.getTime()};
+          }else child.kill('SIGTERM');
+        }
         else {
           const playlist=await prisma.radioPlaylist.findUnique({
             where:{id:settings.playlistId},select:{status:true}
@@ -520,6 +562,7 @@ async function run() {
       // A slow journal write must never create dead air at the next track boundary.
       void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
+    if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){lastAutoDjTrackId=asset.id;}
     if(cursor.isJingle){
       jinglePending=false;
       if(generatedMs>=1000&&exitCode===0){jinglesPlayed++;musicSinceJingle=0;}
@@ -532,6 +575,20 @@ async function run() {
     if(!ended) child.kill('SIGTERM');
     if(decoder===child) decoder=null;
     if(state.playout?.trackId===asset.id)state.playout=null;
+    if(cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping && !publicLive.onAir){
+      const h=pendingScheduledHandover;pendingScheduledHandover=null;
+      // Honor explicit schedule changes made while the song was playing.
+      const validHandover=await prisma.radioScheduleSlot.findUnique({where:{id:h.id},
+        select:{startAt:true,endAt:true,playlist:{select:{status:true}}}});
+      if(validHandover?.playlist?.status==='APPROVED' && validHandover.endAt.getTime()>h.originalStartMs){
+      // Shift by the actual finish; keep each song and broadcast at time zero.
+      delayedScheduledSlot={id:h.id,actualStartMs:Date.now(),
+        actualEndMs:Date.now()+(h.originalEndMs-h.originalStartMs)};
+      resumeAutoDjAfterShow=true;
+      recordBoundary({source:'AUTO_DJ',reason:'FINISHED_BEFORE_SCHEDULE',slotId:h.id,
+        delayedByMs:Math.max(0,delayedScheduledSlot.actualStartMs-h.originalStartMs)});
+      }
+    }
     if(cursor.status==='AUTO_DJ' && exitCode!==null && exitCode!==0 && !child.killed)
       failedAutoDjAssets.set(asset.id,Date.now()+300000);
   }

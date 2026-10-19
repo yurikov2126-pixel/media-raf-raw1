@@ -8,11 +8,14 @@ export async function readAutoDjSettings(db=prisma) {
   return {
     enabled: parsed.enabled === true,
     playlistId: typeof parsed.playlistId==='string'?parsed.playlistId:null,
+    finishTrackBeforeSchedule: parsed.finishTrackBeforeSchedule===true,
   };
 }
 export async function writeAutoDjSettings(settings,db=prisma) {
-  return db.setting.upsert({where:{key:KEY},create:{key:KEY,value:JSON.stringify(settings)},
-    update:{value:JSON.stringify(settings)}});
+  const saved={enabled:settings.enabled===true,playlistId:settings.playlistId||null,
+    finishTrackBeforeSchedule:settings.finishTrackBeforeSchedule===true};
+  return db.setting.upsert({where:{key:KEY},create:{key:KEY,value:JSON.stringify(saved)},
+    update:{value:JSON.stringify(saved)}});
 }
 export function autoDjCursor(assets, timestamp=Date.now()) {
   if (!assets.length) return null;
