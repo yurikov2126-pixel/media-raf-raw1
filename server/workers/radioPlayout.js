@@ -45,7 +45,7 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
-const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTING',trackId:null,slotId:null,playout:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
+const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTING',trackId:null,slotId:null,playout:null,nextTrackId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
 let decoder = null;
 let encoder = null;
 let stopping = false;
@@ -239,7 +239,7 @@ async function current() {
   if(!track || until-nowMs<150)return {cursor,asset:null};
   return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,track,
     until: Number.isFinite(until)?new Date(until).toISOString():null},
-    asset:music[track.index]};
+    asset:music[track.index],nextTrackId:music.length>1?music[(track.index+1)%music.length].id:null};
 }
 function stopDecoder() {
   if(decoder) { decoder.kill('SIGTERM'); decoder=null; }
@@ -261,17 +261,17 @@ async function run() {
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
-      state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;
+      state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;state.nextTrackId=null;
       const frame=publicLive.take(Date.now());
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
       continue;
     }
-    let cursor,asset;
-    try { ({cursor,asset}=await current()); }
+    let cursor,asset,nextTrackId;
+    try { ({cursor,asset,nextTrackId}=await current()); }
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
-      state.mode='SILENCE';state.trackId=null;state.playout=null;
+      state.mode='SILENCE';state.trackId=null;state.playout=null;state.nextTrackId=null;
       for(let i=0;i<5&&!stopping;i++) {
         if(publicLive.onAir)break;
         if(!encoder.stdin.write(silence)) await new Promise(r=>encoder.stdin.once('drain',r));
@@ -280,6 +280,7 @@ async function run() {
       continue;
     }
     state.mode=cursor.isJingle?'JINGLE':cursor.status==='AUTO_DJ'?'AUTO_DJ':'SCHEDULED';state.trackId=asset.id;state.playout=null;
+    state.nextTrackId=cursor.status==='AUTO_DJ'&&!cursor.isJingle?nextTrackId||null:null;
     const boundary=cursor.status==='AUTO_DJ'?(cursor.until?Date.parse(cursor.until):Infinity):Date.parse(cursor.slot.endAt);
     const remaining=Math.max(0,Math.min(cursor.track.remainingMs??(cursor.track.durationMs-cursor.track.offsetMs),boundary-Date.now()));
     if(remaining<150) continue;
