@@ -1,5 +1,5 @@
 import {chooseQueuedTrack,selectExhaustionFallback} from './radioEventQueue.js';
-import {rotationPlan} from './radioRotation.js';
+import {rotationPlan,id3Artist} from './radioRotation.js';
 import {cueAssets} from './radioAudioCue.js';
 /** Read-only planning. Does not mutate history or promise that a track aired. */
 export function previewMusicQueue({assets,settings,history=[],nowMs=Date.now(),limit=10}){
@@ -20,7 +20,7 @@ export function previewMusicQueue({assets,settings,history=[],nowMs=Date.now(),l
   } else candidate=items.find(x=>!visited.has(x.id));
   if(!candidate)break;
   visited.add(candidate.id);
-  tracks.push({id:candidate.id,name:candidate.name,category:settings.rotation.tags[candidate.id]||'OTHER',
+  tracks.push({id:candidate.id,name:candidate.name,artist:id3Artist(candidate),
     durationMs:candidate.playDurationMs});
   shadowHistory.push({id:candidate.id,startedAt:new Date(nowMs+step*60000).toISOString(),mode:'AUTO_DJ'});
  }

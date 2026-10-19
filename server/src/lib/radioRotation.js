@@ -1,6 +1,8 @@
 import { prisma } from './prisma.js';
 
 const KEY='radio_rotation_v1';
+export const id3Artist = asset => typeof asset?.tags?.artist==='string' ? asset.tags.artist.trim() : '';
+export const normalizeArtist = name => String(name||'').normalize('NFKC').trim().replace(/\\s+/g,' ').toLocaleLowerCase('ru-RU');
 export const CATEGORIES=['ENERGY','POP','CALM','INSTRUMENTAL','OTHER'];
 export const DAYPARTS=[
   {id:'NIGHT',start:0,end:7},
@@ -15,16 +17,10 @@ export const DEFAULT_ROTATION={enabled:false,tags:{},artists:{},artistGap:0,cate
   EVENING:['CALM','POP','OTHER'],
 }};
 export function validateRotation(input) {
-  if(!input || typeof input.enabled!=='boolean' || !input.tags ||
-     typeof input.tags!=='object' || Array.isArray(input.tags) ||
-     !input.dayparts || typeof input.dayparts!=='object')throw new TypeError('Некорректные параметры ротации');
+  if(!input || typeof input.enabled!=='boolean')throw new TypeError('Некорректные параметры ротации');
   if(typeof input.allowCooldownFallback!=='boolean')throw new TypeError('Некорректная настройка резервного воспроизведения');
   if(typeof input.strictCooldown!=='boolean')throw new TypeError('Некорректный режим строгого интервала');
   if(!Number.isInteger(input.cooldownMinutes)||input.cooldownMinutes<0||input.cooldownMinutes>240)throw new TypeError('Пауза повторов: от 0 до 240 минут');
-  const tags=Object.fromEntries(Object.entries(input.tags).map(([id,tag])=>{
-    if(!/^[a-z0-9_-]{1,120}$/i.test(id)||!CATEGORIES.includes(tag))throw new TypeError('Недопустимая категория');
-    return [id,tag];
-  }));
   if(!Number.isInteger(input.artistGap)||input.artistGap<0||input.artistGap>5)throw new TypeError('Интервал исполнителей: от 0 до 5 композиций');
   if(!input.artists||typeof input.artists!=='object'||Array.isArray(input.artists))throw new TypeError('Некорректные исполнители');
   const artists={};
@@ -32,25 +28,15 @@ export function validateRotation(input) {
     if(!/^[a-z0-9_-]{1,120}$/i.test(id)||typeof name!=='string'||name.length>100)throw new TypeError('Некорректный исполнитель');
     if(name.trim())artists[id]=name.trim();
   }
-  const categoryPriority={};
-  for(const [category,value] of Object.entries(input.categoryPriority||{})){
-    if(!CATEGORIES.includes(category)||!Number.isInteger(value)||value<1||value>5)throw new TypeError('Приоритет категории: 1–5');
-    categoryPriority[category]=value;
-  }
-  const dayparts={};
-  for(const {id} of DAYPARTS){
-    const choices=input.dayparts[id];
-    if(!Array.isArray(choices)||choices.length<1||choices.length>CATEGORIES.length||
-      choices.some(c=>!CATEGORIES.includes(c))||new Set(choices).size!==choices.length)
-      throw new TypeError('Недопустимые категории периода '+id);
-    dayparts[id]=choices;
-  }
-  return {enabled:input.enabled,tags,artists,artistGap:input.artistGap,categoryPriority,cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,allowCooldownFallback:input.allowCooldownFallback,dayparts};
+  return {enabled:input.enabled,artistGap:input.artistGap,
+    cooldownMinutes:input.cooldownMinutes,strictCooldown:input.strictCooldown,
+    allowCooldownFallback:input.allowCooldownFallback};
+
 }
 export async function readRotation(db=prisma){
   const row=await db.setting.findUnique({where:{key:KEY}});
   try {return validateRotation({...DEFAULT_ROTATION,...JSON.parse(row?.value||'{}')});}
-  catch {return {enabled:false,tags:{},artists:{},artistGap:0,categoryPriority:{},cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false,dayparts:Object.fromEntries(Object.entries(DEFAULT_ROTATION.dayparts).map(([key,categories])=>[key,[...categories]]))};}
+  catch {return {enabled:false,artistGap:0,cooldownMinutes:0,strictCooldown:false,allowCooldownFallback:false};}
 }
 export async function writeRotation(data,db=prisma){
   const rotation=validateRotation(data);
@@ -69,7 +55,7 @@ function hash(s){
  */
 export function separateArtists(items,artists={},gap=0){
   if(gap===0||items.length<2)return {items:[...items],violations:0};
-  const artist=item=>(artists[item.id]||'').trim().toLocaleLowerCase('ru-RU');
+  const artist=item=>normalizeArtist(id3Artist(item));
   const penalty=(order)=>{
     let score=0;
     for(let i=0;i<order.length;i++){
@@ -102,29 +88,17 @@ export function separateArtists(items,artists={},gap=0){
   return {items:best,violations:score};
 }
 export function rotationPlan(assets,config,nowMs=Date.now()){
-  if(!config.enabled || !assets.length)return null;
-  const local=new Date(nowMs+3*3600000);
-  const hour=local.getUTCHours();
-  const part=DAYPARTS.find(p=>p.start<=hour&&hour<p.end);
-  const dayKey=local.toISOString().slice(0,10);
-  const start=Date.parse(dayKey+'T00:00:00+03:00')+part.start*3600000;
-  const end=Date.parse(dayKey+'T00:00:00+03:00')+part.end*3600000;
-  const allowed=new Set(config.dayparts[part.id]);
-  const picked=assets.filter(a=>allowed.has(config.tags[a.id]||'OTHER'));
-  // An empty category filter should not cause unexpected dead air.
-  const pool=picked.length?picked:assets;
-  const seed=dayKey+':'+part.id;
-  // Stable pseudo-random order, independent of process restart and asset position.
-  const shuffled=[...pool].sort((a,b)=>{
-    const scoreA=config.categoryPriority?.[config.tags[a.id]||'OTHER']||3;
-    const scoreB=config.categoryPriority?.[config.tags[b.id]||'OTHER']||3;
-    return scoreB-scoreA||hash(seed+a.id)-hash(seed+b.id)||a.id.localeCompare(b.id);
-  });
-  const arranged=separateArtists(shuffled,config.artists,config.artistGap);
+  if(!config.enabled||!assets.length)return null;
+  // One day-wide rotation, unaffected by time-of-day or mood categories.
+  const dayKey=new Date(nowMs).toISOString().slice(0,10);
+  const start=Date.parse(dayKey+'T00:00:00Z');
+  const end=start+86400000;
+  const shuffled=[...assets].sort((a,b)=>hash(dayKey+a.id)-hash(dayKey+b.id)||a.id.localeCompare(b.id));
+  const arranged=separateArtists(shuffled,{},config.artistGap);
   const ordered=arranged.items;
-  const duration=ordered.reduce((n,a)=>n+a.playDurationMs,0);
-  return {items:ordered,anchorMs:start,endMs:end,daypart:part.id,
-    activeCategories:[...allowed],cycleMs:duration,artistViolations:arranged.violations};
+  return {items:ordered,anchorMs:start,endMs:end,daypart:null,
+    activeCategories:[],cycleMs:ordered.reduce((n,a)=>n+(a.playDurationMs||a.durationMs),0),
+    artistViolations:arranged.violations};
 }
 
 // Move recently generated tracks toward the end of a newly opened daypart.
