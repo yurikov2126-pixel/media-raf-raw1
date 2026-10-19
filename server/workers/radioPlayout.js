@@ -486,7 +486,7 @@ async function run() {
         }
       }
     } catch(e) {state.lastError=e.message;}
-    if(cursor.status==='SCHEDULED' && !state.lastBoundary?.slotId){
+    if(cursor.status==='SCHEDULED' && !(state.lastBoundary?.slotId===cursor.slot.id && state.lastBoundary?.trackId===asset.id && state.lastBoundary?.reason==='END_AT_PCM_TRUNCATED')){
       recordBoundary({source:'SCHEDULED',reason:'TRACK_ENDED',slotId:cursor.slot.id,trackId:asset.id});
     }
     if(pcmStaging){
