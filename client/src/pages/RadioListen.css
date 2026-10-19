@@ -14,3 +14,12 @@
 .rr-invite-action:focus-visible{outline:3px solid #bdb0ff;outline-offset:3px}
 @media(max-width:480px){.rr-invite-card{padding:22px}.rr-invite-card h3{margin-top:37px}.rr-invite-art{width:130px;height:130px;right:-20px;top:-14px}}
 @media(prefers-reduced-motion:reduce){.rr-invite-action{transition:none}.rr-invite-action:hover{transform:none}}
+
+/* Align the headline and supporting copy to the share card as one centered side column. */
+.rr-side-intro{text-align:center;display:flex;flex-direction:column;align-items:center}
+.rr-side-intro h2{max-width:100%;margin-left:auto;margin-right:auto}
+.rr-side-intro p{max-width:380px;margin-left:auto;margin-right:auto;text-wrap:balance}
+.rr-next-show{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px solid #9e83ff4a;border-radius:18px;background:#9e83ff10;padding:15px 12px;margin:10px 0;color:#d7d2f2}
+.rr-next-show strong{font-size:16px;color:#fff;line-height:1.35}
+.rr-next-show>span:last-child{font-size:12px;line-height:1.5}
+@media(max-width:480px){.rr-side-intro h2{font-size:clamp(39px,11vw,46px)}.rr-side-intro p{max-width:340px}}
