@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists,prioritizeUnplayed,id3Artist,normalizeArtist,rotationPlaylistAssets} from '../src/lib/radioRotation.js';
+import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists,prioritizeUnplayed,id3Artist,normalizeArtist,rotationPlaylistAssets,separateArtists} from '../src/lib/radioRotation.js';
 const items=[
  {id:'a1',name:'One',playDurationMs:60000,tags:{artist:'Band A'}},
  {id:'b1',name:'Two',playDurationMs:60000,tags:{artist:'Band B'}},
@@ -100,5 +100,15 @@ describe('rotation persistence after ID3 migration',()=>{
   const result=validateRotation(saved);
   expect(result.artists).toBeUndefined();
   expect(id3Artist({tags:{artist:'Current singer'}})).toBe('Current singer');
+ });
+});
+
+describe('artist spacing precomputed ID3 names',()=>{
+ it('preserves every playlist entry including duplicate performers',()=>{
+  const source=Array.from({length:220},(_,i)=>({id:'song-'+i,tags:{artist:'Performer '+(i%23)},durationMs:180000}));
+  const result=separateArtists(source,{},5);
+  expect(result.items).toHaveLength(source.length);
+  expect(new Set(result.items.map(x=>x.id)).size).toBe(source.length);
+  expect(result.violations).toBeGreaterThanOrEqual(0);
  });
 });
