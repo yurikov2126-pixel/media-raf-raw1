@@ -15,7 +15,6 @@ import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
-import { crossfadePlan } from '../src/lib/radioCrossfade.js';
 import { readRotation, rotationPlan, prioritizeUnplayed } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvents } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
@@ -229,8 +228,7 @@ async function current() {
       until:Number.isFinite(until)?new Date(until).toISOString():null},
       asset:selected};
   }
-  state.queueStatus='TIMELINE';
-  const dsp=await readAudioProcessing();
+  state.queueStatus='SEQUENTIAL';
   // Full music tracks follow one another from their cue-in points. The old
   // cueCursor(music, wall-clock) skipped several seconds after every jingle.
   const nextIndex=musicQueueNextId?music.findIndex(a=>a.id===musicQueueNextId):-1;
