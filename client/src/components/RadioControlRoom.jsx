@@ -22,7 +22,7 @@ export default function RadioControlRoom({token,onOpen}){
  useEffect(()=>{const interval=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(interval);},[]);
  const track=onAir?.track;
  const current=onAir?.slot;
- const playout=onAir?.playout?.trackId===track?.id?onAir.playout:null;
+ const playout=onAir?.playout?.trackId&&onAir.playout.trackId===track?.id?onAir.playout:null;
  const elapsedSinceReport=onAir?.observedAt?Math.min(5000,Math.max(0,now-Date.parse(onAir.observedAt))):0;
  const playedMs=(playout?.seekMs||0)+(playout?.emittedMs||0)+(playout?.startedAt?elapsedSinceReport:0);
  const trackMs=playout?.durationMs||track?.durationMs||0;
