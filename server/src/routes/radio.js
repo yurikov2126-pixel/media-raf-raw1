@@ -1,3 +1,4 @@
+import { validateRadioPlaylistTracks, writeRadioPlaylistItems, MAX_RADIO_PLAYLIST_TRACKS } from '../lib/radioPlaylistBulk.js';
 import { Router } from 'express';
 import {normalizeRadioTags,safeRadioTags} from '../lib/radioAssetTags.js';
 import multer from 'multer';
@@ -390,23 +391,26 @@ router.get('/playlists/:id', safe(async (req, res) => {
 router.post('/playlists', safe(async (req, res) => {
     const { name, description = '', assetIds = [] } = req.body || {};
     if (!validTitle(name) || typeof description !== 'string' || description.length > 2000 ||
-        !Array.isArray(assetIds) || assetIds.length > 100 || assetIds.some(id => typeof id !== 'string'))
-        return res.status(400).json({ error: 'Неверные данные плейлиста' });
+        validateRadioPlaylistTracks(assetIds))
+        return res.status(400).json({ error: validateRadioPlaylistTracks(assetIds) || 'Неверные данные плейлиста' });
     const unique = [...new Set(assetIds)];
     if (unique.length !== assetIds.length || await prisma.radioAsset.count({ where: { id: { in: unique } } }) !== unique.length)
         return res.status(400).json({ error: 'Одна или несколько записей не найдены' });
-    const playlist = await prisma.radioPlaylist.create({ data: {
-        name: name.trim(), description: description.trim(), createdBy: req.user.id,
-        status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date(),
-        items: { create: assetIds.map((assetId, position) => ({ assetId, position })) },
-    }, include: playlistInclude });
+    const playlist = await prisma.$transaction(async tx => {
+        const created = await tx.radioPlaylist.create({ data: {
+            name: name.trim(), description: description.trim(), createdBy: req.user.id,
+            status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date(),
+        } });
+        await writeRadioPlaylistItems(tx,created.id,assetIds);
+        return tx.radioPlaylist.findUnique({where:{id:created.id},include:playlistInclude});
+    },{maxWait:10000,timeout:60000});
     res.status(201).json({ playlist });
 }));
 router.put('/playlists/:id', safe(async (req, res) => {
     const { name, description = '', assetIds = [] } = req.body || {};
     if (!validTitle(name) || typeof description !== 'string' || description.length > 2000 ||
-        !Array.isArray(assetIds) || assetIds.length > 100 || assetIds.some(id => typeof id !== 'string'))
-        return res.status(400).json({ error: 'Неверные данные плейлиста' });
+        validateRadioPlaylistTracks(assetIds))
+        return res.status(400).json({ error: validateRadioPlaylistTracks(assetIds) || 'Неверные данные плейлиста' });
     const unique = [...new Set(assetIds)];
     if (unique.length !== assetIds.length || await prisma.radioAsset.count({ where: { id: { in: unique } } }) !== unique.length)
         return res.status(400).json({ error: 'Записи не найдены или повторяются' });
@@ -433,13 +437,13 @@ router.put('/playlists/:id', safe(async (req, res) => {
         const updated = await tx.radioPlaylist.update({ where: { id: current.id }, data: {
             name: name.trim(), description: description.trim(),
             // Preserve approved status and approval attribution; this edit is by ADMIN.
-            items: { create: assetIds.map((assetId, position) => ({ assetId, position })) },
         }, include: playlistInclude });
+        await writeRadioPlaylistItems(tx,current.id,assetIds);
         for (const slot of future) {
             await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { endAt: new Date(slot.startAt.getTime() + durationMs) } });
         }
-        return updated;
-    });
+        return tx.radioPlaylist.findUnique({where:{id:updated.id},include:playlistInclude});
+    },{maxWait:10000,timeout:60000});
     if (playlist === null) return res.status(404).json({ error: 'Плейлист не найден' });
     if (playlist === false) return res.status(409).json({ error: 'Редактирование создаёт конфликт в запланированном эфире. Изменения не сохранены' });
     res.json({ playlist });
