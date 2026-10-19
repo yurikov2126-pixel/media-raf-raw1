@@ -20,7 +20,7 @@ from esp32_telemetry import report_status
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 
-AGENT_VERSION = '0.3.2'
+AGENT_VERSION = '0.3.3'
 
 
 def default_data_dir():
@@ -108,12 +108,12 @@ class RadioAgentApp(tk.Tk):
 
         tabs = ttk.Notebook(wrap)
         tabs.pack(fill="both", expand=True, pady=(5, 0))
-        air = ttk.Frame(tabs, style="Main.TFrame", padding=12)
-        links = ttk.Frame(tabs, style="Main.TFrame", padding=12)
-        settings = ttk.Frame(tabs, style="Main.TFrame", padding=12)
-        tabs.add(air, text="  Эфир  ")
-        tabs.add(links, text="  Подключения  ")
-        tabs.add(settings, text="  Настройки  ")
+        air_shell, air = self.scroll_tab(tabs)
+        links_shell, links = self.scroll_tab(tabs)
+        settings_shell, settings = self.scroll_tab(tabs)
+        tabs.add(air_shell, text="  Эфир  ")
+        tabs.add(links_shell, text="  Подключения  ")
+        tabs.add(settings_shell, text="  Настройки  ")
 
         ttk.Label(air, text="Управление вещанием", style="Title.TLabel").pack(anchor="w", pady=(0, 5))
         ttk.Label(air, textvariable=self.status, style="Main.TLabel").pack(anchor="w", pady=(0, 9))
@@ -165,6 +165,50 @@ class RadioAgentApp(tk.Tk):
         self.after(5000, self.check_updates)
         self.after(3000,self.idle_esp32_heartbeat)
         self.after(6500,self.report_esp32_status)
+
+    def scroll_tab(self, tabs):
+        """Scrollable pane that retains the full width of the current tab."""
+        shell = ttk.Frame(tabs, style="Main.TFrame")
+        canvas = tk.Canvas(shell, background="#10162d", highlightthickness=0,
+                           borderwidth=0)
+        scrollbar = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        body = ttk.Frame(canvas, style="Main.TFrame", padding=12)
+        window = canvas.create_window((0, 0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda _event: canvas.configure(
+            scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(
+            window, width=event.width))
+
+        def wheel(event):
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            elif getattr(event, "delta", 0):
+                delta = -int(event.delta / 120) or (-1 if event.delta > 0 else 1)
+            else:
+                return
+            canvas.yview_scroll(delta, "units")
+
+        # Bind only when pointer is over this tab; never intercept text scrolling.
+        def enter(_event):
+            canvas.bind_all("<MouseWheel>", wheel)
+            canvas.bind_all("<Button-4>", wheel)
+            canvas.bind_all("<Button-5>", wheel)
+        def leave(_event):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+        shell.bind("<Enter>", enter)
+        shell.bind("<Leave>", leave)
+        canvas.bind("<Enter>", enter)
+        canvas.bind("<Leave>", leave)
+        body.bind("<Enter>", enter)
+        body.bind("<Leave>", leave)
+        return shell, body
 
     def row(self, parent, name, variable, secret=False, browse=False, directory=False):
         ttk.Label(parent, text=name, style="Main.TLabel").pack(anchor="w", pady=(6, 2))
