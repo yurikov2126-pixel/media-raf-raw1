@@ -20,6 +20,6 @@ def send_heartbeat(host, secret, mode, audio_ready, platform_authorized, timeout
         method="POST")
     with urllib.request.urlopen(request,timeout=timeout) as response:
         result=json.load(response)
-        if not result.get("ok") or result.get("relayOutputEnabled") is not False:
+        if not result.get("ok") or not isinstance(result.get("relayOutputEnabled"),bool):
             raise RuntimeError("ESP32 is not in safe pilot mode")
         return result
