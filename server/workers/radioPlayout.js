@@ -207,18 +207,22 @@ async function current() {
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
   const rotationSettings=await readRotation();
-  const candidate=rotationPlan(catalog,rotationSettings,nowMs);
-  // Keep the plan stable for this daypart, including its crossfade boundaries.
-  // Changes in the history must not move the station cursor mid-song.
-  const key=candidate?[candidate.anchorMs,candidate.endMs,rotationSettings.cooldownMinutes,
-    catalog.map(a=>a.id+':'+a.playDurationMs).join(',')].join('|'):null;
+  // Check the catalog fingerprint before running the potentially expensive
+  // artist-spacing rotation. The plan is deterministic within the UTC day.
+  const dayKey=new Date(nowMs).toISOString().slice(0,10);
+  const key=rotationSettings.enabled?[dayKey,rotationSettings.artistGap,
+    rotationSettings.cooldownMinutes,catalog.map(a=>a.id+':'+a.playDurationMs+':'+(a.tags?.artist||'')).join(',')].join('|'):null;
   if(key!==frozenRotation?.key){
+    const started=performance.now();
+    const candidate=rotationPlan(catalog,rotationSettings,nowMs);
     frozenRotation=null;
     if(candidate){
       const history=rotationSettings.cooldownMinutes?await readPlayoutHistory():[];
       const items=prioritizeUnplayed(candidate.items,history,rotationSettings.cooldownMinutes,nowMs);
       frozenRotation={key,plan:{...candidate,items}};
     }
+    state.rotationComputeMs=Math.round(performance.now()-started);
+    state.rotationComputedAt=new Date().toISOString();
   }
   const rotation=frozenRotation?.plan||null;
   const music=rotation?.items||catalog;
