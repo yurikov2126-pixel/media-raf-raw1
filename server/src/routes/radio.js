@@ -368,11 +368,14 @@ router.delete('/playlists/:id', safe(async (req, res) => {
         if (!playlist) return 'missing';
         const slots = await tx.radioScheduleSlot.count({ where: { playlistId: playlist.id } });
         if (slots) return 'in-use';
+        const auto = await readAutoDjSettings();
+        if (auto.playlistId === playlist.id) return 'autodj';
         await tx.radioPlaylist.delete({ where: { id: playlist.id } });
         return 'deleted';
     });
     if (result === 'missing') return res.status(404).json({ error: 'Плейлист не найден' });
     if (result === 'in-use') return res.status(409).json({ error: 'Нельзя удалить плейлист, который присутствует в сетке вещания' });
+    if (result === 'autodj') return res.status(409).json({ error: 'Плейлист выбран в Auto-DJ. Сначала выберите другой плейлист в настройках Auto-DJ' });
     res.json({ ok: true });
 }));
 
@@ -686,6 +689,12 @@ router.put('/autodj', safe(async (req,res) => {
     res.json({settings:await readAutoDjSettings()});
 }));
 router.get('/schedule', safe(async (req, res) => {
+    // Retire finished one-time slots after a safety window; playout history remains separate.
+    // The lock coordinates cleanup with schedule edits and playlist deletion.
+    await prisma.$transaction(async tx=>{
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+      await tx.radioScheduleSlot.deleteMany({where:{endAt:{lt:new Date(Date.now()-24*3600000)}}});
+    });
     const from = new Date(req.query.from), to = new Date(req.query.to);
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || to <= from || to - from > 45 * 86400000)
         return res.status(400).json({ error: 'Неверный диапазон (не более 45 дней)' });
@@ -716,7 +725,7 @@ router.post('/schedule', safe(async (req, res) => {
 
 router.post('/schedule/weekly', safe(async (req, res) => {
     const { playlistId, weekdays, weeks } = req.body || {};
-    const startAt = new Date(req.body?.startAt);
+    const startAt = broadcastStart(req.body || {});
     if (typeof playlistId !== 'string' || !Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now() ||
         !Array.isArray(weekdays) || !weekdays.length || weekdays.length > 7 ||
         weekdays.some(day => !Number.isInteger(day) || day < 0 || day > 6) ||
