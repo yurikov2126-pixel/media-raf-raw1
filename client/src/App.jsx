@@ -52,6 +52,7 @@ const Wiki = lazy(() => import('./pages/Wiki.jsx'));
 const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
 import { useRadioAccess } from './hooks/useRadioAccess.js';
 const Radio = lazy(() => import('./pages/Radio.jsx'));
+const RadioListen = lazy(() => import('./pages/RadioListen.jsx'));
 const RadioStudentPlaylists = lazy(() => import('./pages/RadioStudentPlaylists.jsx'));
 const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
 
@@ -117,6 +118,7 @@ export default function App() {
         <RadioUploadProvider>
             <Routes>
                 <Route path="/" element={<RootGate />} />
+                <Route path="/radio/live" element={<LazyPage><RadioListen /></LazyPage>} />
                 <Route path="/login" element={<div className="page-enter"><Login /></div>} />
                 <Route path="/share/editorial/:token" element={<LazyPage><EditorialShareLanding /></LazyPage>} />
                 <Route path="/verify/:serial" element={<div className="page-enter"><Verify /></div>} />
