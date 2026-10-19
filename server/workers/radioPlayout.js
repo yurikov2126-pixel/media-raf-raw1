@@ -395,7 +395,7 @@ async function run() {
         '-f','s16le','-ac','2','-ar','48000','pipe:1'];
     }
     const prepared=prewarmed;
-    const matches=prepared&&prepared.assetId===asset.id&&prepared.seekMs===(cursor.track.seekMs??cursor.track.offsetMs)&&prepared.durationMs===Math.round(remaining)&&prepared.argsKey===JSON.stringify(args)&&!prepared.child.killed;
+    const matches=prepared&&prepared.assetId===asset.id&&prepared.seekMs===(cursor.track.seekMs??cursor.track.offsetMs)&&Math.abs(prepared.durationMs-remaining)<1200&&!prepared.child.killed;
     if(matches){decoder=prepared.child;prewarmed=null;state.transitions.used++;}
     else{discardPrewarm();decoder=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});if(prepared)state.transitions.missed++;}
     const child=decoder;
@@ -428,7 +428,6 @@ async function run() {
     let emittedBytes=0;
     let warmRequested=false;
     const playedStart=Date.now();
-    let lastChunkAt=null;
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
@@ -440,7 +439,6 @@ async function run() {
         if(publicLive.onAir){child.kill('SIGTERM');break;}
         if(!encoder.stdin.write(output)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
         emittedBytes+=output.length;
-        lastChunkAt=Date.now();
         // Start the next FFmpeg decoder while current PCM is still playing.
         // A bounded OS pipe supplies a warm initial PCM buffer; no second audio
         // source is connected to the station encoder until handoff.
