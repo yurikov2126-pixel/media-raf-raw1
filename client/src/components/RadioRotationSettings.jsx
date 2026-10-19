@@ -11,7 +11,7 @@ export default function RadioRotationSettings({token,assets=[]}){
    catch(e){setError(e.message);}finally{setSaving(false);}
  };
  if(!settings)return <p className="text-sm opacity-60">Загрузка музыкальной ротации… {error}</p>;
- return <section className="rounded-2xl border border-current/15 bg-white/5 p-4 sm:p-5 space-y-3">
+ return <section className="rounded-2xl border border-current/15 radio-surface-soft p-4 sm:p-5 space-y-3">
   <h3 className="text-lg font-semibold">Музыкальная ротация · Авто-DJ</h3>
   <p className="text-sm opacity-70">Категории и музыкальная программа по московскому времени. Неизвестные треки считаются категорией «Другая».</p>
   <form onSubmit={save} className="space-y-4">
