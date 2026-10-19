@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import patch, MagicMock
+from urllib.error import HTTPError, URLError
+from updater import check_latest, UpdateCheckError
 from updater import select_update, version_tuple
 
 class UpdateTests(unittest.TestCase):
