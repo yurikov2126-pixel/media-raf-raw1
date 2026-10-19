@@ -160,3 +160,21 @@
 @media(hover:hover){
  .radio-workspace main .radio-panel:hover{border-color:var(--radio-accent)}
 }
+
+/* Reusable layers shared by schedule, library, playlists, automation, and logs. */
+.radio-workspace .radio-surface-soft{
+  background:var(--radio-surface-soft);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace .radio-surface-raised{
+  background:var(--radio-surface-raised);
+  color:var(--radio-ink);
+  border-color:var(--radio-line);
+}
+.radio-workspace main :is(.radio-surface-soft,.radio-surface-raised) :is(button,input,select,textarea){
+  border-color:var(--radio-line);
+}
+.radio-workspace :is(.radio-surface-soft,.radio-surface-raised) .opacity-60{
+  opacity:.82;
+}
