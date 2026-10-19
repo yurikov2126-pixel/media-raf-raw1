@@ -62,6 +62,8 @@ router.get('/agent/stream', deviceAuth, (req,res) => {
   if(!req.radioDevice.playbackAllowed) return res.status(403).json({error:'Воспроизведение запрещено'});
   return streamWorker(req,res);
 });
+// Browser <audio> does not send bearer headers; public station output is intentionally listen-only.
+router.get('/listen', (req,res)=>streamWorker(req,res));
 router.get('/dashboard/worker', ...admin, workerHealth);
 router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -71,15 +73,22 @@ router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   const mode=typeof status?.mode==='string'?status.mode:'UNKNOWN';
   const trackId=typeof status?.trackId==='string'?status.trackId:null;
   const slotId=typeof status?.slotId==='string'?status.slotId:null;
-  const [asset,slot]=await Promise.all([
+  const nextTrackId=typeof status?.nextTrackId==='string'?status.nextTrackId:null;
+  const [asset,slot,nextAsset,nextSlot]=await Promise.all([
     trackId?prisma.radioAsset.findUnique({where:{id:trackId},select:{id:true,name:true,durationMs:true,tags:true}}):null,
-    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,playlist:{select:{name:true}}}}):null,
+    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,endAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}):null,
+    nextTrackId?prisma.radioAsset.findUnique({where:{id:nextTrackId},select:{id:true,name:true,tags:true}}):null,
+    prisma.radioScheduleSlot.findFirst({where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},orderBy:{startAt:'asc'},select:{id:true,startAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},take:1,include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}),
   ]);
   res.json({available:true,source:'PUBLIC_MP3_WORKER',mode,
     track:asset?{id:asset.id,name:asset.name,durationMs:asset.durationMs,
       title:asset.tags?.title||null,artist:asset.tags?.artist||null}:null,
     slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача'}:null,
     trackId,slotId,trackResolved:!trackId||Boolean(asset),observedAt:new Date().toISOString(),
+    playout:status.playout?.trackId===trackId?status.playout:null,
+    nextTrack:nextAsset?{id:nextAsset.id,name:nextAsset.name,title:nextAsset.tags?.title||null,artist:nextAsset.tags?.artist||null,estimated:true}:null,
+    upcomingSlot:nextSlot?{id:nextSlot.id,name:nextSlot.playlist.name,startAt:nextSlot.startAt,
+      firstTrack:nextSlot.playlist.items[0]?.asset?.name||null}:null,
     listenerCount:Number.isFinite(status?.connected)?status.connected:null,
     lastError:typeof status?.lastError==='string'?status.lastError:null});
 }));
