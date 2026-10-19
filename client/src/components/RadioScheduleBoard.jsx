@@ -24,7 +24,7 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
     <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white" onClick={onCreate}>＋ Передача</button>
    </div>
   </div>
-  {view==='week'?<div className="overflow-x-auto rounded-2xl border border-current/10 bg-white/50 dark:bg-slate-900/40">
+  {view==='week'?<div className="overflow-x-auto rounded-2xl border border-current/10 radio-surface-soft">
    <div className="grid min-w-[780px] grid-cols-7 divide-x divide-current/10">
     {dates.map((day,index)=><div key={day} className="min-w-0">
      <div className={`sticky top-0 z-10 border-b border-current/10 p-3 text-center text-xs font-semibold ${day===now?'bg-indigo-600 text-white':'bg-slate-100 dark:bg-slate-800'}`}>
@@ -41,7 +41,7 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
      </div>
     </div>)}
    </div>
-  </div>:<div className="overflow-hidden rounded-2xl border border-current/10 bg-white/50 dark:bg-slate-900/40">
+  </div>:<div className="overflow-hidden rounded-2xl border border-current/10 radio-surface-soft">
    {entries.length?entries.map(event=><button type="button" key={event.id} onClick={()=>onSelectSlot(event)} className="flex w-full items-center gap-3 border-b border-current/10 p-3 text-left last:border-0 hover:bg-indigo-500/10">
     <span className="w-24 shrink-0 text-xs font-semibold tabular-nums">{readable(event.startAt)}</span>
     <span className="w-24 shrink-0 text-xs tabular-nums">{clock(event.startAt)}</span>
