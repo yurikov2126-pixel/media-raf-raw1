@@ -6,6 +6,7 @@ import { useModules } from './store/modules.jsx';
 import Layout from './components/Layout.jsx';
 import { RadioUploadProvider } from './components/RadioUploadManager.jsx';
 import PwaUpdateNotice from './components/PwaUpdateNotice.jsx';
+import PwaInstallInvite from './components/PwaInstallInvite.jsx';
 import SplashScreen, { useSplashGate } from './components/SplashScreen.jsx';
 import OfflineScreen from './components/OfflineScreen.jsx';
 import NetworkBanner from './components/NetworkBanner.jsx';
@@ -188,6 +189,7 @@ export default function App() {
             {user && sessionWasOnline && <NetworkBanner />}
 
             <PwaUpdateNotice />
+            <PwaInstallInvite />
             {user && <GlobalCommandPalette />}
             {user && <OnboardingModal />}
             {user && <AchievementToast />}

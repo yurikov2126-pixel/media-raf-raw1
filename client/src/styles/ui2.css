@@ -2450,3 +2450,40 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
 /* Telegram-like delivery indicators, only for outgoing direct messages in Messenger 2.0. */
 .mrr-v2-receipt { display:inline-flex;align-items:center;margin-left:5px;letter-spacing:-3px;font-size:13px;font-weight:700;color:var(--text-muted);vertical-align:middle;white-space:nowrap;padding-right:3px; }
 .mrr-v2-receipt.is-read { color:var(--brand-accent-1,#9d5be8); }
+
+/* Mobile PWA installation invite — does not overlap the bottom navigation. */
+.mrr-pwa-invite {
+  position:fixed;z-index:120;left:12px;right:12px;
+  bottom:calc(env(safe-area-inset-bottom, 0px) + 90px);
+  display:flex;align-items:flex-start;gap:11px;
+  max-width:440px;margin-inline:auto;padding:15px 38px 15px 14px;
+  color:var(--text-primary);background:var(--bg-elev-1);
+  border:1px solid var(--border-strong);border-radius:22px;
+  box-shadow:0 18px 48px rgba(0,0,0,.28);
+  -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
+  animation:mrr-pwa-invite-appear 360ms cubic-bezier(.18,.85,.25,1) both;
+}
+.mrr-pwa-invite-icon{
+  width:42px;height:42px;flex-shrink:0;display:grid;place-items:center;
+  color:#fff;font-size:25px;border-radius:14px;
+  background:linear-gradient(135deg,#7c3aed,#ec4899,#06b6d4);
+}
+.mrr-pwa-invite-main{min-width:0;flex:1}
+.mrr-pwa-invite-title{font-size:14px;font-weight:750;line-height:1.3}
+.mrr-pwa-invite-description{font-size:12px;line-height:1.45;color:var(--text-secondary);margin:5px 0 10px}
+.mrr-pwa-invite-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mrr-pwa-invite-install{border-radius:13px;background:var(--brand-gradient);color:#fff;font-size:13px;font-weight:700;min-height:38px;padding:8px 15px}
+.mrr-pwa-invite-install:disabled{opacity:.65}
+.mrr-pwa-invite-later{padding:6px;color:var(--text-secondary);font-size:12px}
+.mrr-pwa-invite-close{
+  position:absolute;top:8px;right:9px;width:29px;height:29px;
+  display:grid;place-items:center;border-radius:50%;font-size:23px;
+  color:var(--text-secondary)
+}
+.mrr-pwa-invite-close:active,.mrr-pwa-invite-later:active{background:var(--bg-elev-3)}
+@keyframes mrr-pwa-invite-appear{
+  from{opacity:0;transform:translateY(24px) scale(.97)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@media(min-width:768px){.mrr-pwa-invite{display:none}}
+@media(prefers-reduced-motion:reduce){.mrr-pwa-invite{animation:none}}
