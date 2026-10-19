@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import patch, MagicMock
+from urllib.error import HTTPError, URLError
+from updater import check_latest, UpdateCheckError
 from updater import select_update, version_tuple
 
 class UpdateTests(unittest.TestCase):
@@ -17,4 +20,21 @@ class UpdateTests(unittest.TestCase):
         self.assertIsNone(select_update({**release,"prerelease":True},"0.2.0"))
         self.assertIsNone(select_update({**release,"tag_name":"site-v0.3.0"},"0.2.0"))
         self.assertIsNone(select_update({**release,"assets":[{**asset,"digest":None}]},"0.2.0"))
+    def test_github_offline_reports_network(self):
+        with patch("updater.urlopen",side_effect=URLError("offline")):
+            with self.assertRaisesRegex(UpdateCheckError,"api.github.com"):
+                check_latest("0.2.0")
+
+    def test_rate_limit_is_readable(self):
+        with patch("updater.urlopen",side_effect=HTTPError("https://api.github.com",403,"limit",{},None)):
+            with self.assertRaisesRegex(UpdateCheckError,"403"):
+                check_latest("0.2.0")
+
+    def test_empty_release_list_means_no_new_release(self):
+        from unittest.mock import MagicMock
+        from io import BytesIO
+        with patch("updater.urlopen",return_value=MagicMock(__enter__=lambda _s:BytesIO(b"[]"),
+                   __exit__=lambda *_:None)):
+            self.assertIsNone(check_latest("0.2.0"))
+
 if __name__=="__main__":unittest.main()
