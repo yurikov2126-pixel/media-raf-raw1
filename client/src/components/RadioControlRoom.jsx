@@ -67,7 +67,7 @@ export default function RadioControlRoom({token,onOpen}){
      {onAir?.upcomingSlot&&<p className="text-xs text-slate-300">Ближайший блок сетки: {onAir.upcomingSlot.name} · {displayTime(onAir.upcomingSlot.startAt)}{onAir.upcomingSlot.firstTrack?' · '+onAir.upcomingSlot.firstTrack:''}</p>}
     </div>
     {error&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{error}</p>}
-    {onAir?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">{onAir.lastError}</p>}
+    {onAir?.mode==="ERROR"&&onAir?.lastError&&<p role="alert" className="relative mt-3 text-sm text-rose-300">Ошибка вещания. Подробности доступны в технической диагностике.</p>}
     <div className="relative mt-6 flex flex-wrap gap-2">
      <button onClick={()=>onOpen('studio')} type="button" className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-200">Открыть студию ↗</button>
      <a href="/radio/live" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Открыть плеер ↗</a>
