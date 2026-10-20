@@ -168,3 +168,16 @@
 
 [data-theme="light"] .profile-portfolio3__dark-card p:not([style]) { color: rgba(255,255,255,.8) !important; }
 [data-theme="light"] .profile-portfolio3__dark-card button { color: #fff; }
+
+/* Explicit in-flow room after profile content so its final action row can
+   scroll clear of the fixed mobile navigation even in nested page layouts. */
+@media (max-width: 767px) {
+  .ui-profile-page .mrr-profile-navigation-clearance {
+    display: block;
+    clear: both;
+    flex: none;
+    width: 100%;
+    height: calc(180px + env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
+  }
+}
