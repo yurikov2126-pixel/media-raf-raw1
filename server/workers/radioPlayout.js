@@ -413,6 +413,7 @@ async function run() {
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
+      lastDecodedSource=null;
       discardPrewarm();musicQueueKey=null;musicQueueNextId=null;
       state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;state.nextTrackId=null;
       const frame=publicLive.take(Date.now());
@@ -424,6 +425,7 @@ async function run() {
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
+      lastDecodedSource=null;
       discardPrewarm();
       state.mode='SILENCE';state.trackId=null;state.playout=null;state.nextTrackId=null;
       for(let i=0;i<5&&!stopping;i++) {
@@ -456,7 +458,8 @@ async function run() {
       const authorityKnown=!!cursor.slot || cursor.status==='AUTO_DJ';
       const handover=reserveSourceTransition({
         source:lastDecodedSource,target:{id:asset.id,mode:cursor.status},
-        sourceReady:lastDecodedSource.emittedMs>=250,targetReady:true,
+        sourceReady:lastDecodedSource.emittedMs>=250&&Date.now()-lastDecodedSource.at<5000,
+        targetReady:!!prewarmed&&prewarmed.assetId===asset.id&&!prewarmed.child.killed,
         slotKnown:authorityKnown,scheduledActive:cursor.status==='SCHEDULED',
         publicLive:publicLive.onAir,overlapMs:1500
       });
@@ -659,7 +662,7 @@ async function run() {
       void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
     if(generatedMs>=250&&['AUTO_DJ','SCHEDULED'].includes(cursor.status))
-      lastDecodedSource={id:asset.id,mode:cursor.status,emittedMs:generatedMs};
+      lastDecodedSource={id:asset.id,mode:cursor.status,emittedMs:generatedMs,at:Date.now()};
     if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){
       lastAutoDjTrackId=asset.id;
       recentlyAiredArtists.push(id3Artist(asset));
