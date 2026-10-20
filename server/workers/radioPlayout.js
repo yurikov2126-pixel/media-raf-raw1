@@ -576,9 +576,10 @@ async function run() {
           !pendingScheduledHandover&&!publicLive.onAir&&Number.isFinite(boundary)&&
           boundary-Date.now()<4500&&boundary-Date.now()>300){
           scheduledPrewarmRequested=true;
-          try{
+          void (async()=>{
+           try{
             const nextSlot=await prisma.radioScheduleSlot.findFirst({
-              where:{startAt:{gte:new Date(Date.now()-500)},startAt:{lte:new Date(Date.now()+5000)},
+              where:{startAt:{gte:new Date(Date.now()-500),lte:new Date(Date.now()+5000)},
                 playlist:{status:'APPROVED'}},
               include:{playlist:{include:{items:{orderBy:{position:'asc'},take:1,include:{asset:true}}}}},
               orderBy:{startAt:'asc'}
@@ -587,7 +588,8 @@ async function run() {
             if(first?.id&&!prewarmed){
               void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true});
             }
-          }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
+           }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
+          })();
         }
         if(state.playout?.trackId===asset.id){
           if(!state.playout.startedAt)state.playout.startedAt=Date.now();
