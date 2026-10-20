@@ -58,6 +58,8 @@ const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-au
 const listeners = new Set();
 // Explicit opt-in: disabled until the full PCM transition is validated on-air.
 const SCHEDULED_CROSSFADE_ENABLED=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
+const scheduledDefaultOverlap=Number(process.env.RADIO_SCHEDULED_DEFAULT_OVERLAP_MS||0);
+const SCHEDULED_DEFAULT_OVERLAP_MS=Number.isSafeInteger(scheduledDefaultOverlap)&&scheduledDefaultOverlap>=250&&scheduledDefaultOverlap<=15000?scheduledDefaultOverlap:0;
 // OFF by default: strict schedule-entry PCM overlap only, with on-air diagnostics.
 const LIVE_SOURCE_CROSSFADE_ENABLED=process.env.RADIO_LIVE_SOURCE_CROSSFADE_ENABLED==='true';
 const LIVE_SOURCE_OVERLAP_MS=1500;
@@ -221,7 +223,7 @@ async function current() {
       if(delayed?.playlist?.status==='APPROVED'){
         const shifted={...delayed,startAt:new Date(delayedScheduledSlot.actualStartMs),
           endAt:new Date(delayedScheduledSlot.actualEndMs)};
-        const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+        const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS});
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
         return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1,
           nextTrackId:scheduledSuccessor(shifted.playlist.items,shiftedCursor)};
@@ -229,7 +231,7 @@ async function current() {
       delayedScheduledSlot=null;
     }
   }
-  let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+  let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS});
   if(LIVE_SOURCE_CROSSFADE_ENABLED&&scheduledEntryOverlap&&cursor.slot?.id===scheduledEntryOverlap.slotId){
     cursor=resumeScheduledCursor(cursor,scheduledEntryOverlap);
   }
