@@ -19,6 +19,7 @@ const Analytics = lazy(() => import('./tabs/Analytics.jsx'));
 const Users = lazy(() => import('./tabs/Users.jsx'));
 const Certificates = lazy(() => import('./tabs/Certificates.jsx'));
 const Broadcast = lazy(() => import('./tabs/Broadcast.jsx'));
+const RadioLiveEditor = lazy(() => import('./tabs/RadioLiveEditor.jsx'));
 const MessengerUI = lazy(() => import('./tabs/MessengerUI.jsx'));
 const Push = lazy(() => import('./tabs/Push.jsx'));
 const Backups = lazy(() => import('./tabs/Backups.jsx'));
@@ -231,6 +232,7 @@ export default function Admin() {
                                 token={token}
                             />
                         )}
+                        {tab === 'radio-live-editor' && <RadioLiveEditor token={token} />}
                         {tab === 'broadcast' && (
                             <Broadcast token={token} users={users} courses={courses} />
                         )}

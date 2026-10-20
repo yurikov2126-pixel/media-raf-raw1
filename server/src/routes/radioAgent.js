@@ -235,6 +235,53 @@ router.put('/dashboard/metadata-sync',...admin,safe(async(req,res)=>{
     update:{value:JSON.stringify(value)}});
   res.json(value);
 }));
+const RADIO_LIVE_DESIGN_KEY='radio_live_design_v1';
+const RADIO_LIVE_TEXT_LIMITS={
+ headerSubtitle:80,eyebrow:80,stationTagline:80,
+ heroLine1:100,heroLine2:100,heroLine3:100,description:500,
+ inviteEyebrow:100,inviteTitle:120,inviteDescription:500,
+ inviteButton:80,sideFooter:180,footerText:250
+};
+const RADIO_LIVE_BOOLEAN_KEYS=['showInvite','showWaves','showSideFooter','showStationClock'];
+const RADIO_LIVE_COLOR_KEYS=['accent','background'];
+async function readRadioLiveDesign(){
+ const row=await prisma.setting.findUnique({where:{key:RADIO_LIVE_DESIGN_KEY}});
+ try {const value=JSON.parse(row?.value||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}
+ catch{return {};}
+}
+router.get('/listen/design',safe(async(_req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ res.json(await readRadioLiveDesign());
+}));
+router.get('/dashboard/live-design',...admin,safe(async(_req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ res.json(await readRadioLiveDesign());
+}));
+router.put('/dashboard/live-design',...admin,safe(async(req,res)=>{
+ const body=req.body;
+ if(!body||typeof body!=='object'||Array.isArray(body))
+  return res.status(400).json({error:'Некорректный формат настроек'});
+ const value={};
+ for(const [key,max] of Object.entries(RADIO_LIVE_TEXT_LIMITS)){
+  if(typeof body[key]!=='string'||body[key].length>max)
+   return res.status(400).json({error:'Некорректное поле '+key});
+  value[key]=body[key];
+ }
+ for(const key of RADIO_LIVE_BOOLEAN_KEYS){
+  if(typeof body[key]!=='boolean')return res.status(400).json({error:'Некорректное поле '+key});
+  value[key]=body[key];
+ }
+ for(const key of RADIO_LIVE_COLOR_KEYS){
+  if(typeof body[key]!=='string'||!/^#[0-9a-fA-F]{6}$/.test(body[key]))
+   return res.status(400).json({error:'Некорректный цвет '+key});
+  value[key]=body[key];
+ }
+ await prisma.setting.upsert({where:{key:RADIO_LIVE_DESIGN_KEY},
+  create:{key:RADIO_LIVE_DESIGN_KEY,value:JSON.stringify(value)},
+  update:{value:JSON.stringify(value)}});
+ await prisma.adminAction.create({data:{adminId:req.user.id,action:'RADIO_LIVE_DESIGN_UPDATE',payload:JSON.stringify({fields:Object.keys(value)})}});
+ res.json(value);
+}));
 router.get('/listen/now-playing',safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   let worker;
