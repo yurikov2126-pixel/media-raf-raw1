@@ -60,6 +60,11 @@ const DEFAULTS = {
     ui_card_border: 'normal',
     ui_card_shadow: 'soft',
     ui_input_style: 'outlined',
+    nav_mobile_style: 'classic',
+    nav_glass_opacity: '64',
+    nav_glass_blur: '24',
+    nav_glass_saturation: '145',
+    nav_glass_border: '45',
     ui_chip_shape: 'pill',
     ui_hover_effect: 'subtle',
 
@@ -140,11 +145,17 @@ export function SettingsProvider({ children }) {
         root.style.setProperty('--ui-density', ({compact:'0.8',standard:'1',spacious:'1.2'})[raw.ui_density] || '1');
         root.style.setProperty('--ui-button-radius', ({square:'6px',standard:'12px',pill:'999px'})[raw.ui_button_shape] || '12px');
         root.style.setProperty('--ui-card-border-opacity', ({subtle:'0.07',normal:'0.13',strong:'0.3'})[raw.ui_card_border] || '0.13');
+        root.dataset.mobileNavStyle = raw.nav_mobile_style === 'glass' ? 'glass' : 'classic';
+        const clamp = (value, min, max, fallback) => Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback));
+        root.style.setProperty('--nav-glass-opacity', String(clamp(raw.nav_glass_opacity, 15, 95, 64) / 100));
+        root.style.setProperty('--nav-glass-blur', `${clamp(raw.nav_glass_blur, 0, 48, 24)}px`);
+        root.style.setProperty('--nav-glass-saturation', `${clamp(raw.nav_glass_saturation, 100, 200, 145)}%`);
+        root.style.setProperty('--nav-glass-border', String(clamp(raw.nav_glass_border, 0, 90, 45) / 100));
         root.dataset.uiInputStyle = ['outlined','filled','minimal'].includes(raw.ui_input_style) ? raw.ui_input_style : 'outlined';
         root.dataset.uiChipShape = ['pill','rounded','square'].includes(raw.ui_chip_shape) ? raw.ui_chip_shape : 'pill';
         root.dataset.uiHoverEffect = ['none','subtle','lift'].includes(raw.ui_hover_effect) ? raw.ui_hover_effect : 'subtle';
         root.style.setProperty('--ui-card-shadow', ({none:'none',soft:'0 8px 28px rgba(0,0,0,.12)',strong:'0 12px 36px rgba(0,0,0,.3)'})[raw.ui_card_shadow] || '0 8px 28px rgba(0,0,0,.12)');
-    }, [raw.brand_accent_1, raw.brand_accent_2, raw.brand_accent_3, raw.ui_font_scale, raw.ui_radius, raw.ui_motion, raw.ui_density, raw.ui_button_shape, raw.ui_card_border, raw.ui_card_shadow, raw.ui_input_style, raw.ui_chip_shape, raw.ui_hover_effect]);
+    }, [raw.brand_accent_1, raw.brand_accent_2, raw.brand_accent_3, raw.ui_font_scale, raw.ui_radius, raw.ui_motion, raw.ui_density, raw.ui_button_shape, raw.ui_card_border, raw.ui_card_shadow, raw.ui_input_style, raw.ui_chip_shape, raw.ui_hover_effect, raw.nav_mobile_style, raw.nav_glass_opacity, raw.nav_glass_blur, raw.nav_glass_saturation, raw.nav_glass_border]);
 
     useEffect(() => {
         if (raw.site_name) document.title = raw.site_name;
