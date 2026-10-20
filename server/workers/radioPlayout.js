@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
+import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
@@ -83,6 +84,8 @@ let resumeAutoDjAfterShow=false;
 // Track natural EOF of the final scheduled item so wall-clock drift cannot replay it.
 let finishedScheduledSlot=null;
 state.lastBoundary=null;
+state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0};
+let lastDecodedSource=null;
 function recordBoundary(event){state.lastBoundary={...event,at:new Date().toISOString()};console.info('RADIO_SOURCE_BOUNDARY',JSON.stringify(state.lastBoundary));}
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
 const liveIntake=new LivePcmIntake();
@@ -410,6 +413,7 @@ async function run() {
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
+      lastDecodedSource=null;
       discardPrewarm();musicQueueKey=null;musicQueueNextId=null;
       state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;state.nextTrackId=null;
       const frame=publicLive.take(Date.now());
@@ -421,6 +425,7 @@ async function run() {
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
+      lastDecodedSource=null;
       discardPrewarm();
       state.mode='SILENCE';state.trackId=null;state.playout=null;state.nextTrackId=null;
       for(let i=0;i<5&&!stopping;i++) {
@@ -443,6 +448,28 @@ async function run() {
       if(cursor.status==='AUTO_DJ')failedAutoDjAssets.set(asset.id,Date.now()+300000);
       await new Promise(resolve=>setTimeout(resolve,250));
       continue;
+    }
+    // Source authority is checked before evaluating a cross-mode transition.
+    // This is intentionally a fail-closed admission/telemetry gate. It does NOT
+    // claim a live overlap until two PCM decoders have actually been mixed.
+    if(lastDecodedSource&&lastDecodedSource.mode!==cursor.status&&
+      ['AUTO_DJ','SCHEDULED'].includes(lastDecodedSource.mode)&&
+      ['AUTO_DJ','SCHEDULED'].includes(cursor.status)){
+      const authorityKnown=!!cursor.slot || cursor.status==='AUTO_DJ';
+      const handover=reserveSourceTransition({
+        source:lastDecodedSource,target:{id:asset.id,mode:cursor.status},
+        sourceReady:lastDecodedSource.emittedMs>=250&&Date.now()-lastDecodedSource.at<5000,
+        targetReady:!!prewarmed&&prewarmed.assetId===asset.id&&!prewarmed.child.killed,
+        slotKnown:authorityKnown,scheduledActive:cursor.status==='SCHEDULED',
+        publicLive:publicLive.onAir,overlapMs:1500
+      });
+      state.sourceHandover.last={
+        from:lastDecodedSource.mode,to:cursor.status,fromId:lastDecodedSource.id,
+        toId:asset.id,admissible:handover.allowed,reason:handover.reason||null,
+        mixed:false,at:new Date().toISOString()
+      };
+      if(handover.allowed)state.sourceHandover.eligible++;
+      else state.sourceHandover.blocked++;
     }
     // A new per-track decoder receives the latest settings. The shared encoder
     // remains alive and scheduled boundaries keep priority over DSP effects.
@@ -634,6 +661,8 @@ async function run() {
       // A slow journal write must never create dead air at the next track boundary.
       void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
+    if(generatedMs>=250&&['AUTO_DJ','SCHEDULED'].includes(cursor.status))
+      lastDecodedSource={id:asset.id,mode:cursor.status,emittedMs:generatedMs,at:Date.now()};
     if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){
       lastAutoDjTrackId=asset.id;
       recentlyAiredArtists.push(id3Artist(asset));
