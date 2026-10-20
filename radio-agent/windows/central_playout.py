@@ -20,7 +20,7 @@ from sync_agent import sync
 from esp32_local import send_heartbeat
 
 STOP = threading.Event()
-PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900}
+PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
 
 def get_status(server, token):
@@ -120,7 +120,7 @@ def run(args, token):
         raise PermissionError('Server does not permit test playback')
     snapshot=read_snapshot(snapshotfile)
     last_authorized=time.monotonic()
-    PLAYBACK_STATE.update(mode='STOPPED',lastAuthorized=last_authorized,offlineGrace=args.offline_grace)
+    PLAYBACK_STATE.update(mode='STOPPED',lastAuthorized=last_authorized,offlineGrace=args.offline_grace,streamLastSeen=0.0,broadcastRunning=True)
     relay=Relay(args.server,token)
     threading.Thread(target=relay.serve_forever,daemon=True).start()
     primary=None
@@ -173,6 +173,13 @@ def run(args, token):
     try:
         while not STOP.is_set():
             now=time.monotonic()
+            # Playback health is independent from a power-intent HTTP request.
+            active_audio=(primary is not None and primary.poll() is None and
+                          not relay.failed.is_set() and now-relay.last_data<=4)
+            reserve_audio=fallback is not None and fallback.poll() is None
+            PLAYBACK_STATE['mode']='CENTRAL' if active_audio else 'LOCAL_RESERVE' if reserve_audio else 'STOPPED'
+            if active_audio or reserve_audio:
+                PLAYBACK_STATE['streamLastSeen']=now
             if esp32_host and esp32_secret and now-last_esp32>=3:
                 last_esp32=now
                 # Safe pilot telemetry only. No relay actuation is possible.
@@ -237,7 +244,7 @@ def run(args, token):
                     fallback_key=None
             STOP.wait(0.5)
     finally:
-        PLAYBACK_STATE['mode']='STOPPED'
+        PLAYBACK_STATE.update(mode='STOPPED',broadcastRunning=False,streamLastSeen=0.0)
         stop_vlc(primary)
         stop_vlc(fallback)
         relay.shutdown()
