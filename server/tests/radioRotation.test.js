@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists,prioritizeUnplayed,id3Artist,normalizeArtist,rotationPlaylistAssets} from '../src/lib/radioRotation.js';
+import {DEFAULT_ROTATION,validateRotation,rotationPlan,readRotation,separateArtists,prioritizeUnplayed,id3Artist,normalizeArtist,rotationPlaylistAssets,fairNextTrack} from '../src/lib/radioRotation.js';
 const items=[
  {id:'a1',name:'One',playDurationMs:60000,tags:{artist:'Band A'}},
  {id:'b1',name:'Two',playDurationMs:60000,tags:{artist:'Band B'}},
@@ -110,5 +110,23 @@ describe('artist spacing precomputed ID3 names',()=>{
   expect(result.items).toHaveLength(source.length);
   expect(new Set(result.items.map(x=>x.id)).size).toBe(source.length);
   expect(result.violations).toBeGreaterThanOrEqual(0);
+ });
+});
+
+describe('fair Auto-DJ history rotation',()=>{
+ const pool=[{id:'a',tags:{artist:'A'}},{id:'b',tags:{artist:'B'}},{id:'c',tags:{artist:'C'}}];
+ const at=Date.parse('2026-10-20T19:00:00Z');
+ const event=(id,seconds)=>({id,startedAt:new Date(at-seconds*1000).toISOString()});
+ it('plays all unheard music before repeating any recently played track',()=>{
+  expect(fairNextTrack(pool,[event('a',15),event('b',30)],[],0,at).id).toBe('c');
+ });
+ it('selects the oldest heard track once all have been aired',()=>{
+  expect(fairNextTrack(pool,[event('a',15),event('b',90),event('c',30)],[],0,at).id).toBe('b');
+ });
+ it('does not select multiple copies of a duplicated playlist asset',()=>{
+  expect(fairNextTrack([...pool,pool[0]],[event('a',20)],[],0,at).id).toBe('b');
+ });
+ it('applies artist separation among equally eligible unseen songs',()=>{
+  expect(fairNextTrack(pool,[],['A'],1,at).id).toBe('b');
  });
 });
