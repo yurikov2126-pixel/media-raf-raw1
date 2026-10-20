@@ -1001,15 +1001,24 @@ async function run() {
           void (async()=>{
            try{
             const nextSlot=await prisma.radioScheduleSlot.findFirst({
-              where:{startAt:{gte:new Date(Date.now()-500),lte:new Date(Date.now()+5000)},
+              where:{startAt:{gte:new Date(boundary-500),lte:new Date(boundary+500)},
                 playlist:{status:'APPROVED'}},
               include:{playlist:{include:{items:{orderBy:{position:'asc'},take:1,include:{asset:true}}}}},
               orderBy:{startAt:'asc'}
             });
             const first=nextSlot?.playlist?.items?.[0]?.asset;
-            if(first?.id&&!prewarmed){
+            if(first?.id&&!prewarmed&&Date.parse(nextSlot.startAt)===boundary){
+              console.info('RADIO_SCHEDULED_PREWARM',JSON.stringify({
+                status:'REQUESTED',slotId:nextSlot.id,trackId:first.id,
+                boundaryInMs:boundary-Date.now(),at:new Date().toISOString()}));
               void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true,
                 scheduledSlotId:nextSlot.id,scheduledSlotStartMs:Date.parse(nextSlot.startAt)});
+            }else{
+              console.info('RADIO_SCHEDULED_PREWARM',JSON.stringify({
+                status:'NOT_READY',reason:!nextSlot?'SLOT_NOT_FOUND':!first?'NO_FIRST_ASSET':
+                  prewarmed?'DECODER_BUSY':'BOUNDARY_MISMATCH',
+                boundaryInMs:boundary-Date.now(),at:new Date().toISOString()}));
+              scheduledPrewarmRequested=false;
             }
            }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
           })();
