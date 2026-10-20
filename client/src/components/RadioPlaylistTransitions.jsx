@@ -21,7 +21,7 @@ export default function RadioPlaylistTransitions({ids,assets,settings,onChange})
  return <section className="space-y-3 rounded-xl border border-current/15 p-3">
   <div><h3 className="font-semibold">Переходы между композициями</h3>
    <p className="mt-1 text-xs opacity-70">Настройка привязана к паре соседних записей. Перестановка удаляет связь с прежним соседним треком, но сохраняет настройку пары для повторного использования.</p>
-   <p className="mt-1 text-xs font-medium">Расчётная длительность с наложением: {Math.ceil(total/1000)} с</p>
+   <p className="mt-1 text-xs font-medium">Плановая длительность после включения PCM-сведения: {Math.ceil(total/1000)} с</p>
   </div>
   {ids.slice(0,-1).map((id,i)=>{
    const next=ids[i+1],key=pair(id,next),config=settings[key]||DEFAULT;
@@ -32,7 +32,7 @@ export default function RadioPlaylistTransitions({ids,assets,settings,onChange})
      <span className="shrink-0 font-medium">{config.mode==='crossfade'?config.overlapMs/1000+' с':'Без наложения'} {expanded===key?'▲':'▼'}</span>
     </button>
     {expanded===key&&<div className="mt-3 space-y-3">
-     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.mode==='crossfade'} onChange={e=>update(key,{mode:e.target.checked?'crossfade':'cut',overlapMs:e.target.checked?Math.min(5000,maximum):0})}/>Наложение треков</label>
+     <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={maximum<250} checked={config.mode==='crossfade'} onChange={e=>update(key,{mode:e.target.checked?'crossfade':'cut',overlapMs:e.target.checked?Math.min(5000,maximum):0})}/>Наложение треков</label>
      {config.mode==='crossfade'&&<>
       <label className="block space-y-1 text-sm">Длительность наложения: {(config.overlapMs/1000).toFixed(2)} сек.
        <input type="range" min="250" max={Math.max(250,maximum)} step="250" value={config.overlapMs} onChange={e=>update(key,{overlapMs:Number(e.target.value)})} className="w-full accent-indigo-600"/>
