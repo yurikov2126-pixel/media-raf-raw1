@@ -94,6 +94,11 @@ export default function Messenger() {
 
     const [chats, setChats] = useState([]);
     const [messages, setMessages] = useState([]);
+    const [hasMoreServerHistory, setHasMoreServerHistory] = useState(false);
+    const loadingOlderHistoryRef = useRef(false);
+    const messagesFetchSeqRef = useRef(0);
+    const socketDuringFetchRef = useRef([]);
+    const messagesFetchPendingRef = useRef(false);
     const [chatReceipts, setChatReceipts] = useState([]);
     const [pinned, setPinned] = useState(null);
     const [myRole, setMyRole] = useState('member');
@@ -243,9 +248,35 @@ export default function Messenger() {
     const [historyEnd, setHistoryEnd] = useState(null); // null follows newest messages
     const prependAnchorRef = useRef(null);
     const historyCount = 120;
+    const loadOlderServerHistory = async () => {
+        if (!chatId || !token || !hasMoreServerHistory || loadingOlderHistoryRef.current || !messages.length) return;
+        loadingOlderHistoryRef.current = true;
+        const activeChatId = chatId;
+        const requestSeq = messagesFetchSeqRef.current;
+        const oldestId = messages[0].id;
+        const viewport = scrollRef.current;
+        if (viewport) prependAnchorRef.current = { height: viewport.scrollHeight, top: viewport.scrollTop };
+        try {
+            const result = await api(`/chats/${activeChatId}/messages?before=${encodeURIComponent(oldestId)}`, { token });
+            if (messagesFetchSeqRef.current !== requestSeq) return;
+            const older = result.messages || [];
+            setMessages((current) => {
+                const known = new Set(current.map((item) => item.id));
+                return [...older.filter((item) => !known.has(item.id)), ...current];
+            });
+            setHistoryStart(0);
+            setHasMoreServerHistory(Boolean(result.hasMore));
+        } catch (err) {
+            prependAnchorRef.current = null;
+            console.error('Не удалось загрузить ранние сообщения', err);
+        } finally {
+            loadingOlderHistoryRef.current = false;
+        }
+    };
     const revealOlder = () => {
         const el = scrollRef.current;
-        if (!el || historyStart === 0) return;
+        if (!el) return;
+        if (historyStart === 0) { if (hasMoreServerHistory) void loadOlderServerHistory(); return; }
         prependAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
         const nextStart = Math.max(0, historyStart - historyCount);
         let start = nextStart;
@@ -445,19 +476,35 @@ export default function Messenger() {
 
     useEffect(() => {
         if (!chatId || !token) return;
+        const requestSeq = ++messagesFetchSeqRef.current;
+        socketDuringFetchRef.current = [];
+        messagesFetchPendingRef.current = true;
+        loadingOlderHistoryRef.current = false;
+        setMessages([]);
+        setHasMoreServerHistory(false);
         setFirstUnreadId(null);
         needsInitialScroll.current = true;
         nearBottomRef.current = true;
         setShowJumpToLatest(false);
         setUnseenCount(0);
         api(`/chats/${chatId}/messages${linkedMessageId ? `?focus=${encodeURIComponent(linkedMessageId)}` : ''}`, { token }).then((r) => {
+            if (requestSeq !== messagesFetchSeqRef.current) return;
+            setHasMoreServerHistory(Boolean(r.hasMore));
+            const mergeLive = (loaded) => {
+                const byId = new Map(loaded.map((m) => [m.id, m]));
+                for (const m of socketDuringFetchRef.current) byId.set(m.id, m);
+                socketDuringFetchRef.current = [];
+                messagesFetchPendingRef.current = false;
+                return [...byId.values()].sort((a, b) =>
+                    new Date(a.createdAt) - new Date(b.createdAt) || a.id.localeCompare(b.id));
+            };
             if (Array.isArray(r)) {
                 let start = isMessengerV2 ? Math.max(0, r.length - historyCount) : 0;
                 while (start > 0 && r[start]?.albumId && r[start - 1]?.albumId === r[start].albumId) start--;
                 setHistoryEnd(null);
                 setHistoryStart(start);
                 setChatReceipts([]);
-                setMessages(r); setPinned(null); setMyRole('member');
+                setMessages(mergeLive(r)); setPinned(null); setMyRole('member');
             } else {
                 const incoming = r.messages || [];
                 const focus = linkedMessageId || r.firstUnreadId;
@@ -471,12 +518,12 @@ export default function Messenger() {
                     const recentIncoming = [...incoming].reverse().find((m) => m.senderId !== user.id && m.sender?.id !== user.id);
                     if (recentIncoming) socket.emit('message:received', { chatId, messageId: recentIncoming.id });
                 }
-                setMessages(incoming);
+                setMessages(mergeLive(incoming));
                 setPinned(r.pinned || null);
                 setMyRole(r.myRole || 'member');
                 setFirstUnreadId(r.firstUnreadId || null);
             }
-        });
+        }).catch((error) => { if (requestSeq === messagesFetchSeqRef.current) { messagesFetchPendingRef.current = false; console.error('Не удалось загрузить сообщения чата', error); } });
         socket?.emit('chat:join', chatId);
         notifications.markChatRead?.(chatId);
     }, [chatId, token, socket]); // eslint-disable-line
@@ -495,6 +542,7 @@ export default function Messenger() {
                     if (nearBottomRef.current && document.visibilityState === 'visible') socket.emit('chat:read', { chatId });
                 }
                 if (!nearBottomRef.current && m.senderId !== user.id && m.sender?.id !== user.id) setUnseenCount((n) => n + 1);
+                if (messagesFetchPendingRef.current) socketDuringFetchRef.current.push(m);
                 setMessages((prev) => prev.some((item) => item.id === m.id) ? prev : [...prev, m]);
             }
             reloadChats();
@@ -1301,7 +1349,7 @@ export default function Messenger() {
                             if (nearBottom) setUnseenCount(0);
                         }} className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 md:px-6 py-4 space-y-2">
                             {isMessengerV2 && historyStart > 0 && <button type="button" className="mrr-v2-load-history" onClick={revealOlder}>
-                                ↑ Показать предыдущие сообщения ({historyStart})
+                                ↑ Показать предыдущие сообщения {historyStart > 0 ? `(${historyStart})` : "(загрузить историю)"}
                             </button>}
                             {messages.map((m, index) => { if (isMessengerV2 && (index < historyStart || (historyEnd !== null && index >= historyEnd))) return null; const album = albumAt(index); return album === 'continuation' ? null : (
                                 <div key={m.id} id={`message-row-${m.id}`} data-message-row="true" className={isMessengerV2 ? 'mrr-v2-message-row' : 'space-y-2'}>
