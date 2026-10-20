@@ -253,9 +253,9 @@ async function current() {
       autoDjEnabled:settings.enabled,publicLive:publicLive.onAir
     });
     reverseReservedTarget=null;
-    if(decision.valid&&prewarmed?.assetId===reservation.assetId&&
-      prewarmed.seekMs===reservation.seekMs+(reservation.consumedFrames||0)/48&&
-      !prewarmed.child.killed){
+    if(decision.valid&&(!reservation.consumedFrames || (prewarmed?.assetId===reservation.assetId&&
+      prewarmed.seekMs===reservation.seekMs+reservation.consumedFrames/48&&
+      !prewarmed.child.killed))){
       const chosen=catalog.find(a=>a.id===reservation.assetId);
       if(chosen){
         state.reverseTargetReservation.used++;
@@ -671,7 +671,8 @@ async function run() {
             preparedSlot?.assetId===reverseReservedTarget.assetId&&
             preparedSlot.seekMs===reverseReservedTarget.seekMs&&
             !preparedSlot.iterator&&!preparedSlot.child.killed&&
-            !!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200&&
+            (liveMixSession?.direction==='REVERSE'||
+              (!!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
