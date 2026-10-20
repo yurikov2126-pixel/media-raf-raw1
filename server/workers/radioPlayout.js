@@ -488,6 +488,10 @@ async function run() {
     if(matches){decoder=prepared.child;prewarmed=null;state.transitions.used++;}
     else{discardPrewarm();decoder=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});if(prepared)state.transitions.missed++;}
     const child=decoder;
+    // Upcoming hard-start schedule takes precedence over AutoDJ prewarm.
+    // This prepares the first scheduled decoder ahead of time without routing it
+    // to the encoder until the authoritative schedule cursor selects it.
+    let scheduledPrewarmRequested=false;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
     let polling=false;
@@ -567,6 +571,25 @@ async function run() {
           void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
             musicCount:cursor.isJingle?0:musicSinceJingle+1,scheduled:cursor.status==='SCHEDULED',
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
+        }
+        if(!scheduledPrewarmRequested&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
+          !pendingScheduledHandover&&!publicLive.onAir&&Number.isFinite(boundary)&&
+          boundary-Date.now()<4500&&boundary-Date.now()>300){
+          scheduledPrewarmRequested=true;
+          void (async()=>{
+           try{
+            const nextSlot=await prisma.radioScheduleSlot.findFirst({
+              where:{startAt:{gte:new Date(Date.now()-500),lte:new Date(Date.now()+5000)},
+                playlist:{status:'APPROVED'}},
+              include:{playlist:{include:{items:{orderBy:{position:'asc'},take:1,include:{asset:true}}}}},
+              orderBy:{startAt:'asc'}
+            });
+            const first=nextSlot?.playlist?.items?.[0]?.asset;
+            if(first?.id&&!prewarmed){
+              void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true});
+            }
+           }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
+          })();
         }
         if(state.playout?.trackId===asset.id){
           if(!state.playout.startedAt)state.playout.startedAt=Date.now();
