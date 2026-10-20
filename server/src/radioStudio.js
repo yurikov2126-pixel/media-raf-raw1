@@ -149,6 +149,16 @@ export function initRadioStudio(io) {
         callback?.({ok:result.accepted,reason:result.reason||null,nextSequence:result.nextSequence??null});
         if(!result.accepted){closeGateway();uplink.reset();uplinkOwner=null;}
       }catch(error){
+        // Capture the underlying gateway/Worker failure before closeGateway()
+        // releases the decoder and resets the session. Do not expose internal
+        // exception strings to public browser clients.
+        const detail=String(gateway?.lastError||error?.message||'UNKNOWN');
+        console.error('[RADIO_PCM_GATEWAY_FAILED]',{
+          detail,
+          sequence,
+          gateway:gateway?.snapshot()||null,
+          uplink:uplink.snapshot(),
+        });
         closeGateway();uplink.reset();uplinkOwner=null;
         callback?.({ok:false,reason:'PCM_GATEWAY_FAILED'});
       }finally{chunkBusy=false;}
