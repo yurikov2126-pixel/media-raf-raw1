@@ -101,7 +101,15 @@ let scheduledEntryOverlap=null;
 let reverseReservedTarget=null;
 let reverseMixAuthorityAt=null;
 let reverseReserveInFlight=false;
-state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null};
+state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null,blocked:0,reasons:{}};
+function reversePrewarmBlocked(reason,details={}){
+  state.reverseTargetReservation.blocked++;
+  state.reverseTargetReservation.reasons[reason]=(state.reverseTargetReservation.reasons[reason]||0)+1;
+  if(state.reverseTargetReservation.last?.reason!==reason){
+    console.info('RADIO_REVERSE_PREWARM',JSON.stringify({status:'BLOCKED',reason,...details,at:new Date().toISOString()}));
+  }
+  state.reverseTargetReservation.last={status:'BLOCKED',reason,at:new Date().toISOString()};
+}
 state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 state.reverseHandover={attempts:0,eligible:0,blocked:0,last:null,mixed:0};
 state.liveOverlapGate={attempts:0,qualified:0,blocked:0,last:null,reasons:{}};
@@ -880,21 +888,25 @@ async function run() {
           void (async()=>{
             try{
               const settings=await readAutoDjSettings();
-              if(!settings.enabled||!settings.playlistId||publicLive.onAir||prewarmed||prewarming)return;
+              if(!settings.enabled||!settings.playlistId){reversePrewarmBlocked('AUTO_DJ_DISABLED');return;}
+              if(publicLive.onAir){reversePrewarmBlocked('PUBLIC_LIVE');return;}
+              if(prewarmed||prewarming){reversePrewarmBlocked('PREWARM_BUSY',{preparedAssetId:prewarmed?.assetId||null});return;}
               const rotationSettings=await readRotation();
-              if(rotationSettings.enabled)return; // do not bypass artist/cooldown rotation
+              if(rotationSettings.enabled){reversePrewarmBlocked('ROTATION_ENABLED');return;} // do not bypass artist/cooldown rotation
               const playlist=await prisma.radioPlaylist.findUnique({
                 where:{id:settings.playlistId},
                 include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
               });
               const approved=cueAssets(selectAutoDjAssets(playlist),await readCues());
               const selected=approved.find(a=>a.playDurationMs>=2500);
-              if(!selected||publicLive.onAir||state.trackId!==asset.id)return;
+              if(!selected){reversePrewarmBlocked('NO_ELIGIBLE_ASSET');return;}
+              if(publicLive.onAir||state.trackId!==asset.id){reversePrewarmBlocked('SOURCE_CHANGED');return;}
               const reservation=reserveReverseTarget({
                 asset:selected,playlistId:settings.playlistId,slotId:cursor.slot.id,
                 slotEndMs:boundary,seekMs:selected.cue.inMs,
                 durationMs:selected.playDurationMs,nowMs:Date.now()
               });
+              if(!reservation){reversePrewarmBlocked('RESERVATION_REJECTED');return;}
               if(reservation&&!reverseReservedTarget){
                 reverseReservedTarget=reservation;
                 if(!prewarmed&&!prewarming){
@@ -904,8 +916,10 @@ async function run() {
                 state.reverseTargetReservation.reserved++;
                 state.reverseTargetReservation.last={status:'RESERVED',assetId:reservation.assetId,
                   slotId:reservation.slotId,at:new Date().toISOString()};
+                console.info('RADIO_REVERSE_PREWARM',JSON.stringify(state.reverseTargetReservation.last));
               }
-            }catch(error){state.lastError='Reverse reservation: '+error.message;}
+            }catch(error){state.lastError='Reverse reservation: '+error.message;
+              reversePrewarmBlocked('LOOKUP_FAILED',{message:error.message});}
             finally{reverseReserveInFlight=false;}
           })();
         }
