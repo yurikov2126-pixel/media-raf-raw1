@@ -100,6 +100,7 @@ let lastDecodedSource=null;
 let scheduledEntryOverlap=null;
 let reverseReservedTarget=null;
 let reverseMixAuthorityAt=null;
+let reverseReserveInFlight=false;
 state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null};
 state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 state.reverseHandover={attempts:0,eligible:0,blocked:0,last:null,mixed:0};
@@ -873,8 +874,9 @@ async function run() {
         // Reserve the actual next AutoDJ asset before the scheduled final
         // track exits. Freeze the candidate only for this slot and playlist.
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
-          isLastScheduledTrack&&!reverseReservedTarget&&
-          boundary-Date.now()<4800&&boundary-Date.now()>1700){
+          isLastScheduledTrack&&!reverseReservedTarget&&!reverseReserveInFlight&&
+          boundary-Date.now()<12000&&boundary-Date.now()>2000){
+          reverseReserveInFlight=true;
           void (async()=>{
             try{
               const settings=await readAutoDjSettings();
@@ -904,6 +906,7 @@ async function run() {
                   slotId:reservation.slotId,at:new Date().toISOString()};
               }
             }catch(error){state.lastError='Reverse reservation: '+error.message;}
+            finally{reverseReserveInFlight=false;}
           })();
         }
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
