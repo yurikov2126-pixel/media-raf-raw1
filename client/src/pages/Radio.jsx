@@ -19,6 +19,7 @@ import RadioPlayoutHistory from '../components/RadioPlayoutHistory.jsx';
 import RadioAudioProcessing from '../components/RadioAudioProcessing.jsx';
 import RadioCueEditor from '../components/RadioCueEditor.jsx';
 import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
+import RadioPlaylistTransitions,{pairTransitions,transitionSettingsFromItems} from '../components/RadioPlaylistTransitions.jsx';
 import RadioDurationTimeline from '../components/RadioDurationTimeline.jsx';
 import { useRadioUploads } from '../components/RadioUploadManager.jsx';
 
@@ -60,6 +61,7 @@ export default function Radio() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selected, setSelected] = useState([]);
+  const [transitions,setTransitions]=useState({});
   const [editing, setEditing] = useState(null);
   const [files, setFiles] = useState([]);
   const [dropActive, setDropActive] = useState(false);
@@ -147,11 +149,11 @@ export default function Radio() {
   useEffect(() => { if (completedUploads) refresh().catch(() => {}); }, [completedUploads]);
   const savePlaylist = () => action(async () => {
     await call(editing ? '/playlists/' + editing : '/playlists', {
-      method: editing ? 'PUT' : 'POST', body: { name, description, assetIds: selected },
+      method: editing ? 'PUT' : 'POST', body: { name, description, assetIds: selected, transitions:pairTransitions(selected,transitions) },
     });
-    setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]);
+    setEditing(null); setName(''); setDescription(''); setSelected([]); setTransitions({}); setWizard(0); setPickIds([]);
   });
-  const reset = () => { editRequestId.current += 1; setEditing(null); setName(''); setDescription(''); setSelected([]); setWizard(0); setPickIds([]); };
+  const reset = () => { editRequestId.current += 1; setEditing(null); setName(''); setDescription(''); setSelected([]); setTransitions({}); setWizard(0); setPickIds([]); };
   const createFolder = () => {
     const name = window.prompt('Название новой папки');
     if (name?.trim()) action(() => call('/folders', { method: 'POST', body: { name: name.trim() } }));
@@ -212,7 +214,7 @@ export default function Radio() {
   const startEdit = async p => {
     const requestId = ++editRequestId.current;
     // Clear all old draft state before loading the selected playlist.
-    setEditing(null); setSelected([]); setPickIds([]); setPickSearch('');
+    setEditing(null); setSelected([]); setTransitions({}); setPickIds([]); setPickSearch('');
     setName(''); setDescription(''); setWizard(0);
     try {
       const { playlist } = await call('/playlists/' + encodeURIComponent(p.id));
@@ -222,6 +224,7 @@ export default function Radio() {
       setName(playlist.name);
       setDescription(playlist.description || '');
       setSelected(playlist.items.map(item => item.assetId));
+      setTransitions(transitionSettingsFromItems(playlist.items));
       setWizard(1);
       setTab('playlists');
     } catch (e) { if (requestId === editRequestId.current) toast.error(e.message || 'Не удалось загрузить плейлист'); }
@@ -391,6 +394,7 @@ export default function Radio() {
           <button type="button" className="border border-current/20 rounded-lg px-2" onClick={()=>setSelected(s=>s.filter((_,i)=>i!==index))}>×</button>
         </div>)}
 
+          <RadioPlaylistTransitions ids={selected} assets={assets} settings={transitions} onChange={setTransitions}/>
           <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm" onClick={()=>setWizard(2)}>+ Добавить ещё записи</button>
         </>}
         <div className="flex flex-wrap gap-2">

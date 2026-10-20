@@ -1,3 +1,4 @@
+import {validatePlaylistTransitions,validateTransitionSpans} from '../lib/radioPlaylistTransitions.js';
 import { validateRadioPlaylistTracks, writeRadioPlaylistItems, MAX_RADIO_PLAYLIST_TRACKS } from '../lib/radioPlaylistBulk.js';
 import { Router } from 'express';
 import {normalizeRadioTags,safeRadioTags} from '../lib/radioAssetTags.js';
@@ -63,14 +64,24 @@ router.get('/student/assets', studentOnly, async (_req, res, next) => {
         select: { id: true, name: true, durationMs: true }, orderBy: { createdAt: 'desc' }, take: 300,
     }) }); } catch(error) { next(error); }
 });
+async function validateStudentTransitions(body){
+ const ids=body.assetIds;
+ const transitions=validatePlaylistTransitions(ids,body.transitions||[]);
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
+ const lengths=new Map(assets.map(asset=>[asset.id,asset.durationMs]));
+ validateTransitionSpans(ids.map((id,i)=>({durationMs:lengths.get(id),transition:transitions[i]})));
+ return transitions;
+}
 router.post('/student/playlists', studentOnly, async (req, res, next) => {
     try {
         if (!validStudentBody(req.body) || !(await validAssets(req.body.assetIds)))
             return res.status(400).json({ error: 'Проверьте название и аудиозаписи' });
+        let transitions;
+        try {transitions=await validateStudentTransitions(req.body);} catch(error){return res.status(400).json({error:error.message});}
         const playlist = await prisma.radioPlaylist.create({ data: {
             name: req.body.name.trim(), description: (req.body.description ?? '').trim(),
             createdBy: req.user.id, status: 'DRAFT',
-            items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position })) },
+            items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position, transition:transitions[position]||null })) },
         }, include: reviewInclude });
         res.status(201).json({ playlist });
     } catch(error) { next(error); }
@@ -79,6 +90,8 @@ router.put('/student/playlists/:id', studentOnly, async (req, res, next) => {
     try {
         if (!validStudentBody(req.body) || !(await validAssets(req.body.assetIds)))
             return res.status(400).json({ error: 'Проверьте название и аудиозаписи' });
+        let transitions;
+        try {transitions=await validateStudentTransitions(req.body);} catch(error){return res.status(400).json({error:error.message});}
         const result = await prisma.$transaction(async tx => {
             const playlist = await tx.radioPlaylist.findFirst({
                 where: { id: req.params.id, createdBy: req.user.id },
@@ -88,7 +101,7 @@ router.put('/student/playlists/:id', studentOnly, async (req, res, next) => {
             await tx.radioPlaylistItem.deleteMany({ where: { playlistId: playlist.id } });
             return tx.radioPlaylist.update({ where: { id: playlist.id }, data: {
                 name: req.body.name.trim(), description: (req.body.description ?? '').trim(),
-                items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position })) },
+                items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position, transition:transitions[position]||null })) },
             }, include: reviewInclude });
         });
         if (result === 'missing') return res.status(404).json({ error: 'Плейлист не найден' });
@@ -392,31 +405,39 @@ router.get('/playlists/:id', safe(async (req, res) => {
     res.json({ playlist });
 }));
 router.post('/playlists', safe(async (req, res) => {
-    const { name, description = '', assetIds = [] } = req.body || {};
+    const { name, description = '', assetIds = [], transitions = [] } = req.body || {};
     if (!validTitle(name) || typeof description !== 'string' || description.length > 2000 ||
         validateRadioPlaylistTracks(assetIds))
         return res.status(400).json({ error: validateRadioPlaylistTracks(assetIds) || 'Неверные данные плейлиста' });
+    let validatedTransitions;
+    try {validatedTransitions=validatePlaylistTransitions(assetIds,transitions);} catch(error){return res.status(400).json({error:error.message});}
     const unique = [...new Set(assetIds)];
     if (unique.length !== assetIds.length || await prisma.radioAsset.count({ where: { id: { in: unique } } }) !== unique.length)
         return res.status(400).json({ error: 'Одна или несколько записей не найдены' });
+    const sizes=await prisma.radioAsset.findMany({where:{id:{in:assetIds}},select:{id:true,durationMs:true}});
+    const lengthById=new Map(sizes.map(x=>[x.id,x.durationMs]));
+    try {validateTransitionSpans(assetIds.map((id,i)=>({durationMs:lengthById.get(id),transition:validatedTransitions[i]})));}
+    catch(error){return res.status(400).json({error:error.message});}
     const playlist = await prisma.$transaction(async tx => {
         const created = await tx.radioPlaylist.create({ data: {
             name: name.trim(), description: description.trim(), createdBy: req.user.id,
             status: 'APPROVED', approvedBy: req.user.id, approvedAt: new Date(),
         } });
-        await writeRadioPlaylistItems(tx,created.id,assetIds);
+        await writeRadioPlaylistItems(tx,created.id,assetIds,validatedTransitions);
         return tx.radioPlaylist.findUnique({where:{id:created.id},include:playlistInclude});
     },{maxWait:10000,timeout:60000});
     res.status(201).json({ playlist });
 }));
 router.put('/playlists/:id', safe(async (req, res) => {
-    const { name, description = '', assetIds = [] } = req.body || {};
+    const { name, description = '', assetIds = [], transitions = [] } = req.body || {};
     if (!validTitle(name) || typeof description !== 'string' || description.length > 2000 ||
         validateRadioPlaylistTracks(assetIds))
         return res.status(400).json({ error: validateRadioPlaylistTracks(assetIds) || 'Неверные данные плейлиста' });
     const unique = [...new Set(assetIds)];
     if (unique.length !== assetIds.length || await prisma.radioAsset.count({ where: { id: { in: unique } } }) !== unique.length)
         return res.status(400).json({ error: 'Записи не найдены или повторяются' });
+    let validatedTransitions;
+    try {validatedTransitions=validatePlaylistTransitions(assetIds,transitions);} catch(error){return res.status(400).json({error:error.message});}
     const playlist = await prisma.$transaction(async tx => {
         const current = await tx.radioPlaylist.findUnique({ where: { id: req.params.id } });
         if (!current) return null;
@@ -425,6 +446,8 @@ router.put('/playlists/:id', safe(async (req, res) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const newAssets = await tx.radioAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, durationMs: true } });
         const lengths = new Map(newAssets.map(a => [a.id, a.durationMs]));
+        try {validateTransitionSpans(assetIds.map((id,i)=>({durationMs:lengths.get(id),transition:validatedTransitions[i]})));}
+        catch {return 'invalid-transition';}
         const durationMs = assetIds.reduce((sum, id) => sum + (lengths.get(id) || 0), 0);
         const future = await tx.radioScheduleSlot.findMany({ where: { playlistId: current.id, startAt: { gt: new Date() } } });
         if (future.length && (!durationMs || durationMs > 12 * 3600000)) return false;
@@ -441,12 +464,13 @@ router.put('/playlists/:id', safe(async (req, res) => {
             name: name.trim(), description: description.trim(),
             // Preserve approved status and approval attribution; this edit is by ADMIN.
         }, include: playlistInclude });
-        await writeRadioPlaylistItems(tx,current.id,assetIds);
+        await writeRadioPlaylistItems(tx,current.id,assetIds,validatedTransitions);
         for (const slot of future) {
             await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { endAt: new Date(slot.startAt.getTime() + durationMs) } });
         }
         return tx.radioPlaylist.findUnique({where:{id:updated.id},include:playlistInclude});
     },{maxWait:10000,timeout:60000});
+    if (playlist === 'invalid-transition') return res.status(400).json({error:'Наложение превышает длительность соседней записи'});
     if (playlist === null) return res.status(404).json({ error: 'Плейлист не найден' });
     if (playlist === false) return res.status(409).json({ error: 'Редактирование создаёт конфликт в запланированном эфире. Изменения не сохранены' });
     res.json({ playlist });

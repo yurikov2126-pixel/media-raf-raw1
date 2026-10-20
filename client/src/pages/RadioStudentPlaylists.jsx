@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../store/toast.jsx';
 import RadioTrackPlayer from '../components/RadioTrackPlayer.jsx';
+import RadioPlaylistTransitions,{pairTransitions,transitionSettingsFromItems} from '../components/RadioPlaylistTransitions.jsx';
 import { useRadioUploads } from '../components/RadioUploadManager.jsx';
 
 const duration = ms => {
@@ -27,6 +28,7 @@ export default function RadioStudentPlaylists() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selected, setSelected] = useState([]);
+  const [transitions,setTransitions]=useState({});
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading,setUploading] = useState(false);
@@ -48,13 +50,14 @@ export default function RadioStudentPlaylists() {
     }).catch(e => toast.error(e.message)).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [call,toast]);
-  const reset = () => { setEditing(null); setName(''); setDescription(''); setSelected([]); if(searchParams.has('playlist')) setSearchParams({}, { replace: true }); };
+  const reset = () => { setEditing(null); setName(''); setDescription(''); setSelected([]); setTransitions({}); if(searchParams.has('playlist')) setSearchParams({}, { replace: true }); };
   useEffect(() => {
     const id = searchParams.get('playlist');
     const playlist = playlists.find(p => p.id === id);
     if (playlist && ['DRAFT','RETURNED'].includes(playlist.status) && editing !== id) {
       setEditing(playlist.id); setName(playlist.name); setDescription(playlist.description || '');
       setSelected(playlist.items.map(item => item.assetId));
+      setTransitions(transitionSettingsFromItems(playlist.items));
     }
   }, [playlists,searchParams,editing]);
   const edit = playlist => {
@@ -62,6 +65,7 @@ export default function RadioStudentPlaylists() {
     setName(playlist.name);
     setDescription(playlist.description || '');
     setSelected(playlist.items.map(item => item.assetId));
+    setTransitions(transitionSettingsFromItems(playlist.items));
   };
   const save = async e => {
     e.preventDefault();
@@ -69,7 +73,7 @@ export default function RadioStudentPlaylists() {
     setBusy(true);
     try {
       const response = await call(editing ? '/playlists/' + editing : '/playlists', {
-        method: editing ? 'PUT' : 'POST', body: { name: name.trim(), description, assetIds: selected },
+        method: editing ? 'PUT' : 'POST', body: { name: name.trim(), description, assetIds: selected, transitions:pairTransitions(selected,transitions) },
       });
       await refresh();
       reset();
@@ -178,6 +182,7 @@ export default function RadioStudentPlaylists() {
               </div>)}
             </div>
           </div>
+          {selected.length>1 && <RadioPlaylistTransitions ids={selected} assets={assets} settings={transitions} onChange={setTransitions}/>}
           {selected.length>0 && <RadioTrackPlayer token={token} student tracks={selected.map(id=>assets.find(a=>a.id===id)).filter(Boolean)}/>}
           <div className="flex flex-wrap gap-2">
             <button disabled={busy} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{busy?'Сохранение…':'Сохранить черновик'}</button>

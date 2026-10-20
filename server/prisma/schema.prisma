@@ -1307,6 +1307,7 @@ model RadioPlaylistItem {
   playlistId String
   assetId    String
   position   Int
+  transition Json?
   playlist   RadioPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
   asset      RadioAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
   @@unique([playlistId, position])

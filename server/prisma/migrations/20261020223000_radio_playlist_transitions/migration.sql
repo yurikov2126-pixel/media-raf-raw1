@@ -1,0 +1,1 @@
+ALTER TABLE "RadioPlaylistItem" ADD COLUMN "transition" JSONB;
