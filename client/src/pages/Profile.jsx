@@ -516,6 +516,8 @@ export default function Profile() {
                 )}
             </div>
 
+            <div className="mrr-profile-navigation-clearance md:hidden" aria-hidden="true" />
+
             {isMe && (
                 <ProfileEditor
                     open={editorOpen}
