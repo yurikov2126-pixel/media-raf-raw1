@@ -23,3 +23,8 @@
 .rr-next-show strong{font-size:16px;color:#fff;line-height:1.35}
 .rr-next-show>span:last-child{font-size:12px;line-height:1.5}
 @media(max-width:480px){.rr-side-intro h2{font-size:clamp(39px,11vw,46px)}.rr-side-intro p{max-width:340px}}
+
+/* Administrator-selected accent, while preserving radio mode defaults when no override is supplied. */
+.rr-live{--rr-accent:var(--rr-admin-accent,#9e83ff)}
+.rr-live .rr-play,.rr-live .rr-invite-action{background:var(--rr-admin-accent,#9e83ff)}
+.rr-live .rr-progress>div{background:var(--rr-admin-accent,#9e83ff)}
