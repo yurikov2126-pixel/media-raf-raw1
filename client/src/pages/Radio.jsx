@@ -73,6 +73,10 @@ export default function Radio() {
   const [pickSearch, setPickSearch] = useState('');
   const [uploading, setUploading] = useState(false);
   const [slotPlaylist, setSlotPlaylist] = useState('');
+  const [slotTitle,setSlotTitle] = useState('');
+  const [slotDuration,setSlotDuration] = useState(30);
+  const [editSlotTitle,setEditSlotTitle] = useState('');
+  const [editSlotDuration,setEditSlotDuration] = useState(30);
   const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [repeatDays, setRepeatDays] = useState([]);
   const [slotTime, setSlotTime] = useState('');
@@ -259,14 +263,16 @@ export default function Radio() {
     e.preventDefault();
     if(!copyingSlot||!moveTime)return;
     try {
-      await call('/schedule',{method:'POST',body:{playlistId:copyingSlot.playlistId,startLocal:moveTime}});
+      await call('/schedule',{method:'POST',body:copyingSlot.playlistId?{playlistId:copyingSlot.playlistId,startLocal:moveTime}:{playlistId:null,title:copyingSlot.title,durationMinutes:Math.round((new Date(copyingSlot.endAt)-new Date(copyingSlot.startAt))/60000),startLocal:moveTime}});
       setCopyingSlot(null);await refresh();toast.success('Копия передачи добавлена в сетку');
     }catch(error){toast.error(error.message);}
   };
   const openSlotEditor = slot => {
     setContextSlot(null);
     setEditingSlot(slot);
-    setEditingSlotPlaylist(slot.playlistId);
+    setEditingSlotPlaylist(slot.playlistId||'');
+    setEditSlotTitle(slot.title||'');
+    setEditSlotDuration(Math.round((new Date(slot.endAt)-new Date(slot.startAt))/60000));
     const local = new Date(slot.startAt).toLocaleString('sv-SE', {
       timeZone: STATION_ZONE, year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
     }).replace(' ','T');
@@ -277,7 +283,7 @@ export default function Radio() {
     if (!editingSlot) return;
     try {
       await call('/schedule/'+editingSlot.id, {method:'PATCH',
-        body:{startLocal:moveTime,playlistId:editingSlotPlaylist}});
+        body:editingSlotPlaylist?{startLocal:moveTime,playlistId:editingSlotPlaylist}:{startLocal:moveTime,playlistId:null,title:editSlotTitle,durationMinutes:editSlotDuration}});
       setEditingSlot(null);
       await refresh();
       toast.success('Слот обновлён');
@@ -446,19 +452,25 @@ export default function Radio() {
         <div role="dialog" aria-modal="true" aria-label="Добавить передачу в расписание" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white">
         <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-lg">Добавить передачу в расписание</h3><button type="button" aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-1" onClick={()=>setCreateScheduleOpen(false)}>✕</button></div>
       <form onSubmit={e=>{e.preventDefault();
-        const playlistId = slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '');
-        if (!playlistId) { toast.error('Выберите утверждённый плейлист'); return; }
+        const playlistId = slotPlaylist;
+        if (!playlistId && (!slotTitle.trim() || slotDuration<1 || slotDuration>720)) { toast.error('Укажите название и длительность слота'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
-        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId,startLocal:slotTime}});setCreateScheduleOpen(false);},'Передача добавлена в сетку');
+        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:playlistId||null,title:slotTitle,durationMinutes:slotDuration,startLocal:slotTime}});setCreateScheduleOpen(false);},'Передача добавлена в сетку');
       }} className="mt-4 space-y-3">
-        <select required className={inputStyle} value={slotPlaylist || (playlists.filter(p=>p.status==='APPROVED').length===1 ? playlists.find(p=>p.status==='APPROVED').id : '')} onChange={e=>setSlotPlaylist(e.target.value)}>
-          <option value="">Выберите утверждённый плейлист</option>
+        <select className={inputStyle} value={slotPlaylist} onChange={e=>setSlotPlaylist(e.target.value)}>
+          <option value="">Без плейлиста · планирование</option>
           {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        {!slotPlaylist&&<div className="space-y-2 rounded-xl border border-dashed border-current/25 p-3">
+          <p className="text-xs opacity-70">Пустой слот не прерывает AutoDJ. Назначьте плейлист позже через редактирование.</p>
+          <label className="block text-sm">Название передачи<input required maxLength={120} className={inputStyle} value={slotTitle} onChange={e=>setSlotTitle(e.target.value)} placeholder="Например, Новости Политеха"/></label>
+          <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={slotDuration} onChange={e=>setSlotDuration(Number(e.target.value))}/></label>
+        </div>}
         <input required className={inputStyle} type="datetime-local" aria-label="Дата и время эфира" value={slotTime} onChange={e=>setSlotTime(e.target.value)}/>
         <label className="text-sm block">Повторять в течение недель (1 — без повтора)
           <input className={inputStyle} type="number" min="1" max="12" value={repeatWeeks} onChange={e=>setRepeatWeeks(Number(e.target.value))}/>
         </label>
+        {!slotPlaylist&&repeatWeeks>1&&<p className="text-xs text-amber-700 dark:text-amber-300">Пустые слоты пока создаются по одному. Для повтора выберите плейлист.</p>}
         {repeatWeeks > 1 && <fieldset className="space-y-2">
           <legend className="text-sm font-semibold">Дни недели (московское время)</legend>
           <div className="flex gap-3 flex-wrap">{[['Вс',0],['Пн',1],['Вт',2],['Ср',3],['Чт',4],['Пт',5],['Сб',6]].map(([label,number])=>
@@ -466,14 +478,14 @@ export default function Radio() {
           </div>
           <p className="text-xs opacity-60">Время и дни недели привязаны к часовому поясу радиостанции — Москва (UTC+3), независимо от устройства администратора.</p>
         </fieldset>}
-        <div className="flex gap-2"><button disabled={repeatWeeks>1&&!repeatDays.length} className={btn}>Запланировать</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setCreateScheduleOpen(false)}>Отмена</button></div>
+        <div className="flex gap-2"><button disabled={repeatWeeks>1&&(!slotPlaylist||!repeatDays.length)} className={btn}>Запланировать</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setCreateScheduleOpen(false)}>Отмена</button></div>
       </form>
       </div></div>}
       {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
         <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
-          <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
+          <h3 className="font-semibold">{contextSlot.playlist?.name||contextSlot.title||'Запланированная передача'}</h3>
           <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
-          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>openSlotEditor(contextSlot)}>✎ Редактировать время и плейлист</button>}
+          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>openSlotEditor(contextSlot)}>✎ Редактировать слот</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-rose-500/40 px-4 py-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>{const slot=contextSlot;setContextSlot(null);if(window.confirm('Удалить передачу из сетки?')) action(()=>call('/schedule/'+slot.id,{method:'DELETE'}));}}>Удалить передачу</button>}
@@ -487,10 +499,16 @@ export default function Radio() {
             <input type="datetime-local" required className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/>
           </label>
           <label className="block text-sm space-y-1">Плейлист
-            <select required className={inputStyle} value={editingSlotPlaylist} onChange={e=>setEditingSlotPlaylist(e.target.value)}>
+            <select className={inputStyle} value={editingSlotPlaylist} onChange={e=>setEditingSlotPlaylist(e.target.value)}>
+              <option value="">Без плейлиста · планирование</option>
               {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
+          {!editingSlotPlaylist&&<div className="space-y-2 rounded-xl border border-dashed border-current/20 p-3">
+            <label className="block text-sm">Название передачи<input required maxLength={120} className={inputStyle} value={editSlotTitle} onChange={e=>setEditSlotTitle(e.target.value)}/></label>
+            <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={editSlotDuration} onChange={e=>setEditSlotDuration(Number(e.target.value))}/></label>
+            <p className="text-xs opacity-65">До прикрепления утверждённого плейлиста AutoDJ продолжит вещание.</p>
+          </div>}
           <p className="text-xs opacity-70">При замене плейлиста время окончания пересчитывается по длительности новой программы. Занятые интервалы сохраняются под защитой проверки пересечений.</p>
           <div className="flex gap-2"><button className={btn}>Сохранить изменения</button><button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setEditingSlot(null)}>Отмена</button></div>
         </form>
@@ -498,7 +516,7 @@ export default function Radio() {
       {copyingSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveCopy} className="w-full max-w-md space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 dark:bg-slate-900 dark:text-white">
           <h3 className="text-lg font-semibold">Копирование передачи</h3>
-          <p className="text-sm opacity-70">{copyingSlot.playlist.name}</p>
+          <p className="text-sm opacity-70">{copyingSlot.playlist?.name||copyingSlot.title}</p>
           <label className="block space-y-1 text-sm">Дата и время копии · Москва UTC+3<input required type="datetime-local" className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/></label>
           <p className="text-xs opacity-60">Оригинальная передача сохранится. Занятые интервалы копировать нельзя.</p>
           <div className="flex gap-2"><button className={btn}>Создать копию</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>setCopyingSlot(null)}>Отмена</button></div>
@@ -511,7 +529,7 @@ export default function Radio() {
       {movingSlot && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveMove} className="w-full max-w-md rounded-2xl border border-current/15 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-3">
           <h3 className="text-lg font-semibold">Перенести передачу</h3>
-          <p className="text-sm opacity-70">{movingSlot.playlist.name}</p>
+          <p className="text-sm opacity-70">{movingSlot.playlist?.name||movingSlot.title}</p>
           <label className="block space-y-1 text-sm">Новое начало · Москва UTC+3
             <input type="datetime-local" required className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/>
           </label>
