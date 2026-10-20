@@ -40,7 +40,7 @@ export class RadioHandoverController {
   if(this.emittedFrames===this.overlapMs*48)this.phase='COMPLETED';
   return {ok:true,completed:this.phase==='COMPLETED',targetFrameOffset:this.targetFrameOffset};
  }
- fail(reason){
+ fail(reason,{sourceAvailable=true,targetAvailable=true}={}){
   if(this.phase==='COMPLETED')return {ok:false,reason:'ALREADY_COMPLETED'};
   this.reasons.push(String(reason||'UNKNOWN'));
   this.phase='FALLBACK';
