@@ -21,6 +21,7 @@ import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
+import { isPcmBoundaryAligned } from '../src/lib/radioPcmBoundaryClock.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
@@ -686,7 +687,7 @@ async function run() {
             (liveMixSession?.direction==='REVERSE'||
               (!!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
-            (liveMixSession||Math.abs((remaining-emittedBytes/PCM_BYTES_PER_MS)-(boundary-Date.now()))<900)&&
+            (liveMixSession||isPcmBoundaryAligned({remainingMs:remaining,emittedBytes,boundaryMs:boundary,nowMs:Date.now(),bytesPerMs:PCM_BYTES_PER_MS}))&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
