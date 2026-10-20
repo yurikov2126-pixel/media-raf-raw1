@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
 import {useRadioMetadataSync} from '../hooks/useRadioMetadataSync.js';
 import './RadioListen.css';
+import {RADIO_LIVE_DEFAULTS,normalizeRadioLiveDesign} from '../lib/radioLiveDesign.js';
 
 const STREAM='/api/radio-agent/listen';
 const clock=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
@@ -12,6 +13,7 @@ export default function RadioListen(){
  const {audioRef,playing,error,reconnecting,audioEvents}=useRadioStreamRecovery();
  const {ingest,display:status,delay,waiting,setConfig}=useRadioMetadataSync(audioRef);
  const [metaError,setMetaError]=useState(false);
+ const [design,setDesign]=useState(RADIO_LIVE_DEFAULTS);
  const [now,setNow]=useState(Date.now());
  const [volume,setVolume]=useState(0.85);
  const [muted,setMuted]=useState(false);
@@ -25,6 +27,12 @@ export default function RadioListen(){
   // Audible autoplay is best-effort: Safari/Chrome may require a user gesture.
   audio.play().then(()=>setAutoplayBlocked(false)).catch(()=>setAutoplayBlocked(true));
  },[audioRef]);
+ useEffect(()=>{
+  let active=true;
+  fetch('/api/radio-agent/listen/design',{cache:'no-store'}).then(res=>{if(!res.ok)throw Error('design unavailable');return res.json();})
+   .then(value=>{if(active)setDesign(normalizeRadioLiveDesign(value));}).catch(()=>{});
+  return()=>{active=false;};
+ },[]);
  useEffect(()=>{
   let active=true;
   const refreshSync=async()=>{
@@ -84,16 +92,16 @@ export default function RadioListen(){
  const untilShow=Number.isFinite(showStart)?Math.max(0,showStart-now):null;
  const showDate=Number.isFinite(showStart)?new Date(showStart).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):null;
  const tone=mode==='LIVE'?'live':mode==='JINGLE'?'jingle':'music';
- return <main className={'rr-live rr-tone-'+tone}>
+ return <main className={'rr-live rr-tone-'+tone} style={{'--rr-admin-accent':design.accent,'--rr-admin-background':design.background,backgroundColor:design.background}}>
   <div className="rr-ambient rr-ambient-a" aria-hidden="true"/><div className="rr-ambient rr-ambient-b" aria-hidden="true"/>
   <div className="rr-shell">
    <header className="rr-header">
-    <a href="/" className="rr-wordmark"><span className="rr-logo">R</span><span>MEDIA <i>·</i> РАФ <i>·</i> RAW<small>РАДИО МЕДИАЦЕНТРА</small></span></a>
+    <a href="/" className="rr-wordmark"><span className="rr-logo">R</span><span>MEDIA <i>·</i> РАФ <i>·</i> RAW<small>{design.headerSubtitle}</small></span></a>
     <div className="rr-header-actions"><span className="rr-onair"><span/> В ЭФИРЕ</span><a className="rr-back" href="/">На сайт <span aria-hidden="true">↗</span></a></div>
    </header>
    <div className="rr-content">
     <section className="rr-player" aria-label="Плеер прямого эфира">
-     <div className="rr-player-top"><span className="rr-eyebrow">MEDIA RADIO / ONLINE</span><span className="rr-dots" aria-hidden="true">✦ ✦ ✦</span></div>
+     <div className="rr-player-top"><span className="rr-eyebrow">{design.eyebrow}</span><span className="rr-dots" aria-hidden="true">✦ ✦ ✦</span></div>
      <div className="rr-disc-area">
       <div className={'rr-halo '+(active?'rr-halo-active':'')} aria-hidden="true"/>
       <div className={'rr-disc '+(active?'rr-disc-playing':'')} aria-hidden="true"><div className="rr-disc-center"><span>MEDIA</span><strong>РАФ</strong><span>RAW</span></div></div>
@@ -106,7 +114,7 @@ export default function RadioListen(){
      </div>
      {silence&&<div className="rr-next-show" role="status"><span className="rr-eyebrow">СКОРО В ЭФИРЕ</span>{showDate?<><strong>{status.nextShow.name}</strong><span>{showDate} · МСК{untilShow!==null&&untilShow>0?' · через '+(untilShow>=3600000?Math.floor(untilShow/3600000)+' ч ':'')+Math.ceil((untilShow%3600000)/60000)+' мин':''}</span></>:<span>Ближайших передач пока нет в расписании</span>}</div>}
      {waiting&&<p className="rr-meta-note">Собираем историю для компенсации задержки — первые секунды данные могут опережать звук.</p>}
-     <Waves active={active}/>
+     {design.showWaves&&<Waves active={active}/>}
      <div className="rr-progress" role="progressbar" aria-label="Прогресс текущей записи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}><div style={{width:percent+'%'}}/></div>
      <div className="rr-times"><span>{status?.playout?clock(elapsed):'—:—'}</span><span>{total?clock(total):'—:—'}</span></div>
      <div className="rr-controls">
@@ -121,18 +129,19 @@ export default function RadioListen(){
      {sharing&&<p className="rr-copy-note" role="status">Ссылка скопирована!</p>}
     </section>
     <aside className="rr-side">
-     <div className="rr-side-intro"><span className="rr-eyebrow">ТВОЯ ВОЛНА</span><h2>Включай.<br/><em>Чувствуй.</em><br/>Создавай.</h2><p>Музыка, авторские программы и голоса студенческого медиацентра — там, где ты.</p></div>
-     <div className="rr-invite-card">
-      <span className="rr-eyebrow">РАДИО, КОТОРЫМ ХОЧЕТСЯ ДЕЛИТЬСЯ</span>
+     <div className="rr-side-intro"><span className="rr-eyebrow">{design.stationTagline}</span><h2>{design.heroLine1}<br/><em>{design.heroLine2}</em><br/>{design.heroLine3}</h2><p>{design.description}</p></div>
+     {design.showInvite&&<div className="rr-invite-card">
+      <span className="rr-eyebrow">{design.inviteEyebrow}</span>
       <div className="rr-invite-art" aria-hidden="true"><span className="rr-invite-orbit rr-invite-orbit-a"/><span className="rr-invite-orbit rr-invite-orbit-b"/><span className="rr-invite-icon">♫</span></div>
-      <h3>Передай волну дальше.</h3>
-      <p>Любимая музыка звучит лучше вместе. Пригласи друзей послушать наш прямой эфир.</p>
-      <button className="rr-invite-action" type="button" onClick={share}>Поделиться эфиром <span aria-hidden="true">↗</span></button>
-     </div>
-     <div className="rr-side-footer"><span className="rr-footer-mark">✳</span><p>Здесь звучит то,<br/>что мы создаём вместе.</p></div>
+      <h3>{design.inviteTitle}</h3>
+      <p>{design.inviteDescription}</p>
+      <button className="rr-invite-action" type="button" onClick={share}>{design.inviteButton} <span aria-hidden="true">↗</span></button>
+     </div>}
+     {design.showStationClock&&<div className="rr-side-footer">Москва · {new Date(now).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})}</div>}
+     {design.showSideFooter&&<div className="rr-side-footer"><span className="rr-footer-mark">✳</span><p>{design.sideFooter}</p></div>
     </aside>
    </div>
-   <footer className="rr-footer"><span>© MEDIA · РАФ · RAW</span><span>Информация о треке синхронизируется с задержкой плеера (оценочно).</span></footer>
+   <footer className="rr-footer"><span>© MEDIA · РАФ · RAW</span><span>{design.footerText}</span></footer>
   </div>
  </main>;
 }
