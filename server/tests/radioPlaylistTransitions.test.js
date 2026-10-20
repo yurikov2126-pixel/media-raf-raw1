@@ -34,3 +34,16 @@ describe('editorial scheduled playlist transitions',()=>{
   expect(options).toEqual([]);
  });
 });
+
+describe('schedule duration is computed from actual overlaps',()=>{
+ it('shortens a ten-track program by nine six-second transitions',()=>{
+  const ids=Array.from({length:10},(_,i)=>String(i));
+  const transitions=validatePlaylistTransitions(ids,Array.from({length:9},()=>({mode:'crossfade',overlapMs:6000,curve:'equalPower'})));
+  const items=ids.map((id,i)=>({assetId:id,durationMs:180000,transition:transitions[i]}));
+  expect(scheduledPlaylistDuration(items)).toBe(1746000);
+ });
+ it('keeps legacy cut-only schedule unchanged',()=>{
+  const items=[{durationMs:120000},{durationMs:90000},{durationMs:100000}];
+  expect(scheduledPlaylistDuration(items)).toBe(310000);
+ });
+});

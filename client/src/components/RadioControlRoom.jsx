@@ -108,6 +108,24 @@ export default function RadioControlRoom({token,onOpen}){
     </div>
    </section>
   </div>
+  <section className="radio-panel rounded-2xl border p-4 text-sm space-y-2" aria-label="Диагностика переходов Crossfade">
+   <div className="flex flex-wrap items-center justify-between gap-2">
+    <h3 className="font-semibold">Диагностика Crossfade</h3>
+    <span className="text-xs opacity-65">Данные фактического PCM Worker · обновление 5 с</span>
+   </div>
+   {!worker?.transitions?<p className="text-xs opacity-65">Телеметрия Worker недоступна — проверьте подключение радиосервера.</p>:
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+     <p className="rounded-lg border border-current/10 p-2">Запущено: <strong>{worker.transitions.crossfadeAttempted??'—'}</strong></p>
+     <p className="rounded-lg border border-current/10 p-2">Завершено: <strong>{worker.transitions.crossfadeCompleted??'—'}</strong></p>
+     <p className="rounded-lg border border-current/10 p-2">Резервных переходов: <strong>{worker.transitions.crossfadeFallbacks??'—'}</strong></p>
+     <p className="rounded-lg border border-current/10 p-2">Ошибок: <strong>{worker.transitions.crossfadeFailed??'—'}</strong></p>
+    </div>}
+   {worker?.transitions?.lastCrossfade&&<p className="text-xs opacity-70">
+    Последний переход: {worker.transitions.lastCrossfade.fromId} → {worker.transitions.lastCrossfade.toId}
+    · {worker.transitions.lastCrossfade.emittedMs} мс PCM · {worker.transitions.lastCrossfade.completed?'успешно':'прерван'}
+   </p>}
+   <p className="text-xs opacity-60">Счётчики показывают PCM, переданный кодировщику, а не акустическое качество на устройствах слушателей.</p>
+  </section>
   <RadioAmplifierControl token={token}/>
   <section className="flex flex-wrap items-center justify-between gap-3 radio-panel rounded-2xl border p-4 text-sm dark:bg-slate-900/60">
     <div><strong>LIVE-микшер</strong><p className="mt-1 text-xs opacity-65">Входы, мониторинг, маршрутизация и эфирная диагностика</p></div>

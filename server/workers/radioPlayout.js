@@ -56,7 +56,9 @@ const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTIN
 let decoder = null;
 let prewarmed=null;
 let prewarming=false;
-state.transitions={prewarmed:0,used:0,missed:0,lastGapMs:null};
+state.transitions={prewarmed:0,used:0,missed:0,lastGapMs:null,
+ crossfadeAttempted:0,crossfadeCompleted:0,crossfadeFallbacks:0,
+ crossfadeFailed:0,lastCrossfade:null,scheduledEnabled:process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true'};
 function discardPrewarm(){if(prewarmed){prewarmed.child.kill('SIGTERM');prewarmed=null;}}
 
 let encoder = null;
@@ -446,11 +448,13 @@ async function run() {
     let args;
     let usableBlend=blend;
     if(usableBlend){
+      state.transitions.crossfadeAttempted++;
       const candidate=path.join(assetsRoot,path.basename(usableBlend.nextStorageKey));
       try {await fs.access(candidate);}
       catch {
         state.lastError='Crossfade: next audio unavailable '+usableBlend.nextId;
         usableBlend=null;
+        state.transitions.crossfadeFallbacks++;
       }
     }
     if(usableBlend){
@@ -520,6 +524,7 @@ async function run() {
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
+    const crossfadeStartedAt=usableBlend?Date.now():null;
     try {
       for await(const chunk of child.stdout) {
         if(stopping||publicLive.onAir) {child.kill('SIGTERM');break;}
@@ -562,6 +567,15 @@ async function run() {
         }
       }
     } catch(e) {state.lastError=e.message;}
+    if(usableBlend){
+      const transition={source:cursor.status,fromId:asset.id,toId:usableBlend.nextId,
+        requestedMs:usableBlend.overlapMs,emittedMs:Math.round(emittedBytes/PCM_BYTES_PER_MS),
+        startedAt:new Date(crossfadeStartedAt).toISOString(),at:new Date().toISOString(),
+        exitCode,completed:exitCode===0&&!truncatedAtBoundary};
+      state.transitions.lastCrossfade=transition;
+      if(transition.completed)state.transitions.crossfadeCompleted++;
+      else state.transitions.crossfadeFailed++;
+    }
     if(cursor.status==='SCHEDULED' && !(state.lastBoundary?.slotId===cursor.slot.id && state.lastBoundary?.trackId===asset.id && state.lastBoundary?.reason==='END_AT_PCM_TRUNCATED')){
       recordBoundary({source:'SCHEDULED',reason:'TRACK_ENDED',slotId:cursor.slot.id,trackId:asset.id});
     }
