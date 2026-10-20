@@ -619,7 +619,8 @@ async function run() {
         const gated=cursor.status==='SCHEDULED'
           ?boundScheduledPcm(decoded,Date.parse(cursor.slot.endAt),Date.now())
           :{pcm:decoded,truncated:false};
-        const output=gated.pcm;
+        const output=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)
+          ?gated.pcm.subarray(0,Math.max(0,fadeTotalBytes-emittedBytes)) :gated.pcm;
         if(output.length){
           // Opt-in real PCM route for a hard AutoDJ -> scheduled boundary.
           // Use the PCM clock to split a packet exactly at the overlap start;
@@ -629,6 +630,7 @@ async function run() {
             !usableBlend&&!publicLive.onAir&&!pendingScheduledHandover&&
             Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
             preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
+            !preparedSlot.iterator&&
             !preparedSlot.child.killed&&!liveMixDisabled&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
@@ -661,6 +663,8 @@ async function run() {
                 const incoming=await readPcmFrames(liveMixSession.iterator,tail.length/4,{
                   deadlineMs:350,maxBufferedFrames:240000
                 });
+                if(publicLive.onAir||prewarmed!==preparedSlot)
+                  throw new Error('SOURCE_AUTHORITY_CHANGED');
                 const mixed=liveMixSession.engine.push(tail,incoming);
                 if(mixed.pcm.length!==tail.length)throw new Error('MIXED_PCM_LENGTH_MISMATCH');
                 if(!encoder.stdin.write(mixed.pcm))
@@ -674,6 +678,7 @@ async function run() {
                   preparedSlot.seekMs=LIVE_SOURCE_OVERLAP_MS;
                   preparedSlot.durationMs-=LIVE_SOURCE_OVERLAP_MS;
                   state.liveSourceCrossfade.completed++;
+                  state.sourceHandover.mixed++;
                   state.liveSourceCrossfade.last={status:'MIXED',
                     slotId:liveMixSession.slotId,frames:liveMixSession.engine.snapshot().framesOut,
                     at:new Date().toISOString()};
