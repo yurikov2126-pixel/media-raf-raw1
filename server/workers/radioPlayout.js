@@ -14,6 +14,7 @@ import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
 import {planSourceHandover} from '../src/lib/radioSourceHandoverClock.js';
+import {planReverseHandover} from '../src/lib/radioReverseHandoverPlan.js';
 import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
 import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
@@ -96,6 +97,7 @@ state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,cloc
 let lastDecodedSource=null;
 let scheduledEntryOverlap=null;
 state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
+state.reverseHandover={attempts:0,eligible:0,blocked:0,last:null,mixed:0};
 const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
 let previousSourcePcmTail=null;
 let shadowOverlap=null;
@@ -562,6 +564,7 @@ async function run() {
     // to the encoder until the authoritative schedule cursor selects it.
     let scheduledPrewarmRequested=false;
     let sourceClockPlanned=false;
+    let reverseClockPlanned=false;
     let crossfadeAuthorityRequested=false;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
@@ -767,6 +770,25 @@ async function run() {
             publicPcmMixed:false};
           if(timing.allowed)state.sourceHandover.clockPlanned++;
           else state.sourceHandover.clockRejected++;
+        }
+        // Reverse transition admission is observational until the AutoDJ
+        // candidate can be reserved without changing playlist rotation.
+        if(!reverseClockPlanned&&cursor.status==='SCHEDULED'&&isLastScheduledTrack&&
+          Number.isFinite(boundary)&&boundary-Date.now()<=5500&&boundary-Date.now()>0){
+          reverseClockPlanned=true;
+          const candidate=prewarmed;
+          const plan=planReverseHandover({
+            nowMs:Date.now(),slotEndMs:boundary,
+            remainingMs:Math.max(0,remaining-emittedBytes/PCM_BYTES_PER_MS),
+            lastScheduledTrack:true,autoDjEnabled:state.autoDjEnabled,
+            target:candidate&&!candidate.scheduledSlotId?
+              {id:candidate.assetId,seekMs:candidate.seekMs}:null,
+            prepared:candidate,publicLive:publicLive.onAir
+          });
+          state.reverseHandover.attempts++;
+          if(plan.allowed)state.reverseHandover.eligible++;
+          else state.reverseHandover.blocked++;
+          state.reverseHandover.last={...plan,at:new Date().toISOString(),mixed:false};
         }
         if(!scheduledPrewarmRequested&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
           !pendingScheduledHandover&&!publicLive.onAir&&Number.isFinite(boundary)&&
