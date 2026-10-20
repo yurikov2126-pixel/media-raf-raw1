@@ -21,6 +21,7 @@ import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
+import { isPcmBoundaryAligned } from '../src/lib/radioPcmBoundaryClock.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
@@ -57,6 +58,8 @@ const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-au
 const listeners = new Set();
 // Explicit opt-in: disabled until the full PCM transition is validated on-air.
 const SCHEDULED_CROSSFADE_ENABLED=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
+const scheduledDefaultOverlap=Number(process.env.RADIO_SCHEDULED_DEFAULT_OVERLAP_MS||0);
+const SCHEDULED_DEFAULT_OVERLAP_MS=Number.isSafeInteger(scheduledDefaultOverlap)&&scheduledDefaultOverlap>=250&&scheduledDefaultOverlap<=15000?scheduledDefaultOverlap:0;
 // OFF by default: strict schedule-entry PCM overlap only, with on-air diagnostics.
 const LIVE_SOURCE_CROSSFADE_ENABLED=process.env.RADIO_LIVE_SOURCE_CROSSFADE_ENABLED==='true';
 const LIVE_SOURCE_OVERLAP_MS=1500;
@@ -220,7 +223,7 @@ async function current() {
       if(delayed?.playlist?.status==='APPROVED'){
         const shifted={...delayed,startAt:new Date(delayedScheduledSlot.actualStartMs),
           endAt:new Date(delayedScheduledSlot.actualEndMs)};
-        const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+        const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS});
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
         return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1,
           nextTrackId:scheduledSuccessor(shifted.playlist.items,shiftedCursor)};
@@ -228,7 +231,7 @@ async function current() {
       delayedScheduledSlot=null;
     }
   }
-  let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+  let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS});
   if(LIVE_SOURCE_CROSSFADE_ENABLED&&scheduledEntryOverlap&&cursor.slot?.id===scheduledEntryOverlap.slotId){
     cursor=resumeScheduledCursor(cursor,scheduledEntryOverlap);
   }
@@ -686,7 +689,7 @@ async function run() {
             (liveMixSession?.direction==='REVERSE'||
               (!!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
-            (liveMixSession||Math.abs(remaining-(boundary-Date.now()))<900)&&
+            (liveMixSession||isPcmBoundaryAligned({remainingMs:remaining,emittedBytes,boundaryMs:boundary,nowMs:Date.now(),bytesPerMs:PCM_BYTES_PER_MS}))&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
@@ -847,7 +850,7 @@ async function run() {
         }
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&!crossfadeAuthorityRequested&&
           cursor.status==='AUTO_DJ'&&!cursor.isJingle&&Number.isFinite(boundary)&&
-          boundary-Date.now()<=2800&&boundary-Date.now()>1600&&
+          boundary-Date.now()<=4500&&boundary-Date.now()>1700&&
           prewarmed?.scheduledSlotStartMs===boundary){
           crossfadeAuthorityRequested=true;
           const candidate=prewarmed;
@@ -949,7 +952,7 @@ async function run() {
         }
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
           isLastScheduledTrack&&reverseReservedTarget&&prewarmed?.assetId===reverseReservedTarget.assetId&&
-          !reverseMixAuthorityAt&&boundary-Date.now()<=2800&&boundary-Date.now()>1600){
+          !reverseMixAuthorityAt&&boundary-Date.now()<=4500&&boundary-Date.now()>1700){
           const reservation=reverseReservedTarget;
           void (async()=>{
             try{
@@ -993,7 +996,7 @@ async function run() {
         }
         if(!scheduledPrewarmRequested&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
           !pendingScheduledHandover&&!publicLive.onAir&&Number.isFinite(boundary)&&
-          boundary-Date.now()<4500&&boundary-Date.now()>300){
+          boundary-Date.now()<12000&&boundary-Date.now()>2500){
           scheduledPrewarmRequested=true;
           void (async()=>{
            try{
