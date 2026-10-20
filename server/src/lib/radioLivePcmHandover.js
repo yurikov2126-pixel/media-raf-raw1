@@ -3,18 +3,26 @@ import {RadioSourcePcmOverlap} from './radioSourcePcmOverlap.js';
 /** Read exactly the PCM frames needed from an already-warmed decoder.
  * Never accept an unbounded buffer or fabricate samples on decoder EOF.
  */
-export async function readPcmFrames(iterator,frames,{maxBufferedFrames=240000}={}){
+export async function readPcmFrames(iterator,frames,{maxBufferedFrames=240000,deadlineMs=1500}={}){
  if(!iterator||typeof iterator.next!=='function'||!Number.isSafeInteger(frames)||frames<0)
   throw new TypeError('Invalid PCM reader');
  if(!Number.isSafeInteger(maxBufferedFrames)||maxBufferedFrames<frames)
   throw new RangeError('Insufficient buffer bound');
+ if(!Number.isSafeInteger(deadlineMs)||deadlineMs<20||deadlineMs>15000)
+  throw new RangeError('Invalid decoder deadline');
  const wanted=frames*4;
  if(!iterator._radioRest)iterator._radioRest=Buffer.alloc(0);
  const pieces=[];let total=0;
+ const started=Date.now();
  while(total<wanted){
   let next=iterator._radioRest;iterator._radioRest=Buffer.alloc(0);
   if(!next.length){
-   const result=await iterator.next();
+   const left=Math.max(0,deadlineMs-(Date.now()-started));
+   if(!left)throw new Error('TARGET_PCM_TIMEOUT');
+   let timer;
+   const result=await Promise.race([iterator.next(),new Promise((_,reject)=>{
+    timer=setTimeout(()=>reject(new Error('TARGET_PCM_TIMEOUT')),left);
+   })]).finally(()=>clearTimeout(timer));
    if(result.done)throw new Error('TARGET_PCM_UNDERRUN');
    next=result.value;
   }
