@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
+import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
@@ -187,7 +188,8 @@ async function current() {
           endAt:new Date(delayedScheduledSlot.actualEndMs)};
         const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
-        return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1};
+        return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1,
+          nextTrackId:scheduledSuccessor(shifted.playlist.items,shiftedCursor)};
       }
       delayedScheduledSlot=null;
     }
@@ -198,7 +200,8 @@ async function current() {
     cursor.slot.id===finishedScheduledSlot.id && nowMs<finishedScheduledSlot.endAtMs;
   if(cursor.slot && scheduled && !alreadyFinished){
     musicQueueKey=null;musicQueueNextId=null;
-    return {cursor,asset:scheduled,isLastScheduledTrack:cursor.track.index===slots[0].playlist.items.length-1};
+    return {cursor,asset:scheduled,isLastScheduledTrack:cursor.track.index===slots[0].playlist.items.length-1,
+      nextTrackId:scheduledSuccessor(slots[0].playlist.items,cursor)};
   }
   // A schedule may have an unfilled wall-clock tail, or the final track may
   // have naturally ended before its nominal offset. Resume AutoDJ immediately.
@@ -337,7 +340,7 @@ async function current() {
 
 // Prediction is advisory only: the real current() authority is re-checked
 // before a prepared decoder can feed the public encoder.
-async function warmSuccessor({nextTrackId,musicCount,currentTrackId}){
+async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false}){
   if(prewarming||prewarmed||publicLive.onAir||stopping)return;
   prewarming=true;
   try{
@@ -347,7 +350,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId}){
     const partHour=new Date(nowMs+3*3600000).getUTCHours();
     const daypart=partHour<7?'NIGHT':partHour<11?'MORNING':partHour<18?'DAY':'EVENING';
     let candidate=null,seekMs=0,durationMs=0;
-    if(jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
+    if(!scheduled&&jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
        musicCount>0&&musicCount%jingles.everyTracks===0){
       const assets=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
       candidate=chooseJingleAsset(jingles,assets,jinglesPlayed);
@@ -357,8 +360,8 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId}){
       if(candidate){
         const cues=await readCues();
         const cue=cueAssets([candidate],cues)[0];
-        seekMs=cue?.cue.inMs||0;
-        durationMs=cue?.playDurationMs||0;
+        seekMs=scheduled?0:cue?.cue.inMs||0;
+        durationMs=scheduled?candidate.durationMs:cue?.playDurationMs||0;
       }
     }
     if(!candidate||durationMs<1000)return;
@@ -366,7 +369,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId}){
       where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
       select:{startAt:true},orderBy:{startAt:'asc'}
     });
-    if(nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
+    if(!scheduled&&nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
     const filename=path.join(assetsRoot,path.basename(candidate.storageKey));
     await fs.access(filename);
     const dsp=await readAudioProcessing();
@@ -557,11 +560,12 @@ async function run() {
         // Start the next FFmpeg decoder while current PCM is still playing.
         // A bounded OS pipe supplies a warm initial PCM buffer; no second audio
         // source is connected to the station encoder until handoff.
-        if(!warmRequested&&cursor.status==='AUTO_DJ'&&(cursor.isJingle?musicQueueNextId:nextTrackId)&&
+        if(!warmRequested&&(cursor.status==='AUTO_DJ'||cursor.status==='SCHEDULED')&&
+           (cursor.isJingle?musicQueueNextId:nextTrackId)&&!usableBlend&&
           remaining-emittedBytes/(48000*4)*1000<4500){
           warmRequested=true;
           void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
-            musicCount:cursor.isJingle?0:musicSinceJingle+1,
+            musicCount:cursor.isJingle?0:musicSinceJingle+1,scheduled:cursor.status==='SCHEDULED',
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
         }
         if(state.playout?.trackId===asset.id){
