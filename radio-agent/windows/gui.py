@@ -397,13 +397,28 @@ class RadioAgentApp(tk.Tk):
                                 self.last_power_was_auto=False
                             self.last_power_intent=permit
                             self.last_power_received=now
-                        except Exception:
-                            # Only previously authorized local reserve may bridge a
-                            # temporary internet outage; capped to 15 minutes.
+                        except Exception as error:
+                            # A transient intent-fetch failure is not an explicit OFF.
+                            # Keep a recent, already-authorized CENTRAL stream powered for
+                            # at most 6 seconds while the API recovers. Existing LOCAL_RESERVE
+                            # authorization has its own bounded offline grace. Never turn
+                            # on based solely on a failed fetch, and keep all explicit
+                            # emergency/manual/revoked OFF responses immediate.
                             state=PLAYBACK_STATE
-                            permit=self.last_power_intent is True and state["mode"]=="LOCAL_RESERVE" and (
-                                time.monotonic()-self.last_power_received<min(state["offlineGrace"],900)) and (
-                                time.monotonic()-state["lastAuthorized"]<min(state["offlineGrace"],900))
+                            since_intent=time.monotonic()-self.last_power_received
+                            since_auth=time.monotonic()-state["lastAuthorized"]
+                            recently_authorized=(self.last_power_intent is True and
+                                state["mode"] in ("CENTRAL","LOCAL_RESERVE") and
+                                since_auth<min(state["offlineGrace"],900))
+                            if state["mode"]=="CENTRAL":
+                                permit=recently_authorized and since_intent<6
+                            else:
+                                permit=recently_authorized and state["mode"]=="LOCAL_RESERVE" and (
+                                    since_intent<min(state["offlineGrace"],900))
+                            print("RADIO_POWER_INTENT_FETCH_FAILED",
+                                  type(error).__name__, "mode="+str(state["mode"]),
+                                  "recentIntentSeconds="+str(round(since_intent,1)),
+                                  "hold="+str(permit),flush=True)
                     signed_power(host,secret,permit,8000 if permit else 0)
                     self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
