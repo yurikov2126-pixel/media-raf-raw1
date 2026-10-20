@@ -27,6 +27,19 @@ describe.skipIf(!available)('offline two-source FFmpeg rehearsal',()=>{
    expect(result.pcm.readInt16LE(result.pcm.length-4)).toBe(-9000);
   }finally{await rm(root,{recursive:true,force:true});}
  });
+ it('decodes reverse schedule-to-AutoDJ sound with the same exact frame window',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'radio-reverse-'));
+  try{
+   const a=path.join(root,'show.wav'),b=path.join(root,'auto.wav');
+   await Promise.all([writeFile(a,wav(15000)),writeFile(b,wav(-12000))]);
+   const result=await rehearseSourceOverlap({sourcePath:a,targetPath:b,
+    sourceId:'SCHEDULED',targetId:'AUTO_DJ',overlapMs:250});
+   expect(result.metrics).toMatchObject({status:'COMPLETED',frames:12000,
+    streamedToPublicEncoder:false});
+   expect(result.pcm.readInt16LE(0)).toBe(15000);
+   expect(result.pcm.readInt16LE(result.pcm.length-4)).toBe(-12000);
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
  it('rejects a truncated second file rather than replaying previous audio',async()=>{
   const root=await mkdtemp(path.join(tmpdir(),'radio-overlap-'));
   try{
