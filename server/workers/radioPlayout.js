@@ -674,6 +674,7 @@ async function run() {
             (liveMixSession?.direction==='REVERSE'||
               (!!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
+            (liveMixSession||Math.abs(remaining-(boundary-Date.now()))<900)&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
