@@ -14,6 +14,7 @@ import threading
 import webbrowser
 import tkinter as tk
 from pathlib import Path
+from urllib.error import HTTPError
 from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run, PLAYBACK_STATE
@@ -465,7 +466,7 @@ class RadioAgentApp(tk.Tk):
                             self.messages.put(("api_status","● Сервер: ошибка "+type(error).__name__))
                             # A transient intent-fetch failure is not an explicit OFF.
                             # Keep a recent, already-authorized CENTRAL stream powered for
-                            # at most 6 seconds while the API recovers. Existing LOCAL_RESERVE
+                            # for one bounded watchdog cycle while the API recovers. Existing LOCAL_RESERVE
                             # authorization has its own bounded offline grace. Never turn
                             # on based solely on a failed fetch, and keep all explicit
                             # emergency/manual/revoked OFF responses immediate.
@@ -475,11 +476,10 @@ class RadioAgentApp(tk.Tk):
                             recently_authorized=(self.last_power_intent is True and
                                 state["mode"] in ("CENTRAL","LOCAL_RESERVE") and
                                 since_auth<min(state["offlineGrace"],900))
-                            if state["mode"]=="CENTRAL":
-                                permit=recently_authorized and since_intent<7.5
-                            else:
-                                permit=recently_authorized and state["mode"]=="LOCAL_RESERVE" and (
-                                    since_intent<min(state["offlineGrace"],900))
+                            # Authentication and registration failures are hard denials.
+                            # A network outage can bridge only one bounded lease cycle.
+                            hard_denial=(isinstance(error,HTTPError) and 400<=error.code<500) or isinstance(error,ValueError)
+                            permit=(not hard_denial and recently_authorized and since_intent<7.5)
                             decision="FETCH_ERROR_HOLD" if permit else "FETCH_ERROR_OFF"
                             record_power_event("INTENT_ERROR",result=decision,durationMs=round((time.monotonic()-started)*1000),httpStatus=getattr(error,"code",None),errorType=type(error).__name__,mode=state["mode"],intentAgeSeconds=round(since_intent,2),authorizationAgeSeconds=round(since_auth,2),permit=permit)
                             print("RADIO_POWER_INTENT_FETCH_FAILED",
