@@ -101,7 +101,7 @@ router.put('/student/playlists/:id', studentOnly, async (req, res, next) => {
             await tx.radioPlaylistItem.deleteMany({ where: { playlistId: playlist.id } });
             return tx.radioPlaylist.update({ where: { id: playlist.id }, data: {
                 name: req.body.name.trim(), description: (req.body.description ?? '').trim(),
-                items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position })) },
+                items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position, transition:transitions[position]||null })) },
             }, include: reviewInclude });
         });
         if (result === 'missing') return res.status(404).json({ error: 'Плейлист не найден' });
