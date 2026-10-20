@@ -5,6 +5,8 @@ The GUI never saves the device token, enables a relay or starts at Windows login
 Hardware/ESP32 switching is intentionally unavailable in this build.
 """
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import queue
 import sys
@@ -25,6 +27,35 @@ from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
 AGENT_VERSION = '0.3.6'
+
+def power_diagnostic_logger():
+    path=Path(default_data_dir()) / "logs"
+    path.mkdir(parents=True,exist_ok=True)
+    logger=logging.getLogger("media_raf_raw.radio.power")
+    if not logger.handlers:
+        handler=RotatingFileHandler(path / "power-diagnostics.log",
+                                    maxBytes=2*1024*1024,backupCount=3,encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate=False
+    return logger
+
+def record_power_event(event,**fields):
+    # Strict allowlist: credentials, secrets, headers, URLs and raw exceptions
+    # must never be written to diagnostics.
+    safe={}
+    for key in ("result","durationMs","httpStatus","permit","reason","policyMode",
+                "mode","intentAgeSeconds","authorizationAgeSeconds","errorType",
+                "armed","leaseMs","phase"):
+        value=fields.get(key)
+        if value is not None:
+            safe[key]=str(value)[:120] if isinstance(value,str) else value
+    try:
+        power_diagnostic_logger().info("%s %s",event,json.dumps(safe,ensure_ascii=False))
+    except OSError:
+        pass
+
 
 
 def default_data_dir():
@@ -158,6 +189,7 @@ class RadioAgentApp(tk.Tk):
         ttk.Label(linkbar, textvariable=self.esp32_status, style="Main.TLabel").pack(side="left", padx=12)
         ttk.Label(links, textvariable=self.esp32_platform_status, style="Main.TLabel").pack(anchor="w", pady=(3, 0))
         ttk.Label(links, textvariable=self.power_status,style="Main.TLabel").pack(anchor="w",pady=(5,0))
+        ttk.Button(links, text="Открыть журнал питания", command=self.open_power_diagnostics).pack(anchor="w",pady=(8,0))
         ttk.Button(links, text="Сохранить параметры", command=self.save_preferences).pack(anchor="w", pady=(12, 0))
 
         ttk.Label(settings, text="Настройки программы", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
@@ -354,6 +386,16 @@ class RadioAgentApp(tk.Tk):
             self.last_power_was_auto=False
             self.power_status.set("Усилитель: управление отключено")
 
+    def open_power_diagnostics(self):
+        path=Path(default_data_dir())/"logs"/"power-diagnostics.log"
+        if not path.exists():
+            messagebox.showinfo("Диагностика питания","Журнал появится после первой проверки питания.")
+            return
+        try:
+            os.startfile(str(path))
+        except OSError as error:
+            messagebox.showerror("Диагностика питания",type(error).__name__)
+
     def power_tick(self):
         # A failed fetch cannot create a fresh ON authorization. Relay self-OFF
         # occurs even if the Windows process is killed.
@@ -366,10 +408,14 @@ class RadioAgentApp(tk.Tk):
             armed=self.power_arm.get()
             def job():
                 permit=False
+                started=time.monotonic()
+                phase="intent"
+                decision="NOT_ARMED"
                 try:
                     if armed and token.startswith("rr_"):
                         try:
                             intent=fetch_intent(server,token)
+                            record_power_event("INTENT_RESPONSE",result="OK",durationMs=round((time.monotonic()-started)*1000),permit=intent.get("permit"),reason=intent.get("reason"),policyMode=intent.get("policyMode"),mode=PLAYBACK_STATE["mode"])
                             if intent.get("esp32Ip")!=host:
                                 raise ValueError("ESP32 is not registered for this agent")
                             permit=intent.get("permit") is True and intent.get("hardwareExpected")=="POWER_CONTROL_V1"
@@ -395,6 +441,7 @@ class RadioAgentApp(tk.Tk):
                             else:
                                 self.power_off_candidate_since=None
                                 self.last_power_was_auto=False
+                            decision="INTENT_ALLOWED" if permit else "INTENT_OFF"
                             self.last_power_intent=permit
                             self.last_power_received=now
                         except Exception as error:
@@ -415,13 +462,18 @@ class RadioAgentApp(tk.Tk):
                             else:
                                 permit=recently_authorized and state["mode"]=="LOCAL_RESERVE" and (
                                     since_intent<min(state["offlineGrace"],900))
+                            decision="FETCH_ERROR_HOLD" if permit else "FETCH_ERROR_OFF"
+                            record_power_event("INTENT_ERROR",result=decision,durationMs=round((time.monotonic()-started)*1000),httpStatus=getattr(error,"code",None),errorType=type(error).__name__,mode=state["mode"],intentAgeSeconds=round(since_intent,2),authorizationAgeSeconds=round(since_auth,2),permit=permit)
                             print("RADIO_POWER_INTENT_FETCH_FAILED",
                                   type(error).__name__, "mode="+str(state["mode"]),
                                   "recentIntentSeconds="+str(round(since_intent,1)),
                                   "hold="+str(permit),flush=True)
+                    phase="esp32_power"
                     signed_power(host,secret,permit,8000 if permit else 0)
+                    record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
                     self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
+                    record_power_event("POWER_ERROR",result="ERROR",durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
                     self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
                 finally:
                     self.messages.put(("power_done",None))
