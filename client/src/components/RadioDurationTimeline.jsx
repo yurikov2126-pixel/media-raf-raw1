@@ -49,9 +49,10 @@ export default function RadioDurationTimeline({weekStart,slots=[],onOpen}) {
             </div>
             <span className="h-11 w-1 shrink-0 rounded-full bg-blue-500"/>
             <div className="min-w-0 flex-1">
-              <div className="break-words text-sm font-semibold">{slot.playlist?.name||'Передача'}</div>
+              <div className="break-words text-sm font-semibold">{slot.playlist?.name||slot.title||'Передача'}</div>
               <div className="mt-1 text-xs opacity-65">{duration(to-from)}{from<day.start?' · продолжение':''}{to>day.end?' · до следующего дня':''}</div>
-              {running&&<div className="mt-1 text-xs font-medium text-red-500">В эфире</div>}
+              {!slot.playlistId&&<div className="mt-1 text-xs opacity-70">Планирование · AutoDJ не прерывается</div>}
+              {running&&slot.playlistId&&<div className="mt-1 text-xs font-medium text-red-500">В эфире</div>}
             </div>
             <span className="text-xl opacity-65" aria-hidden="true">⋯</span>
           </button>
