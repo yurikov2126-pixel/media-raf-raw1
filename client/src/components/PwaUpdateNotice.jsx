@@ -35,8 +35,21 @@ export default function PwaUpdateNotice() {
     const acceptUpdate = async () => {
         if (!update || updating) return;
         setUpdating(true);
-        setAvailable(false);
-        try { await update(true); } catch (error) {
+        try {
+            // injectManifest workers receive SKIP_WAITING explicitly; do not
+            // rely solely on the helper's refresh callback in iOS standalone.
+            const registration = await navigator.serviceWorker?.getRegistration();
+            if (registration?.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            } else {
+                await registration?.update();
+                if (registration?.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+            await update(true);
+            // WebKit may miss controllerchange after activation. A navigation
+            // retries against the newly active worker rather than leaving a dead button.
+            window.setTimeout(() => window.location.reload(), 2200);
+        } catch (error) {
             console.error('PWA update failed:', error);
             setUpdating(false);
             setAvailable(true);
