@@ -12,6 +12,7 @@ export default function MobileNav({ links, user }) {
     const { logout } = useAuth();
     const { allowed: radioAllowed } = useRadioAccess();
     const { raw: siteSettings } = useSettings();
+    const glassMenu = siteSettings.nav_mobile_style === 'glass';
     const [standalone, setStandalone] = useState(() => typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true));
     useEffect(() => { const media = window.matchMedia('(display-mode: standalone)'); const refresh = () => setStandalone(media.matches || window.navigator.standalone === true); media.addEventListener?.('change', refresh); return () => media.removeEventListener?.('change', refresh); }, []);
     const [moreOpen, setMoreOpen] = useState(false);
@@ -108,7 +109,7 @@ export default function MobileNav({ links, user }) {
     const extraItems = parseMenu(siteSettings[moreKey], extra).filter(allowed).filter(item => item.action !== 'more').map(resolve);
     return (
         <>
-            <nav className="ui-mobile-nav md:hidden" aria-label="Основная навигация">
+            <nav className={`ui-mobile-nav md:hidden ${glassMenu ? "ui-mobile-nav--glass" : ""}`} aria-label="Основная навигация">
                 {primaryItems.map((item) => {
                     if (item.action === 'more') {
                         return (
@@ -138,8 +139,8 @@ export default function MobileNav({ links, user }) {
             </nav>
 
             {moreOpen && (
-                <div className="ui-more-sheet-backdrop" onClick={() => setMoreOpen(false)}>
-                    <div className="ui-more-sheet" onClick={(e) => e.stopPropagation()}>
+                <div className={`ui-more-sheet-backdrop ${glassMenu ? "ui-more-sheet-backdrop--glass" : ""}`} onClick={() => setMoreOpen(false)}>
+                    <div className={`ui-more-sheet ${glassMenu ? "ui-more-sheet--glass" : ""}`} onClick={(e) => e.stopPropagation()}>
                         <div className="ui-more-sheet__handle" />
                         <div className="ui-more-grid">
                             {extraItems.map((item) => (
