@@ -1314,12 +1314,13 @@ model RadioPlaylistItem {
 
 model RadioScheduleSlot {
   id         String   @id @default(cuid())
-  playlistId String
+  playlistId String?
+  title      String   @default("")
   startAt    DateTime
   endAt      DateTime
   createdBy  String
   createdAt  DateTime @default(now())
-  playlist   RadioPlaylist @relation(fields: [playlistId], references: [id], onDelete: Restrict)
+  playlist   RadioPlaylist? @relation(fields: [playlistId], references: [id], onDelete: Restrict)
   @@index([startAt, endAt])
 }
 

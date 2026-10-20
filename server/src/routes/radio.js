@@ -701,23 +701,40 @@ router.get('/schedule', safe(async (req, res) => {
     res.json({ slots: await prisma.radioScheduleSlot.findMany({ where: { startAt: { lt: to }, endAt: { gt: from } },
         include: { playlist: { include: playlistInclude } }, orderBy: { startAt: 'asc' }, take: 500 }) });
 }));
+// Planning slots reserve editor time only. Without an approved playlist they are
+// intentionally excluded from playout, public now-playing and offline agent sync.
+function planningFields(payload) {
+    const title=typeof payload.title==='string'?payload.title.trim():'';
+    const durationMinutes=Number(payload.durationMinutes);
+    if (!title || title.length>120 || !Number.isInteger(durationMinutes) ||
+        durationMinutes<1 || durationMinutes>720) return null;
+    return {title,durationMinutes};
+}
 router.post('/schedule', safe(async (req, res) => {
     const { playlistId } = req.body || {};
     const startAt = broadcastStart(req.body);
-    if (!playlistId || !Number.isFinite(startAt.getTime()) || startAt < new Date(Date.now() - 60000))
-        return res.status(400).json({ error: 'Укажите утверждённый плейлист и будущее время' });
-    const playlist = await prisma.radioPlaylist.findUnique({ where: { id: playlistId }, include: playlistInclude });
-    if (!playlist || playlist.status !== 'APPROVED' || !playlist.items.length)
-        return res.status(400).json({ error: 'Плейлист не утверждён' });
-    const durationMs = playlistMs(playlist);
-    if (!durationMs || durationMs > 12 * 3600000) return res.status(400).json({ error: 'Недопустимая продолжительность' });
+    if (!Number.isFinite(startAt.getTime()) || startAt < new Date(Date.now() - 60000))
+        return res.status(400).json({ error: 'Укажите будущее время' });
+    let durationMs, title='';
+    if (playlistId == null) {
+        const planned=planningFields(req.body||{});
+        if (!planned) return res.status(400).json({error:'Укажите название и длительность 1–720 минут'});
+        durationMs=planned.durationMinutes*60000;
+        title=planned.title;
+    } else {
+        const playlist = await prisma.radioPlaylist.findUnique({ where: { id: playlistId }, include: playlistInclude });
+        if (!playlist || playlist.status !== 'APPROVED' || !playlist.items.length)
+            return res.status(400).json({ error: 'Плейлист не утверждён' });
+        durationMs = playlistMs(playlist);
+        if (!durationMs || durationMs > 12 * 3600000) return res.status(400).json({ error: 'Недопустимая продолжительность' });
+    }
     const endAt = new Date(startAt.getTime() + durationMs);
     // Serialize scheduling writes to prevent concurrent overlaps.
     const slot = await prisma.$transaction(async tx => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const clash = await tx.radioScheduleSlot.findFirst({ where: { startAt: { lt: endAt }, endAt: { gt: startAt } } });
         if (clash) return null;
-        return tx.radioScheduleSlot.create({ data: { playlistId, startAt, endAt, createdBy: req.user.id } });
+        return tx.radioScheduleSlot.create({ data: { playlistId:playlistId||null, title, startAt, endAt, createdBy: req.user.id } });
     });
     if (!slot) return res.status(409).json({ error: 'Этот интервал уже занят' });
     res.status(201).json({ slot });
@@ -765,9 +782,9 @@ router.patch('/schedule/:id', safe(async (req, res) => {
     const startAt = payload.startLocal || payload.startAt ? broadcastStart(payload) : null;
     if (startAt && (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now()))
         return res.status(400).json({ error: 'Укажите будущее время начала эфира (Москва UTC+3)' });
-    if (payload.playlistId !== undefined && (typeof payload.playlistId !== 'string' || !payload.playlistId))
+    if (payload.playlistId !== undefined && payload.playlistId !== null && (typeof payload.playlistId !== 'string' || !payload.playlistId))
         return res.status(400).json({ error: 'Выберите утверждённый плейлист' });
-    if (!startAt && payload.playlistId === undefined)
+    if (!startAt && payload.playlistId === undefined && payload.title === undefined && payload.durationMinutes === undefined)
         return res.status(400).json({ error: 'Укажите новое время или плейлист' });
     const result = await prisma.$transaction(async tx => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
@@ -775,7 +792,20 @@ router.patch('/schedule/:id', safe(async (req, res) => {
         if (!slot) return { status: 404, error: 'Эфир не найден' };
         if (slot.startAt <= new Date()) return { status: 409, error: 'Начавшийся или прошедший эфир переносить нельзя' };
         let playlistId = slot.playlistId;
+        let title=slot.title;
         let length = slot.endAt.getTime() - slot.startAt.getTime();
+        if (payload.playlistId === null) {
+            const planned=planningFields(payload);
+            if (!planned) return {status:400,error:'Укажите название и длительность 1–720 минут'};
+            playlistId=null;title=planned.title;length=planned.durationMinutes*60000;
+        } else if (slot.playlistId===null && payload.playlistId===undefined) {
+            if (payload.title!==undefined || payload.durationMinutes!==undefined) {
+                const planned=planningFields({title:payload.title??slot.title,
+                    durationMinutes:payload.durationMinutes??Math.round(length/60000)});
+                if (!planned) return {status:400,error:'Укажите название и длительность 1–720 минут'};
+                title=planned.title;length=planned.durationMinutes*60000;
+            }
+        }
         if (payload.playlistId && payload.playlistId !== slot.playlistId) {
             const playlist = await tx.radioPlaylist.findUnique({
                 where: { id: payload.playlistId }, include: playlistInclude,
@@ -794,7 +824,7 @@ router.patch('/schedule/:id', safe(async (req, res) => {
             select: { id: true },
         });
         if (conflict) return { status: 409, error: 'В выбранное время уже запланирован другой эфир' };
-        const updated = await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { startAt: nextStart, endAt, playlistId } });
+        const updated = await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { startAt: nextStart, endAt, playlistId, title } });
         return { slot: updated };
     });
     if (result.error) return res.status(result.status).json({ error: result.error });

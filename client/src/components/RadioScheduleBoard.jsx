@@ -37,8 +37,10 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
      <div className="radio-schedule-day-body min-h-64 space-y-2 p-2">
       {groups[day].map((event,j)=><button key={event.id} type="button" draggable={new Date(event.startAt)>new Date()} onDragStart={e=>{setDragId(event.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',event.id);}} onDragEnd={()=>setDragId(null)} onClick={()=>onSelectSlot(event)} onContextMenu={e=>{e.preventDefault();onSelectSlot(event);}} title="Перетащите на другой день или нажмите для действий" className={`radio-schedule-event w-full rounded-xl border p-2.5 text-left transition ${colors[index%colors.length]}`}>
        <span className="block text-xs font-bold tabular-nums">{clock(event.startAt)} — {clock(event.endAt)}</span>
-       <span className="mt-1 block break-words text-xs font-semibold">{event.playlist?.name||event.name||'Передача'}</span>
-       {timeConflict(event)&&<span className="mt-1 block text-[10px] font-bold text-rose-500">⚠ Пересечение</span>}
+       <span className="mt-1 block break-words text-xs font-semibold">{event.playlist?.name||event.title||'Передача'}</span>
+       {!event.playlistId&&<span className="mt-1 block text-[10px] opacity-70">План · нет плейлиста · AutoDJ продолжает эфир</span>}
+       {!event.playlistId&&<span className="shrink-0 text-[10px] opacity-70">План</span>}
+    {timeConflict(event)&&<span className="mt-1 block text-[10px] font-bold text-rose-500">⚠ Пересечение</span>}
       </button>)}
       {!groups[day].length&&<p className="radio-schedule-empty pt-6 text-center text-xs">Auto-DJ / без событий</p>}
      </div>
@@ -48,7 +50,7 @@ export default function RadioScheduleBoard({slots,date,onDateChange,onSelectSlot
    {entries.length?entries.map(event=><button type="button" key={event.id} onClick={()=>onSelectSlot(event)} onContextMenu={e=>{e.preventDefault();onSelectSlot(event);}} className="flex w-full items-center gap-3 border-b border-current/10 p-3 text-left last:border-0 hover:bg-indigo-500/10">
     <span className="w-24 shrink-0 text-xs font-semibold tabular-nums">{readable(event.startAt)}</span>
     <span className="w-24 shrink-0 text-xs tabular-nums">{clock(event.startAt)}</span>
-    <span className="min-w-0 flex-1 truncate text-sm font-medium">{event.playlist?.name||event.name||'Передача'}</span>
+    <span className="min-w-0 flex-1 truncate text-sm font-medium">{event.playlist?.name||event.title||'Передача'}</span>
     {timeConflict(event)&&<span className="shrink-0 text-xs text-rose-500">Пересечение</span>}
     <span className="opacity-50">›</span>
    </button>):<p className="p-6 text-center text-sm opacity-60">Нет передач на выбранной неделе</p>}
