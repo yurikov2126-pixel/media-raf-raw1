@@ -2607,3 +2607,9 @@ body:has([data-theme="dark"]) .mrr-role-group-toggle { background: #334155; colo
   .ui-mobile-nav--glass .ui-mobile-nav__item:active{transform:scale(.95)}
 }
 @media(prefers-reduced-motion:reduce){.ui-mobile-nav--glass .ui-mobile-nav__item{transition:none!important}}
+
+/* Messenger hyperlinks are legible and tappable in both color schemes. */
+.mrr-message-link { color:var(--brand-accent-1,#9b5de5);text-decoration-thickness:1px;text-underline-offset:3px;overflow-wrap:anywhere;cursor:pointer;-webkit-touch-callout:default; }
+.mrr-message-link:focus-visible { outline:2px solid var(--brand-accent-1,#9b5de5);outline-offset:2px;border-radius:3px; }
+.mrr-own-bubble .mrr-message-link { color:#b8eaff; }
+.mrr-v2-neutral-bubble .mrr-message-link { color:var(--brand-accent-1,#9b5de5); }
