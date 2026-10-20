@@ -760,25 +760,41 @@ router.post('/schedule/weekly', safe(async (req, res) => {
 }));
 
 router.patch('/schedule/:id', safe(async (req, res) => {
-    // Moving a scheduled slot never changes the approved playlist or its duration.
-    const startAt = broadcastStart(req.body || {});
-    if (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now())
+    // Move the slot and/or replace its approved playlist atomically.
+    const payload = req.body || {};
+    const startAt = payload.startLocal || payload.startAt ? broadcastStart(payload) : null;
+    if (startAt && (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now()))
         return res.status(400).json({ error: 'Укажите будущее время начала эфира (Москва UTC+3)' });
+    if (payload.playlistId !== undefined && (typeof payload.playlistId !== 'string' || !payload.playlistId))
+        return res.status(400).json({ error: 'Выберите утверждённый плейлист' });
+    if (!startAt && payload.playlistId === undefined)
+        return res.status(400).json({ error: 'Укажите новое время или плейлист' });
     const result = await prisma.$transaction(async tx => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const slot = await tx.radioScheduleSlot.findUnique({ where: { id: req.params.id } });
         if (!slot) return { status: 404, error: 'Эфир не найден' };
         if (slot.startAt <= new Date()) return { status: 409, error: 'Начавшийся или прошедший эфир переносить нельзя' };
-        const length = slot.endAt.getTime() - slot.startAt.getTime();
+        let playlistId = slot.playlistId;
+        let length = slot.endAt.getTime() - slot.startAt.getTime();
+        if (payload.playlistId && payload.playlistId !== slot.playlistId) {
+            const playlist = await tx.radioPlaylist.findUnique({
+                where: { id: payload.playlistId }, include: playlistInclude,
+            });
+            if (!playlist || playlist.status !== 'APPROVED' || !playlist.items.length)
+                return { status: 400, error: 'Новый плейлист не утверждён или пуст' };
+            length = playlistMs(playlist);
+            playlistId = playlist.id;
+        }
         if (length <= 0 || length > 12 * 3600000)
             return { status: 409, error: 'Некорректная продолжительность передачи' };
-        const endAt = new Date(startAt.getTime() + length);
+        const nextStart = startAt || slot.startAt;
+        const endAt = new Date(nextStart.getTime() + length);
         const conflict = await tx.radioScheduleSlot.findFirst({
-            where: { id: { not: slot.id }, startAt: { lt: endAt }, endAt: { gt: startAt } },
+            where: { id: { not: slot.id }, startAt: { lt: endAt }, endAt: { gt: nextStart } },
             select: { id: true },
         });
         if (conflict) return { status: 409, error: 'В выбранное время уже запланирован другой эфир' };
-        const updated = await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { startAt, endAt } });
+        const updated = await tx.radioScheduleSlot.update({ where: { id: slot.id }, data: { startAt: nextStart, endAt, playlistId } });
         return { slot: updated };
     });
     if (result.error) return res.status(result.status).json({ error: result.error });
