@@ -98,6 +98,7 @@ state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,cloc
 let lastDecodedSource=null;
 let scheduledEntryOverlap=null;
 let reverseReservedTarget=null;
+let reverseMixAuthorityAt=null;
 state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null};
 state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 state.reverseHandover={attempts:0,eligible:0,blocked:0,last:null,mixed:0};
@@ -253,14 +254,17 @@ async function current() {
     });
     reverseReservedTarget=null;
     if(decision.valid&&prewarmed?.assetId===reservation.assetId&&
-      prewarmed.seekMs===reservation.seekMs&&!prewarmed.child.killed){
+      prewarmed.seekMs===reservation.seekMs+(reservation.consumedFrames||0)/48&&
+      !prewarmed.child.killed){
       const chosen=catalog.find(a=>a.id===reservation.assetId);
       if(chosen){
         state.reverseTargetReservation.used++;
         state.reverseTargetReservation.last={status:'USED',assetId:chosen.id,at:new Date().toISOString()};
         return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
-          track:{id:chosen.id,name:chosen.name,index:catalog.indexOf(chosen),offsetMs:0,
-            seekMs:reservation.seekMs,durationMs:reservation.durationMs},
+          track:{id:chosen.id,name:chosen.name,index:catalog.indexOf(chosen),
+            offsetMs:(reservation.consumedFrames||0)/48,
+            seekMs:reservation.seekMs+(reservation.consumedFrames||0)/48,
+            durationMs:reservation.durationMs},
           until:null},asset:chosen};
       }
     }
@@ -460,6 +464,7 @@ async function run() {
   startEncoder();
   while(!stopping) {
     if(publicLive.onAir){
+      reverseReservedTarget=null;reverseMixAuthorityAt=null;
       lastDecodedSource=null;
       previousSourcePcmTail=null;
       shadowOverlap=null;
@@ -474,6 +479,7 @@ async function run() {
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
+      if(!reverseReservedTarget)reverseMixAuthorityAt=null;
       lastDecodedSource=null;
       discardPrewarm();
       state.mode='SILENCE';state.trackId=null;state.playout=null;state.nextTrackId=null;
@@ -658,7 +664,19 @@ async function run() {
           // Use the PCM clock to split a packet exactly at the overlap start;
           // the prepared scheduled decoder supplies fresh frames concurrently.
           const preparedSlot=prewarmed;
-          const eligible=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
+          const reverseEligible=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
+            isLastScheduledTrack&&!usableBlend&&!publicLive.onAir&&
+            reverseReservedTarget?.slotId===cursor.slot.id&&
+            reverseReservedTarget.slotEndMs===boundary&&
+            preparedSlot?.assetId===reverseReservedTarget.assetId&&
+            preparedSlot.seekMs===reverseReservedTarget.seekMs&&
+            !preparedSlot.iterator&&!preparedSlot.child.killed&&
+            !!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200&&
+            remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
+            (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
+            (liveMixSession||Math.abs((boundary-Date.now())-
+              (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
+          const forwardEligible=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
             !usableBlend&&!publicLive.onAir&&!pendingScheduledHandover&&
             Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
             preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
@@ -669,6 +687,7 @@ async function run() {
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
+          const eligible=forwardEligible||reverseEligible;
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
           const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
           if(plainBytes){
@@ -685,15 +704,16 @@ async function run() {
               try{
                 if(!liveMixSession){
                   const engine=new RadioSourcePcmOverlap({
-                    source:{id:asset.id,mode:'AUTO_DJ'},
-                    target:{id:preparedSlot.assetId,mode:'SCHEDULED'},
+                    source:{id:asset.id,mode:cursor.status},
+                    target:{id:preparedSlot.assetId,mode:reverseEligible?'AUTO_DJ':'SCHEDULED'},
                     overlapMs:LIVE_SOURCE_OVERLAP_MS,curve:'equalPower'
                   });
                   const ready=engine.start({sourceReady:true,targetReady:true,
                     slotAuthority:true,publicLive:publicLive.onAir});
                   if(!ready.ok)throw new Error(ready.reason);
                   liveMixSession={engine,iterator:preparedSlot.child.stdout[Symbol.asyncIterator](),
-                    slotId:preparedSlot.scheduledSlotId,assetId:preparedSlot.assetId};
+                    slotId:reverseEligible?cursor.slot.id:preparedSlot.scheduledSlotId,
+                    assetId:preparedSlot.assetId,direction:reverseEligible?'REVERSE':'FORWARD'};
                 }
                 const incoming=await readPcmFrames(liveMixSession.iterator,tail.length/4,{
                   deadlineMs:350,maxBufferedFrames:240000
@@ -705,17 +725,28 @@ async function run() {
                 if(!encoder.stdin.write(mixed.pcm))
                   await new Promise(resolve=>encoder.stdin.once('drain',resolve));
                 emittedBytes+=mixed.pcm.length;
-                scheduledEntryOverlap={slotId:liveMixSession.slotId,
-                  assetId:liveMixSession.assetId,
-                  consumedFrames:liveMixSession.engine.snapshot().framesOut};
+                if(liveMixSession.direction==='FORWARD'){
+                  scheduledEntryOverlap={slotId:liveMixSession.slotId,
+                    assetId:liveMixSession.assetId,
+                    consumedFrames:liveMixSession.engine.snapshot().framesOut};
+                }else if(reverseReservedTarget){
+                  reverseReservedTarget={...reverseReservedTarget,
+                    consumedFrames:liveMixSession.engine.snapshot().framesOut};
+                }
                 if(mixed.status==='COMPLETED'){
                   preparedSlot.iterator=liveMixSession.iterator;
-                  preparedSlot.seekMs=LIVE_SOURCE_OVERLAP_MS;
+                  preparedSlot.seekMs+=LIVE_SOURCE_OVERLAP_MS;
                   preparedSlot.durationMs-=LIVE_SOURCE_OVERLAP_MS;
+                  if(liveMixSession.direction==='REVERSE'){
+                    state.reverseHandover.mixed++;
+                    state.reverseHandover.last={status:'MIXED',assetId:preparedSlot.assetId,
+                      frames:liveMixSession.engine.snapshot().framesOut,at:new Date().toISOString()};
+                  }
                   state.liveSourceCrossfade.completed++;
                   state.sourceHandover.mixed++;
                   state.liveSourceCrossfade.last={status:'MIXED',
-                    slotId:liveMixSession.slotId,frames:liveMixSession.engine.snapshot().framesOut,
+                    direction:liveMixSession.direction,slotId:liveMixSession.slotId,
+                    frames:liveMixSession.engine.snapshot().framesOut,
                     at:new Date().toISOString()};
                 }
               }catch(error){
@@ -734,7 +765,15 @@ async function run() {
                 if(!encoder.stdin.write(fallback))
                   await new Promise(resolve=>encoder.stdin.once('drain',resolve));
                 emittedBytes+=fallback.length;
-                if(prewarmed===preparedSlot)discardPrewarm();
+                if(liveMixSession?.direction==='REVERSE'&&reverseReservedTarget?.consumedFrames){
+                  // Never reset a partially aired AutoDJ intro to its cue-in.
+                  // Retain the actual prepared decoder only if still usable.
+                  preparedSlot.iterator=liveMixSession.iterator;
+                  preparedSlot.seekMs=reverseReservedTarget.seekMs+
+                    reverseReservedTarget.consumedFrames/48;
+                  preparedSlot.durationMs=reverseReservedTarget.durationMs-
+                    reverseReservedTarget.consumedFrames/48;
+                }else if(prewarmed===preparedSlot)discardPrewarm();
               }
             }else{
               const normal=fadePcmChunk(tail,{positionBytes:emittedBytes,
@@ -833,6 +872,31 @@ async function run() {
                   slotId:reservation.slotId,at:new Date().toISOString()};
               }
             }catch(error){state.lastError='Reverse reservation: '+error.message;}
+          })();
+        }
+        if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
+          isLastScheduledTrack&&reverseReservedTarget&&prewarmed?.assetId===reverseReservedTarget.assetId&&
+          !reverseMixAuthorityAt&&boundary-Date.now()<=2800&&boundary-Date.now()>1600){
+          const reservation=reverseReservedTarget;
+          void (async()=>{
+            try{
+              const [slot,settings,active]=await Promise.all([
+                prisma.radioScheduleSlot.findUnique({
+                  where:{id:reservation.slotId},
+                  select:{endAt:true,playlist:{select:{status:true}}}}),
+                readAutoDjSettings(),
+                prisma.radioScheduleSlot.findFirst({
+                  where:{startAt:{lte:new Date(boundary)},endAt:{gt:new Date(boundary)},
+                    playlist:{status:'APPROVED'}},
+                  select:{id:true},orderBy:{startAt:'asc'}
+                })
+              ]);
+              if(slot?.playlist?.status==='APPROVED'&&
+                Date.parse(slot.endAt)===reservation.slotEndMs&&
+                settings.enabled&&settings.playlistId===reservation.playlistId&&
+                !active&&!publicLive.onAir&&reverseReservedTarget===reservation)
+                reverseMixAuthorityAt=Date.now();
+            }catch(error){state.lastError='Reverse crossfade authority: '+error.message;}
           })();
         }
         // Reverse transition admission is observational until the AutoDJ
