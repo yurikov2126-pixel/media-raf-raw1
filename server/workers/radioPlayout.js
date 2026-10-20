@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
+import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
@@ -86,6 +87,10 @@ let finishedScheduledSlot=null;
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0};
 let lastDecodedSource=null;
+const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
+let previousSourcePcmTail=null;
+let shadowOverlap=null;
+state.sourceOverlapShadow={enabled:SOURCE_OVERLAP_SHADOW,attempts:0,completed:0,blocked:0,failed:0,last:null};
 function recordBoundary(event){state.lastBoundary={...event,at:new Date().toISOString()};console.info('RADIO_SOURCE_BOUNDARY',JSON.stringify(state.lastBoundary));}
 const LIVE_PCM_INTAKE_ENABLED=process.env.RADIO_LIVE_PCM_INTAKE_ENABLED==='true';
 const liveIntake=new LivePcmIntake();
@@ -414,6 +419,8 @@ async function run() {
   while(!stopping) {
     if(publicLive.onAir){
       lastDecodedSource=null;
+      previousSourcePcmTail=null;
+      shadowOverlap=null;
       discardPrewarm();musicQueueKey=null;musicQueueNextId=null;
       state.mode='LIVE';state.trackId=null;state.slotId=null;state.playout=null;state.nextTrackId=null;
       const frame=publicLive.take(Date.now());
@@ -471,6 +478,29 @@ async function run() {
       if(handover.allowed)state.sourceHandover.eligible++;
       else state.sourceHandover.blocked++;
     }
+    if(SOURCE_OVERLAP_SHADOW&&lastDecodedSource&&lastDecodedSource.mode!==cursor.status&&
+      previousSourcePcmTail?.length&&['AUTO_DJ','SCHEDULED'].includes(cursor.status)&&
+      ['AUTO_DJ','SCHEDULED'].includes(lastDecodedSource.mode)){
+      const overlap=new RadioSourcePcmOverlap({
+        source:{id:lastDecodedSource.id,mode:lastDecodedSource.mode},
+        target:{id:asset.id,mode:cursor.status},overlapMs:1500,curve:'equalPower'
+      });
+      const decision=overlap.start({
+        sourceReady:previousSourcePcmTail.length>=1500*PCM_BYTES_PER_MS,
+        targetReady:!!prewarmed&&prewarmed.assetId===asset.id&&!prewarmed.child.killed,
+        slotAuthority:!!cursor.slot||cursor.status==='AUTO_DJ',
+        publicLive:publicLive.onAir
+      });
+      state.sourceOverlapShadow.attempts++;
+      if(decision.ok){
+        shadowOverlap={engine:overlap,tail:previousSourcePcmTail,sourceOffset:0};
+      }else{
+        state.sourceOverlapShadow.blocked++;
+        state.sourceOverlapShadow.last={phase:'BLOCKED',reason:decision.reason,
+          fromId:lastDecodedSource.id,toId:asset.id,at:new Date().toISOString()};
+      }
+    }
+    previousSourcePcmTail=null;
     // A new per-track decoder receives the latest settings. The shared encoder
     // remains alive and scheduled boundaries keep priority over DSP effects.
     let dsp;
