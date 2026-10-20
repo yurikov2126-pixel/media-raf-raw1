@@ -26,7 +26,7 @@ export async function rehearseSourceOverlap({
   '-i',file,'-t',seconds,'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'];
  const children=[spawn(ffmpeg,args(sourcePath),{stdio:['ignore','pipe','pipe']}),
   spawn(ffmpeg,args(targetPath),{stdio:['ignore','pipe','pipe']})];
- const input=[[],[]];const errors=[];
+ const input=[[],[]];
  const run=(child,index)=>new Promise((resolve,reject)=>{
   let stderr='';
   child.stderr.on('data',c=>{stderr=(stderr+c.toString()).slice(-1000);});
@@ -53,13 +53,12 @@ export async function rehearseSourceOverlap({
      samples[1].subarray(position,position+size));
    mixed=Buffer.concat([mixed,result.pcm]);
   }
-  if(!engine.snapshot().closed||mixed.length!==expected)
+  if(engine.snapshot().phase!=='COMPLETED'||mixed.length!==expected)
    throw new Error('Incomplete or duplicated overlap frames');
   return {pcm:mixed,metrics:{status:'COMPLETED',frames:mixed.length/4,
    overlapMs,sourceBytes:samples[0].length,targetBytes:samples[1].length,
    streamedToPublicEncoder:false}};
  }catch(error){
-  errors.push(error.message);
   engine.abort(error.message);
   throw error;
  }finally{
