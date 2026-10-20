@@ -65,6 +65,7 @@ export default function RadioStudentPlaylists() {
     setName(playlist.name);
     setDescription(playlist.description || '');
     setSelected(playlist.items.map(item => item.assetId));
+    setTransitions(transitionSettingsFromItems(playlist.items));
   };
   const save = async e => {
     e.preventDefault();
