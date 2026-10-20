@@ -15,6 +15,8 @@ import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
 import {planSourceHandover} from '../src/lib/radioSourceHandoverClock.js';
 import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
+import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
+import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
@@ -53,6 +55,10 @@ const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-au
 const listeners = new Set();
 // Explicit opt-in: disabled until the full PCM transition is validated on-air.
 const SCHEDULED_CROSSFADE_ENABLED=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
+// OFF by default: strict schedule-entry PCM overlap only, with on-air diagnostics.
+const LIVE_SOURCE_CROSSFADE_ENABLED=process.env.RADIO_LIVE_SOURCE_CROSSFADE_ENABLED==='true';
+const LIVE_SOURCE_OVERLAP_MS=1500;
+const LIVE_SOURCE_OVERLAP_BYTES=LIVE_SOURCE_OVERLAP_MS*PCM_BYTES_PER_MS;
 // Non-fatal FFmpeg metadata notices must not overwrite real playout errors.
 function isIgnorableMediaNotice(value){
  return /Incorrect BOM value|Error reading frame GEOB|skipped\s*$/i.test(value);
@@ -88,6 +94,8 @@ let finishedScheduledSlot=null;
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
 let lastDecodedSource=null;
+let scheduledEntryOverlap=null;
+state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
 let previousSourcePcmTail=null;
 let shadowOverlap=null;
@@ -203,7 +211,10 @@ async function current() {
       delayedScheduledSlot=null;
     }
   }
-  const cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+  let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+  if(LIVE_SOURCE_CROSSFADE_ENABLED&&scheduledEntryOverlap&&cursor.slot?.id===scheduledEntryOverlap.slotId){
+    cursor=resumeScheduledCursor(cursor,scheduledEntryOverlap);
+  }
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   const alreadyFinished=!!cursor.slot && !!finishedScheduledSlot &&
     cursor.slot.id===finishedScheduledSlot.id && nowMs<finishedScheduledSlot.endAtMs;
@@ -349,7 +360,7 @@ async function current() {
 
 // Prediction is advisory only: the real current() authority is re-checked
 // before a prepared decoder can feed the public encoder.
-async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false}){
+async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false,scheduledSlotId=null,scheduledSlotStartMs=null}){
   if(prewarming||prewarmed||publicLive.onAir||stopping)return;
   prewarming=true;
   try{
@@ -392,7 +403,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
     child.on('error',()=>{if(prewarmed?.child===child)prewarmed=null;});
     child.on('close',()=>{if(prewarmed?.child===child)prewarmed=null;});
     prewarmed={child,assetId:candidate.id,seekMs,durationMs,
-      argsKey:JSON.stringify(args)};
+      scheduledSlotId,scheduledSlotStartMs,argsKey:JSON.stringify(args)};
     state.transitions.prewarmed++;
   }catch(error){state.lastError='Next audio prewarm: '+error.message;}
   finally{prewarming=false;}
@@ -595,7 +606,8 @@ async function run() {
     const playbackStartedAt=new Date().toISOString();
     const crossfadeStartedAt=usableBlend?Date.now():null;
     try {
-      for await(const chunk of child.stdout) {
+      const pcmChunks=matches&&prepared.iterator?continuePcmIterator(prepared.iterator):child.stdout;
+      for await(const chunk of pcmChunks) {
         if(stopping||publicLive.onAir) {child.kill('SIGTERM');break;}
         const decoded=pcmStaging?pcmStaging.push(chunk):chunk;
         if(!decoded?.length)continue;
@@ -660,7 +672,8 @@ async function run() {
             });
             const first=nextSlot?.playlist?.items?.[0]?.asset;
             if(first?.id&&!prewarmed){
-              void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true});
+              void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true,
+                scheduledSlotId:nextSlot.id,scheduledSlotStartMs:Date.parse(nextSlot.startAt)});
             }
            }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
           })();
