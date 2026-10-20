@@ -892,13 +892,37 @@ async function run() {
               if(publicLive.onAir){reversePrewarmBlocked('PUBLIC_LIVE');return;}
               if(prewarmed||prewarming){reversePrewarmBlocked('PREWARM_BUSY',{preparedAssetId:prewarmed?.assetId||null});return;}
               const rotationSettings=await readRotation();
-              if(rotationSettings.enabled){reversePrewarmBlocked('ROTATION_ENABLED');return;} // do not bypass artist/cooldown rotation
               const playlist=await prisma.radioPlaylist.findUnique({
                 where:{id:settings.playlistId},
                 include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
               });
-              const approved=cueAssets(selectAutoDjAssets(playlist),await readCues());
-              const selected=approved.find(a=>a.playDurationMs>=2500);
+              const approved=cueAssets(selectAutoDjAssets(playlist)
+                .filter(candidate=>!failedAutoDjAssets.has(candidate.id)),await readCues());
+              const nowMs=Date.now();
+              let selected=null;
+              if(rotationSettings.enabled){
+                const plan=rotationPlan(approved,rotationSettings,nowMs);
+                const music=plan?.items||approved;
+                const history=await readPlayoutHistory();
+                const ordered=prioritizeUnplayed(music,history,rotationSettings.cooldownMinutes,nowMs);
+                const artistGap=rotationSettings.artistGap||0;
+                const artistRecent=recentlyAiredArtists.slice(-artistGap);
+                if(rotationSettings.strictCooldown&&rotationSettings.cooldownMinutes>0){
+                  const avoided=new Set(artistRecent.map(name=>name.toLocaleLowerCase('ru-RU')));
+                  const distinct=ordered.filter(item=>!avoided.has(
+                    id3Artist(item).normalize('NFKC').trim().replace(/\\s+/g,' ').toLocaleLowerCase('ru-RU'))
+                    ||!id3Artist(item).trim());
+                  const eligible=chooseQueuedTrack(distinct,history,rotationSettings.cooldownMinutes,nowMs)
+                    ||chooseQueuedTrack(ordered,history,rotationSettings.cooldownMinutes,nowMs);
+                  selected=eligible||selectExhaustionFallback(
+                    distinct.length?distinct:ordered,history,nowMs,rotationSettings.allowCooldownFallback);
+                }else{
+                  selected=fairNextTrack(ordered,history,artistRecent,artistGap,nowMs);
+                }
+              }else{
+                selected=approved.find(a=>a.playDurationMs>=2500);
+              }
+              if(selected?.playDurationMs<2500)selected=null;
               if(!selected){reversePrewarmBlocked('NO_ELIGIBLE_ASSET');return;}
               if(publicLive.onAir||state.trackId!==asset.id){reversePrewarmBlocked('SOURCE_CHANGED');return;}
               const reservation=reserveReverseTarget({
