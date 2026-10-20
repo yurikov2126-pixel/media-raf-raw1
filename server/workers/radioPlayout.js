@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
+import {planSourceHandover} from '../src/lib/radioSourceHandoverClock.js';
 import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
@@ -85,7 +86,7 @@ let resumeAutoDjAfterShow=false;
 // Track natural EOF of the final scheduled item so wall-clock drift cannot replay it.
 let finishedScheduledSlot=null;
 state.lastBoundary=null;
-state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0};
+state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
 let lastDecodedSource=null;
 const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
 let previousSourcePcmTail=null;
@@ -549,6 +550,7 @@ async function run() {
     // This prepares the first scheduled decoder ahead of time without routing it
     // to the encoder until the authoritative schedule cursor selects it.
     let scheduledPrewarmRequested=false;
+    let sourceClockPlanned=false;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
     let polling=false;
@@ -628,6 +630,21 @@ async function run() {
           void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
             musicCount:cursor.isJingle?0:musicSinceJingle+1,scheduled:cursor.status==='SCHEDULED',
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
+        }
+        if(!sourceClockPlanned&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
+          Number.isFinite(boundary)&&boundary-Date.now()<=5500&&boundary-Date.now()>0){
+          sourceClockPlanned=true;
+          const timing=planSourceHandover({
+            fromMode:'AUTO_DJ',toMode:'SCHEDULED',nowMs:Date.now(),
+            boundaryMs:boundary,overlapMs:1500,
+            // This dry-run does not imply the new audio route is connected.
+            sourceRemainingMs:Math.max(0,remaining-emittedBytes/PCM_BYTES_PER_MS),
+            targetDurationMs:Infinity
+          });
+          state.sourceHandover.lastClockPlan={...timing,at:new Date().toISOString(),
+            publicPcmMixed:false};
+          if(timing.allowed)state.sourceHandover.clockPlanned++;
+          else state.sourceHandover.clockRejected++;
         }
         if(!scheduledPrewarmRequested&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
           !pendingScheduledHandover&&!publicLive.onAir&&Number.isFinite(boundary)&&
