@@ -206,6 +206,35 @@ router.get('/agent/stream', deviceAuth, (req,res) => {
   return streamWorker(req,res);
 });
 // Limited public metadata; never expose device tokens, Worker diagnostics or private files.
+// A single station-wide metadata latency setting, administered in the control room.
+const RADIO_METADATA_SYNC_KEY='radio_metadata_sync_v1';
+const defaultMetadataSync={mode:'auto',manualDelay:8};
+async function readMetadataSync(){
+  const row=await prisma.setting.findUnique({where:{key:RADIO_METADATA_SYNC_KEY}});
+  try {
+    const parsed=JSON.parse(row?.value||'null');
+    if(parsed && ['auto','manual','off'].includes(parsed.mode) &&
+       Number.isFinite(parsed.manualDelay) && parsed.manualDelay>=0 && parsed.manualDelay<=30)
+      return {mode:parsed.mode,manualDelay:parsed.manualDelay};
+  }catch {/* invalid legacy setting */}
+  return defaultMetadataSync;
+}
+router.get('/listen/metadata-sync',safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.json(await readMetadataSync());
+}));
+router.put('/dashboard/metadata-sync',...admin,safe(async(req,res)=>{
+  const {mode,manualDelay}=req.body||{};
+  if(!['auto','manual','off'].includes(mode) ||
+     typeof manualDelay!=='number' || !Number.isFinite(manualDelay) ||
+     manualDelay<0 || manualDelay>30)
+    return res.status(400).json({error:'Некорректная настройка синхронизации'});
+  const value={mode,manualDelay};
+  await prisma.setting.upsert({where:{key:RADIO_METADATA_SYNC_KEY},
+    create:{key:RADIO_METADATA_SYNC_KEY,value:JSON.stringify(value)},
+    update:{value:JSON.stringify(value)}});
+  res.json(value);
+}));
 router.get('/listen/now-playing',safe(async(_req,res)=>{
   res.setHeader('Cache-Control','no-store');
   let worker;
