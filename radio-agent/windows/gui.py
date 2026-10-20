@@ -22,6 +22,7 @@ from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat
 from esp32_telemetry import report_status
 from esp32_power import signed_power,fetch_intent
+from power_policy import allowed_power
 import time
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
@@ -492,12 +493,12 @@ class RadioAgentApp(tk.Tk):
                     # not override server OFF or the ESP32 heartbeat/lease watchdog.
                     state=PLAYBACK_STATE
                     now=time.monotonic()
-                    audio_recent=(state["streamLastSeen"]>0 and
-                                  now-state["streamLastSeen"]<30)
-                    local_running=state["broadcastRunning"] and not STOP.is_set()
-                    if not local_running or not audio_recent:
-                        permit=False
-                        decision="LOCAL_STOP" if not local_running else "AUDIO_TIMEOUT"
+                    local_running=bool(state["broadcastRunning"])
+                    permit,local_reason=allowed_power(permit,local_running,STOP.is_set(),
+                        state["streamLastSeen"],now)
+                    audio_recent=(state["streamLastSeen"]>0 and now-state["streamLastSeen"]<30)
+                    if not permit and local_reason!="SERVER_OR_NETWORK_OFF":
+                        decision=local_reason
                     self.messages.put(("broadcast_status","● Эфир включён" if local_running else "● Эфир выключен"))
                     self.messages.put(("audio_status","● Звук: воспроизведение / переход" if audio_recent else "● Звук: нет подтверждения"))
                     phase="esp32_power"
