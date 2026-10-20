@@ -15,6 +15,8 @@ import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
 import {planSourceHandover} from '../src/lib/radioSourceHandoverClock.js';
 import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
+import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
+import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
@@ -53,6 +55,10 @@ const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-au
 const listeners = new Set();
 // Explicit opt-in: disabled until the full PCM transition is validated on-air.
 const SCHEDULED_CROSSFADE_ENABLED=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
+// OFF by default: strict schedule-entry PCM overlap only, with on-air diagnostics.
+const LIVE_SOURCE_CROSSFADE_ENABLED=process.env.RADIO_LIVE_SOURCE_CROSSFADE_ENABLED==='true';
+const LIVE_SOURCE_OVERLAP_MS=1500;
+const LIVE_SOURCE_OVERLAP_BYTES=LIVE_SOURCE_OVERLAP_MS*PCM_BYTES_PER_MS;
 // Non-fatal FFmpeg metadata notices must not overwrite real playout errors.
 function isIgnorableMediaNotice(value){
  return /Incorrect BOM value|Error reading frame GEOB|skipped\s*$/i.test(value);
@@ -88,6 +94,8 @@ let finishedScheduledSlot=null;
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
 let lastDecodedSource=null;
+let scheduledEntryOverlap=null;
+state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
 let previousSourcePcmTail=null;
 let shadowOverlap=null;
@@ -203,7 +211,10 @@ async function current() {
       delayedScheduledSlot=null;
     }
   }
-  const cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+  let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
+  if(LIVE_SOURCE_CROSSFADE_ENABLED&&scheduledEntryOverlap&&cursor.slot?.id===scheduledEntryOverlap.slotId){
+    cursor=resumeScheduledCursor(cursor,scheduledEntryOverlap);
+  }
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   const alreadyFinished=!!cursor.slot && !!finishedScheduledSlot &&
     cursor.slot.id===finishedScheduledSlot.id && nowMs<finishedScheduledSlot.endAtMs;
@@ -349,7 +360,7 @@ async function current() {
 
 // Prediction is advisory only: the real current() authority is re-checked
 // before a prepared decoder can feed the public encoder.
-async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false}){
+async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false,scheduledSlotId=null,scheduledSlotStartMs=null}){
   if(prewarming||prewarmed||publicLive.onAir||stopping)return;
   prewarming=true;
   try{
@@ -392,7 +403,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
     child.on('error',()=>{if(prewarmed?.child===child)prewarmed=null;});
     child.on('close',()=>{if(prewarmed?.child===child)prewarmed=null;});
     prewarmed={child,assetId:candidate.id,seekMs,durationMs,
-      argsKey:JSON.stringify(args)};
+      scheduledSlotId,scheduledSlotStartMs,sourceAuthorityConfirmedAt:null,argsKey:JSON.stringify(args)};
     state.transitions.prewarmed++;
   }catch(error){state.lastError='Next audio prewarm: '+error.message;}
   finally{prewarming=false;}
@@ -551,6 +562,7 @@ async function run() {
     // to the encoder until the authoritative schedule cursor selects it.
     let scheduledPrewarmRequested=false;
     let sourceClockPlanned=false;
+    let crossfadeAuthorityRequested=false;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
     let polling=false;
@@ -594,8 +606,11 @@ async function run() {
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
     const crossfadeStartedAt=usableBlend?Date.now():null;
+    let liveMixSession=null;
+    let liveMixDisabled=false;
     try {
-      for await(const chunk of child.stdout) {
+      const pcmChunks=matches&&prepared.iterator?continuePcmIterator(prepared.iterator):child.stdout;
+      for await(const chunk of pcmChunks) {
         if(stopping||publicLive.onAir) {child.kill('SIGTERM');break;}
         const decoded=pcmStaging?pcmStaging.push(chunk):chunk;
         if(!decoded?.length)continue;
@@ -605,12 +620,99 @@ async function run() {
         const gated=cursor.status==='SCHEDULED'
           ?boundScheduledPcm(decoded,Date.parse(cursor.slot.endAt),Date.now())
           :{pcm:decoded,truncated:false};
-        const output=gated.pcm;
+        const output=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)
+          ?gated.pcm.subarray(0,Math.max(0,fadeTotalBytes-emittedBytes)) :gated.pcm;
         if(output.length){
-          const faded=fadePcmChunk(output,{positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
-            fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut});
-          if(!encoder.stdin.write(faded)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
-          emittedBytes+=faded.length;
+          // Opt-in real PCM route for a hard AutoDJ -> scheduled boundary.
+          // Use the PCM clock to split a packet exactly at the overlap start;
+          // the prepared scheduled decoder supplies fresh frames concurrently.
+          const preparedSlot=prewarmed;
+          const eligible=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
+            !usableBlend&&!publicLive.onAir&&!pendingScheduledHandover&&
+            Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
+            preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
+            !preparedSlot.iterator&&
+            !preparedSlot.child.killed&&!liveMixDisabled&&
+            !!preparedSlot.sourceAuthorityConfirmedAt&&
+            Date.now()-preparedSlot.sourceAuthorityConfirmedAt<2200&&
+            (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
+            (liveMixSession||Math.abs((boundary-Date.now())-
+              (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
+          const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
+          const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
+          if(plainBytes){
+            const plain=fadePcmChunk(output.subarray(0,plainBytes),{
+              positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
+              fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut:fadeOut&&!eligible
+            });
+            if(!encoder.stdin.write(plain))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+            emittedBytes+=plain.length;
+          }
+          const tail=output.subarray(plainBytes);
+          if(tail.length){
+            if(eligible){
+              try{
+                if(!liveMixSession){
+                  const engine=new RadioSourcePcmOverlap({
+                    source:{id:asset.id,mode:'AUTO_DJ'},
+                    target:{id:preparedSlot.assetId,mode:'SCHEDULED'},
+                    overlapMs:LIVE_SOURCE_OVERLAP_MS,curve:'equalPower'
+                  });
+                  const ready=engine.start({sourceReady:true,targetReady:true,
+                    slotAuthority:true,publicLive:publicLive.onAir});
+                  if(!ready.ok)throw new Error(ready.reason);
+                  liveMixSession={engine,iterator:preparedSlot.child.stdout[Symbol.asyncIterator](),
+                    slotId:preparedSlot.scheduledSlotId,assetId:preparedSlot.assetId};
+                }
+                const incoming=await readPcmFrames(liveMixSession.iterator,tail.length/4,{
+                  deadlineMs:350,maxBufferedFrames:240000
+                });
+                if(publicLive.onAir||prewarmed!==preparedSlot)
+                  throw new Error('SOURCE_AUTHORITY_CHANGED');
+                const mixed=liveMixSession.engine.push(tail,incoming);
+                if(mixed.pcm.length!==tail.length)throw new Error('MIXED_PCM_LENGTH_MISMATCH');
+                if(!encoder.stdin.write(mixed.pcm))
+                  await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+                emittedBytes+=mixed.pcm.length;
+                scheduledEntryOverlap={slotId:liveMixSession.slotId,
+                  assetId:liveMixSession.assetId,
+                  consumedFrames:liveMixSession.engine.snapshot().framesOut};
+                if(mixed.status==='COMPLETED'){
+                  preparedSlot.iterator=liveMixSession.iterator;
+                  preparedSlot.seekMs=LIVE_SOURCE_OVERLAP_MS;
+                  preparedSlot.durationMs-=LIVE_SOURCE_OVERLAP_MS;
+                  state.liveSourceCrossfade.completed++;
+                  state.sourceHandover.mixed++;
+                  state.liveSourceCrossfade.last={status:'MIXED',
+                    slotId:liveMixSession.slotId,frames:liveMixSession.engine.snapshot().framesOut,
+                    at:new Date().toISOString()};
+                }
+              }catch(error){
+                liveMixDisabled=true;
+                state.liveSourceCrossfade.fallbacks++;
+                if(liveMixSession?.engine.snapshot().framesOut)
+                  state.liveSourceCrossfade.partial++;
+                state.liveSourceCrossfade.last={status:'FALLBACK',reason:error.message,
+                  at:new Date().toISOString()};
+                state.lastError='Source crossfade: '+error.message;
+                // Missing target PCM: emit the outgoing frame only. Never
+                // replay mixed bytes or restart the scheduled track at zero.
+                const fallback=fadePcmChunk(tail,{positionBytes:emittedBytes,
+                  totalBytes:fadeTotalBytes,fadeMs:DEFAULT_SOURCE_FADE_MS,
+                  fadeIn:false,fadeOut});
+                if(!encoder.stdin.write(fallback))
+                  await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+                emittedBytes+=fallback.length;
+                if(prewarmed===preparedSlot)discardPrewarm();
+              }
+            }else{
+              const normal=fadePcmChunk(tail,{positionBytes:emittedBytes,
+                totalBytes:fadeTotalBytes,fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut});
+              if(!encoder.stdin.write(normal))
+                await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+              emittedBytes+=normal.length;
+            }
+          }
         }
         if(gated.truncated){
           truncatedAtBoundary=true;
@@ -623,13 +725,33 @@ async function run() {
         // Start the next FFmpeg decoder while current PCM is still playing.
         // A bounded OS pipe supplies a warm initial PCM buffer; no second audio
         // source is connected to the station encoder until handoff.
-        if(!warmRequested&&(cursor.status==='AUTO_DJ'||cursor.status==='SCHEDULED')&&
+        if(!warmRequested&&(cursor.status==='SCHEDULED'||(cursor.status==='AUTO_DJ'&&
+           (!LIVE_SOURCE_CROSSFADE_ENABLED||!Number.isFinite(boundary))))&&
            (cursor.isJingle?musicQueueNextId:nextTrackId)&&!usableBlend&&
           remaining-emittedBytes/(48000*4)*1000<4500){
           warmRequested=true;
           void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
             musicCount:cursor.isJingle?0:musicSinceJingle+1,scheduled:cursor.status==='SCHEDULED',
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
+        }
+        if(LIVE_SOURCE_CROSSFADE_ENABLED&&!crossfadeAuthorityRequested&&
+          cursor.status==='AUTO_DJ'&&!cursor.isJingle&&Number.isFinite(boundary)&&
+          boundary-Date.now()<=2800&&boundary-Date.now()>1600&&
+          prewarmed?.scheduledSlotStartMs===boundary){
+          crossfadeAuthorityRequested=true;
+          const candidate=prewarmed;
+          void (async()=>{
+            try{
+              const slot=await prisma.radioScheduleSlot.findUnique({
+                where:{id:candidate.scheduledSlotId},
+                select:{startAt:true,endAt:true,playlist:{select:{status:true}}}
+              });
+              if(slot?.playlist?.status==='APPROVED'&&Date.parse(slot.startAt)===boundary&&
+                Date.parse(slot.endAt)>boundary&&prewarmed===candidate){
+                candidate.sourceAuthorityConfirmedAt=Date.now();
+              }
+            }catch(error){state.lastError='Crossfade authority: '+error.message;}
+          })();
         }
         if(!sourceClockPlanned&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
           Number.isFinite(boundary)&&boundary-Date.now()<=5500&&boundary-Date.now()>0){
@@ -660,7 +782,8 @@ async function run() {
             });
             const first=nextSlot?.playlist?.items?.[0]?.asset;
             if(first?.id&&!prewarmed){
-              void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true});
+              void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,scheduled:true,
+                scheduledSlotId:nextSlot.id,scheduledSlotStartMs:Date.parse(nextSlot.startAt)});
             }
            }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
           })();
