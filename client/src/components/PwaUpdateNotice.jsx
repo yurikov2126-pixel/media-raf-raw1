@@ -45,10 +45,10 @@ export default function PwaUpdateNotice() {
                 await registration?.update();
                 if (registration?.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
-            await update(true);
-            // WebKit may miss controllerchange after activation. A navigation
-            // retries against the newly active worker rather than leaving a dead button.
+            // Start fallback before awaiting the plugin: Safari/WebKit can leave
+            // its promise pending even after the worker activates.
             window.setTimeout(() => window.location.reload(), 2200);
+            await update(true);
         } catch (error) {
             console.error('PWA update failed:', error);
             setUpdating(false);
