@@ -1,3 +1,4 @@
+import {scheduledPlaylistDuration} from '../lib/radioPlaylistTransitions.js';
 import {validatePlaylistTransitions,validateTransitionSpans} from '../lib/radioPlaylistTransitions.js';
 import { validateRadioPlaylistTracks, writeRadioPlaylistItems, MAX_RADIO_PLAYLIST_TRACKS } from '../lib/radioPlaylistBulk.js';
 import { Router } from 'express';
@@ -150,7 +151,10 @@ const hasAudioHeader = bytes =>
     bytes.subarray(0, 4).toString() === 'OggS' ||
     bytes.subarray(4, 8).toString() === 'ftyp';
 const validTitle = value => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 140;
-const playlistMs = p => p.items.reduce((sum, item) => sum + item.asset.durationMs, 0);
+const CROSSFADE_GRID=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
+const playlistMs = p => CROSSFADE_GRID
+  ?scheduledPlaylistDuration(p.items)
+  :p.items.reduce((sum,item)=>sum+item.asset.durationMs,0);
 const RADIO_TIMEZONE = 'Europe/Moscow';
 // Europe/Moscow observes UTC+03:00 year-round for contemporary broadcasts.
 // Parse wall-clock times on the server, not in the administrator's browser timezone.
@@ -448,7 +452,9 @@ router.put('/playlists/:id', safe(async (req, res) => {
         const lengths = new Map(newAssets.map(a => [a.id, a.durationMs]));
         try {validateTransitionSpans(assetIds.map((id,i)=>({durationMs:lengths.get(id),transition:validatedTransitions[i]})));}
         catch {return 'invalid-transition';}
-        const durationMs = assetIds.reduce((sum, id) => sum + (lengths.get(id) || 0), 0);
+        const durationMs=CROSSFADE_GRID
+          ?scheduledPlaylistDuration(assetIds.map((id,i)=>({durationMs:lengths.get(id),transition:validatedTransitions[i]})))
+          :assetIds.reduce((sum,id)=>sum+(lengths.get(id)||0),0);
         const future = await tx.radioScheduleSlot.findMany({ where: { playlistId: current.id, startAt: { gt: new Date() } } });
         if (future.length && (!durationMs || durationMs > 12 * 3600000)) return false;
         for (const slot of future) {
