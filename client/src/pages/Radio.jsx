@@ -46,6 +46,8 @@ export default function Radio() {
   const [slots, setSlots] = useState([]);
   const [createScheduleOpen,setCreateScheduleOpen] = useState(false);
   const [movingSlot,setMovingSlot] = useState(null);
+  const [editingSlot,setEditingSlot] = useState(null);
+  const [editingSlotPlaylist,setEditingSlotPlaylist] = useState('');
   const [copyingSlot,setCopyingSlot] = useState(null);
   const [contextSlot,setContextSlot] = useState(null);
   const touchTimer=useRef(null);
@@ -261,6 +263,26 @@ export default function Radio() {
       setCopyingSlot(null);await refresh();toast.success('Копия передачи добавлена в сетку');
     }catch(error){toast.error(error.message);}
   };
+  const openSlotEditor = slot => {
+    setContextSlot(null);
+    setEditingSlot(slot);
+    setEditingSlotPlaylist(slot.playlistId);
+    const local = new Date(slot.startAt).toLocaleString('sv-SE', {
+      timeZone: STATION_ZONE, year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
+    }).replace(' ','T');
+    setMoveTime(local);
+  };
+  const saveSlotEdit = async e => {
+    e.preventDefault();
+    if (!editingSlot) return;
+    try {
+      await call('/schedule/'+editingSlot.id, {method:'PATCH',
+        body:{startLocal:moveTime,playlistId:editingSlotPlaylist}});
+      setEditingSlot(null);
+      await refresh();
+      toast.success('Слот обновлён');
+    } catch (error) { toast.error(error.message); }
+  };
   const proposeMove = (slot, day) => {
     if (new Date(slot.startAt).getTime() <= Date.now()) return;
     const clock = new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
@@ -451,11 +473,27 @@ export default function Radio() {
         <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
           <h3 className="font-semibold">{contextSlot.playlist.name}</h3>
           <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
+          {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>openSlotEditor(contextSlot)}>✎ Редактировать время и плейлист</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-rose-500/40 px-4 py-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>{const slot=contextSlot;setContextSlot(null);if(window.confirm('Удалить передачу из сетки?')) action(()=>call('/schedule/'+slot.id,{method:'DELETE'}));}}>Удалить передачу</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>setContextSlot(null)}>Закрыть</button>
         </div>
+      </div>}
+      {editingSlot && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setEditingSlot(null);}}>
+        <form onSubmit={saveSlotEdit} className="w-full max-w-md rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-xl dark:bg-slate-900 dark:text-white space-y-4">
+          <h3 className="text-lg font-semibold">Редактирование слота</h3>
+          <label className="block text-sm space-y-1">Начало · Москва UTC+3
+            <input type="datetime-local" required className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/>
+          </label>
+          <label className="block text-sm space-y-1">Плейлист
+            <select required className={inputStyle} value={editingSlotPlaylist} onChange={e=>setEditingSlotPlaylist(e.target.value)}>
+              {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <p className="text-xs opacity-70">При замене плейлиста время окончания пересчитывается по длительности новой программы. Занятые интервалы сохраняются под защитой проверки пересечений.</p>
+          <div className="flex gap-2"><button className={btn}>Сохранить изменения</button><button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setEditingSlot(null)}>Отмена</button></div>
+        </form>
       </div>}
       {copyingSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3">
         <form onSubmit={saveCopy} className="w-full max-w-md space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 dark:bg-slate-900 dark:text-white">
