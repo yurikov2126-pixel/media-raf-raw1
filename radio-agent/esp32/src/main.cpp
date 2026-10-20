@@ -123,6 +123,10 @@ void setup(){
   snprintf(buf,sizeof(buf),"%08lx%08lx",(unsigned long)esp_random(),(unsigned long)esp_random());
   bootNonce=String(buf);
   WiFi.mode(WIFI_STA);
+  // A relay controller needs low-latency LAN heartbeats/lease renewals.
+  // Disable modem-sleep to avoid Wi-Fi power-save wakeup delays on the studio AP.
+  // This changes radio latency only; safety interlocks remain unchanged.
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.begin(RADIO_WIFI_SSID,RADIO_WIFI_PASSWORD);
   const char* headers[]={"X-Radio-Local-Secret","X-Radio-Signature"};
