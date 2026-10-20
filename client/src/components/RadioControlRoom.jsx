@@ -1,6 +1,8 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../api/client.js';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
+import {useRadioMetadataSync} from '../hooks/useRadioMetadataSync.js';
+import RadioMetadataSyncControl from './RadioMetadataSyncControl.jsx';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 const z='Europe/Moscow';
@@ -8,17 +10,18 @@ const displayTime=value=>value?new Date(value).toLocaleTimeString('ru-RU',{timeZ
 const duration=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 const modes={SCHEDULED:'По расписанию',AUTO_DJ:'Auto-DJ',JINGLE:'Джингл',LIVE:'Прямой эфир',SILENCE:'Ожидание / тишина',ERROR:'Ошибка',STARTING:'Запуск'};
 export default function RadioControlRoom({token,onOpen}){
- const [data,setData]=useState(null),[worker,setWorker]=useState(null),[onAir,setOnAir]=useState(null),[error,setError]=useState('');
+ const [data,setData]=useState(null),[worker,setWorker]=useState(null),[error,setError]=useState('');
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
  const {audioRef,playing:listening,error:audioError,reconnecting,audioEvents}=useRadioStreamRecovery();
+ const {ingest,display:onAir,delay,config,setConfig,automaticMeasured,waiting}=useRadioMetadataSync(audioRef);
  const refresh=useCallback(async()=>{
   try{
    const report=await api('/radio-agent/dashboard',{token});setData(report);setError('');
-   try{setOnAir(await api('/radio-agent/dashboard/now-playing',{token}));}
-   catch{setOnAir(null);}
+   try{ingest(await api('/radio-agent/dashboard/now-playing',{token}));}
+   catch{/* Keep last confirmed metadata during a transient API failure. */}
    try{setWorker(await api('/radio-agent/dashboard/worker',{token}));}
    catch{setWorker(null);}
-  }catch(e){setError(e.message||'Мониторинг недоступен');setData(null);setWorker(null);setOnAir(null);}
+  }catch(e){setError(e.message||'Мониторинг недоступен');setData(null);setWorker(null);}
  },[token]);
  useEffect(()=>{void refresh();const interval=setInterval(refresh,5000);return()=>clearInterval(interval);},[refresh]);
  useEffect(()=>{const interval=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(interval);},[]);
@@ -26,7 +29,7 @@ export default function RadioControlRoom({token,onOpen}){
  const current=onAir?.slot;
  const playout=onAir?.playout?.trackId&&onAir.playout.trackId===track?.id?onAir.playout:null;
  const elapsedSinceReport=onAir?.observedAt?Math.min(5000,Math.max(0,now-Date.parse(onAir.observedAt))):0;
- const playedMs=(playout?.seekMs||0)+(playout?.emittedMs||0)+(playout?.startedAt?elapsedSinceReport:0);
+ const playedMs=Math.max(0,(playout?.seekMs||0)+(playout?.emittedMs||0)+(playout?.startedAt?elapsedSinceReport:0)-delay*1000);
  const trackMs=playout?.durationMs||track?.durationMs||0;
  const fraction=playout&&trackMs>0?Math.min(100,Math.max(0,100*playedMs/trackMs)):0;
  const isWorking=onAir?.available&&onAir.mode!=='ERROR'&&onAir.mode!=='SILENCE';
@@ -58,7 +61,9 @@ export default function RadioControlRoom({token,onOpen}){
       <div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{width:fraction+'%'}}/>
      </div>
      <div className="flex justify-between text-xs tabular-nums text-slate-400"><span>{playout?duration(playedMs):'—'}</span><span>{trackMs?duration(trackMs):'—'}</span></div>
-     <p className="text-xs text-slate-400">Прогресс основан на данных PCM Worker. Поток слушателя может отставать из-за буферизации.</p>
+     <p className="text-xs text-slate-400">Прогресс с поправкой на задержку относительно PCM Worker. Время станции остаётся серверным.</p>
+     <RadioMetadataSyncControl compact config={config} setConfig={setConfig} delay={delay} automaticMeasured={automaticMeasured}/>
+     {waiting&&<p className="text-xs text-amber-300">Калибровка истории треков: первые секунды отображение ориентировочное.</p>}
     </div>
     <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
      <p className="text-xs uppercase tracking-widest text-slate-400">Слушать эфир</p>
