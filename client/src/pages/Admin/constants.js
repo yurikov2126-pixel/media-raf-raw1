@@ -44,6 +44,7 @@ export const TAB_GROUPS = [
         label: 'Платформа',
         tabs: [
             ['site', 'Дизайн сайта', '🎨'],
+            ['radio-live-editor', 'Редактор radio/live', '📻'],
             ['modules', 'Модули', '🧩'],
             ['dashboard-widgets', 'Виджеты Dashboard 2.0', '🎛️'],
             ['gamification', 'Геймификация', '🎮'],
