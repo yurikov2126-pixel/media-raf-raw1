@@ -120,6 +120,11 @@ export default function RadioControlRoom({token,onOpen}){
      <p className="rounded-lg border border-current/10 p-2">Резервных переходов: <strong>{worker.transitions.crossfadeFallbacks??'—'}</strong></p>
      <p className="rounded-lg border border-current/10 p-2">Ошибок: <strong>{worker.transitions.crossfadeFailed??'—'}</strong></p>
     </div>}
+   {worker?.crossfadeQuality&&<p className="text-xs opacity-70">
+    Анализ PCM: {worker.crossfadeQuality.inspected} участков ·
+    резких скачков сигнала: {worker.crossfadeQuality.suspiciousJumps} ·
+    последний скачок: {worker.crossfadeQuality.lastJump} / 65535
+   </p>}
    {worker?.transitions?.lastCrossfade&&<p className="text-xs opacity-70">
     Последний переход: {worker.transitions.lastCrossfade.fromId} → {worker.transitions.lastCrossfade.toId}
     · {worker.transitions.lastCrossfade.emittedMs} мс PCM · {worker.transitions.lastCrossfade.completed?'успешно':'прерван'}
