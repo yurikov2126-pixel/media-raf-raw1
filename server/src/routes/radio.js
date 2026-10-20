@@ -1,4 +1,4 @@
-import {validatePlaylistTransitions} from '../lib/radioPlaylistTransitions.js';
+import {validatePlaylistTransitions,validateTransitionSpans} from '../lib/radioPlaylistTransitions.js';
 import { validateRadioPlaylistTracks, writeRadioPlaylistItems, MAX_RADIO_PLAYLIST_TRACKS } from '../lib/radioPlaylistBulk.js';
 import { Router } from 'express';
 import {normalizeRadioTags,safeRadioTags} from '../lib/radioAssetTags.js';
@@ -402,6 +402,10 @@ router.post('/playlists', safe(async (req, res) => {
     const unique = [...new Set(assetIds)];
     if (unique.length !== assetIds.length || await prisma.radioAsset.count({ where: { id: { in: unique } } }) !== unique.length)
         return res.status(400).json({ error: 'Одна или несколько записей не найдены' });
+    const sizes=await prisma.radioAsset.findMany({where:{id:{in:assetIds}},select:{id:true,durationMs:true}});
+    const lengthById=new Map(sizes.map(x=>[x.id,x.durationMs]));
+    try {validateTransitionSpans(assetIds.map((id,i)=>({durationMs:lengthById.get(id),transition:validatedTransitions[i]})));}
+    catch(error){return res.status(400).json({error:error.message});}
     const playlist = await prisma.$transaction(async tx => {
         const created = await tx.radioPlaylist.create({ data: {
             name: name.trim(), description: description.trim(), createdBy: req.user.id,
@@ -430,6 +434,8 @@ router.put('/playlists/:id', safe(async (req, res) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const newAssets = await tx.radioAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, durationMs: true } });
         const lengths = new Map(newAssets.map(a => [a.id, a.durationMs]));
+        try {validateTransitionSpans(assetIds.map((id,i)=>({durationMs:lengths.get(id),transition:validatedTransitions[i]})));}
+        catch {return 'invalid-transition';}
         const durationMs = assetIds.reduce((sum, id) => sum + (lengths.get(id) || 0), 0);
         const future = await tx.radioScheduleSlot.findMany({ where: { playlistId: current.id, startAt: { gt: new Date() } } });
         if (future.length && (!durationMs || durationMs > 12 * 3600000)) return false;
@@ -452,6 +458,7 @@ router.put('/playlists/:id', safe(async (req, res) => {
         }
         return tx.radioPlaylist.findUnique({where:{id:updated.id},include:playlistInclude});
     },{maxWait:10000,timeout:60000});
+    if (playlist === 'invalid-transition') return res.status(400).json({error:'Наложение превышает длительность соседней записи'});
     if (playlist === null) return res.status(404).json({ error: 'Плейлист не найден' });
     if (playlist === false) return res.status(409).json({ error: 'Редактирование создаёт конфликт в запланированном эфире. Изменения не сохранены' });
     res.json({ playlist });
