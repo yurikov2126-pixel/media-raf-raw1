@@ -46,6 +46,8 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
+// Explicit opt-in: disabled until the full PCM transition is validated on-air.
+const SCHEDULED_CROSSFADE_ENABLED=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
 // Non-fatal FFmpeg metadata notices must not overwrite real playout errors.
 function isIgnorableMediaNotice(value){
  return /Incorrect BOM value|Error reading frame GEOB|skipped\s*$/i.test(value);
@@ -178,14 +180,14 @@ async function current() {
       if(delayed?.playlist?.status==='APPROVED'){
         const shifted={...delayed,startAt:new Date(delayedScheduledSlot.actualStartMs),
           endAt:new Date(delayedScheduledSlot.actualEndMs)};
-        const shiftedCursor=resolveRadioCursor([shifted],nowMs);
+        const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
         return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1};
       }
       delayedScheduledSlot=null;
     }
   }
-  const cursor=resolveRadioCursor(slots,nowMs);
+  const cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   const alreadyFinished=!!cursor.slot && !!finishedScheduledSlot &&
     cursor.slot.id===finishedScheduledSlot.id && nowMs<finishedScheduledSlot.endAtMs;
@@ -440,7 +442,7 @@ async function run() {
     try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0,crossfadeMs:0};}
     state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs,crossfadeMs:dsp.crossfadeMs};
     const filter=audioProcessingFilter(dsp,remaining/1000);
-    const blend=cursor.status==='AUTO_DJ'?cursor.track.blend:null;
+    const blend=(cursor.status==='AUTO_DJ'||(cursor.status==='SCHEDULED'&&SCHEDULED_CROSSFADE_ENABLED))?cursor.track.blend:null;
     let args;
     let usableBlend=blend;
     if(usableBlend){
@@ -454,6 +456,7 @@ async function run() {
     if(usableBlend){
       const nextFilename=path.join(assetsRoot,path.basename(usableBlend.nextStorageKey));
       const fullSeconds=usableBlend.overlapMs/1000;
+      const shape=usableBlend.curve==='linear'?'tri':usableBlend.curve==='sCurve'?'qsin':'hsin';
       const blendStart=usableBlend.blendPosition/1000;
       // Build the complete overlap and discard its elapsed portion. Starting the
       // filter at zero would otherwise restart gain curves after Worker recovery.
@@ -462,7 +465,7 @@ async function run() {
       args=['-hide_banner','-loglevel','error','-nostdin','-re',
         '-ss',String(firstSeek),'-t',String(fullSeconds),'-i',filename,
         '-re','-ss',String(secondSeek),'-t',String(fullSeconds),'-i',nextFilename,
-        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1=tri:c2=tri,atrim=start='+blendStart+':duration='+(remaining/1000)+',asetpts=PTS-STARTPTS[m]',
+        '-filter_complex','[0:a][1:a]acrossfade=d='+fullSeconds+':c1='+shape+':c2='+shape+',atrim=start='+blendStart+':duration='+(remaining/1000)+',asetpts=PTS-STARTPTS[m]',
         '-map','[m]','-f','s16le','-ac','2','-ar','48000','pipe:1'];
     } else {
       args=['-hide_banner','-loglevel','error','-nostdin','-re',
@@ -511,8 +514,8 @@ async function run() {
     let emittedBytes=0;
     let warmRequested=false;
     const playedStart=Date.now();
-    const fadeIn=cursor.status==='SCHEDULED'||(cursor.status==='AUTO_DJ'&&!usableBlend);
-    const fadeOut=cursor.status==='SCHEDULED'||(cursor.status==='AUTO_DJ'&&!usableBlend&&Number.isFinite(boundary));
+    const fadeIn=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||cursor.status==='AUTO_DJ');
+    const fadeOut=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||(cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)));
     const fadeTotalBytes=Math.max(0,Math.floor(remaining*PCM_BYTES_PER_MS/4)*4);
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
