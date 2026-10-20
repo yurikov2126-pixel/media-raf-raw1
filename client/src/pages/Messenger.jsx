@@ -224,6 +224,8 @@ export default function Messenger() {
 
     const scrollRef = useRef(null);
     const nearBottomRef = useRef(true);
+    const ownSendPendingRef = useRef(false);
+    const keyboardResizeRef = useRef(null);
     const [showJumpToLatest, setShowJumpToLatest] = useState(false);
     const [unseenCount, setUnseenCount] = useState(0);
     const chatListScrollRef = useRef(null);
@@ -309,7 +311,11 @@ export default function Messenger() {
         let frame = 0;
         const update = () => {
             cancelAnimationFrame(frame);
+            const el = scrollRef.current;
+            const wasAtBottom = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 120 : false;
+            const previousTop = el?.scrollTop ?? 0;
             frame = requestAnimationFrame(() => {
+                if (document.activeElement === textareaRef.current) keyboardResizeRef.current = { wasAtBottom, previousTop };
                 setVisibleViewport({
                     top: Math.max(0, viewport.offsetTop),
                     height: Math.max(240, viewport.height),
@@ -328,6 +334,17 @@ export default function Messenger() {
             window.removeEventListener('orientationchange', update);
         };
     }, [isMessengerV2, chatId]);
+
+    // Preserve reading position across iOS visualViewport keyboard animations.
+    useLayoutEffect(() => {
+        const anchor = keyboardResizeRef.current;
+        keyboardResizeRef.current = null;
+        const el = scrollRef.current;
+        if (!anchor || !el || !isMessengerV2) return;
+        el.scrollTop = anchor.wasAtBottom ? el.scrollHeight : anchor.previousTop;
+        nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        setShowJumpToLatest(!nearBottomRef.current);
+    }, [visibleViewport?.height, visibleViewport?.top, isMessengerV2]);
 
     const canGroupMessages = (a, b) => {
         if (!a || !b || a.deletedAt || b.deletedAt) return false;
@@ -468,6 +485,11 @@ export default function Messenger() {
         if (!socket) return;
         const onNew = (m) => {
             if (m.chatId === chatId) {
+                if (isMessengerV2 && (m.senderId === user.id || m.sender?.id === user.id)) {
+                    ownSendPendingRef.current = true;
+                    nearBottomRef.current = true;
+                    setShowJumpToLatest(false);
+                }
                 if (isMessengerV2 && m.senderId !== user.id && m.sender?.id !== user.id) {
                     socket.emit('message:received', { chatId, messageId: m.id });
                     if (nearBottomRef.current && document.visibilityState === 'visible') socket.emit('chat:read', { chatId });
@@ -652,6 +674,14 @@ export default function Messenger() {
             needsInitialScroll.current = false;
             return;
         }
+        // Own new messages must remain visible above the composer, never behind the jump button.
+        if (isMessengerV2 && ownSendPendingRef.current && messages.length) {
+            ownSendPendingRef.current = false;
+            nearBottomRef.current = true;
+            setShowJumpToLatest(false);
+            requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+            return;
+        }
         // Do not yank the reader away from older messages when a new message arrives.
         if (messages.length > 0 && nearBottomRef.current && !linkedMessageId && (!isMessengerV2 || historyEnd === null)) {
             const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -697,6 +727,10 @@ export default function Messenger() {
             socket.emit('message:edit', { messageId: editing.id, content: text });
             setEditing(null);
         } else {
+            if (isMessengerV2) {
+                ownSendPendingRef.current = true;
+                jumpToLatest();
+            }
             socket.emit('message:send', { chatId, content: text, type: 'text', replyToId: replyTo?.id });
         }
         if (isMessengerV2 && draftStorageKey) {
@@ -1324,7 +1358,7 @@ export default function Messenger() {
                                 </button>
                             )}
                         </div>
-                        {showJumpToLatest && (
+                        {showJumpToLatest && !ownSendPendingRef.current && (
                             <button type="button"
                                 aria-label={unseenCount ? `К последним сообщениям, новых: ${unseenCount}` : 'К последним сообщениям'}
                                 title="К последним сообщениям"
