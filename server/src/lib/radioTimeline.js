@@ -3,7 +3,7 @@
  * Input timestamps are absolute instants (UTC); Moscow is only the editor's display timezone.
  * Returns no audio bytes. Safe for all authorized agents to use as a clock reference.
  */
-export function resolveRadioCursor(slots, nowMs = Date.now(), {scheduledCrossfade=false} = {}) {
+export function resolveRadioCursor(slots, nowMs = Date.now(), {scheduledCrossfade=false,defaultScheduledOverlapMs=0} = {}) {
   const now = Number(nowMs);
   if (!Number.isFinite(now)) throw new TypeError('Invalid station clock');
   const slot = slots.find(item => {
@@ -15,17 +15,25 @@ export function resolveRadioCursor(slots, nowMs = Date.now(), {scheduledCrossfad
   const offsetMs = Math.max(0, now - new Date(slot.startAt).getTime());
   if(scheduledCrossfade){
     const items=slot.playlist.items;
+    const overlapFor=index=>{
+      const current=items[index],next=items[index+1];
+      if(!next)return 0;
+      const transition=current.transition;
+      // Explicit cut always wins. Unconfigured tracks may use station-wide default.
+      const configured=transition?.mode==='crossfade'?transition.overlapMs:
+        transition?.mode==='cut'?0:defaultScheduledOverlapMs;
+      const limit=Math.floor(Math.min(current.asset.durationMs,next.asset.durationMs)/2);
+      return Number.isSafeInteger(configured)&&configured>=250&&configured<=15000&&configured<=limit
+        ?configured:0;
+    };
     let start=0;
     for(let index=0;index<items.length;index++){
       const current=items[index],length=current.asset.durationMs;
       if(!Number.isSafeInteger(length)||length<=0)throw new TypeError('Invalid track duration');
       const next=items[index+1];
       const transition=current.transition;
-      const configured=transition?.mode==='crossfade'?transition.overlapMs:0;
-      const overlap=next&&Number.isSafeInteger(configured)&&configured>=250&&configured<=15000&&
-        configured<=Math.floor(Math.min(length,next.asset.durationMs)/2)?configured:0;
-      const entry=index>0&&items[index-1].transition?.mode==='crossfade'
-        ?Math.min(items[index-1].transition.overlapMs||0,Math.floor(Math.min(items[index-1].asset.durationMs,length)/2)):0;
+      const overlap=overlapFor(index);
+      const entry=index>0?overlapFor(index-1):0;
       const span=length-entry-overlap;
       const blendAt=start+span;
       const end=blendAt+overlap;
