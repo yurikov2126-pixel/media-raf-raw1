@@ -10,11 +10,11 @@ export function validateRadioPlaylistTracks(assetIds){
  return null;
 }
 
-export async function writeRadioPlaylistItems(tx,playlistId,assetIds){
+export async function writeRadioPlaylistItems(tx,playlistId,assetIds,transitions=[]){
  for(let offset=0;offset<assetIds.length;offset+=RADIO_PLAYLIST_WRITE_BATCH){
   const batch=assetIds.slice(offset,offset+RADIO_PLAYLIST_WRITE_BATCH);
   await tx.radioPlaylistItem.createMany({
-   data:batch.map((assetId,index)=>({playlistId,assetId,position:offset+index})),
+   data:batch.map((assetId,index)=>({playlistId,assetId,position:offset+index,transition:transitions[offset+index]||null})),
   });
  }
 }
