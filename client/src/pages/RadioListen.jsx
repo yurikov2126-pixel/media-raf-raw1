@@ -138,7 +138,7 @@ export default function RadioListen(){
       <button className="rr-invite-action" type="button" onClick={share}>{design.inviteButton} <span aria-hidden="true">↗</span></button>
      </div>}
      {design.showStationClock&&<div className="rr-side-footer">Москва · {new Date(now).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})}</div>}
-     {design.showSideFooter&&<div className="rr-side-footer"><span className="rr-footer-mark">✳</span><p>{design.sideFooter}</p></div>
+     {design.showSideFooter&&<div className="rr-side-footer"><span className="rr-footer-mark">✳</span><p>{design.sideFooter}</p></div>}
     </aside>
    </div>
    <footer className="rr-footer"><span>© MEDIA · РАФ · RAW</span><span>{design.footerText}</span></footer>
