@@ -103,6 +103,7 @@ let reverseMixAuthorityAt=null;
 state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null};
 state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 state.reverseHandover={attempts:0,eligible:0,blocked:0,last:null,mixed:0};
+state.liveOverlapGate={attempts:0,qualified:0,blocked:0,last:null,reasons:{}};
 const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
 let previousSourcePcmTail=null;
 let shadowOverlap=null;
@@ -670,8 +671,9 @@ async function run() {
             reverseReservedTarget?.slotId===cursor.slot.id&&
             reverseReservedTarget.slotEndMs===boundary&&
             preparedSlot?.assetId===reverseReservedTarget.assetId&&
-            preparedSlot.seekMs===reverseReservedTarget.seekMs&&
-            !preparedSlot.iterator&&!preparedSlot.child.killed&&
+            (liveMixSession?.direction==='REVERSE'||
+              (preparedSlot.seekMs===reverseReservedTarget.seekMs&&!preparedSlot.iterator))&&
+            !preparedSlot.child.killed&&
             (liveMixSession?.direction==='REVERSE'||
               (!!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
@@ -691,6 +693,32 @@ async function run() {
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
           const eligible=forwardEligible||reverseEligible;
+          if(LIVE_SOURCE_CROSSFADE_ENABLED&&!liveMixSession&&!liveMixDisabled&&
+             ['AUTO_DJ','SCHEDULED'].includes(cursor.status)&&
+             Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
+             boundary-Date.now()<5500&&boundary-Date.now()>0&&
+             (cursor.status==='AUTO_DJ'?!!prewarmed||boundary-Date.now()<1700:
+               !!isLastScheduledTrack)){
+            const reason=eligible?'READY':!prewarmed?'NO_PREWARM':
+              prewarmed.child.killed?'DECODER_EXITED':
+              cursor.status==='SCHEDULED'&&!reverseReservedTarget?'NO_REVERSE_RESERVATION':
+              cursor.status==='SCHEDULED'&&!reverseMixAuthorityAt?'REVERSE_AUTHORITY':
+              cursor.status==='AUTO_DJ'&&!prewarmed.scheduledSlotId?'NOT_SCHEDULED_TARGET':
+              cursor.status==='AUTO_DJ'&&!prewarmed.sourceAuthorityConfirmedAt?'FORWARD_AUTHORITY':
+              emittedBytes>Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES)?'MISSED_PCM_WINDOW':
+              'TIMELINE_OR_IDENTITY';
+            state.liveOverlapGate.attempts++;
+            if(eligible)state.liveOverlapGate.qualified++;
+            else {state.liveOverlapGate.blocked++;
+              state.liveOverlapGate.reasons[reason]=(state.liveOverlapGate.reasons[reason]||0)+1;}
+            if(state.liveOverlapGate.last?.reason!==reason)
+              console.log('RADIO_CROSSFADE_GATE',JSON.stringify({reason,mode:cursor.status,
+                slotId:cursor.slot?.id||null,trackId:asset.id,
+                targetId:prewarmed?.assetId||null,
+                remainingMs:Math.round(remaining-emittedBytes/PCM_BYTES_PER_MS),
+                boundaryInMs:Math.round(boundary-Date.now()),at:new Date().toISOString()}));
+            state.liveOverlapGate.last={reason,mode:cursor.status,at:new Date().toISOString()};
+          }
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
           const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
           if(plainBytes){
