@@ -143,3 +143,21 @@ export function preferArtistGap(items, recentArtists=[], gap=0){
   }
   return bestIndex===0?[...items]:[items[bestIndex],...items.slice(0,bestIndex),...items.slice(bestIndex+1)];
 }
+
+/** Fair Auto-DJ: prefer tracks absent from recent playout history, then select
+ * the least recently aired track. Use artist spacing only within the fairest
+ * available tier, so it cannot repeatedly promote a small subset.
+ */
+export function fairNextTrack(items,history=[],recentArtists=[],gap=0,nowMs=Date.now()){
+  if(!items?.length)return null;
+  const unique=[...new Map(items.map(item=>[item.id,item])).values()];
+  const latest=new Map();
+  for(const row of history){
+    const at=Date.parse(row.startedAt);
+    if(Number.isFinite(at)&&at<=nowMs)
+      latest.set(row.id,Math.max(at,latest.get(row.id)||0));
+  }
+  const min=Math.min(...unique.map(item=>latest.get(item.id)||0));
+  const tier=unique.filter(item=>(latest.get(item.id)||0)===min);
+  return preferArtistGap(tier,recentArtists,gap)[0]||null;
+}

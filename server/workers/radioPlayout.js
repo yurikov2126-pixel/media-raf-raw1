@@ -17,7 +17,7 @@ import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
-import { readRotation, rotationPlan, prioritizeUnplayed, preferArtistGap, id3Artist } from '../src/lib/radioRotation.js';
+import { readRotation, rotationPlan, prioritizeUnplayed, preferArtistGap, fairNextTrack, id3Artist } from '../src/lib/radioRotation.js';
 import { readPlayoutHistory, recordPlayoutEvents } from '../src/lib/radioPlayoutHistory.js';
 import { playbackAttributions } from '../src/lib/radioPlayoutAttribution.js';
 import { preflightNextTracks } from '../src/lib/radioNextTrackPreflight.js';
@@ -306,7 +306,13 @@ async function current() {
   const initial=cueCursor(music,clock);
   const index=nextIndex>=0?nextIndex:initial?.index??0;
   const candidates=[...music.slice(index),...music.slice(0,index)];
-  const chosen=artistGap?preferArtistGap(candidates,artistRecent,artistGap)[0]:music[index];
+  // Never restart the same short rotation cycle while unheard music remains.
+  // Rotation uses actual recorded playout order; the playing decoder is not
+  // affected by this selection and the full playlist remains eligible.
+  const history=rotation?await readPlayoutHistory():[];
+  const chosen=rotation
+    ?fairNextTrack(candidates,history,artistRecent,artistGap,nowMs)
+    :artistGap?preferArtistGap(candidates,artistRecent,artistGap)[0]:music[index];
   const chosenIndex=music.findIndex(item=>item.id===chosen?.id);
   const track=chosen?{id:chosen.id,name:chosen.name,index:chosenIndex,offsetMs:0,
     seekMs:chosen.cue.inMs,durationMs:chosen.playDurationMs}:null;
