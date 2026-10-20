@@ -28,7 +28,7 @@ export default function RadioControlRoom({token,onOpen}){
  const track=onAir?.track;
  const current=onAir?.slot;
  const playout=onAir?.playout?.trackId&&onAir.playout.trackId===track?.id?onAir.playout:null;
- const elapsedSinceReport=onAir?.observedAt?Math.min(5000,Math.max(0,now-Date.parse(onAir.observedAt))):0;
+ const elapsedSinceReport=onAir?.observedAt?Math.min(40000,Math.max(0,now-Date.parse(onAir.observedAt))):0;
  const playedMs=Math.max(0,(playout?.seekMs||0)+(playout?.emittedMs||0)+(playout?.startedAt?elapsedSinceReport:0)-delay*1000);
  const trackMs=playout?.durationMs||track?.durationMs||0;
  const fraction=playout&&trackMs>0?Math.min(100,Math.max(0,100*playedMs/trackMs)):0;
