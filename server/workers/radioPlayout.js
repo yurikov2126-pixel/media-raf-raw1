@@ -15,6 +15,7 @@ import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import {reserveSourceTransition} from '../src/lib/radioSourceTransitionGuard.js';
 import {planSourceHandover} from '../src/lib/radioSourceHandoverClock.js';
 import {planReverseHandover} from '../src/lib/radioReverseHandoverPlan.js';
+import {reserveReverseTarget,validateReverseTarget} from '../src/lib/radioReverseTargetReservation.js';
 import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
 import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
@@ -96,6 +97,8 @@ state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
 let lastDecodedSource=null;
 let scheduledEntryOverlap=null;
+let reverseReservedTarget=null;
+state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null};
 state.liveSourceCrossfade={enabled:LIVE_SOURCE_CROSSFADE_ENABLED,completed:0,fallbacks:0,partial:0,last:null};
 state.reverseHandover={attempts:0,eligible:0,blocked:0,last:null,mixed:0};
 const SOURCE_OVERLAP_SHADOW=process.env.RADIO_SOURCE_OVERLAP_SHADOW==='true';
@@ -241,6 +244,31 @@ async function current() {
   for(const [id,expires] of failedAutoDjAssets)if(expires<=nowMs)failedAutoDjAssets.delete(id);
   const catalog=cueAssets(selectAutoDjAssets(playlist).filter(asset=>!failedAutoDjAssets.has(asset.id)),await readCues());
   if(!catalog.length)return {cursor,asset:null};
+  if(reverseReservedTarget){
+    const reservation=reverseReservedTarget;
+    const decision=validateReverseTarget(reservation,{
+      nowMs,slotId:reservation.slotId,slotEndMs:reservation.slotEndMs,
+      playlistId:settings.playlistId,assetIds:catalog.map(a=>a.id),
+      autoDjEnabled:settings.enabled,publicLive:publicLive.onAir
+    });
+    reverseReservedTarget=null;
+    if(decision.valid&&prewarmed?.assetId===reservation.assetId&&
+      prewarmed.seekMs===reservation.seekMs&&!prewarmed.child.killed){
+      const chosen=catalog.find(a=>a.id===reservation.assetId);
+      if(chosen){
+        state.reverseTargetReservation.used++;
+        state.reverseTargetReservation.last={status:'USED',assetId:chosen.id,at:new Date().toISOString()};
+        return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
+          track:{id:chosen.id,name:chosen.name,index:catalog.indexOf(chosen),offsetMs:0,
+            seekMs:reservation.seekMs,durationMs:reservation.durationMs},
+          until:null},asset:chosen};
+      }
+    }
+    state.reverseTargetReservation.invalidated++;
+    state.reverseTargetReservation.last={status:'INVALID',
+      reason:decision.valid?'DECODER_NOT_PREPARED':decision.reason,at:new Date().toISOString()};
+  }
+
   const rotationSettings=await readRotation();
   const artistGap=rotationSettings.enabled?rotationSettings.artistGap:0;
   const artistRecent=recentlyAiredArtists.slice(-artistGap);
@@ -362,7 +390,7 @@ async function current() {
 
 // Prediction is advisory only: the real current() authority is re-checked
 // before a prepared decoder can feed the public encoder.
-async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false,scheduledSlotId=null,scheduledSlotStartMs=null}){
+async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false,scheduledSlotId=null,scheduledSlotStartMs=null,reverse=false}){
   if(prewarming||prewarmed||publicLive.onAir||stopping)return;
   prewarming=true;
   try{
@@ -372,7 +400,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
     const partHour=new Date(nowMs+3*3600000).getUTCHours();
     const daypart=partHour<7?'NIGHT':partHour<11?'MORNING':partHour<18?'DAY':'EVENING';
     let candidate=null,seekMs=0,durationMs=0;
-    if(!scheduled&&jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
+    if(!scheduled&&!reverse&&jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
        musicCount>0&&musicCount%jingles.everyTracks===0){
       const assets=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
       candidate=chooseJingleAsset(jingles,assets,jinglesPlayed);
@@ -391,7 +419,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
       where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
       select:{startAt:true},orderBy:{startAt:'asc'}
     });
-    if(!scheduled&&nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
+    if(!scheduled&&!reverse&&nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
     const filename=path.join(assetsRoot,path.basename(candidate.storageKey));
     await fs.access(filename);
     const dsp=await readAudioProcessing();
@@ -770,6 +798,42 @@ async function run() {
             publicPcmMixed:false};
           if(timing.allowed)state.sourceHandover.clockPlanned++;
           else state.sourceHandover.clockRejected++;
+        }
+        // Reserve the actual next AutoDJ asset before the scheduled final
+        // track exits. Freeze the candidate only for this slot and playlist.
+        if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
+          isLastScheduledTrack&&!reverseReservedTarget&&
+          boundary-Date.now()<4800&&boundary-Date.now()>1700){
+          void (async()=>{
+            try{
+              const settings=await readAutoDjSettings();
+              if(!settings.enabled||!settings.playlistId||publicLive.onAir||prewarmed||prewarming)return;
+              const rotationSettings=await readRotation();
+              if(rotationSettings.enabled)return; // do not bypass artist/cooldown rotation
+              const playlist=await prisma.radioPlaylist.findUnique({
+                where:{id:settings.playlistId},
+                include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
+              });
+              const approved=cueAssets(selectAutoDjAssets(playlist),await readCues());
+              const selected=approved.find(a=>a.playDurationMs>=2500);
+              if(!selected||publicLive.onAir||state.trackId!==asset.id)return;
+              const reservation=reserveReverseTarget({
+                asset:selected,playlistId:settings.playlistId,slotId:cursor.slot.id,
+                slotEndMs:boundary,seekMs:selected.cue.inMs,
+                durationMs:selected.playDurationMs,nowMs:Date.now()
+              });
+              if(reservation&&!reverseReservedTarget){
+                reverseReservedTarget=reservation;
+                if(!prewarmed&&!prewarming){
+                  void warmSuccessor({nextTrackId:reservation.assetId,musicCount:0,
+                    currentTrackId:asset.id,reverse:true});
+                }
+                state.reverseTargetReservation.reserved++;
+                state.reverseTargetReservation.last={status:'RESERVED',assetId:reservation.assetId,
+                  slotId:reservation.slotId,at:new Date().toISOString()};
+              }
+            }catch(error){state.lastError='Reverse reservation: '+error.message;}
+          })();
         }
         // Reverse transition admission is observational until the AutoDJ
         // candidate can be reserved without changing playlist rotation.
