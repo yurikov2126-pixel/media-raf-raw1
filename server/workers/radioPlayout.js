@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
+import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
@@ -56,6 +57,8 @@ const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTIN
 let decoder = null;
 let prewarmed=null;
 let prewarming=false;
+state.crossfadeQuality=createCrossfadeQualityState();
+let lastPcmTail=null;
 state.transitions={prewarmed:0,used:0,missed:0,lastGapMs:null,
  crossfadeAttempted:0,crossfadeCompleted:0,crossfadeFallbacks:0,
  crossfadeFailed:0,lastCrossfade:null,scheduledEnabled:process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true'};
