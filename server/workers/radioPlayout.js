@@ -514,8 +514,8 @@ async function run() {
     let emittedBytes=0;
     let warmRequested=false;
     const playedStart=Date.now();
-    const fadeIn=!usableBlend&&(cursor.status==='SCHEDULED'||cursor.status==='AUTO_DJ');
-    const fadeOut=!usableBlend&&(cursor.status==='SCHEDULED'||(cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)));
+    const fadeIn=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||cursor.status==='AUTO_DJ');
+    const fadeOut=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||(cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)));
     const fadeTotalBytes=Math.max(0,Math.floor(remaining*PCM_BYTES_PER_MS/4)*4);
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
