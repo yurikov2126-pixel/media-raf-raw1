@@ -388,7 +388,7 @@ async function current() {
 
 // Prediction is advisory only: the real current() authority is re-checked
 // before a prepared decoder can feed the public encoder.
-async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false,scheduledSlotId=null,scheduledSlotStartMs=null}){
+async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=false,scheduledSlotId=null,scheduledSlotStartMs=null,reverse=false}){
   if(prewarming||prewarmed||publicLive.onAir||stopping)return;
   prewarming=true;
   try{
@@ -398,7 +398,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
     const partHour=new Date(nowMs+3*3600000).getUTCHours();
     const daypart=partHour<7?'NIGHT':partHour<11?'MORNING':partHour<18?'DAY':'EVENING';
     let candidate=null,seekMs=0,durationMs=0;
-    if(!scheduled&&jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
+    if(!scheduled&&!reverse&&jingles?.enabled&&jingles.assetIds.length&&jingles.dayparts.includes(daypart)&&
        musicCount>0&&musicCount%jingles.everyTracks===0){
       const assets=await prisma.radioAsset.findMany({where:{id:{in:jingles.assetIds}}});
       candidate=chooseJingleAsset(jingles,assets,jinglesPlayed);
@@ -417,7 +417,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
       where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
       select:{startAt:true},orderBy:{startAt:'asc'}
     });
-    if(!scheduled&&nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
+    if(!scheduled&&!reverse&&nextSlot&&nextSlot.startAt.getTime()-Date.now()<durationMs+500)return;
     const filename=path.join(assetsRoot,path.basename(candidate.storageKey));
     await fs.access(filename);
     const dsp=await readAudioProcessing();
@@ -820,6 +820,10 @@ async function run() {
               });
               if(reservation&&!reverseReservedTarget){
                 reverseReservedTarget=reservation;
+                if(!prewarmed&&!prewarming){
+                  void warmSuccessor({nextTrackId:reservation.assetId,musicCount:0,
+                    currentTrackId:asset.id,reverse:true});
+                }
                 state.reverseTargetReservation.reserved++;
                 state.reverseTargetReservation.last={status:'RESERVED',assetId:reservation.assetId,
                   slotId:reservation.slotId,at:new Date().toISOString()};
