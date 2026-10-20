@@ -65,7 +65,7 @@ export default function RadioListen(){
  const total=status?.playout?.durationMs||track?.durationMs||0;
  const rawElapsed=status?.playout?Math.max(0,(status.playout.seekMs||0)+(status.playout.emittedMs||0)):0;
  const observed=Number(status?.observedAt)||0;
- const elapsed=total?Math.max(0,Math.min(total,rawElapsed+(status?.playout&&observed?Math.max(0,Math.min(5000,now-observed)):0)-delay*1000)):0;
+ const elapsed=total?Math.max(0,Math.min(total,rawElapsed+(status?.playout&&observed?Math.max(0,Math.min(40000,now-observed)):0)-delay*1000)):0;
  const percent=total?Math.max(0,Math.min(100,elapsed/total*100)):0;
  const active=playing&&!reconnecting;
  const silence=mode==='SILENCE';
