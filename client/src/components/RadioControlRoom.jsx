@@ -120,6 +120,11 @@ export default function RadioControlRoom({token,onOpen}){
      <p className="rounded-lg border border-current/10 p-2">Резервных переходов: <strong>{worker.transitions.crossfadeFallbacks??'—'}</strong></p>
      <p className="rounded-lg border border-current/10 p-2">Ошибок: <strong>{worker.transitions.crossfadeFailed??'—'}</strong></p>
     </div>}
+   {worker?.sourceOverlapShadow?.enabled&&<p className="text-xs opacity-70">
+    Двухдековая проверка (без влияния на эфир): {worker.sourceOverlapShadow.attempts} попыток ·
+    {worker.sourceOverlapShadow.completed} завершено ·
+    {worker.sourceOverlapShadow.blocked} отклонено · {worker.sourceOverlapShadow.failed} ошибок
+   </p>}
    {worker?.crossfadeQuality&&<p className="text-xs opacity-70">
     Анализ PCM: {worker.crossfadeQuality.inspected} участков ·
     резких скачков сигнала: {worker.crossfadeQuality.suspiciousJumps} ·
