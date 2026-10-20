@@ -359,8 +359,8 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
       if(candidate){
         const cues=await readCues();
         const cue=cueAssets([candidate],cues)[0];
-        seekMs=cue?.cue.inMs||0;
-        durationMs=cue?.playDurationMs||0;
+        seekMs=scheduled?0:cue?.cue.inMs||0;
+        durationMs=scheduled?candidate.durationMs:cue?.playDurationMs||0;
       }
     }
     if(!candidate||durationMs<1000)return;
