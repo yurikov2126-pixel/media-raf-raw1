@@ -403,7 +403,7 @@ async function warmSuccessor({nextTrackId,musicCount,currentTrackId,scheduled=fa
     child.on('error',()=>{if(prewarmed?.child===child)prewarmed=null;});
     child.on('close',()=>{if(prewarmed?.child===child)prewarmed=null;});
     prewarmed={child,assetId:candidate.id,seekMs,durationMs,
-      scheduledSlotId,scheduledSlotStartMs,argsKey:JSON.stringify(args)};
+      scheduledSlotId,scheduledSlotStartMs,sourceAuthorityConfirmedAt:null,argsKey:JSON.stringify(args)};
     state.transitions.prewarmed++;
   }catch(error){state.lastError='Next audio prewarm: '+error.message;}
   finally{prewarming=false;}
@@ -562,6 +562,7 @@ async function run() {
     // to the encoder until the authoritative schedule cursor selects it.
     let scheduledPrewarmRequested=false;
     let sourceClockPlanned=false;
+    let crossfadeAuthorityRequested=false;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
     let polling=false;
@@ -632,6 +633,8 @@ async function run() {
             preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
             !preparedSlot.iterator&&
             !preparedSlot.child.killed&&!liveMixDisabled&&
+            !!preparedSlot.sourceAuthorityConfirmedAt&&
+            Date.now()-preparedSlot.sourceAuthorityConfirmedAt<2200&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
@@ -729,6 +732,25 @@ async function run() {
           void warmSuccessor({nextTrackId:cursor.isJingle?musicQueueNextId:nextTrackId,
             musicCount:cursor.isJingle?0:musicSinceJingle+1,scheduled:cursor.status==='SCHEDULED',
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
+        }
+        if(LIVE_SOURCE_CROSSFADE_ENABLED&&!crossfadeAuthorityRequested&&
+          cursor.status==='AUTO_DJ'&&!cursor.isJingle&&Number.isFinite(boundary)&&
+          boundary-Date.now()<=2800&&boundary-Date.now()>1600&&
+          prewarmed?.scheduledSlotStartMs===boundary){
+          crossfadeAuthorityRequested=true;
+          const candidate=prewarmed;
+          void (async()=>{
+            try{
+              const slot=await prisma.radioScheduleSlot.findUnique({
+                where:{id:candidate.scheduledSlotId},
+                select:{startAt:true,endAt:true,playlist:{select:{status:true}}}
+              });
+              if(slot?.playlist?.status==='APPROVED'&&Date.parse(slot.startAt)===boundary&&
+                Date.parse(slot.endAt)>boundary&&prewarmed===candidate){
+                candidate.sourceAuthorityConfirmedAt=Date.now();
+              }
+            }catch(error){state.lastError='Crossfade authority: '+error.message;}
+          })();
         }
         if(!sourceClockPlanned&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
           Number.isFinite(boundary)&&boundary-Date.now()<=5500&&boundary-Date.now()>0){
