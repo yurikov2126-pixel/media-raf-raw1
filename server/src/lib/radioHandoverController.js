@@ -44,13 +44,15 @@ export class RadioHandoverController {
   if(this.phase==='COMPLETED')return {ok:false,reason:'ALREADY_COMPLETED'};
   this.reasons.push(String(reason||'UNKNOWN'));
   this.phase='FALLBACK';
-  return {ok:false,reason:this.reasons.at(-1),fallback:this.safeFallback()};
+  return {ok:false,reason:this.reasons.at(-1),fallback:this.safeFallback({sourceAvailable,targetAvailable})};
  }
- safeFallback(){
+ safeFallback({sourceAvailable=true,targetAvailable=true}={}){
   // Never replay target frames already emitted as mixed PCM.
   // If target was unavailable, remain on currently available source.
-  return {mode:'SINGLE_SOURCE',sourceId:this.targetFrameOffset>0?this.target?.id:
-   this.source?.id,skipTargetFrames:this.targetFrameOffset};
+  const targetChosen=this.targetFrameOffset>0&&targetAvailable;
+  const sourceId=targetChosen?this.target?.id:sourceAvailable?this.source?.id:targetAvailable?this.target?.id:null;
+  return {mode:sourceId?'SINGLE_SOURCE':'NO_SOURCE',sourceId,
+    skipTargetFrames:sourceId===this.target?.id?this.targetFrameOffset:0};
  }
  snapshot(){return {phase:this.phase,sourceId:this.source?.id||null,
   targetId:this.target?.id||null,emittedFrames:this.emittedFrames,
