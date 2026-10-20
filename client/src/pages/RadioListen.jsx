@@ -1,7 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
 import {useRadioMetadataSync} from '../hooks/useRadioMetadataSync.js';
-import RadioMetadataSyncControl from '../components/RadioMetadataSyncControl.jsx';
 import './RadioListen.css';
 
 const STREAM='/api/radio-agent/listen';
@@ -11,7 +10,7 @@ const bars=Array.from({length:29},(_,i)=>({height:18+((i*19+7)%57),delay:(i%9)*-
 function Waves({active}){return <div className={'rr-waves '+(active?'is-active':'')} aria-hidden="true">{bars.map((bar,i)=><span key={i} style={{'--h':bar.height+'%','--delay':bar.delay+'s','--duration':bar.duration+'s'}}/>)}</div>;}
 export default function RadioListen(){
  const {audioRef,playing,error,reconnecting,audioEvents}=useRadioStreamRecovery();
- const {ingest,display:status,delay,config,setConfig,automaticMeasured,waiting}=useRadioMetadataSync(audioRef);
+ const {ingest,display:status,delay,waiting,setConfig}=useRadioMetadataSync(audioRef);
  const [metaError,setMetaError]=useState(false);
  const [now,setNow]=useState(Date.now());
  const [volume,setVolume]=useState(0.85);
@@ -26,6 +25,18 @@ export default function RadioListen(){
   // Audible autoplay is best-effort: Safari/Chrome may require a user gesture.
   audio.play().then(()=>setAutoplayBlocked(false)).catch(()=>setAutoplayBlocked(true));
  },[audioRef]);
+ useEffect(()=>{
+  let active=true;
+  const refreshSync=async()=>{
+   try{
+    const response=await fetch('/api/radio-agent/listen/metadata-sync',{cache:'no-store'});
+    if(response.ok){const value=await response.json();if(active)setConfig(value);}
+   }catch{/* Retain last known calibration on network failure. */}
+  };
+  void refreshSync();
+  const timer=setInterval(refreshSync,30000);
+  return()=>{active=false;clearInterval(timer);};
+ },[setConfig]);
  useEffect(()=>{
   mounted.current=true;
   let active=true;
@@ -94,7 +105,6 @@ export default function RadioListen(){
       <p title={artist}>{artist}</p>
      </div>
      {silence&&<div className="rr-next-show" role="status"><span className="rr-eyebrow">СКОРО В ЭФИРЕ</span>{showDate?<><strong>{status.nextShow.name}</strong><span>{showDate} · МСК{untilShow!==null&&untilShow>0?' · через '+(untilShow>=3600000?Math.floor(untilShow/3600000)+' ч ':'')+Math.ceil((untilShow%3600000)/60000)+' мин':''}</span></>:<span>Ближайших передач пока нет в расписании</span>}</div>}
-     <RadioMetadataSyncControl compact config={config} setConfig={setConfig} delay={delay} automaticMeasured={automaticMeasured}/>
      {waiting&&<p className="rr-meta-note">Собираем историю для компенсации задержки — первые секунды данные могут опережать звук.</p>}
      <Waves active={active}/>
      <div className="rr-progress" role="progressbar" aria-label="Прогресс текущей записи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}><div style={{width:percent+'%'}}/></div>

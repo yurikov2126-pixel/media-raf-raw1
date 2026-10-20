@@ -14,6 +14,17 @@ export default function RadioControlRoom({token,onOpen}){
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
  const {audioRef,playing:listening,error:audioError,reconnecting,audioEvents}=useRadioStreamRecovery();
  const {ingest,display:onAir,delay,config,setConfig,automaticMeasured,waiting}=useRadioMetadataSync(audioRef);
+ useEffect(()=>{
+  let active=true;
+  api('/radio-agent/listen/metadata-sync').then(value=>{if(active)setConfig(value);}).catch(()=>{});
+  return()=>{active=false;};
+ },[setConfig]);
+ const saveSyncConfig=(updater)=>{
+  const next=typeof updater==='function'?updater(config):updater;
+  setConfig(next);
+  api('/radio-agent/dashboard/metadata-sync',{token,method:'PUT',body:next})
+   .catch(()=>setError('Не удалось сохранить настройку синхронизации на сервере'));
+ };
  const refresh=useCallback(async()=>{
   try{
    const report=await api('/radio-agent/dashboard',{token});setData(report);setError('');
@@ -62,7 +73,7 @@ export default function RadioControlRoom({token,onOpen}){
      </div>
      <div className="flex justify-between text-xs tabular-nums text-slate-400"><span>{playout?duration(playedMs):'—'}</span><span>{trackMs?duration(trackMs):'—'}</span></div>
      <p className="text-xs text-slate-400">Прогресс с поправкой на задержку относительно PCM Worker. Время станции остаётся серверным.</p>
-     <RadioMetadataSyncControl compact config={config} setConfig={setConfig} delay={delay} automaticMeasured={automaticMeasured}/>
+     <RadioMetadataSyncControl compact config={config} setConfig={saveSyncConfig} delay={delay} automaticMeasured={automaticMeasured}/>
      {waiting&&<p className="text-xs text-amber-300">Калибровка истории треков: первые секунды отображение ориентировочное.</p>}
     </div>
     <div className="relative mt-4 rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
