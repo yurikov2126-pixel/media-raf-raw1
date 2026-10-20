@@ -14,6 +14,7 @@ import threading
 import webbrowser
 import tkinter as tk
 from pathlib import Path
+from urllib.error import HTTPError
 from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run, PLAYBACK_STATE
@@ -21,12 +22,13 @@ from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat
 from esp32_telemetry import report_status
 from esp32_power import signed_power,fetch_intent
+from power_policy import allowed_power
 import time
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.3.7'
+AGENT_VERSION = '0.4.0'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -97,8 +99,8 @@ class RadioAgentApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("MEDIA · РАФ · RAW — Windows Radio Agent")
-        self.geometry("780x615")
-        self.minsize(620, 490)
+        self.geometry("920x690")
+        self.minsize(720, 540)
         self.configure(bg="#10162d")
         try:
             self.iconbitmap(str(Path(getattr(sys,"_MEIPASS",Path(__file__).parent)) / "brand.ico"))
@@ -123,6 +125,9 @@ class RadioAgentApp(tk.Tk):
         self.auto_start = tk.BooleanVar(value=startup_enabled())
         self.power_arm = tk.BooleanVar(value=prefs.get("power_arm") is True)
         self.power_status = tk.StringVar(value="Усилитель: безопасный OFF")
+        self.broadcast_status = tk.StringVar(value="● Эфир выключен")
+        self.audio_status = tk.StringVar(value="● Источник: ожидание")
+        self.api_status = tk.StringVar(value="● Сервер: ожидание")
         self.last_power_intent = None
         self.last_power_received = 0.0
         self.power_off_candidate_since = None
@@ -138,12 +143,20 @@ class RadioAgentApp(tk.Tk):
         style.configure("Main.TLabel", background="#10162d", foreground="#f8fafc", font=("Segoe UI", 10))
         style.configure("Title.TLabel", background="#10162d", foreground="#f8fafc", font=("Segoe UI", 18, "bold"))
         style.configure("TCheckbutton", background="#10162d", foreground="#f8fafc")
+        style.map("TCheckbutton",background=[("active","#10162d")],foreground=[("active","#ffffff"),("disabled","#94a3b8")])
+        style.configure("Status.TLabelframe",background="#172441",foreground="#f8fafc",bordercolor="#52698f",relief="solid")
+        style.configure("Status.TLabelframe.Label",background="#10162d",foreground="#e2e8f0",font=("Segoe UI",11,"bold"))
+        style.configure("Status.TLabel",background="#172441",foreground="#ffffff",font=("Segoe UI",11,"bold"))
         style.configure("TEntry", fieldbackground="#182443", foreground="#f8fafc", padding=(8,7))
         style.configure("TNotebook", background="#10162d", borderwidth=0)
         style.configure("TNotebook.Tab", background="#182443", foreground="#f8fafc", padding=(16,9))
         style.map("TNotebook.Tab", background=[("selected","#4f46e5")], foreground=[("selected","#ffffff")])
         style.configure("TButton", background="#293b62", foreground="#ffffff", padding=(11,7))
-        style.map("TButton", background=[("active","#4f46e5")])
+        style.map("TButton", background=[("active","#4f46e5"),("disabled","#334155")],foreground=[("disabled","#cbd5e1")])
+        style.configure("Live.TButton",background="#2563eb",foreground="#ffffff",padding=(16,10),font=("Segoe UI",11,"bold"))
+        style.map("Live.TButton",background=[("active","#1d4ed8"),("disabled","#334155")])
+        style.configure("Stop.TButton",background="#9f1239",foreground="#ffffff",padding=(16,10),font=("Segoe UI",11,"bold"))
+        style.map("Stop.TButton",background=[("active","#be123c"),("disabled","#334155")])
         wrap = ttk.Frame(self, padding=22, style="Main.TFrame")
         wrap.pack(fill="both", expand=True)
         ttk.Label(wrap, text="◉  MEDIA · РАФ · RAW  /  RADIO AGENT", style="Title.TLabel").pack(anchor="w")
@@ -159,15 +172,19 @@ class RadioAgentApp(tk.Tk):
         tabs.add(links_shell, text="  Подключения  ")
         tabs.add(settings_shell, text="  Настройки  ")
 
-        ttk.Label(air, text="Управление вещанием", style="Title.TLabel").pack(anchor="w", pady=(0, 5))
+        ttk.Label(air, text="Эфирная аппаратная", style="Title.TLabel").pack(anchor="w", pady=(0, 5))
+        dashboard=ttk.LabelFrame(air,text="  СОСТОЯНИЕ СТАНЦИИ  ",style="Status.TLabelframe",padding=14)
+        dashboard.pack(fill="x",pady=(5,12))
+        for var in (self.broadcast_status,self.audio_status,self.api_status,self.power_status):
+            ttk.Label(dashboard,textvariable=var,style="Status.TLabel").pack(anchor="w",pady=3)
         ttk.Label(air, textvariable=self.status, style="Main.TLabel").pack(anchor="w", pady=(0, 9))
         ttk.Checkbutton(air, text="Тест в наушниках · усилитель не включается",
                         variable=self.agreed).pack(anchor="w", pady=(0, 9))
         bar = ttk.Frame(air, style="Main.TFrame")
         bar.pack(fill="x", pady=(0, 10))
-        self.start_btn = ttk.Button(bar, text="▶ Запустить агент", command=self.start)
+        self.start_btn = ttk.Button(bar, text="▶ Включить эфир", command=self.start,style="Live.TButton")
         self.start_btn.pack(side="left")
-        self.stop_btn = ttk.Button(bar, text="■ Остановить", command=self.stop, state="disabled")
+        self.stop_btn = ttk.Button(bar, text="■ Остановить эфир", command=self.stop, state="disabled",style="Stop.TButton")
         self.stop_btn.pack(side="left", padx=10)
         ttk.Label(air, text="Журнал событий", style="Main.TLabel").pack(anchor="w")
         self.log = tk.Text(air, height=13, bg="#182443", fg="#f1f5f9",
@@ -300,6 +317,7 @@ class RadioAgentApp(tk.Tk):
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.status.set("Подключение к центральному эфиру…")
+        self.broadcast_status.set("● Эфир запускается")
         self.messages.put(("log", "Агент запущен вручную. Реле/ESP32 не задействованы."))
         # Never log tokens or put them in subprocess arguments.
         def task():
@@ -415,6 +433,7 @@ class RadioAgentApp(tk.Tk):
                     if armed and token.startswith("rr_"):
                         try:
                             intent=fetch_intent(server,token)
+                            self.messages.put(("api_status","● Сервер: разрешение получено"))
                             record_power_event("INTENT_RESPONSE",result="OK",durationMs=round((time.monotonic()-started)*1000),permit=intent.get("permit"),reason=intent.get("reason"),policyMode=intent.get("policyMode"),mode=PLAYBACK_STATE["mode"])
                             if intent.get("esp32Ip")!=host:
                                 raise ValueError("ESP32 is not registered for this agent")
@@ -445,9 +464,10 @@ class RadioAgentApp(tk.Tk):
                             self.last_power_intent=permit
                             self.last_power_received=now
                         except Exception as error:
+                            self.messages.put(("api_status","● Сервер: ошибка "+type(error).__name__))
                             # A transient intent-fetch failure is not an explicit OFF.
                             # Keep a recent, already-authorized CENTRAL stream powered for
-                            # at most 6 seconds while the API recovers. Existing LOCAL_RESERVE
+                            # for one bounded watchdog cycle while the API recovers. Existing LOCAL_RESERVE
                             # authorization has its own bounded offline grace. Never turn
                             # on based solely on a failed fetch, and keep all explicit
                             # emergency/manual/revoked OFF responses immediate.
@@ -457,17 +477,30 @@ class RadioAgentApp(tk.Tk):
                             recently_authorized=(self.last_power_intent is True and
                                 state["mode"] in ("CENTRAL","LOCAL_RESERVE") and
                                 since_auth<min(state["offlineGrace"],900))
-                            if state["mode"]=="CENTRAL":
-                                permit=recently_authorized and since_intent<6
-                            else:
-                                permit=recently_authorized and state["mode"]=="LOCAL_RESERVE" and (
-                                    since_intent<min(state["offlineGrace"],900))
+                            # Authentication and registration failures are hard denials.
+                            # A network outage can bridge only one bounded lease cycle.
+                            hard_denial=(isinstance(error,HTTPError) and 400<=error.code<500) or isinstance(error,ValueError)
+                            permit=(not hard_denial and recently_authorized and since_intent<7.5)
                             decision="FETCH_ERROR_HOLD" if permit else "FETCH_ERROR_OFF"
                             record_power_event("INTENT_ERROR",result=decision,durationMs=round((time.monotonic()-started)*1000),httpStatus=getattr(error,"code",None),errorType=type(error).__name__,mode=state["mode"],intentAgeSeconds=round(since_intent,2),authorizationAgeSeconds=round(since_auth,2),permit=permit)
                             print("RADIO_POWER_INTENT_FETCH_FAILED",
                                   type(error).__name__, "mode="+str(state["mode"]),
                                   "recentIntentSeconds="+str(round(since_intent,1)),
                                   "hold="+str(permit),flush=True)
+                    # The broadcast Start/Stop button is the local master switch.
+                    # Preserve a bounded 30-second audio-gap grace only while an
+                    # already-authorized agent session remains running. This does
+                    # not override server OFF or the ESP32 heartbeat/lease watchdog.
+                    state=PLAYBACK_STATE
+                    now=time.monotonic()
+                    local_running=bool(state["broadcastRunning"])
+                    permit,local_reason=allowed_power(permit,local_running,STOP.is_set(),
+                        state["streamLastSeen"],now)
+                    audio_recent=(state["streamLastSeen"]>0 and now-state["streamLastSeen"]<30)
+                    if not permit and local_reason!="SERVER_OR_NETWORK_OFF":
+                        decision=local_reason
+                    self.messages.put(("broadcast_status","● Эфир включён" if local_running else "● Эфир выключен"))
+                    self.messages.put(("audio_status","● Звук: воспроизведение / переход" if audio_recent else "● Звук: нет подтверждения"))
                     phase="esp32_power"
                     signed_power(host,secret,permit,8000 if permit else 0)
                     record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
@@ -527,6 +560,7 @@ class RadioAgentApp(tk.Tk):
     def stop(self):
         STOP.set()
         self.status.set("Остановка…")
+        self.broadcast_status.set("● Эфир останавливается")
         self.stop_btn.configure(state="disabled")
 
     def close(self):
@@ -550,8 +584,10 @@ class RadioAgentApp(tk.Tk):
                 if action == "log":
                     if value.startswith("PRIMARY_CONNECTING"):
                         self.status.set("Центральный MP3 · подключение")
+                        self.audio_status.set("● Подключение к основному потоку")
                     elif value.startswith("LOCAL_STANDBY"):
                         self.status.set("Резерв · потеря центрального эфира")
+                        self.audio_status.set("● Локальный резерв")
                     elif value.startswith("PLAYBACK_PERMISSION_EXPIRED"):
                         self.status.set("Разрешение на воспроизведение истекло")
                     self.log.configure(state="normal")
@@ -570,6 +606,12 @@ class RadioAgentApp(tk.Tk):
                     self.esp32_platform_status.set(value)
                 elif action == "esp32_report_error":
                     self.esp32_platform_status.set("Ошибка отправки: "+value)
+                elif action == "api_status":
+                    self.api_status.set(value)
+                elif action == "broadcast_status":
+                    self.broadcast_status.set(value)
+                elif action == "audio_status":
+                    self.audio_status.set(value)
                 elif action == "power_status":
                     self.power_status.set(value)
                 elif action == "power_done":
@@ -601,6 +643,8 @@ class RadioAgentApp(tk.Tk):
                     self.update_btn.configure(state="normal")
                 elif action == "stopped":
                     self.status.set("Остановлен · оборудование не управляется")
+                    self.broadcast_status.set("● Эфир выключен")
+                    self.audio_status.set("● Источник: остановлен")
                     self.start_btn.configure(state="normal")
                     self.stop_btn.configure(state="disabled")
         except queue.Empty:
