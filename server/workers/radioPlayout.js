@@ -752,6 +752,7 @@ async function run() {
                 }
               }catch(error){
                 liveMixDisabled=true;
+                if(publicLive.onAir||stopping){child.kill('SIGTERM');break;}
                 state.liveSourceCrossfade.fallbacks++;
                 if(liveMixSession?.engine.snapshot().framesOut)
                   state.liveSourceCrossfade.partial++;
