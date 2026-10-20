@@ -35,8 +35,21 @@ export default function PwaUpdateNotice() {
     const acceptUpdate = async () => {
         if (!update || updating) return;
         setUpdating(true);
-        setAvailable(false);
-        try { await update(true); } catch (error) {
+        try {
+            // injectManifest workers receive SKIP_WAITING explicitly; do not
+            // rely solely on the helper's refresh callback in iOS standalone.
+            const registration = await navigator.serviceWorker?.getRegistration();
+            if (registration?.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            } else {
+                await registration?.update();
+                if (registration?.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+            // Start fallback before awaiting the plugin: Safari/WebKit can leave
+            // its promise pending even after the worker activates.
+            window.setTimeout(() => window.location.reload(), 2200);
+            await update(true);
+        } catch (error) {
             console.error('PWA update failed:', error);
             setUpdating(false);
             setAvailable(true);

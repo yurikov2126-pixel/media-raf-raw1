@@ -17,8 +17,22 @@ export default function MobileNav({ links, user }) {
     useEffect(() => { const media = window.matchMedia('(display-mode: standalone)'); const refresh = () => setStandalone(media.matches || window.navigator.standalone === true); media.addEventListener?.('change', refresh); return () => media.removeEventListener?.('change', refresh); }, []);
     const [moreOpen, setMoreOpen] = useState(false);
     const [typing, setTyping] = useState(false);
+    const [keyboardOpen, setKeyboardOpen] = useState(false);
     const [searchActive, setSearchActive] = useState(false);
     const blurFrame = useRef(null);
+    useEffect(() => {
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const refresh = () => {
+            const occluded = window.innerHeight - (vv.height + vv.offsetTop);
+            setKeyboardOpen(occluded > 120);
+        };
+        vv.addEventListener('resize', refresh);
+        vv.addEventListener('scroll', refresh);
+        window.addEventListener('resize', refresh);
+        refresh();
+        return () => { vv.removeEventListener('resize', refresh); vv.removeEventListener('scroll', refresh); window.removeEventListener('resize', refresh); };
+    }, []);
     useEffect(() => {
         const isEditor = (node) => node instanceof HTMLElement && (node.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, [contenteditable="true"]') || Boolean(node.closest('[contenteditable="true"]')));
         const onFocusIn = (event) => {
@@ -64,10 +78,15 @@ export default function MobileNav({ links, user }) {
             setTyping(node instanceof HTMLElement && (node.matches('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea, [contenteditable="true"]') || Boolean(node.closest('[contenteditable="true"]'))));
         });
         return () => cancelAnimationFrame(frame);
+        // Global search overlay is route-scoped; never strand the menu hidden.
+        setSearchActive(false);
+        setMoreOpen(false);
     }, [location.pathname]);
 
     const isChatRoom = /^\/app\/chats\/.+/.test(location.pathname);
-    if (isChatRoom || typing || searchActive) return null;
+    // Do not unmount navigation merely because an input retained focus after a route change.
+    // iOS PWA only needs it hidden while the actual keyboard occupies the viewport.
+    if (isChatRoom || (typing && keyboardOpen) || searchActive) return null;
 
     const handleLogout = () => {
         if (!window.confirm('Выйти из аккаунта?')) return;
@@ -116,7 +135,7 @@ export default function MobileNav({ links, user }) {
                             <button
                                 key="more"
                                 type="button"
-                                className="ui-mobile-nav__item"
+                                className={`ui-mobile-nav__item ${moreOpen ? "is-more-active" : ""}`}
                                 onClick={() => setMoreOpen(true)}
                             >
                                 <span className="ui-mobile-nav__icon"><Icon name="more" size={21} /></span>
