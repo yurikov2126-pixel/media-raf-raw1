@@ -121,16 +121,34 @@ router.get('/:id/messages', auth, async (req, res) => {
 
     const previousLastRead = member.lastRead;
 
-    const messages = await prisma.message.findMany({
-        where: { chatId: req.params.id },
-        orderBy: { createdAt: 'asc' },
-        take: 200,
+    // Fetch the newest page rather than the first 200 messages ever sent.
+    // Stable id tie-breaker and keyset cursor prevent gaps at equal timestamps.
+    const before = typeof req.query.before === 'string' ? req.query.before : null;
+    let olderThan;
+    if (before) {
+        const anchor = await prisma.message.findFirst({
+            where: { id: before, chatId: req.params.id },
+            select: { id: true, createdAt: true },
+        });
+        if (!anchor) return res.status(400).json({ error: 'Некорректный курсор истории' });
+        olderThan = { OR: [
+            { createdAt: { lt: anchor.createdAt } },
+            { createdAt: anchor.createdAt, id: { lt: anchor.id } },
+        ] };
+    }
+    const page = await prisma.message.findMany({
+        where: { chatId: req.params.id, ...(olderThan || {}) },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 201,
         include: {
             sender: { select: { id: true, fullName: true, username: true, avatar: true } },
             replyTo: { include: { sender: { select: { id: true, fullName: true } } } },
             reactions: true,
         },
     });
+
+    const hasMore = page.length > 200;
+    const messages = page.slice(0, 200).reverse();
 
     // Include a search deep-link target even when it falls outside the loaded window.
     if (typeof req.query.focus === 'string' && req.query.focus.length < 128 &&
@@ -175,6 +193,7 @@ router.get('/:id/messages', auth, async (req, res) => {
 
     res.json({
         messages,
+        hasMore,
         pinned,
         myRole: member.role,
         firstUnreadId: firstUnread?.id || null,
