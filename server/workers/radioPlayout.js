@@ -632,6 +632,7 @@ async function run() {
             preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
             !preparedSlot.iterator&&
             !preparedSlot.child.killed&&!liveMixDisabled&&
+            (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
