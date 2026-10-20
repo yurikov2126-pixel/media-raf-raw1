@@ -17,8 +17,19 @@ export function validatePlaylistTransitions(assetIds,transitions=[]){
   return {mode:overlapMs?'crossfade':'cut',overlapMs,curve:value.curve};
  });
 }
+export function validateTransitionSpans(items){
+ for(let i=0;i<items.length-1;i++){
+  const a=items[i].durationMs??items[i].asset?.durationMs;
+  const b=items[i+1].durationMs??items[i+1].asset?.durationMs;
+  const overlap=items[i].transition?.overlapMs||0;
+  if(!Number.isFinite(a)||!Number.isFinite(b)||a<=0||b<=0||overlap>Math.floor(Math.min(a,b)/2))
+   throw new TypeError('Наложение превышает допустимую длину соседних записей');
+ }
+ return true;
+}
 export function scheduledPlaylistDuration(items){
  if(!items.length)return 0;
+ validateTransitionSpans(items);
  let total=0;
  for(let i=0;i<items.length;i++){
   const duration=items[i].asset?.durationMs??items[i].durationMs;
