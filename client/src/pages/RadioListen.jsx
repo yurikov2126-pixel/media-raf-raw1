@@ -1,5 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
+import {useRadioMetadataSync} from '../hooks/useRadioMetadataSync.js';
+import RadioMetadataSyncControl from '../components/RadioMetadataSyncControl.jsx';
 import './RadioListen.css';
 
 const STREAM='/api/radio-agent/listen';
@@ -9,7 +11,7 @@ const bars=Array.from({length:29},(_,i)=>({height:18+((i*19+7)%57),delay:(i%9)*-
 function Waves({active}){return <div className={'rr-waves '+(active?'is-active':'')} aria-hidden="true">{bars.map((bar,i)=><span key={i} style={{'--h':bar.height+'%','--delay':bar.delay+'s','--duration':bar.duration+'s'}}/>)}</div>;}
 export default function RadioListen(){
  const {audioRef,playing,error,reconnecting,audioEvents}=useRadioStreamRecovery();
- const [status,setStatus]=useState(null);
+ const {ingest,display:status,delay,config,setConfig,automaticMeasured,waiting}=useRadioMetadataSync(audioRef);
  const [metaError,setMetaError]=useState(false);
  const [now,setNow]=useState(Date.now());
  const [volume,setVolume]=useState(0.85);
@@ -32,7 +34,7 @@ export default function RadioListen(){
     const response=await fetch('/api/radio-agent/listen/now-playing',{cache:'no-store'});
     if(!response.ok)throw new Error('metadata temporarily unavailable');
     const json=await response.json();
-    if(active){setStatus(json);setMetaError(false);}
+    if(active){ingest(json);setMetaError(false);}
    }catch{if(active)setMetaError(true);}
   };
   void refresh();
@@ -63,7 +65,7 @@ export default function RadioListen(){
  const total=status?.playout?.durationMs||track?.durationMs||0;
  const rawElapsed=status?.playout?Math.max(0,(status.playout.seekMs||0)+(status.playout.emittedMs||0)):0;
  const observed=Number(status?.observedAt)||0;
- const elapsed=total?Math.min(total,rawElapsed+(status?.playout&&observed?Math.max(0,Math.min(5000,now-observed)):0)):0;
+ const elapsed=total?Math.max(0,Math.min(total,rawElapsed+(status?.playout&&observed?Math.max(0,Math.min(5000,now-observed)):0)-delay*1000)):0;
  const percent=total?Math.max(0,Math.min(100,elapsed/total*100)):0;
  const active=playing&&!reconnecting;
  const silence=mode==='SILENCE';
@@ -92,6 +94,8 @@ export default function RadioListen(){
       <p title={artist}>{artist}</p>
      </div>
      {silence&&<div className="rr-next-show" role="status"><span className="rr-eyebrow">СКОРО В ЭФИРЕ</span>{showDate?<><strong>{status.nextShow.name}</strong><span>{showDate} · МСК{untilShow!==null&&untilShow>0?' · через '+(untilShow>=3600000?Math.floor(untilShow/3600000)+' ч ':'')+Math.ceil((untilShow%3600000)/60000)+' мин':''}</span></>:<span>Ближайших передач пока нет в расписании</span>}</div>}
+     <RadioMetadataSyncControl compact config={config} setConfig={setConfig} delay={delay} automaticMeasured={automaticMeasured}/>
+     {waiting&&<p className="rr-meta-note">Собираем историю для компенсации задержки — первые секунды данные могут опережать звук.</p>}
      <Waves active={active}/>
      <div className="rr-progress" role="progressbar" aria-label="Прогресс текущей записи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}><div style={{width:percent+'%'}}/></div>
      <div className="rr-times"><span>{status?.playout?clock(elapsed):'—:—'}</span><span>{total?clock(total):'—:—'}</span></div>
@@ -118,7 +122,7 @@ export default function RadioListen(){
      <div className="rr-side-footer"><span className="rr-footer-mark">✳</span><p>Здесь звучит то,<br/>что мы создаём вместе.</p></div>
     </aside>
    </div>
-   <footer className="rr-footer"><span>© MEDIA · РАФ · RAW</span><span>Звук из прямого MP3-потока может слегка отставать от метаданных.</span></footer>
+   <footer className="rr-footer"><span>© MEDIA · РАФ · RAW</span><span>Информация о треке синхронизируется с задержкой плеера (оценочно).</span></footer>
   </div>
  </main>;
 }
