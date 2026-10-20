@@ -605,6 +605,8 @@ async function run() {
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
     const playbackStartedAt=new Date().toISOString();
     const crossfadeStartedAt=usableBlend?Date.now():null;
+    let liveMixSession=null;
+    let liveMixDisabled=false;
     try {
       const pcmChunks=matches&&prepared.iterator?continuePcmIterator(prepared.iterator):child.stdout;
       for await(const chunk of pcmChunks) {
@@ -619,10 +621,89 @@ async function run() {
           :{pcm:decoded,truncated:false};
         const output=gated.pcm;
         if(output.length){
-          const faded=fadePcmChunk(output,{positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
-            fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut});
-          if(!encoder.stdin.write(faded)) await new Promise(resolve=>encoder.stdin.once('drain',resolve));
-          emittedBytes+=faded.length;
+          // Opt-in real PCM route for a hard AutoDJ -> scheduled boundary.
+          // Use the PCM clock to split a packet exactly at the overlap start;
+          // the prepared scheduled decoder supplies fresh frames concurrently.
+          const preparedSlot=prewarmed;
+          const eligible=LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
+            !usableBlend&&!publicLive.onAir&&!pendingScheduledHandover&&
+            Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
+            preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
+            !preparedSlot.child.killed&&!liveMixDisabled&&
+            (liveMixSession||Math.abs((boundary-Date.now())-
+              (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
+          const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
+          const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
+          if(plainBytes){
+            const plain=fadePcmChunk(output.subarray(0,plainBytes),{
+              positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
+              fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut:fadeOut&&!eligible
+            });
+            if(!encoder.stdin.write(plain))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+            emittedBytes+=plain.length;
+          }
+          const tail=output.subarray(plainBytes);
+          if(tail.length){
+            if(eligible){
+              try{
+                if(!liveMixSession){
+                  const engine=new RadioSourcePcmOverlap({
+                    source:{id:asset.id,mode:'AUTO_DJ'},
+                    target:{id:preparedSlot.assetId,mode:'SCHEDULED'},
+                    overlapMs:LIVE_SOURCE_OVERLAP_MS,curve:'equalPower'
+                  });
+                  const ready=engine.start({sourceReady:true,targetReady:true,
+                    slotAuthority:true,publicLive:publicLive.onAir});
+                  if(!ready.ok)throw new Error(ready.reason);
+                  liveMixSession={engine,iterator:preparedSlot.child.stdout[Symbol.asyncIterator](),
+                    slotId:preparedSlot.scheduledSlotId,assetId:preparedSlot.assetId};
+                }
+                const incoming=await readPcmFrames(liveMixSession.iterator,tail.length/4,{
+                  deadlineMs:350,maxBufferedFrames:240000
+                });
+                const mixed=liveMixSession.engine.push(tail,incoming);
+                if(mixed.pcm.length!==tail.length)throw new Error('MIXED_PCM_LENGTH_MISMATCH');
+                if(!encoder.stdin.write(mixed.pcm))
+                  await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+                emittedBytes+=mixed.pcm.length;
+                scheduledEntryOverlap={slotId:liveMixSession.slotId,
+                  assetId:liveMixSession.assetId,
+                  consumedFrames:liveMixSession.engine.snapshot().framesOut};
+                if(mixed.status==='COMPLETED'){
+                  preparedSlot.iterator=liveMixSession.iterator;
+                  preparedSlot.seekMs=LIVE_SOURCE_OVERLAP_MS;
+                  preparedSlot.durationMs-=LIVE_SOURCE_OVERLAP_MS;
+                  state.liveSourceCrossfade.completed++;
+                  state.liveSourceCrossfade.last={status:'MIXED',
+                    slotId:liveMixSession.slotId,frames:liveMixSession.engine.snapshot().framesOut,
+                    at:new Date().toISOString()};
+                }
+              }catch(error){
+                liveMixDisabled=true;
+                state.liveSourceCrossfade.fallbacks++;
+                if(liveMixSession?.engine.snapshot().framesOut)
+                  state.liveSourceCrossfade.partial++;
+                state.liveSourceCrossfade.last={status:'FALLBACK',reason:error.message,
+                  at:new Date().toISOString()};
+                state.lastError='Source crossfade: '+error.message;
+                // Missing target PCM: emit the outgoing frame only. Never
+                // replay mixed bytes or restart the scheduled track at zero.
+                const fallback=fadePcmChunk(tail,{positionBytes:emittedBytes,
+                  totalBytes:fadeTotalBytes,fadeMs:DEFAULT_SOURCE_FADE_MS,
+                  fadeIn:false,fadeOut});
+                if(!encoder.stdin.write(fallback))
+                  await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+                emittedBytes+=fallback.length;
+                if(prewarmed===preparedSlot)discardPrewarm();
+              }
+            }else{
+              const normal=fadePcmChunk(tail,{positionBytes:emittedBytes,
+                totalBytes:fadeTotalBytes,fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut});
+              if(!encoder.stdin.write(normal))
+                await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+              emittedBytes+=normal.length;
+            }
+          }
         }
         if(gated.truncated){
           truncatedAtBoundary=true;
