@@ -135,7 +135,7 @@ export default function MobileNav({ links, user }) {
                             <button
                                 key="more"
                                 type="button"
-                                className="ui-mobile-nav__item"
+                                className={`ui-mobile-nav__item ${moreOpen ? "is-more-active" : ""}`}
                                 onClick={() => setMoreOpen(true)}
                             >
                                 <span className="ui-mobile-nav__icon"><Icon name="more" size={21} /></span>
