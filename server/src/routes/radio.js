@@ -64,14 +64,24 @@ router.get('/student/assets', studentOnly, async (_req, res, next) => {
         select: { id: true, name: true, durationMs: true }, orderBy: { createdAt: 'desc' }, take: 300,
     }) }); } catch(error) { next(error); }
 });
+async function validateStudentTransitions(body){
+ const ids=body.assetIds;
+ const transitions=validatePlaylistTransitions(ids,body.transitions||[]);
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
+ const lengths=new Map(assets.map(asset=>[asset.id,asset.durationMs]));
+ validateTransitionSpans(ids.map((id,i)=>({durationMs:lengths.get(id),transition:transitions[i]})));
+ return transitions;
+}
 router.post('/student/playlists', studentOnly, async (req, res, next) => {
     try {
         if (!validStudentBody(req.body) || !(await validAssets(req.body.assetIds)))
             return res.status(400).json({ error: 'Проверьте название и аудиозаписи' });
+        let transitions;
+        try {transitions=await validateStudentTransitions(req.body);} catch(error){return res.status(400).json({error:error.message});}
         const playlist = await prisma.radioPlaylist.create({ data: {
             name: req.body.name.trim(), description: (req.body.description ?? '').trim(),
             createdBy: req.user.id, status: 'DRAFT',
-            items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position })) },
+            items: { create: req.body.assetIds.map((assetId, position) => ({ assetId, position, transition:transitions[position]||null })) },
         }, include: reviewInclude });
         res.status(201).json({ playlist });
     } catch(error) { next(error); }
@@ -80,6 +90,8 @@ router.put('/student/playlists/:id', studentOnly, async (req, res, next) => {
     try {
         if (!validStudentBody(req.body) || !(await validAssets(req.body.assetIds)))
             return res.status(400).json({ error: 'Проверьте название и аудиозаписи' });
+        let transitions;
+        try {transitions=await validateStudentTransitions(req.body);} catch(error){return res.status(400).json({error:error.message});}
         const result = await prisma.$transaction(async tx => {
             const playlist = await tx.radioPlaylist.findFirst({
                 where: { id: req.params.id, createdBy: req.user.id },
