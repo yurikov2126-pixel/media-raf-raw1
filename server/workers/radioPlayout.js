@@ -252,7 +252,8 @@ async function current() {
       autoDjEnabled:settings.enabled,publicLive:publicLive.onAir
     });
     reverseReservedTarget=null;
-    if(decision.valid){
+    if(decision.valid&&prewarmed?.assetId===reservation.assetId&&
+      prewarmed.seekMs===reservation.seekMs&&!prewarmed.child.killed){
       const chosen=catalog.find(a=>a.id===reservation.assetId);
       if(chosen){
         state.reverseTargetReservation.used++;
@@ -264,7 +265,8 @@ async function current() {
       }
     }
     state.reverseTargetReservation.invalidated++;
-    state.reverseTargetReservation.last={status:'INVALID',reason:decision.reason,at:new Date().toISOString()};
+    state.reverseTargetReservation.last={status:'INVALID',
+      reason:decision.valid?'DECODER_NOT_PREPARED':decision.reason,at:new Date().toISOString()};
   }
 
   const rotationSettings=await readRotation();
@@ -805,7 +807,9 @@ async function run() {
           void (async()=>{
             try{
               const settings=await readAutoDjSettings();
-              if(!settings.enabled||!settings.playlistId||publicLive.onAir)return;
+              if(!settings.enabled||!settings.playlistId||publicLive.onAir||prewarmed||prewarming)return;
+              const rotationSettings=await readRotation();
+              if(rotationSettings.enabled)return; // do not bypass artist/cooldown rotation
               const playlist=await prisma.radioPlaylist.findUnique({
                 where:{id:settings.playlistId},
                 include:{items:{orderBy:{position:'asc'},include:{asset:true}}}
