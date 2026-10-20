@@ -93,6 +93,7 @@ let recentlyAiredArtists=[];
 let resumeAutoDjAfterShow=false;
 // Track natural EOF of the final scheduled item so wall-clock drift cannot replay it.
 let finishedScheduledSlot=null;
+const finishedScheduledTrackKeys=new Map();
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
 let lastDecodedSource=null;
@@ -956,8 +957,15 @@ async function run() {
       if(transition.completed)state.transitions.crossfadeCompleted++;
       else state.transitions.crossfadeFailed++;
     }
-    if(cursor.status==='SCHEDULED' && !(state.lastBoundary?.slotId===cursor.slot.id && state.lastBoundary?.trackId===asset.id && state.lastBoundary?.reason==='END_AT_PCM_TRUNCATED')){
-      recordBoundary({source:'SCHEDULED',reason:'TRACK_ENDED',slotId:cursor.slot.id,trackId:asset.id});
+    if(cursor.status==='SCHEDULED'){
+      const key=cursor.slot.id+':'+asset.id+':'+(cursor.track?.index??0);
+      for(const [old,expiry] of finishedScheduledTrackKeys)if(expiry<Date.now())finishedScheduledTrackKeys.delete(old);
+      if(!finishedScheduledTrackKeys.has(key)){
+        finishedScheduledTrackKeys.set(key,Date.parse(cursor.slot.endAt)+60000);
+        if(!(state.lastBoundary?.slotId===cursor.slot.id && state.lastBoundary?.trackId===asset.id && state.lastBoundary?.reason==='END_AT_PCM_TRUNCATED')){
+          recordBoundary({source:'SCHEDULED',reason:'TRACK_ENDED',slotId:cursor.slot.id,trackId:asset.id});
+        }
+      }
     }
     if(pcmStaging){
       pcmStaging.finish();
