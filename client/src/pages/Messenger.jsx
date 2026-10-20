@@ -98,6 +98,7 @@ export default function Messenger() {
     const loadingOlderHistoryRef = useRef(false);
     const messagesFetchSeqRef = useRef(0);
     const socketDuringFetchRef = useRef([]);
+    const messagesFetchPendingRef = useRef(false);
     const [chatReceipts, setChatReceipts] = useState([]);
     const [pinned, setPinned] = useState(null);
     const [myRole, setMyRole] = useState('member');
@@ -263,7 +264,7 @@ export default function Messenger() {
                 const known = new Set(current.map((item) => item.id));
                 return [...older.filter((item) => !known.has(item.id)), ...current];
             });
-            setHistoryStart((old) => old + older.length);
+            setHistoryStart(0);
             setHasMoreServerHistory(Boolean(result.hasMore));
         } catch (err) {
             prependAnchorRef.current = null;
@@ -477,6 +478,7 @@ export default function Messenger() {
         if (!chatId || !token) return;
         const requestSeq = ++messagesFetchSeqRef.current;
         socketDuringFetchRef.current = [];
+        messagesFetchPendingRef.current = true;
         loadingOlderHistoryRef.current = false;
         setMessages([]);
         setHasMoreServerHistory(false);
@@ -492,6 +494,7 @@ export default function Messenger() {
                 const byId = new Map(loaded.map((m) => [m.id, m]));
                 for (const m of socketDuringFetchRef.current) byId.set(m.id, m);
                 socketDuringFetchRef.current = [];
+                messagesFetchPendingRef.current = false;
                 return [...byId.values()].sort((a, b) =>
                     new Date(a.createdAt) - new Date(b.createdAt) || a.id.localeCompare(b.id));
             };
@@ -520,7 +523,7 @@ export default function Messenger() {
                 setMyRole(r.myRole || 'member');
                 setFirstUnreadId(r.firstUnreadId || null);
             }
-        }).catch((error) => { if (requestSeq === messagesFetchSeqRef.current) console.error('Не удалось загрузить сообщения чата', error); });
+        }).catch((error) => { if (requestSeq === messagesFetchSeqRef.current) { messagesFetchPendingRef.current = false; console.error('Не удалось загрузить сообщения чата', error); } });
         socket?.emit('chat:join', chatId);
         notifications.markChatRead?.(chatId);
     }, [chatId, token, socket]); // eslint-disable-line
@@ -539,7 +542,7 @@ export default function Messenger() {
                     if (nearBottomRef.current && document.visibilityState === 'visible') socket.emit('chat:read', { chatId });
                 }
                 if (!nearBottomRef.current && m.senderId !== user.id && m.sender?.id !== user.id) setUnseenCount((n) => n + 1);
-                socketDuringFetchRef.current.push(m);
+                if (messagesFetchPendingRef.current) socketDuringFetchRef.current.push(m);
                 setMessages((prev) => prev.some((item) => item.id === m.id) ? prev : [...prev, m]);
             }
             reloadChats();
