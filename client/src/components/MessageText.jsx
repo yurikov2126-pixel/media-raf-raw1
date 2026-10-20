@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Собирает регулярку для одного inline-паттерна
-const INLINE_RE = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`|@[a-z0-9_]{3,20})/gi;
+const INLINE_RE = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?:\/[\w\-./?%&=+#~:]*)?|\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`|@[a-z0-9_]{3,20})/gi;
 
 function renderInline(text, highlights = new Set()) {
     const parts = [];
@@ -12,7 +12,29 @@ function renderInline(text, highlights = new Set()) {
         if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
         const m = match[0];
 
-        if (m.startsWith('**')) {
+        if (/^(https?:\/\/|www\.)/i.test(m) || /^[a-z0-9-]+(?:\.[a-z0-9-]+)+/i.test(m)) {
+            // Do not turn sentence punctuation into a URL; never accept unsafe schemes.
+            const clean = m.replace(/[.,!?;:]+$/g, '').replace(/\)+$/g, '');
+            const suffix = m.slice(clean.length);
+            let target;
+            try {
+                const url = new URL(/^https?:\/\//i.test(clean) ? clean : `https://${clean}`);
+                if (['https:', 'http:'].includes(url.protocol) && url.hostname.includes('.')) target = url.href;
+            } catch { /* leave malformed addresses as plain text */ }
+            if (target) parts.push(
+                <a key={`url-${match.index}`} href={target} target="_blank" rel="noopener noreferrer"
+                    className="mrr-message-link underline underline-offset-2 break-all"
+                    onClick={(event) => event.stopPropagation()}
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onTouchMove={(event) => event.stopPropagation()}
+                    onTouchEnd={(event) => event.stopPropagation()}
+                    onContextMenu={(event) => event.stopPropagation()}>
+                    {clean}
+                </a>
+            );
+            else parts.push(clean);
+            if (suffix) parts.push(suffix);
+        } else if (m.startsWith('**')) {
             parts.push(<strong key={`b-${match.index}`}>{m.slice(2, -2)}</strong>);
         } else if (m.startsWith('`')) {
             parts.push(
