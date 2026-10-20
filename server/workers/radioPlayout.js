@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
+import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
@@ -188,7 +189,7 @@ async function current() {
         const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED});
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
         return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1,
-          nextTrackId:shiftedCursor.track&&!shiftedCursor.track.blend?shifted.playlist.items[shiftedCursor.track.index+1]?.assetId:null};
+          nextTrackId:scheduledSuccessor(shifted.playlist.items,shiftedCursor)};
       }
       delayedScheduledSlot=null;
     }
@@ -200,7 +201,7 @@ async function current() {
   if(cursor.slot && scheduled && !alreadyFinished){
     musicQueueKey=null;musicQueueNextId=null;
     return {cursor,asset:scheduled,isLastScheduledTrack:cursor.track.index===slots[0].playlist.items.length-1,
-      nextTrackId:!cursor.track.blend?slots[0].playlist.items[cursor.track.index+1]?.assetId:null};
+      nextTrackId:scheduledSuccessor(slots[0].playlist.items,cursor)};
   }
   // A schedule may have an unfilled wall-clock tail, or the final track may
   // have naturally ended before its nominal offset. Resume AutoDJ immediately.
