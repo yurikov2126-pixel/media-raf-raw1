@@ -697,10 +697,11 @@ async function run() {
             !usableBlend&&!publicLive.onAir&&!pendingScheduledHandover&&
             Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
             preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
-            !preparedSlot.iterator&&
+            (liveMixSession?.direction==='FORWARD'||!preparedSlot.iterator)&&
             !preparedSlot.child.killed&&!liveMixDisabled&&
-            !!preparedSlot.sourceAuthorityConfirmedAt&&
-            Date.now()-preparedSlot.sourceAuthorityConfirmedAt<2200&&
+            (liveMixSession?.direction==='FORWARD'||
+              (!!preparedSlot.sourceAuthorityConfirmedAt&&
+               Date.now()-preparedSlot.sourceAuthorityConfirmedAt<2200))&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
@@ -757,6 +758,9 @@ async function run() {
                   liveMixSession={engine,iterator:preparedSlot.child.stdout[Symbol.asyncIterator](),
                     slotId:reverseEligible?cursor.slot.id:preparedSlot.scheduledSlotId,
                     assetId:preparedSlot.assetId,direction:reverseEligible?'REVERSE':'FORWARD'};
+                  console.info('RADIO_CROSSFADE_MIX',JSON.stringify({status:'STARTED',direction:liveMixSession.direction,
+                    fromId:asset.id,toId:preparedSlot.assetId,slotId:liveMixSession.slotId,
+                    at:new Date().toISOString()}));
                 }
                 const incoming=await readPcmFrames(liveMixSession.iterator,tail.length/4,{
                   deadlineMs:350,maxBufferedFrames:240000
@@ -787,6 +791,9 @@ async function run() {
                   }
                   state.liveSourceCrossfade.completed++;
                   state.sourceHandover.mixed++;
+                  console.info('RADIO_CROSSFADE_MIX',JSON.stringify({status:'COMPLETED',
+                    direction:liveMixSession.direction,frames:liveMixSession.engine.snapshot().framesOut,
+                    fromId:asset.id,toId:preparedSlot.assetId,at:new Date().toISOString()}));
                   state.liveSourceCrossfade.last={status:'MIXED',
                     direction:liveMixSession.direction,slotId:liveMixSession.slotId,
                     frames:liveMixSession.engine.snapshot().framesOut,
@@ -800,6 +807,9 @@ async function run() {
                   state.liveSourceCrossfade.partial++;
                 state.liveSourceCrossfade.last={status:'FALLBACK',reason:error.message,
                   at:new Date().toISOString()};
+                console.warn('RADIO_CROSSFADE_MIX',JSON.stringify({status:'FALLBACK',
+                  direction:liveMixSession?.direction||null,reason:error.message,
+                  at:new Date().toISOString()}));
                 state.lastError='Source crossfade: '+error.message;
                 // Missing target PCM: emit the outgoing frame only. Never
                 // replay mixed bytes or restart the scheduled track at zero.
