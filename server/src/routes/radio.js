@@ -1,4 +1,4 @@
-import {validatePlaylistTransitions,scheduledPlaylistDuration} from '../lib/radioPlaylistTransitions.js';
+import {validatePlaylistTransitions} from '../lib/radioPlaylistTransitions.js';
 import { validateRadioPlaylistTracks, writeRadioPlaylistItems, MAX_RADIO_PLAYLIST_TRACKS } from '../lib/radioPlaylistBulk.js';
 import { Router } from 'express';
 import {normalizeRadioTags,safeRadioTags} from '../lib/radioAssetTags.js';
@@ -413,13 +413,15 @@ router.post('/playlists', safe(async (req, res) => {
     res.status(201).json({ playlist });
 }));
 router.put('/playlists/:id', safe(async (req, res) => {
-    const { name, description = '', assetIds = [] } = req.body || {};
+    const { name, description = '', assetIds = [], transitions = [] } = req.body || {};
     if (!validTitle(name) || typeof description !== 'string' || description.length > 2000 ||
         validateRadioPlaylistTracks(assetIds))
         return res.status(400).json({ error: validateRadioPlaylistTracks(assetIds) || 'Неверные данные плейлиста' });
     const unique = [...new Set(assetIds)];
     if (unique.length !== assetIds.length || await prisma.radioAsset.count({ where: { id: { in: unique } } }) !== unique.length)
         return res.status(400).json({ error: 'Записи не найдены или повторяются' });
+    let validatedTransitions;
+    try {validatedTransitions=validatePlaylistTransitions(assetIds,transitions);} catch(error){return res.status(400).json({error:error.message});}
     const playlist = await prisma.$transaction(async tx => {
         const current = await tx.radioPlaylist.findUnique({ where: { id: req.params.id } });
         if (!current) return null;
@@ -428,9 +430,7 @@ router.put('/playlists/:id', safe(async (req, res) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const newAssets = await tx.radioAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, durationMs: true } });
         const lengths = new Map(newAssets.map(a => [a.id, a.durationMs]));
-        let durationMs;
-        try { durationMs=scheduledPlaylistDuration(assetIds.map((id,index)=>({durationMs:lengths.get(id),transition:validatedTransitions[index]}))); }
-        catch {return false;}
+        const durationMs = assetIds.reduce((sum, id) => sum + (lengths.get(id) || 0), 0);
         const future = await tx.radioScheduleSlot.findMany({ where: { playlistId: current.id, startAt: { gt: new Date() } } });
         if (future.length && (!durationMs || durationMs > 12 * 3600000)) return false;
         for (const slot of future) {
