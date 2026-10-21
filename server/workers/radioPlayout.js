@@ -821,13 +821,20 @@ async function run() {
                     fromId:asset.id,toId:preparedSlot.assetId,slotId:liveMixSession.slotId,
                     at:new Date().toISOString()}));
                 }
-                const incoming=await readPcmFrames(liveMixSession.iterator,tail.length/4,{
+                // FFmpeg packets do not end on an overlap boundary. Feed only
+                // the remaining whole stereo frames to the overlap engine;
+                // an oversize final packet must not be mistaken for mix failure.
+                const framesLeft=LIVE_SOURCE_OVERLAP_MS*48-
+                  liveMixSession.engine.snapshot().framesOut;
+                if(framesLeft<=0)throw new Error('OVERLAP_ALREADY_COMPLETED');
+                const overlapTail=tail.subarray(0,Math.min(tail.length,framesLeft*4));
+                const incoming=await readPcmFrames(liveMixSession.iterator,overlapTail.length/4,{
                   deadlineMs:350,maxBufferedFrames:240000
                 });
                 if(publicLive.onAir||prewarmed!==preparedSlot)
                   throw new Error('SOURCE_AUTHORITY_CHANGED');
-                const mixed=liveMixSession.engine.push(tail,incoming);
-                if(mixed.pcm.length!==tail.length)throw new Error('MIXED_PCM_LENGTH_MISMATCH');
+                const mixed=liveMixSession.engine.push(overlapTail,incoming);
+                if(mixed.pcm.length!==overlapTail.length)throw new Error('MIXED_PCM_LENGTH_MISMATCH');
                 if(!encoder.stdin.write(mixed.pcm))
                   await new Promise(resolve=>encoder.stdin.once('drain',resolve));
                 emittedBytes+=mixed.pcm.length;

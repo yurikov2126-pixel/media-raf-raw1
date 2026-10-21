@@ -37,3 +37,18 @@ describe('source PCM overlap: independent packet boundaries',()=>{
   expect(()=>x.push(Buffer.alloc(3),Buffer.alloc(4))).toThrow();
  });
 });
+
+describe('last packet at exact overlap boundary',()=>{
+ it('caps an oversized source packet to remaining frames instead of reporting a length mismatch',()=>{
+  const engine=new RadioSourcePcmOverlap({source,target,overlapMs:1500});
+  expect(engine.start({sourceReady:true,targetReady:true,slotAuthority:true}).ok).toBe(true);
+  expect(engine.push(pcm(10,71500),pcm(20,71500)).frames).toBe(71500);
+  const sourcePacket=pcm(10,960);
+  const framesLeft=1500*48-engine.snapshot().framesOut;
+  const clipped=sourcePacket.subarray(0,Math.min(sourcePacket.length,framesLeft*4));
+  const result=engine.push(clipped,pcm(20,framesLeft));
+  expect(result.pcm.length).toBe(clipped.length);
+  expect(result.status).toBe('COMPLETED');
+  expect(engine.snapshot().framesOut).toBe(72000);
+ });
+});
