@@ -113,6 +113,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     <div className="rcs-cover-player-status" role="status">{reconnecting?'Переподключаем поток…':playing?'● Контрольное прослушивание активно':playbackError?'Ошибка прослушивания: '+playbackError:'Нажмите Play на обложке для прослушивания'}</div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
    </section>
+   <div className="rcs-right-rail">
    <Panel title="Далее в эфире" extraClass="rcs-queue" action={<button type="button" onClick={()=>setQueueOpen(x=>!x)} aria-expanded={queueOpen}>{queueOpen?'Свернуть':'Развернуть'}</button>}>
     <div className="rcs-tabs" role="tablist" aria-label="Тип очереди"><button type="button" role="tab" aria-selected={tab==='tracks'} className={tab==='tracks'?'selected':''} onClick={()=>setTab('tracks')}>Ближайшие передачи</button><button type="button" role="tab" aria-selected={tab==='grid'} className={tab==='grid'?'selected':''} onClick={()=>setTab('grid')}>Сетка</button></div>
     {queueOpen&&(tab==='tracks'?<RadioUpcomingQueue entries={upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>:<div className="rcs-schedule-items">{planned.map(s=><button type="button" key={s.id} onClick={()=>onOpen('schedule')}><span>{fmt(s.startAt)}</span><strong>{s.title||s.name||s.playlist?.name||'Передача'}</strong><span>↗</span></button>)}{!planned.length&&<p>Нет предстоящих событий в загруженной сетке.</p>}</div>)}
@@ -141,6 +142,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <p className="rcs-meter-state" role="status">{!results.worker?'Нет связи с PCM Worker':!loudness?'Сервер не передал loudness. Проверьте перезапуск Worker после обновления.':loudness.status==='DISABLED'?'Измеритель отключён (RADIO_LUFS_ENABLED=false).':loudness.status==='OVERLOADED'?'Анализатор перегружен: '+(loudness.lastError||'нет подробностей'):loudness.status==='UNAVAILABLE'?'FFmpeg-анализатор недоступен: '+(loudness.lastError||'неизвестная ошибка'):loudness.stale?'Показания устарели. Последний замер: '+(loudness.updatedAt||'нет'):loudness.status==='STARTING'?'Анализатор запускается; получено MP3-частей: '+(loudness.receivedChunks??0):'Серверный замер активен; данные MP3 после кодирования.'}</p>
     </aside>
+   </div>
    <Panel title="Источники и управление" extraClass="rcs-sources" action={<button type="button" onClick={()=>onOpen('automation')}>Автоматизация ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Основной источник" state={results.metadata?running:null} detail={results.metadata?sourceName[source]||source:'Нет телеметрии'} onClick={()=>onOpen('automation')}/>
