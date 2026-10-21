@@ -1,3 +1,4 @@
+import {validateAutoPlaylistInput,previewAutoPlaylist} from '../lib/radioAutoPlaylistService.js';
 import {scheduledPlaylistDuration} from '../lib/radioPlaylistTransitions.js';
 import {validatePlaylistTransitions,validateTransitionSpans} from '../lib/radioPlaylistTransitions.js';
 import { validateRadioPlaylistTracks, writeRadioPlaylistItems, MAX_RADIO_PLAYLIST_TRACKS } from '../lib/radioPlaylistBulk.js';
@@ -247,6 +248,55 @@ const streamAudio = safe(async (req, res) => {
 router.get('/student/assets/:id/audio', studentOnly, streamAudio);
 router.get('/assets/:id/audio', requireRole('ADMIN'), streamAudio);
 router.use(requireRole('ADMIN'));
+
+// AutoPlaylist configurations are draft-only. No route here changes live playout.
+router.get('/auto-playlists',safe(async (_req,res)=>{
+ res.json({autoPlaylists:await prisma.radioAutoPlaylist.findMany({
+  include:{sourceFolder:{select:{id:true,name:true}}},
+  orderBy:{updatedAt:'desc'},take:250})});
+}));
+router.post('/auto-playlists',safe(async (req,res)=>{
+ let input;
+ try{input=validateAutoPlaylistInput(req.body);}
+ catch(e){return res.status(400).json({error:e.message});}
+ const folder=await prisma.radioAssetFolder.findUnique({where:{id:input.sourceFolderId},select:{id:true}});
+ if(!folder)return res.status(400).json({error:'Музыкальная папка не найдена'});
+ const jingles=input.jingleAssetIds.length?await prisma.radioAsset.count({where:{id:{in:input.jingleAssetIds}}}):0;
+ if(jingles!==input.jingleAssetIds.length)return res.status(400).json({error:'Джинглы не найдены'});
+ const created=await prisma.radioAutoPlaylist.create({data:{...input,createdBy:req.user.id}});
+ res.status(201).json({autoPlaylist:created});
+}));
+router.put('/auto-playlists/:id',safe(async (req,res)=>{
+ let input;
+ try{input=validateAutoPlaylistInput(req.body);}
+ catch(e){return res.status(400).json({error:e.message});}
+ const exists=await prisma.radioAutoPlaylist.findUnique({where:{id:req.params.id},select:{id:true}});
+ if(!exists)return res.status(404).json({error:'Автоплейлист не найден'});
+ const folder=await prisma.radioAssetFolder.findUnique({where:{id:input.sourceFolderId},select:{id:true}});
+ if(!folder)return res.status(400).json({error:'Музыкальная папка не найдена'});
+ const count=input.jingleAssetIds.length?await prisma.radioAsset.count({where:{id:{in:input.jingleAssetIds}}}):0;
+ if(count!==input.jingleAssetIds.length)return res.status(400).json({error:'Джинглы не найдены'});
+ const updated=await prisma.radioAutoPlaylist.update({where:{id:req.params.id},data:input});
+ res.json({autoPlaylist:updated});
+}));
+router.delete('/auto-playlists/:id',safe(async (req,res)=>{
+ const result=await prisma.radioAutoPlaylist.deleteMany({where:{id:req.params.id}});
+ if(!result.count)return res.status(404).json({error:'Автоплейлист не найден'});
+ res.json({ok:true});
+}));
+router.post('/auto-playlists/preview',safe(async (req,res)=>{
+ let input;
+ try{input=validateAutoPlaylistInput(req.body);}
+ catch(e){return res.status(400).json({error:e.message});}
+ try{res.json({preview:await previewAutoPlaylist(input,{seed:String(req.body?.seed??'preview').slice(0,100)})});}
+ catch(e){if(e instanceof RangeError)return res.status(400).json({error:e.message});throw e;}
+}));
+router.get('/auto-playlists/:id/preview',safe(async (req,res)=>{
+ const config=await prisma.radioAutoPlaylist.findUnique({where:{id:req.params.id}});
+ if(!config)return res.status(404).json({error:'Автоплейлист не найден'});
+ try{res.json({preview:await previewAutoPlaylist(config,{seed:String(req.query.seed??'preview').slice(0,100)})});}
+ catch(e){if(e instanceof RangeError)return res.status(400).json({error:e.message});throw e;}
+}));
 
 // Asset metadata may be edited without changing the original audio bytes.
 router.get('/asset-folders',requireRole('ADMIN'),safe(async (_req,res)=>{
