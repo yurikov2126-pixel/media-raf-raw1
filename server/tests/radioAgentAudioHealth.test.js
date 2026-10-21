@@ -1,6 +1,11 @@
 import {describe,it,expect} from 'vitest';
 import {validateAudioReport,audioHealth} from '../src/lib/radioAgentAudioHealth.js';
 describe('radio device audio telemetry',()=>{
+ it('accepts bounded Windows endpoint state and refuses malformed data',()=>{
+  const input={playback:'PLAYING',outputDevice:'VLC',outputEndpoint:{state:'AVAILABLE',name:'Speakers',count:1}};
+  expect(validateAudioReport(input).outputEndpoint.state).toBe('AVAILABLE');
+  expect(validateAudioReport({...input,outputEndpoint:{state:'CLAIMED',name:'Speakers'}})).toBeNull();
+ });
  it('keeps source and last MP3 packet age for diagnostics',()=>{
   const report=validateAudioReport({playback:'PLAYING',source:'LOCAL_RESERVE',outputDevice:'VLC',lastPacketAgeMs:null});
   expect(report.source).toBe('LOCAL_RESERVE');
