@@ -28,7 +28,6 @@ function Panel({title,action,children,extraClass=''}) {
 export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[],onOpen}){
  const [now,setNow]=useState(()=>Date.now());
  const {audioRef,playing,reconnecting,error:playbackError,audioEvents}=useRadioStreamRecovery();
- const loudness=worker?.loudness;
  const [lufsHistory,setLufsHistory]=useState([]);
  const [volume,setVolume]=useState(0.8);
  const [muted,setMuted]=useState(false);
@@ -57,6 +56,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
 
  const [report,setReport]=useState(null),[metadata,setMetadata]=useState(null),[worker,setWorker]=useState(null),[amp,setAmp]=useState(null);
  const [results,setResults]=useState({}),[loadedAt,setLoadedAt]=useState(null),[refreshing,setRefreshing]=useState(false);
+ const loudness=worker?.loudness;
  const [queueOpen,setQueueOpen]=useState(true),[tab,setTab]=useState('tracks'),[details,setDetails]=useState(false);
  const refresh=useCallback(async()=>{
   setRefreshing(true);
