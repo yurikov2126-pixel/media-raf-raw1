@@ -12,6 +12,7 @@ const modes={SCHEDULED:'По расписанию',AUTO_DJ:'Auto-DJ',JINGLE:'Д�
 export default function RadioControlRoom({token,onOpen}){
  const [data,setData]=useState(null),[worker,setWorker]=useState(null),[error,setError]=useState('');
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
+ const [expandedMonitor,setExpandedMonitor]=useState(false);
  const {audioRef,playing:listening,error:audioError,reconnecting,audioEvents}=useRadioStreamRecovery();
  const {ingest,display:onAir,delay,config,setConfig,automaticMeasured,waiting}=useRadioMetadataSync(audioRef);
  useEffect(()=>{
@@ -47,7 +48,7 @@ export default function RadioControlRoom({token,onOpen}){
  const upcoming=onAir?.upcomingSlot||data?.upcoming?.[0]||null;
  const untilUpcoming=upcoming?.startAt?Math.max(0,new Date(upcoming.startAt).getTime()-now):null;
  return <div className="space-y-4">
-  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 radio-panel rounded-2xl border p-3 text-sm dark:bg-slate-900/70">
+  <div className="radio-onair-status flex flex-wrap items-center gap-x-5 gap-y-2 radio-panel rounded-2xl border p-3 text-sm">
     <span><strong>Эфир:</strong> {onAir?.available?modes[onAir.mode]||onAir.mode:'Нет связи'}</span>
     <span><strong>Слушателей:</strong> {onAir?.listenerCount??'—'}</span>
     <span><strong>Следующая передача:</strong> {upcoming?displayTime(upcoming.startAt):'Не назначена'}</span>
@@ -95,7 +96,7 @@ export default function RadioControlRoom({token,onOpen}){
      <button onClick={()=>onOpen('schedule')} type="button" className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/10">Сетка вещания</button>
     </div>
    </section>
-   <section className="flex flex-col justify-between radio-panel rounded-2xl p-5">
+   <section className="radio-station-clock flex flex-col justify-between rounded-2xl border border-current/20 p-5">
     <div>
      <p className="text-[11px] font-semibold uppercase tracking-widest opacity-55">Время станции · Москва</p>
      <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">{new Date(now).toLocaleTimeString('ru-RU',{timeZone:z,hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p>
@@ -108,6 +109,12 @@ export default function RadioControlRoom({token,onOpen}){
     </div>
    </section>
   </div>
+  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-current/15 p-3">
+   <div><p className="text-sm font-semibold">Диагностика и технические панели</p><p className="text-xs opacity-75">Данные PCM, усилитель и инструменты подготовки</p></div>
+   <button type="button" aria-expanded={expandedMonitor} onClick={()=>setExpandedMonitor(v=>!v)}
+    className="rounded-xl border border-current/25 px-4 py-2 text-sm font-semibold">{expandedMonitor?'Свернуть технические панели ↑':'Открыть технические панели ↓'}</button>
+  </div>
+  {expandedMonitor&&<>
   <section className="radio-panel rounded-2xl border p-4 text-sm space-y-2" aria-label="Диагностика переходов Crossfade">
    <div className="flex flex-wrap items-center justify-between gap-2">
     <h3 className="font-semibold">Диагностика Crossfade</h3>
@@ -152,6 +159,7 @@ export default function RadioControlRoom({token,onOpen}){
       <span className="text-xl" aria-hidden>{icon}</span>{label}<span className="ml-auto opacity-40">→</span></button>)}
    </div>
   </section>
+  </>}
   <RadioUpcomingQueue entries={data?.upcoming} onSchedule={()=>onOpen('schedule')}/>
   <div className="text-right"><button type="button" onClick={()=>setDetails(v=>!v)} className="rounded-xl border border-current/10 px-4 py-2 text-xs opacity-75">{details?'Скрыть сведения':'Дополнительные сведения о состоянии'}</button></div>
   {details&&<section className="rounded-xl border border-current/10 p-4 text-sm"><p>Центральный Worker: {onAir?.mode||'недоступен'} · Расчётный курсор: {data?.cursor?.status||'—'} · Поток: {data?.stream?.status||'—'}</p><p className="mt-2 opacity-65">Данные поступают от существующих API. Мониторинг не включает эфир и не управляет усилителем.</p></section>}
