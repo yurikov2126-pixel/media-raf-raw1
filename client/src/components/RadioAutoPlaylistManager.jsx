@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../api/client.js';
+import RadioAutoPlaylistDraftEditor from './RadioAutoPlaylistDraftEditor.jsx';
 const defaults={name:'',sourceFolderId:'',includeChildren:true,targetMinutes:60,trackOrder:'SMART',
  minTrackGap:20,minArtistGap:3,jingleAssetIds:[],jingleEvery:3,fadeMs:2000};
 const field='w-full rounded-xl border border-current/20 bg-white/75 p-2.5 text-slate-900 dark:bg-slate-900/80 dark:text-slate-100';
@@ -9,6 +10,7 @@ export default function RadioAutoPlaylistManager({token}){
  const [current,setCurrent]=useState({...defaults}),[editing,setEditing]=useState(null);
  const [preview,setPreview]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [open,setOpen]=useState(false);
+ const [draftId,setDraftId]=useState(null);
  const call=useCallback((path,options)=>api('/radio'+path,{token,...options}),[token]);
  const reload=useCallback(async()=>{
   const [a,f,l]=await Promise.all([call('/assets'),call('/asset-folders'),call('/auto-playlists')]);
@@ -46,12 +48,14 @@ export default function RadioAutoPlaylistManager({token}){
     <h3 className="font-semibold">{p.name}</h3>
     <p className="mt-1 text-xs opacity-70">{p.sourceFolder?.name||'Папка'} · {p.targetMinutes} мин · интервал по исполнителю {p.minArtistGap}</p>
     <div className="mt-3 flex gap-2">
+     <button type="button" onClick={()=>{setDraftId(p.id);setOpen(false);}} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Редактор</button>
      <button type="button" onClick={()=>edit(p)} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Настроить</button>
      <button type="button" onClick={()=>remove(p)} disabled={busy} className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-700 dark:text-red-300">Удалить</button>
     </div>
    </article>)}
   </div>
   {!list.length&&!open&&<p className="rounded-xl border border-dashed border-current/20 p-5 text-center text-sm opacity-70">Автоплейлистов пока нет. Создайте первый из существующей папки аудиотеки.</p>}
+  {draftId&&list.find(p=>p.id===draftId)&&<RadioAutoPlaylistDraftEditor token={token} config={list.find(p=>p.id===draftId)} assets={assets} onSaved={reload}/>}
   {open&&<form onSubmit={save} className="space-y-4 rounded-2xl border border-current/20 p-4">
    <div className="flex items-center justify-between gap-2"><h3 className="font-semibold">{editing?'Настройка автоплейлиста':'Создание автоплейлиста'}</h3>
     <button type="button" onClick={()=>setOpen(false)} className="rounded-lg border border-current/20 px-3 py-1.5 text-sm">Закрыть</button></div>

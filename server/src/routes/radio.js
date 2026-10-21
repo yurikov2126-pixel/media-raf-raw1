@@ -1,3 +1,4 @@
+import {validateAutoPlaylistDraft} from '../lib/radioAutoPlaylistDraft.js';
 import {validateAutoPlaylistInput,previewAutoPlaylist} from '../lib/radioAutoPlaylistService.js';
 import {scheduledPlaylistDuration} from '../lib/radioPlaylistTransitions.js';
 import {validatePlaylistTransitions,validateTransitionSpans} from '../lib/radioPlaylistTransitions.js';
@@ -282,6 +283,27 @@ router.put('/auto-playlists/:id',safe(async (req,res)=>{
 router.delete('/auto-playlists/:id',safe(async (req,res)=>{
  const result=await prisma.radioAutoPlaylist.deleteMany({where:{id:req.params.id}});
  if(!result.count)return res.status(404).json({error:'Автоплейлист не найден'});
+ res.json({ok:true});
+}));
+router.put('/auto-playlists/:id/draft',safe(async (req,res)=>{
+ const config=await prisma.radioAutoPlaylist.findUnique({where:{id:req.params.id},select:{id:true}});
+ if(!config)return res.status(404).json({error:'Автоплейлист не найден'});
+ const incoming=req.body?.items;
+ if(!Array.isArray(incoming)||incoming.length>500)
+  return res.status(400).json({error:'Некорректный список композиций'});
+ const ids=[...new Set(incoming.map(item=>item?.assetId).filter(id=>typeof id==='string'))];
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
+ let snapshot;
+ try{snapshot=validateAutoPlaylistDraft(incoming,assets);}
+ catch(e){return res.status(400).json({error:e.message});}
+ const updated=await prisma.radioAutoPlaylist.update({
+  where:{id:req.params.id},data:{draftItems:snapshot.items}});
+ res.json({draft:{items:updated.draftItems,durationMs:snapshot.durationMs}});
+}));
+router.delete('/auto-playlists/:id/draft',safe(async (req,res)=>{
+ const updated=await prisma.radioAutoPlaylist.updateMany({
+  where:{id:req.params.id},data:{draftItems:null}});
+ if(!updated.count)return res.status(404).json({error:'Автоплейлист не найден'});
  res.json({ok:true});
 }));
 router.post('/auto-playlists/preview',safe(async (req,res)=>{
