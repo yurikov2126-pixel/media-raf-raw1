@@ -40,7 +40,7 @@ export default function RadioPlaylistWorkbench({
   <header className="flex flex-wrap items-center justify-between gap-3">
    <div><p className="text-[11px] font-bold uppercase tracking-widest opacity-55">RADIO 3.0 · МУЗЫКАЛЬНЫЙ РЕДАКТОР</p>
     <h3 className="text-xl font-bold">{editing?'Редактирование плейлиста':'Новый плейлист'}</h3>
-    <p className="mt-1 text-xs opacity-65">Список и аудиотека доступны одновременно, без пошагового мастера.</p>
+    <p className="mt-1 text-xs opacity-65">Порядок можно менять перетаскиванием или кнопками ↑ ↓. Список и аудиотека доступны одновременно.</p>
    </div>
    <div className="rounded-xl border border-current/15 px-3 py-2 text-sm tabular-nums">
     {selected.length} записей · {duration(total)}
@@ -65,6 +65,12 @@ export default function RadioPlaylistWorkbench({
       <span className="w-6 shrink-0 text-xs tabular-nums opacity-50">{index+1}</span>
       <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{asset?.name||id}</p>
        <p className="text-xs opacity-55">{asset?.tags?.artist||'Аудиозапись'} · {duration(asset?.durationMs||0)}</p></div>
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+       <button type="button" disabled={index===0} title="Выше" aria-label={'Переместить выше '+(asset?.name||id)}
+        onClick={()=>move(index,index-1)} className="rounded-md border border-current/15 px-2 py-0.5 text-xs disabled:opacity-25">↑</button>
+       <button type="button" disabled={index===selected.length-1} title="Ниже" aria-label={'Переместить ниже '+(asset?.name||id)}
+        onClick={()=>move(index,index+1)} className="rounded-md border border-current/15 px-2 py-0.5 text-xs disabled:opacity-25">↓</button>
+      </div>
       <button type="button" title="Прослушать" aria-label={'Прослушать '+(asset?.name||id)}
        onClick={()=>asset&&onPreview(asset)} className="rounded-lg border border-current/15 px-2.5 py-2 text-xs">▶</button>
       <button type="button" title="Настройка переходов" aria-label="Настройка переходов"
