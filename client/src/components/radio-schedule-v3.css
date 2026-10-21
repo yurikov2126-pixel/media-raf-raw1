@@ -1,0 +1,28 @@
+.radio-v3-schedule-toolbar{background:linear-gradient(120deg,rgba(139,92,246,.07),rgba(16,185,129,.04))}
+.radio-v3-schedule-btn{border:1px solid rgba(100,116,139,.25);border-radius:.75rem;padding:.6rem .75rem;font-size:.8rem;background:transparent}
+.radio-v3-schedule-btn:hover{background:rgba(139,92,246,.1)}
+.radio-v3-day-strip{background:rgba(100,116,139,.06);scrollbar-width:thin}
+.radio-v3-day-active{background:rgba(139,92,246,.18);box-shadow:inset 0 0 0 1px rgba(139,92,246,.24)}
+.radio-v3-week-grid{display:grid;grid-template-columns:64px repeat(7,minmax(120px,1fr))}
+.radio-v3-day-grid{display:grid;grid-template-columns:64px minmax(0,1fr)}
+.radio-v3-day-heading{height:47px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid rgba(100,116,139,.2);font-size:.74rem;font-weight:700;background:rgba(100,116,139,.045);position:sticky;top:0;z-index:3}
+.radio-v3-today{background:rgba(139,92,246,.17)}
+.radio-v3-hour-label{position:absolute;right:7px;font-size:.65rem;color:#64748b;font-variant-numeric:tabular-nums}
+.dark .radio-v3-hour-label{color:#94a3b8}
+.radio-v3-day-timeline{background-image:linear-gradient(to bottom,rgba(100,116,139,.07) 1px,transparent 1px);background-size:100% 58px;cursor:crosshair}
+.radio-v3-hour-line{position:absolute;left:0;right:0;border-top:1px solid rgba(100,116,139,.13);pointer-events:none}
+.radio-v3-now-line{position:absolute;left:0;right:0;border-top:2px solid #ef4444;z-index:2;pointer-events:none}
+.radio-v3-now-line span{position:absolute;right:0;top:-14px;background:#ef4444;border-radius:6px;padding:1px 5px;color:white;font-size:10px}
+.radio-v3-event{z-index:1;min-width:0;isolation:isolate;transition:box-shadow .15s,border-color .15s}
+.radio-v3-event:hover,.radio-v3-event:focus-visible{z-index:4;box-shadow:0 3px 12px rgba(0,0,0,.17)}
+.radio-v3-event-music{background:rgba(13,148,136,.15);border-color:rgba(13,148,136,.35);color:#115e59}
+.radio-v3-event-show{background:rgba(79,70,229,.13);border-color:rgba(79,70,229,.38);color:#3730a3}
+.radio-v3-event-other{background:rgba(147,51,234,.12);border-color:rgba(147,51,234,.34);color:#6b21a8}
+.dark .radio-v3-event-music{color:#99f6e4;background:rgba(13,148,136,.2)}
+.dark .radio-v3-event-show{color:#c7d2fe;background:rgba(79,70,229,.24)}
+.dark .radio-v3-event-other{color:#e9d5ff;background:rgba(147,51,234,.21)}
+.radio-v3-event-live{box-shadow:inset 3px 0 #ef4444}
+.radio-v3-live-dot{height:6px;width:6px;flex-shrink:0;border-radius:50%;background:#ef4444}
+.radio-v3-event-conflict{border-color:#f43f5e;border-style:dashed}
+@media(max-width:640px){.radio-v3-day-grid{grid-template-columns:53px minmax(0,1fr)}.radio-v3-day-strip button{min-width:68px}.radio-v3-schedule-toolbar{padding:.85rem}.radio-v3-event{border-radius:.55rem}}
+@media(prefers-reduced-motion:reduce){.radio-v3-event{transition:none}}
