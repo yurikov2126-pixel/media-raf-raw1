@@ -48,3 +48,16 @@ describe('reverse reservation and identity',()=>{
    consumedFrames:72000,expectedFrames:72000}).allowed).toBe(false);
  });
 });
+
+import {reverseAuthorityFresh} from '../src/lib/radioPcmBoundaryClock.js';
+describe('reverse authority survives PCM window entry',()=>{
+ it('does not expire at 2218ms immediately before the overlap',()=>{
+  expect(reverseAuthorityFresh({confirmedAtMs:10000,nowMs:12218,boundaryMs:15000})).toBe(true);
+ });
+ it('expires on an old, future, missing or past-boundary authority',()=>{
+  expect(reverseAuthorityFresh({confirmedAtMs:10000,nowMs:13500,boundaryMs:15000})).toBe(false);
+  expect(reverseAuthorityFresh({confirmedAtMs:10000,nowMs:9999,boundaryMs:15000})).toBe(false);
+  expect(reverseAuthorityFresh({confirmedAtMs:null,nowMs:12218,boundaryMs:15000})).toBe(false);
+  expect(reverseAuthorityFresh({confirmedAtMs:10000,nowMs:15000,boundaryMs:15000})).toBe(false);
+ });
+});
