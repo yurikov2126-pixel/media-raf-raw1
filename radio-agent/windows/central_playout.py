@@ -19,6 +19,7 @@ from standby_plan import standby_selection
 from sync_agent import sync
 from esp32_local import send_heartbeat
 from audio_telemetry import playback_report, async_playback_report
+from audio_output_probe import inspect_outputs
 
 STOP = threading.Event()
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
@@ -141,6 +142,16 @@ def run(args, token):
     esp32_secret=getattr(args,'esp32_secret',os.environ.get('RADIO_ESP32_SECRET','')).strip()
     last_esp32=0.0
     last_audio_report=0.0
+    output_probe={'state':'UNKNOWN','name':None,'count':None}
+    last_output_probe=0.0
+    output_probe_busy=threading.Event()
+
+    def probe_output():
+        nonlocal output_probe
+        try:
+            output_probe=inspect_outputs()
+        finally:
+            output_probe_busy.clear()
 
     def refresh():
         try:
@@ -182,9 +193,14 @@ def run(args, token):
             PLAYBACK_STATE['mode']='CENTRAL' if active_audio else 'LOCAL_RESERVE' if reserve_audio else 'STOPPED'
             if active_audio or reserve_audio:
                 PLAYBACK_STATE['streamLastSeen']=now
+            if now-last_output_probe>=30 and not output_probe_busy.is_set():
+                last_output_probe=now
+                output_probe_busy.set()
+                threading.Thread(target=probe_output,daemon=True).start()
             if now-last_audio_report>=8:
                 last_audio_report=now
                 report=playback_report(primary,fallback,relay,now)
+                report['outputEndpoint']=dict(output_probe)
                 threading.Thread(target=async_playback_report,
                                  args=(args.server,token,report),daemon=True).start()
             if esp32_host and esp32_secret and now-last_esp32>=3:
