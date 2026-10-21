@@ -9,6 +9,12 @@ describe('radio automatic playlist draft',()=>{
   expect(a.durationMs).toBeLessThanOrEqual(settings.durationMs);
   expect(a.items.length).toBeGreaterThan(5);
  });
+ it('requires beginning and ending jingles',()=>{
+  const result=generateRadioAutoPlaylist(settings);
+  expect(result.items[0].kind).toBe('JINGLE');
+  expect(result.items.at(-1).kind).toBe('JINGLE');
+  expect(generateRadioAutoPlaylist({...settings,jingles:[]}).warnings).toContain('OPENING_CLOSING_JINGLES_REQUIRED');
+ });
  it('inserts a jingle after every third song without placing it as a song',()=>{
   const a=generateRadioAutoPlaylist(settings).items;
   const music=a.filter(x=>x.kind==='MUSIC');
@@ -35,9 +41,9 @@ describe('configurable artist rotation',()=>{
    {id:'d1',artist:'Исполнитель Г',durationMs:60000},
   ];
   const result=generateRadioAutoPlaylist({tracks:songs,durationMs:540000,fadeMs:0,
-   jingleEvery:0,minTrackGap:0,minArtistGap:2,order:'SMART'});
+   jingleEvery:0,jingles:[{id:'j',durationMs:8000}],minTrackGap:0,minArtistGap:2,order:'SMART'});
   const artists=Object.fromEntries(songs.map(x=>[x.id,x.artist.trim().toLocaleLowerCase('ru-RU')]));
-  const sequence=result.items.map(x=>artists[x.assetId]);
+  const sequence=result.items.filter(x=>x.kind==='MUSIC').map(x=>artists[x.assetId]);
   for(let i=1;i<sequence.length;i++)
    expect(sequence.slice(Math.max(0,i-2),i)).not.toContain(sequence[i]);
  });
@@ -45,7 +51,7 @@ describe('configurable artist rotation',()=>{
   const result=generateRadioAutoPlaylist({tracks:[
    {id:'s1',artist:'One',durationMs:60000},
    {id:'s2',artist:'ONE',durationMs:60000}
-  ],durationMs:300000,fadeMs:0,jingleEvery:0,minTrackGap:0,minArtistGap:2});
+  ],jingles:[{id:'j',durationMs:8000}],durationMs:300000,fadeMs:0,jingleEvery:0,minTrackGap:0,minArtistGap:2});
   expect(result.items.length).toBeGreaterThan(1);
   expect(result.warnings).toContain('ARTIST_GAP_RELAXED');
  });
