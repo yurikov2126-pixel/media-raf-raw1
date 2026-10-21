@@ -6,9 +6,11 @@ export default function RadioAutoPlaylistRecurrence({token}){
  const call=useCallback((path,options)=>api('/radio'+path,{token,...options}),[token]);
  const [rules,setRules]=useState([]),[auto,setAuto]=useState([]),[folderId,setFolderId]=useState('');
  const [weekdays,setWeekdays]=useState([1,2,3,4,5]),[clock,setClock]=useState('08:00');
+ const [automationEnabled,setAutomationEnabled]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const load=useCallback(async()=>{
-  const [r,a]=await Promise.all([call('/auto-playlist-rules'),call('/auto-playlists')]);
+  const [r,a,settings]=await Promise.all([call('/auto-playlist-rules'),call('/auto-playlists'),call('/auto-playlist-automation')]);
+  setAutomationEnabled(settings.enabled===true);
   setRules(r.rules||[]);setAuto(a.autoPlaylists||[]);
  },[call]);
  useEffect(()=>{load().catch(e=>setError(e.message));},[load]);
@@ -25,6 +27,13 @@ export default function RadioAutoPlaylistRecurrence({token}){
  const del=rule=>{if(!window.confirm('Удалить правило? Уже созданные эфиры останутся в сетке.'))return;
   run(async()=>{await call('/auto-playlist-rules/'+rule.id,{method:'DELETE'});setNotice('Правило удалено');});
  };
+ const changeAutomation=()=>run(async()=>{
+  const wanted=!automationEnabled;
+  if(wanted&&!window.confirm('Включить автоматическую подготовку будущих эфиров из активных правил? Уже созданные события не изменятся.'))return;
+  const response=await call('/auto-playlist-automation',{method:'PUT',body:{enabled:wanted}});
+  setAutomationEnabled(response.enabled);
+  setNotice(response.enabled?'Автоматическая подготовка включена':'Автоматическая подготовка выключена');
+ });
  const prepare=()=>run(async()=>{const r=await call('/auto-playlist-rules/materialize',{method:'POST'});
   setNotice('Создано '+r.summary.created+' · конфликты '+r.summary.conflicts+' · пропущено '+r.summary.skipped+
    (r.summary.errors.length?' · ошибок '+r.summary.errors.length:''));});
@@ -33,6 +42,13 @@ export default function RadioAutoPlaylistRecurrence({token}){
    <p className="mt-1 text-sm opacity-70">Подготовка эфирных слотов на ближайшие 7 дней. Время московское, UTC+3. Созданные эфирные версии больше не меняются.</p></div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {notice&&<p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
+  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-current/15 p-3">
+   <div><p className="font-semibold text-sm">Автоматическая подготовка эфира</p><p className="text-xs opacity-65">Ежечасно формирует будущие версии на 7 дней из включённых правил</p></div>
+   <button type="button" role="switch" aria-checked={automationEnabled} disabled={busy} onClick={changeAutomation}
+    className={'rounded-xl px-4 py-2 text-sm font-semibold '+(automationEnabled?'bg-emerald-600 text-white':'border border-current/20')}>
+    {automationEnabled?'Включена · выключить':'Выключена · включить'}
+   </button>
+  </div>
   <form onSubmit={add} className="space-y-3 rounded-xl border border-current/15 p-3">
    <label className="block text-sm">Автоплейлист
     <select className={style} required value={folderId} onChange={e=>setFolderId(e.target.value)}>
@@ -56,6 +72,6 @@ export default function RadioAutoPlaylistRecurrence({token}){
    <button type="button" disabled={busy} onClick={()=>del(rule)} className="rounded-lg border border-red-500/30 px-3 py-2 text-red-700 dark:text-red-300">Удалить</button>
   </div>)}
   <button type="button" onClick={prepare} disabled={busy} className="rounded-xl border border-current/25 px-4 py-2 text-sm">Подготовить ближайшие 7 дней вручную</button>
-  <p className="text-xs opacity-65">Автоматическое фоновое выполнение дополнительно требует серверной настройки RADIO_AUTO_PLAYLIST_RECURRENCE_ENABLED=true. Конфликтующие слоты не заменяются.</p>
+  <p className="text-xs opacity-65">Переключатель управляет фоновым планировщиком без изменения .env. Конфликтующие слоты не заменяются. Уже созданные слоты остаются в сетке.</p>
  </section>;
 }
