@@ -22,6 +22,7 @@ import RadioPlayoutHistory from '../components/RadioPlayoutHistory.jsx';
 import RadioAudioProcessing from '../components/RadioAudioProcessing.jsx';
 import RadioCueEditor from '../components/RadioCueEditor.jsx';
 import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
+import RadioPlaylistWorkbench from '../components/RadioPlaylistWorkbench.jsx';
 import RadioPlaylistTransitions,{pairTransitions,transitionSettingsFromItems} from '../components/RadioPlaylistTransitions.jsx';
 import RadioDurationTimeline from '../components/RadioDurationTimeline.jsx';
 import { useRadioUploads } from '../components/RadioUploadManager.jsx';
@@ -232,7 +233,7 @@ export default function Radio() {
       setDescription(playlist.description || '');
       setSelected(playlist.items.map(item => item.assetId));
       setTransitions(transitionSettingsFromItems(playlist.items));
-      setWizard(1);
+      setWizard(3);
       setTab('playlists');
     } catch (e) { if (requestId === editRequestId.current) toast.error(e.message || 'Не удалось загрузить плейлист'); }
   };
@@ -374,43 +375,16 @@ export default function Radio() {
     {tab === 'playlists' && <section className="space-y-4">
       <RadioPlaylistReview token={token} onChanged={refresh} />
       <RadioSectionIntro eyebrow="ПОДГОТОВКА" title="Конструктор радиопрограмм" description="Создавайте программы из записей, формируйте порядок воспроизведения, согласовывайте и размещайте в сетке." metrics={[{label:'Плейлистов',value:playlists.length},{label:'Утверждено',value:playlists.filter(p=>p.status==='APPROVED').length},{label:'Папок',value:folders.length}]}/>
-      {wizard === 0 ? <button className={btn} onClick={() => { reset(); setWizard(1); }}>+ Создать плейлист</button> : <form onSubmit={e => { e.preventDefault(); if (wizard===1) setWizard(2); else if (wizard===2) { setSelected(ids=>[...ids,...pickIds.filter(id=>!ids.includes(id))]); setPickIds([]); setWizard(3); } else savePlaylist(); }} className="rounded-2xl border border-current/10 p-4 space-y-3">
-        <p className="text-xs opacity-60">Шаг {wizard} из 3 · {editing ? 'Редактирование' : 'Новый плейлист'}</p>
-        {wizard===1 && <>
-          <h3 className="font-semibold">1. Название и описание</h3>
-          <input className={inputStyle} placeholder="Название передачи" required maxLength={140} value={name} onChange={e=>setName(e.target.value)}/>
-          <textarea className={inputStyle} placeholder="Описание" maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)}/>
-        </>}
-        {wizard===2 && <>
-          <h3 className="font-semibold">2. Выберите записи из аудиотеки</h3>
-          <input className={inputStyle} placeholder="Найти запись" value={pickSearch} onChange={e=>setPickSearch(e.target.value)}/>
-          <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm" onClick={()=>setPickIds(assets.filter(a=>!selected.includes(a.id) && a.name.toLocaleLowerCase('ru').includes(pickSearch.toLocaleLowerCase('ru'))).map(a=>a.id))}>Выбрать все найденные</button>
-          <div className="max-h-72 overflow-auto space-y-2">
-            {assets.filter(a=>!selected.includes(a.id) && a.name.toLocaleLowerCase('ru').includes(pickSearch.toLocaleLowerCase('ru'))).map(a=><label key={a.id} className="flex items-center gap-3 rounded-lg border border-current/10 p-2 text-sm">
-              <input type="checkbox" checked={pickIds.includes(a.id)} onChange={e=>setPickIds(ids=>e.target.checked?[...ids,a.id]:ids.filter(id=>id!==a.id))}/>
-              <span className="flex-1 truncate">{a.name}</span><span className="opacity-60">{fmt(a.durationMs)}</span>
-            </label>)}
-          </div>
-        </>}
-        {wizard===3 && <>
-          <h3 className="font-semibold">3. Порядок воспроизведения</h3>
-          <p className="text-sm opacity-70">{selected.length} записей · {fmt(selected.reduce((sum,id)=>sum+(assets.find(a=>a.id===id)?.durationMs||0),0))}</p>
-        {selected.map((id,index) => <div key={id} draggable onDragStart={() => setDragging(index)} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); reorder(index); }} onDragEnd={() => setDragging(null)} className="flex gap-2 items-center rounded-lg border border-current/10 p-2" title="Перетащите для изменения порядка">
-          <span className="flex-1 text-sm truncate">{index+1}. {assets.find(a=>a.id===id)?.name}</span>
-          <button type="button" className="border border-current/20 rounded-lg px-2" disabled={index===0} onClick={()=>setSelected(s=>{const n=[...s];[n[index-1],n[index]]=[n[index],n[index-1]];return n;})}>↑</button>
-          <button type="button" className="border border-current/20 rounded-lg px-2" disabled={index===selected.length-1} onClick={()=>setSelected(s=>{const n=[...s];[n[index+1],n[index]]=[n[index],n[index+1]];return n;})}>↓</button>
-          <button type="button" className="border border-current/20 rounded-lg px-2" onClick={()=>setSelected(s=>s.filter((_,i)=>i!==index))}>×</button>
-        </div>)}
-
-          <RadioPlaylistTransitions ids={selected} assets={assets} settings={transitions} onChange={setTransitions}/>
-          <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm" onClick={()=>setWizard(2)}>+ Добавить ещё записи</button>
-        </>}
-        <div className="flex flex-wrap gap-2">
-          {wizard>1 && <button type="button" className="rounded-xl border px-4 py-2" onClick={()=>setWizard(w=>w-1)}>Назад</button>}
-          <button className={btn} disabled={wizard===3 && !selected.length}>{wizard===3 ? 'Сохранить плейлист' : 'Продолжить'}</button>
-          <button type="button" className="rounded-xl border px-4 py-2" onClick={reset}>Отмена</button>
-        </div>
-      </form>}
+      {wizard===0?<div className="flex flex-wrap items-center gap-2">
+        <button className={btn} onClick={()=>{reset();setWizard(3);}}>＋ Создать плейлист</button>
+        <button type="button" onClick={()=>openWorkspace('auto-playlists')}
+         className="rounded-xl border border-current/20 px-4 py-2 text-sm font-semibold">♫ Открыть автоплейлисты</button>
+      </div>:<RadioPlaylistWorkbench
+        assets={assets} selected={selected} onSelected={setSelected}
+        transitions={transitions} onTransitions={setTransitions}
+        name={name} onName={setName} description={description} onDescription={setDescription}
+        editing={editing} onSave={savePlaylist} onCancel={reset} onPreview={preview}
+      />}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-lg font-semibold">Плейлисты <span className="text-sm opacity-50">({playlists.length})</span></h3>
