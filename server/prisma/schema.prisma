@@ -1375,6 +1375,7 @@ model RadioAutoPlaylist {
   minArtistGap    Int      @default(3)
   jingleAssetIds  Json     @default("[]")
   jingleEvery     Int      @default(3)
+  draftItems      Json?
   fadeMs          Int      @default(2000)
   createdBy       String
   createdAt       DateTime @default(now())
