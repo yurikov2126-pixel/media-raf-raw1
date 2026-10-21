@@ -1017,6 +1017,7 @@ async function run() {
         // Reserve the actual next AutoDJ asset before the scheduled final
         // track exits. Freeze the candidate only for this slot and playlist.
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
+          !(gridCrossfadeEnabled&&prewarmed?.scheduledSlotStartMs===boundary)&&
           isLastScheduledTrack&&!reverseReservedTarget&&!reverseReserveInFlight&&
           boundary-Date.now()<12000&&boundary-Date.now()>2000){
           reverseReserveInFlight=true;
