@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
+import {validateAudioReport,audioHealth} from '../lib/radioAgentAudioHealth.js';
 import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
@@ -177,13 +178,29 @@ router.post('/devices', ...admin, safe(async(req,res) => {
   const device = await prisma.radioDevice.create({ data: { name, tokenHash: digest(token) } });
   res.status(201).json({ device: { id: device.id, name: device.name }, token });
 }));
+router.post('/agent/audio-telemetry',deviceAuth,safe(async(req,res)=>{
+ const report=validateAudioReport(req.body);
+ if(!report)return res.status(400).json({error:'Некорректное состояние аудиоустройства'});
+ const key='radio_agent_audio_v1_'+req.radioDevice.id;
+ const value=JSON.stringify({...report,receivedAt:new Date().toISOString()});
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ await prisma.radioDevice.update({where:{id:req.radioDevice.id},data:{lastSeenAt:new Date()}});
+ res.setHeader('Cache-Control','no-store');
+ res.json({accepted:true});
+}));
 router.get('/dashboard/devices-health',...admin,safe(async(_req,res)=>{
  const devices=await prisma.radioDevice.findMany({
   select:{id:true,name:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true},
   orderBy:{createdAt:'desc'},take:100});
  const amplifier=await ampDecision();
+ const active=devices.filter(d=>!d.revokedAt);
+ const telemetry=await prisma.setting.findMany({where:{key:{in:active.map(d=>'radio_agent_audio_v1_'+d.id)}},select:{key:true,value:true}});
+ const lookup=new Map(telemetry.map(row=>{try{return[row.key,JSON.parse(row.value)];}catch{return[row.key,null];}}));
+ const agents=summarizeRadioAgents(devices);
+ agents.agents=agents.agents.map(agent=>({...agent,audio:audioHealth(lookup.get('radio_agent_audio_v1_'+agent.id))}));
+
  res.setHeader('Cache-Control','no-store');
- res.json({generatedAt:new Date().toISOString(),agents:summarizeRadioAgents(devices),
+ res.json({generatedAt:new Date().toISOString(),agents,
   amplifier:{connection:amplifier.connection,physicalRelay:amplifier.physicalRelay,
    hardwareReady:amplifier.hardwareReady,leaseValid:amplifier.leaseValid,
    emergencyOff:!!amplifier.policy?.emergencyOff,mode:amplifier.policy?.mode,
