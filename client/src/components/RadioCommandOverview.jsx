@@ -57,14 +57,14 @@ export default function RadioCommandOverview({slots=[],playlists=[],assets=[],on
      {!visible.length&&<p className="text-sm opacity-65">В загруженном интервале нет запланированных передач.</p>}
      {visible.slice(0,showAll?20:4).map(s=>{
       const started=Date.parse(s.startAt)<=Date.now();
-      return <div key={s.id} className="flex items-center gap-3 rounded-xl border border-current/10 p-3">
+      return <button key={s.id} type="button" onClick={()=>onOpen("schedule")} title="Открыть передачу в сетке" className="flex w-full items-center gap-3 rounded-xl border border-current/20 p-3 text-left transition-colors hover:bg-violet-500/10">
        <span className={'h-9 w-1 shrink-0 rounded-full '+(started?'bg-rose-500':'bg-violet-500')}/>
        <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{s.playlist?.name||s.title||'Передача'}</p>
         <p className="text-xs opacity-60">{fmt(s.startAt)}–{fmt(s.endAt)} · {started?'В пределах запланированного времени':'Через '+secs(Date.parse(s.startAt)-Date.now())}</p>
        </div>
-       <span className="text-[11px] opacity-60">{s.playlistId?'Плейлист':'План'}</span>
-      </div>;
+       <span className="text-[11px] opacity-75">{s.playlistId?'Плейлист':'План'} ↗</span>
+      </button>;
      })}
     </div>
     <p className="mt-3 text-xs opacity-55">Это расписание, не подтверждение фактического звучания. Реальный источник показывается эфирным монитором.</p>
