@@ -20,6 +20,7 @@ import RadioAutoPlaylistRecurrence from '../components/RadioAutoPlaylistRecurren
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
 import RadioJingleSettings from '../components/RadioJingleSettings.jsx';
 import RadioPlayoutHistory from '../components/RadioPlayoutHistory.jsx';
+import RadioMonitoringCenter from '../components/RadioMonitoringCenter.jsx';
 import RadioAudioProcessing from '../components/RadioAudioProcessing.jsx';
 import RadioCueEditor from '../components/RadioCueEditor.jsx';
 import RadioPlaylistReview from '../components/RadioPlaylistReview.jsx';
@@ -582,6 +583,6 @@ export default function Radio() {
       </div>)}
     </section>}
     {tab==='studio' && <RadioLiveStudio />}
-    {tab==='history' && <RadioPlayoutHistory token={token}/>}
+    {tab==='history' && <RadioMonitoringCenter token={token} onOpen={openWorkspace}/>}
   </RadioWorkspaceShell>;
 }
