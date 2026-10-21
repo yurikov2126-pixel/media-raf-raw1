@@ -326,3 +326,38 @@
 .radio-v3 .radio-v3-schedule-toolbar,.radio-v3 .radio-playlist-workbench,.radio-v3 .radio-automation-nav{color:var(--radio-ink)}
 .radio-v3 .radio-v3-stat button.text-violet-700{color:var(--radio-accent)!important}
 @media(max-width:1023px){.radio-v3 .radio-v3-sidebar{box-shadow:0 20px 50px rgba(0,0,0,.28)}}
+
+
+/* Radio 3.0 second-pass contrast: explicit surface-specific tokens.
+   Global application typography may override Tailwind text utilities.
+   Never inherit dark backgrounds with dark headings or light backgrounds with light labels. */
+.radio-workspace.radio-v3 .radio-v3-context,
+.radio-workspace.radio-v3 .radio-v3-overview>div:first-child,
+.radio-workspace.radio-v3 .radio-v3-overview>div:nth-child(2){color:#f8fafc}
+.radio-workspace.radio-v3 .radio-v3-context :is(h1,h2,p,button),
+.radio-workspace.radio-v3 .radio-v3-overview>div:first-child :is(h1,h2,p),
+.radio-workspace.radio-v3 .radio-v3-overview>div:nth-child(2) button:not(.bg-violet-700){color:#f8fafc!important}
+.radio-workspace.radio-v3 .radio-v3-overview>div:nth-child(2) button.bg-violet-700{color:#fff!important}
+.radio-workspace.radio-v3 .radio-onair-status{background:#f8fafc!important;color:#0f172a!important;border-color:#94a3b8!important}
+.dark .radio-workspace.radio-v3 .radio-onair-status{background:#1e293b!important;color:#f8fafc!important;border-color:#64748b!important}
+.radio-workspace.radio-v3 .radio-onair-status :is(span,strong,button){color:inherit!important;opacity:1!important}
+.radio-workspace.radio-v3 .radio-onair-status button{border-color:currentColor!important}
+.radio-workspace.radio-v3 .radio-station-clock{background:#f8fafc!important;color:#0f172a!important;border-color:#94a3b8!important}
+.dark .radio-workspace.radio-v3 .radio-station-clock{background:#182236!important;color:#f8fafc!important;border-color:#64748b!important}
+.radio-workspace.radio-v3 .radio-station-clock :is(p,strong,h1,h2,h3){color:inherit!important;opacity:1!important}
+.radio-workspace.radio-v3 .radio-station-clock p.opacity-60,.radio-workspace.radio-v3 .radio-station-clock p.opacity-55{opacity:.78!important}
+.radio-workspace.radio-v3 .radio-on-air-card{color:#f8fafc!important;background:#17132f!important;border-color:#484068!important}
+.radio-workspace.radio-v3 .radio-on-air-card :is(h1,h2,h3,h4){color:#fff!important}
+.radio-workspace.radio-v3 .radio-on-air-card .text-slate-300{color:#e2e8f0!important}
+.radio-workspace.radio-v3 .radio-on-air-card .text-slate-400{color:#cbd5e1!important}
+.radio-workspace.radio-v3 .radio-on-air-card :is(select,input){color:#fff!important;background-color:#292441!important;border:1px solid #786e9b!important}
+.radio-workspace.radio-v3 .radio-on-air-card select option{background:#292441;color:#fff}
+.radio-workspace.radio-v3 .radio-on-air-card button.bg-white{background:#fff!important;color:#17132f!important}
+.radio-workspace.radio-v3 .radio-on-air-card button:not(.bg-white){color:#fff!important;border-color:#8177a7!important}
+.radio-workspace.radio-v3 .radio-on-air-card audio{color-scheme:dark}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat{color:var(--radio-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat :is(button,h2,h3,p,strong){color:inherit}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat button.text-violet-700{color:var(--radio-accent)!important}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat .opacity-65,
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat .opacity-60{opacity:1!important;color:var(--radio-muted)!important}
+@media(min-width:1536px){.radio-workspace.radio-v3 .radio-station-clock{min-height:0}}
