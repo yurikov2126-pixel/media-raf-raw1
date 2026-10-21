@@ -1,4 +1,5 @@
 import {validateAutoPlaylistDraft} from '../lib/radioAutoPlaylistDraft.js';
+import {prepareAutoPlaylistPublication} from '../lib/radioAutoPlaylistPublication.js';
 import {validateAutoPlaylistInput,previewAutoPlaylist} from '../lib/radioAutoPlaylistService.js';
 import {scheduledPlaylistDuration} from '../lib/radioPlaylistTransitions.js';
 import {validatePlaylistTransitions,validateTransitionSpans} from '../lib/radioPlaylistTransitions.js';
@@ -305,6 +306,30 @@ router.delete('/auto-playlists/:id/draft',safe(async (req,res)=>{
   where:{id:req.params.id},data:{draftItems:null}});
  if(!updated.count)return res.status(404).json({error:'Автоплейлист не найден'});
  res.json({ok:true});
+}));
+router.post('/auto-playlists/:id/publish',safe(async (req,res)=>{
+ const published=await prisma.$transaction(async tx=>{
+  const config=await tx.radioAutoPlaylist.findUnique({where:{id:req.params.id}});
+  if(!config)return {status:404,error:'Автоплейлист не найден'};
+  if(!Array.isArray(config.draftItems)||!config.draftItems.length)
+   return {status:400,error:'Сначала сохраните непустой черновик'};
+  const ids=[...new Set(config.draftItems.map(x=>x.assetId))];
+  const assets=await tx.radioAsset.findMany({where:{id:{in:ids}},
+   select:{id:true,durationMs:true}});
+  let prepared;
+  try{prepared=prepareAutoPlaylistPublication(config.draftItems,assets);}
+  catch(error){if(error instanceof RangeError||error instanceof TypeError)
+   return {status:400,error:error.message};throw error;}
+  const playlist=await tx.radioPlaylist.create({data:{
+   name:config.name.trim(),description:'Автоплейлист · фиксированная версия',
+   createdBy:req.user.id,status:'APPROVED',approvedBy:req.user.id,approvedAt:new Date(),
+  }});
+  await writeRadioPlaylistItems(tx,playlist.id,prepared.assetIds,prepared.transitions);
+  return {playlist:await tx.radioPlaylist.findUnique({where:{id:playlist.id},include:playlistInclude}),
+   durationMs:prepared.durationMs};
+ },{maxWait:10000,timeout:60000});
+ if(published.error)return res.status(published.status).json({error:published.error});
+ res.status(201).json(published);
 }));
 router.post('/auto-playlists/preview',safe(async (req,res)=>{
  let input;
