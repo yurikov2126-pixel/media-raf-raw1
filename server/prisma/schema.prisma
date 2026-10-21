@@ -1356,6 +1356,28 @@ model RadioAssetFolder {
   parent RadioAssetFolder? @relation("RadioAssetTree", fields: [parentId], references: [id], onDelete: SetNull)
   children RadioAssetFolder[] @relation("RadioAssetTree")
   assets RadioAsset[]
+  autoPlaylists RadioAutoPlaylist[]
   createdAt DateTime @default(now())
   @@index([parentId])
+}
+
+// A draft automation configuration, not an on-air source. Publishing creates
+// ordinary RadioPlaylist snapshots, so existing approval and playout stay intact.
+model RadioAutoPlaylist {
+  id              String   @id @default(cuid())
+  name            String
+  sourceFolderId  String
+  sourceFolder    RadioAssetFolder @relation(fields: [sourceFolderId], references: [id], onDelete: Restrict)
+  includeChildren Boolean  @default(true)
+  targetMinutes   Int      @default(60)
+  trackOrder      String   @default("SMART")
+  minTrackGap     Int      @default(20)
+  minArtistGap    Int      @default(3)
+  jingleAssetIds  Json     @default("[]")
+  jingleEvery     Int      @default(3)
+  fadeMs          Int      @default(2000)
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([sourceFolderId])
 }
