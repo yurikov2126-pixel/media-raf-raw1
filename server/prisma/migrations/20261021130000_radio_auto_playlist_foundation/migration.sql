@@ -6,6 +6,7 @@ CREATE TABLE "RadioAutoPlaylist" (
   "targetMinutes" INTEGER NOT NULL DEFAULT 60,
   "trackOrder" TEXT NOT NULL DEFAULT 'SMART',
   "minTrackGap" INTEGER NOT NULL DEFAULT 20,
+  "minArtistGap" INTEGER NOT NULL DEFAULT 3,
   "jingleAssetIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
   "jingleEvery" INTEGER NOT NULL DEFAULT 3,
   "fadeMs" INTEGER NOT NULL DEFAULT 2000,
