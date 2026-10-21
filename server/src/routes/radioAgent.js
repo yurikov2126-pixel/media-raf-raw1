@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
 import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
@@ -175,6 +176,18 @@ router.post('/devices', ...admin, safe(async(req,res) => {
   const token = 'rr_' + randomBytes(32).toString('hex');
   const device = await prisma.radioDevice.create({ data: { name, tokenHash: digest(token) } });
   res.status(201).json({ device: { id: device.id, name: device.name }, token });
+}));
+router.get('/dashboard/devices-health',...admin,safe(async(_req,res)=>{
+ const devices=await prisma.radioDevice.findMany({
+  select:{id:true,name:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true},
+  orderBy:{createdAt:'desc'},take:100});
+ const amplifier=await ampDecision();
+ res.setHeader('Cache-Control','no-store');
+ res.json({generatedAt:new Date().toISOString(),agents:summarizeRadioAgents(devices),
+  amplifier:{connection:amplifier.connection,physicalRelay:amplifier.physicalRelay,
+   hardwareReady:amplifier.hardwareReady,leaseValid:amplifier.leaseValid,
+   emergencyOff:!!amplifier.policy?.emergencyOff,mode:amplifier.policy?.mode,
+   requested:amplifier.requested,reason:amplifier.reason}});
 }));
 router.get('/devices', ...admin, safe(async(_req,res) => {
   const devices = await prisma.radioDevice.findMany({ orderBy: { createdAt:'desc' }, select: {

@@ -54,16 +54,16 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
  };
  const toggleMute=()=>{setMuted(v=>{if(audioRef.current)audioRef.current.muted=!v;return !v;});};
 
- const [report,setReport]=useState(null),[metadata,setMetadata]=useState(null),[worker,setWorker]=useState(null),[amp,setAmp]=useState(null);
+ const [report,setReport]=useState(null),[metadata,setMetadata]=useState(null),[worker,setWorker]=useState(null),[amp,setAmp]=useState(null),[health,setHealth]=useState(null);
  const [results,setResults]=useState({}),[loadedAt,setLoadedAt]=useState(null),[refreshing,setRefreshing]=useState(false);
  const loudness=worker?.loudness;
  const [queueOpen,setQueueOpen]=useState(true),[tab,setTab]=useState('tracks'),[details,setDetails]=useState(false);
  const refresh=useCallback(async()=>{
   setRefreshing(true);
-  const paths={report:'/radio-agent/dashboard',metadata:'/radio-agent/dashboard/now-playing',worker:'/radio-agent/dashboard/worker',amp:'/radio-agent/amplifier'};
+  const paths={report:'/radio-agent/dashboard',metadata:'/radio-agent/dashboard/now-playing',worker:'/radio-agent/dashboard/worker',amp:'/radio-agent/amplifier',health:'/radio-agent/dashboard/devices-health'};
   const entries=await Promise.all(Object.entries(paths).map(async([key,path])=>{try{return[key,{value:await api(path,{token}),ok:true}];}catch{return[key,{value:null,ok:false}];}}));
   const map=Object.fromEntries(entries);setReport(map.report.value);setMetadata(map.metadata.value);
-  setWorker(map.worker.value);setAmp(map.amp.value);
+  setWorker(map.worker.value);setAmp(map.amp.value);setHealth(map.health.value);
   const measured=map.worker.value?.loudness;
   if(measured?.status==='RUNNING'&&!measured.stale){setLufsHistory(prev=>[...prev.slice(-39),{at:Date.now(),momentary:measured.momentary,integrated:measured.integrated,truePeak:measured.truePeak}]);}
   setResults(Object.fromEntries(entries.map(([key,v])=>[key,v.ok])));setLoadedAt(Date.now());setRefreshing(false);
@@ -154,10 +154,19 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
    <Panel title="Диагностика и мониторинг" extraClass="rcs-diagnostics" action={<button type="button" onClick={()=>onOpen('history')}>Открыть мониторинг ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Playout Worker" state={results.worker?true:null} detail={results.worker?'Телеметрия отвечает':'Данные недоступны'}/>
-     <Status title="Windows Radio Agent" state={null} detail="Пинг агента не подтверждён"/>
-     <Status title="ESP32 · усилитель" state={results.amp?(amp?.connection==='ONLINE'):null} detail={results.amp?('Связь: '+(amp.connection||'неизвестна')):'Нет ответа API'}/>
+     <Status title="Windows Radio Agent" state={!results.health||!health?.agents?.registered?null:health.agents.online>0} detail={!results.health?'Мониторинг устройств недоступен':!health?.agents?.registered?'Нет зарегистрированных агентов':health.agents.online+' из '+health.agents.registered+' на связи · TTL '+Math.round(health.agents.ttlMs/1000)+' с'} onClick={()=>onOpen('equipment')}/>
+     <Status title="ESP32 · усилитель" state={!results.health?null:health?.amplifier?.connection==='ONLINE'} detail={!results.health?'Нет телеметрии усилителя':(health.amplifier.connection==='ONLINE'?'На связи':'Нет связи')+' · Реле: '+(health.amplifier.physicalRelay||'UNKNOWN')} onClick={()=>onOpen('equipment')}/>
      <Status title="Кроссфейды" state={worker?.transitions?worker.transitions.crossfadeFailed===0:null} detail={worker?.transitions?'Неудачных: '+(worker.transitions.crossfadeFailed??'—'):'Метрики недоступны'}/>
     </div>
+    {results.health&&health?.agents?.agents?.length>0&&<div className="rcs-agent-list" aria-label="Состояние радиокомпьютеров">
+     {health.agents.agents.filter(a=>a.status!=='REVOKED').map(agent=><div key={agent.id} className="rcs-agent-row">
+      <span className={'rcs-led '+(agent.status==='ONLINE'?'ok':agent.status==='OFFLINE'?'bad':'unknown')}/>
+      <strong>{agent.name||'Windows Radio Agent'}</strong>
+      <span>{agent.status==='ONLINE'?'Связь есть':agent.status==='OFFLINE'?'Связь потеряна':'Ещё не подключался'}</span>
+      <small>{agent.ageMs===null?'Нет heartbeat':'Последний запрос '+Math.floor(agent.ageMs/1000)+' с назад'}</small>
+     </div>)}
+    </div>}
+    {results.health&&((health?.agents?.offline||0)>0||health?.amplifier?.connection==='OFFLINE')&&<p className="rcs-health-warning" role="alert">Внимание: {health.agents.offline||0} радиокомпьютеров без связи{health.amplifier.connection==='OFFLINE'?', усилитель ESP32 недоступен':''}. Проверить оборудование ↗</p>}
     <button type="button" className="rcs-details-toggle" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>{details?'Скрыть сведения':'Подробности подключения и усилителя'}</button>
     {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p><RadioAmplifierControl token={token}/></div>}
    </Panel>
