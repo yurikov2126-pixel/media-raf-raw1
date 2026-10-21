@@ -102,6 +102,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <small>Прогресс расчётный по данным Worker; не подтверждает слышимый сигнал на удалённом устройстве.</small>
      </div>
     </div>
+    <div className="rcs-monitor-layout">
     <div className="rcs-player" aria-label="Контрольный эфирный плеер">
      <div className="rcs-player-main">
       <button className="rcs-player-play" type="button" disabled={playerBusy} onClick={()=>void togglePlayback()} aria-label={playing?'Приостановить локальное прослушивание':'Слушать эфир'}>{playing?'Ⅱ':'▶'}</button>
@@ -117,23 +118,31 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <audio ref={audioRef} {...audioEvents} preload="none" src="/api/radio-agent/listen" onPlaying={()=>setLastPlaying(Date.now())} aria-label="MP3-поток Политех-FM"/>
      {playbackError&&<p className="rcs-player-error" role="alert">{playbackError}</p>}
-     <div className="rcs-lufs rcs-server-lufs" aria-label="Серверные показатели громкости">
-      <div className="rcs-lufs-title"><strong>Громкость эфирного потока · EBU R128</strong><span>Серверный анализ · MP3 после кодирования</span></div>
-      <div className="rcs-lufs-values rcs-lufs-three">
-       {[
-        ['LUFS-M','momentary',loudness?.momentary,'Громкость за 400 мс',-60,0],
-        ['LUFS-I','integrated',loudness?.integrated,'Интегральная громкость с начала анализа',-60,0],
-        ['True Peak','truePeak',loudness?.truePeak,'Пиковый уровень после передискретизации',-40,0]
-       ].map(([name,key,value,hint,min,max])=><div key={name} title={hint}>
-        <span>{name}</span><strong>{loudness?.status==='RUNNING'&&!loudness.stale&&Number.isFinite(value)?value.toFixed(1):'—'} <small>{name==='True Peak'?'dBTP':'LUFS'}</small></strong>
-        <div className="rcs-lufs-mini" role="img" aria-label={'График '+name+' за последние 40 измерений'}>
-         {lufsHistory.map((sample,i)=><i key={sample.at+'-'+i} style={{height:(Number.isFinite(sample[key])?Math.max(3,Math.min(100,(sample[key]-min)/(max-min)*100)):3)+'%'}} />)}
-        </div>
-       </div>)}
-      </div>
-      <p>{!loudness?.enabled?'Серверный измеритель отключён.':loudness.stale||loudness.status!=='RUNNING'?'Измерения недоступны либо устарели.':'Измерения выходного MP3-потока сервером (обновление интерфейса раз в 10 с).'} Значения не измеряют аналоговый выход усилителя.</p>
-     </div>
      <div className="rcs-player-footer"><small>Локальное прослушивание — не управление эфиром</small><small>{lastPlaying?'Последнее воспроизведение: '+clock(lastPlaying):'Ожидание запуска'}</small></div>
+    </div>
+    <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical" aria-label="Серверный измеритель громкости">
+     <div className="rcs-lufs-title"><strong>Уровень эфира · EBU R128</strong><span>Серверный MP3</span></div>
+     <div className="rcs-meter-row">
+      {[
+       ['LUFS-M','momentary',loudness?.momentary,'LUFS',-60,0],
+       ['LUFS-I','integrated',loudness?.integrated,'LUFS',-60,0],
+       ['True Peak','truePeak',loudness?.truePeak,'dBTP',-40,3]
+      ].map(([label,key,value,unit,min,max])=>{
+       const valid=loudness?.status==='RUNNING'&&!loudness.stale&&Number.isFinite(value);
+       const percent=valid?Math.max(0,Math.min(100,(value-min)/(max-min)*100)):0;
+       return <div className="rcs-meter" key={key}>
+        <strong className="rcs-meter-label">{label}</strong>
+        <div className="rcs-meter-gauge" role="meter" aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={valid?value:undefined} aria-valuetext={valid?value.toFixed(1)+' '+unit:'Нет данных'}>
+         <span className="rcs-meter-grid"/>
+         <span className="rcs-meter-fill" style={{height:percent+'%'}}/>
+        </div>
+        <strong className="rcs-meter-number">{valid?value.toFixed(1):'—'}</strong>
+        <span className="rcs-meter-unit">{unit}</span>
+       </div>;
+      })}
+     </div>
+     <p className="rcs-meter-state" role="status">{!results.worker?'Нет связи с PCM Worker':!loudness?'Сервер не передал loudness. Проверьте перезапуск Worker после обновления.':loudness.status==='DISABLED'?'Измеритель отключён (RADIO_LUFS_ENABLED=false).':loudness.status==='OVERLOADED'?'Анализатор перегружен: '+(loudness.lastError||'нет подробностей'):loudness.status==='UNAVAILABLE'?'FFmpeg-анализатор недоступен: '+(loudness.lastError||'неизвестная ошибка'):loudness.stale?'Показания устарели. Последний замер: '+(loudness.updatedAt||'нет'):loudness.status==='STARTING'?'Анализатор запускается; получено MP3-частей: '+(loudness.receivedChunks??0):'Серверный замер активен; данные MP3 после кодирования.'}</p>
+    </aside>
     </div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
    </section>
