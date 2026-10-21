@@ -867,6 +867,45 @@ router.post('/schedule', safe(async (req, res) => {
     res.status(201).json({ slot });
 }));
 
+// Explicit one-off scheduling: atomically freeze an AutoPlaylist draft and
+// reserve its real PCM-accounted duration, never mutating the live slot.
+router.post('/schedule/auto-playlist',safe(async (req,res)=>{
+ const id=req.body?.autoPlaylistId;
+ const startAt=broadcastStart(req.body);
+ if(typeof id!=='string'||!id||!Number.isFinite(startAt.getTime())||
+    startAt.getTime()<=Date.now()+60000)
+  return res.status(400).json({error:'Выберите автоплейлист и будущее время не ранее чем через минуту'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const config=await tx.radioAutoPlaylist.findUnique({where:{id}});
+  if(!config)return {status:404,error:'Автоплейлист не найден'};
+  if(!Array.isArray(config.draftItems)||!config.draftItems.length)
+   return {status:400,error:'Сначала сохраните подборку в редакторе'};
+  const ids=[...new Set(config.draftItems.map(item=>item?.assetId).filter(Boolean))];
+  const assets=await tx.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
+  let ready;
+  try{ready=prepareAutoPlaylistPublication(config.draftItems,assets);}
+  catch(error){if(error instanceof TypeError||error instanceof RangeError)
+   return {status:400,error:error.message};throw error;}
+  const endAt=new Date(startAt.getTime()+ready.durationMs);
+  if(ready.durationMs<=0||endAt.getTime()<=Date.now())
+   return {status:400,error:'Некорректная продолжительность'};
+  const conflict=await tx.radioScheduleSlot.findFirst({
+   where:{startAt:{lt:endAt},endAt:{gt:startAt}},select:{id:true}});
+  if(conflict)return {status:409,error:'Выбранное эфирное время занято'};
+  const playlist=await tx.radioPlaylist.create({data:{
+   name:config.name.trim(),description:'Автоплейлист · эфирная версия из сохранённого черновика',
+   status:'APPROVED',createdBy:req.user.id,approvedBy:req.user.id,approvedAt:new Date()
+  }});
+  await writeRadioPlaylistItems(tx,playlist.id,ready.assetIds,ready.transitions);
+  const slot=await tx.radioScheduleSlot.create({data:{
+   playlistId:playlist.id,title:config.name,startAt,endAt,createdBy:req.user.id
+  }});
+  return {slot,playlistId:playlist.id,durationMs:ready.durationMs};
+ },{maxWait:10000,timeout:60000});
+ if(result.error)return res.status(result.status).json({error:result.error});
+ res.status(201).json(result);
+}));
 router.post('/schedule/weekly', safe(async (req, res) => {
     const { playlistId, weekdays, weeks } = req.body || {};
     const startAt = broadcastStart(req.body || {});
