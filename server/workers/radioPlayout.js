@@ -1196,8 +1196,10 @@ async function run() {
         select:{startAt:true,endAt:true,playlist:{select:{status:true}}}});
       if(validHandover?.playlist?.status==='APPROVED' && validHandover.endAt.getTime()>h.originalStartMs){
       // Shift by the actual finish; keep each song and broadcast at time zero.
-      delayedScheduledSlot={id:h.id,actualStartMs:Date.now(),
-        actualEndMs:Date.now()+(h.originalEndMs-h.originalStartMs)};
+      const actualStartMs=Date.now();
+      delayedScheduledSlot={id:h.id,originalStartMs:h.originalStartMs,
+        originalEndMs:h.originalEndMs,actualStartMs,
+        actualEndMs:actualStartMs+(h.originalEndMs-h.originalStartMs)};
       resumeAutoDjAfterShow=true;
       recordBoundary({source:'AUTO_DJ',reason:'FINISHED_BEFORE_SCHEDULE',slotId:h.id,
         delayedByMs:Math.max(0,delayedScheduledSlot.actualStartMs-h.originalStartMs)});
