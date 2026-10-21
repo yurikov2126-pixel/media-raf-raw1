@@ -328,7 +328,7 @@ export default function Radio() {
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
     {tab === 'home' && <RadioControlRoom token={token} onOpen={openWorkspace} />}
-    {tab === 'auto-playlists' && <section className="space-y-5"><RadioAutoPlaylistManager token={token}/><RadioAutoPlaylistRecurrence token={token}/></section>}
+    {tab === 'auto-playlists' && <section className="space-y-5"><RadioAutoPlaylistManager token={token} onPublished={refresh}/><RadioAutoPlaylistRecurrence token={token}/></section>}
     {tab === 'automation' && <section className="space-y-5">
       <RadioSourceControl token={token}/>
       <RadioAutoDjSettings token={token} playlists={playlists}/>
