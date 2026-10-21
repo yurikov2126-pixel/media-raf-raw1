@@ -1407,3 +1407,9 @@ model RadioAutoPlaylistRuleSlot {
   createdAt DateTime @default(now())
   @@unique([ruleId,localDate])
 }
+
+model RadioAutoPlaylistAutomation {
+  id Int @id @default(1)
+  enabled Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
