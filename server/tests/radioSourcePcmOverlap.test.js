@@ -52,3 +52,15 @@ describe('last packet at exact overlap boundary',()=>{
   expect(engine.snapshot().framesOut).toBe(72000);
  });
 });
+
+describe('completed overlap rejects post-mix source PCM',()=>{
+ it('reports completed state after exactly 72000 mixed frames',()=>{
+  const engine=new RadioSourcePcmOverlap({source,target,overlapMs:1500});
+  expect(engine.start({sourceReady:true,targetReady:true,slotAuthority:true}).ok).toBe(true);
+  const mixed=engine.push(pcm(100,72000),pcm(200,72000));
+  expect(mixed.status).toBe('COMPLETED');
+  expect(engine.snapshot()).toMatchObject({phase:'COMPLETED',framesOut:72000});
+  // The worker checks phase before ever calling push for a subsequent packet.
+  expect(engine.snapshot().phase==='COMPLETED').toBe(true);
+ });
+});
