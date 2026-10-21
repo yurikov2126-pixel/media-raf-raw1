@@ -70,7 +70,7 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
   <button type="button" className="hidden lg:block w-full rounded-xl border border-current/15 p-2 text-xs"
    onClick={()=>setCompact(v=>!v)}>{compact?'→':'← Свернуть меню'}</button>
  </nav>;
- return <div className="radio-workspace radio-v3 min-h-[calc(100vh-6rem)] text-slate-950 dark:text-slate-100">
+ return <div className="radio-workspace radio-v4 min-h-[calc(100vh-6rem)] text-slate-950 dark:text-slate-100">
   <div className="radio-shell relative overflow-hidden rounded-3xl shadow-sm">
    <header className="radio-shell-header radio-v3-header sticky top-0 z-30 flex items-center gap-3 border-b p-3 backdrop-blur-xl sm:px-5">
     <button type="button" onClick={()=>setMobileOpen(v=>!v)} aria-label="Разделы радио"
