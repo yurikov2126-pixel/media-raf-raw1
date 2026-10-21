@@ -2,6 +2,14 @@
 // Separate FFmpeg process: when stalled, discard samples instead of delaying broadcast.
 import {spawn} from 'node:child_process';
 
+export function parseEbur128Frame(line){
+ if(!/(?:^|\s)M:\s/.test(line)||!/(?:^|\s)I:\s/.test(line))return null;
+ const value=name=>{const match=line.match(new RegExp('(?:^|\\\\s)'+name+':\\\\s*(-?(?:\\\\d+(?:\\\\.\\\\d+)?|inf))','i'));return match?Number(match[1]):null;};
+ const peakPart=line.match(/(?:^|\s)TPK:\s*([^a-zA-Z]*?)(?:\s*dBFS|$)/);
+ const peaks=peakPart?peakPart[1].trim().split(/\s+/).map(Number).filter(Number.isFinite):[];
+ return {momentary:value('M'),integrated:value('I'),truePeak:peaks.length?Math.max(...peaks):null};
+}
+
 export function createStationLufsMeter({ffmpeg='ffmpeg',enabled=true}={}){
  const state={enabled,status:enabled?'STARTING':'DISABLED',source:'SERVER_MP3_OUTPUT',
   momentary:null,integrated:null,truePeak:null,updatedAt:null,errors:0,discardedChunks:0};
@@ -11,15 +19,11 @@ export function createStationLufsMeter({ffmpeg='ffmpeg',enabled=true}={}){
   '-f','null','-'],{stdio:['pipe','ignore','pipe']});
  let pending='',alive=true;
  const parse=line=>{
-  // ffmpeg EBU R128 log: M/S/I LUFS, and TPK dBTP.
-  if(!line.includes(' M:')||!line.includes(' I:'))return;
-  const value=(name)=>{const m=line.match(new RegExp('(?:^|\\s)'+name+':\\s*(-?(?:\\d+(?:\\.\\d+)?|inf))','i'));return m?Number(m[1]):null;};
-  const m=value('M'),i=value('I'),tp=value('TPK');
-  state.momentary=Number.isFinite(m)?m:null;
-  state.integrated=Number.isFinite(i)?i:null;
-  state.truePeak=Number.isFinite(tp)?tp:null;
-  state.updatedAt=new Date().toISOString();
-  state.status='RUNNING';
+  const result=parseEbur128Frame(line);if(!result)return;
+  state.momentary=Number.isFinite(result.momentary)?result.momentary:null;
+  state.integrated=Number.isFinite(result.integrated)?result.integrated:null;
+  state.truePeak=Number.isFinite(result.truePeak)?result.truePeak:null;
+  state.updatedAt=new Date().toISOString();state.status='RUNNING';
  };
  child.stderr.on('data',buf=>{
   pending+=buf.toString();
@@ -27,6 +31,7 @@ export function createStationLufsMeter({ffmpeg='ffmpeg',enabled=true}={}){
   for(const line of lines)parse(line);
   if(pending.length>8192)pending=pending.slice(-8192);
  });
+ child.stdin.on('error',()=>{alive=false;state.errors++;state.status='UNAVAILABLE';});
  child.on('error',()=>{alive=false;state.errors++;state.status='UNAVAILABLE';});
  child.on('exit',()=>{alive=false;state.status='UNAVAILABLE';});
  return {
