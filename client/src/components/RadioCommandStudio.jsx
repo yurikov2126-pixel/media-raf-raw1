@@ -166,6 +166,14 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <small>{agent.ageMs===null?'Нет heartbeat':'Последний запрос '+Math.floor(agent.ageMs/1000)+' с назад'}</small>
      </div>)}
     </div>}
+    {results.health&&health?.agents?.agents?.some(a=>a.status!=='REVOKED')&&<div className="rcs-agent-audio-list" aria-label="Диагностика аудиовыхода Windows Agent">
+      <p className="rcs-audio-caption">Аудиовыход Windows Agent</p>
+      {health.agents.agents.filter(a=>a.status!=='REVOKED').map(agent=><div className="rcs-agent-audio-row" key={agent.id}>
+       <strong>{agent.name||'Радиокомпьютер'}</strong>
+       <span>{agent.audio?.status==='PLAYING'?'Воспроизведение подтверждено агентом':agent.audio?.status==='BUFFERING'?'Буферизация':agent.audio?.status==='STOPPED'?'Воспроизведение остановлено':agent.audio?.status==='ERROR'?'Ошибка аудиоустройства':agent.audio?.status==='DEGRADED'?'Пакеты давно не поступали':agent.audio?.status==='STALE'?'Аудиотелеметрия устарела':'Аудиотелеметрия ещё не поступала'}</span>
+       <small>{agent.audio?.reason&&agent.audio.status!=='UNKNOWN'?agent.audio.reason:''}</small>
+      </div>)}
+     </div>}
     {results.health&&((health?.agents?.offline||0)>0||health?.amplifier?.connection==='OFFLINE')&&<p className="rcs-health-warning" role="alert">Внимание: {health.agents.offline||0} радиокомпьютеров без связи{health.amplifier.connection==='OFFLINE'?', усилитель ESP32 недоступен':''}. Проверить оборудование ↗</p>}
     <button type="button" className="rcs-details-toggle" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>{details?'Скрыть сведения':'Подробности подключения и усилителя'}</button>
     {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p><RadioAmplifierControl token={token}/></div>}
