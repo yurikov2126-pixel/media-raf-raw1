@@ -1,21 +1,11 @@
 import {useEffect,useState} from 'react';
 
 export const RADIO_NAV_GROUPS=[
- {id:'broadcast',title:'Эфир',items:[
-  {id:'home',icon:'◉',label:'Эфирный центр',hint:'Сейчас в эфире · управление'},
-  {id:'studio',icon:'◉',label:'Студия',hint:'Микрофон · прямой эфир'}]},
- {id:'planning',title:'Планирование',items:[
-  {id:'schedule',icon:'▦',label:'Сетка вещания',hint:'Календарь и передачи'}]},
- {id:'music',title:'Музыка и плейлисты',items:[
-  {id:'playlists',icon:'☷',label:'Плейлисты',hint:'Подготовка передач'},
-  {id:'auto-playlists',icon:'♫',label:'Автоплейлисты',hint:'Генерация и редактор'},
-  {id:'assets',icon:'♫',label:'Аудиотека',hint:'Треки и джинглы'}]},
- {id:'settings',title:'Автоматизация и звук',items:[
-  {id:'automation',icon:'⟳',label:'Автоматизация',hint:'AutoDJ · ротация'},
-  {id:'processing',icon:'≋',label:'Звук',hint:'Обработка и переходы'}]},
- {id:'monitor',title:'Мониторинг',items:[
-  {id:'history',icon:'◷',label:'История',hint:'Отчёты · эфирные события'},
-  {id:'equipment',icon:'▣',label:'Оборудование',hint:'Радиокомпьютеры'}]}
+ {id:'broadcast',title:'Вещание',items:[{id:'home',icon:'◉',label:'Эфир',hint:'Командный центр'},{id:'studio',icon:'◈',label:'Студия',hint:'Прямой эфир'}]},
+ {id:'planning',title:'Планирование',items:[{id:'schedule',icon:'▦',label:'Сетка',hint:'Эфирное расписание'}]},
+ {id:'media',title:'Контент',items:[{id:'playlists',icon:'☷',label:'Плейлисты',hint:'Состав передач'},{id:'auto-playlists',icon:'♫',label:'Автоплейлисты',hint:'Генерация'},{id:'assets',icon:'▣',label:'Медиатека',hint:'Треки и джинглы'}]},
+ {id:'automation',title:'Автоматизация',items:[{id:'automation',icon:'⚙',label:'Автоматизация',hint:'AutoDJ и правила'},{id:'processing',icon:'≋',label:'Звук',hint:'Обработка'}]},
+ {id:'monitor',title:'Контроль',items:[{id:'history',icon:'▤',label:'Мониторинг',hint:'Работа станции'},{id:'equipment',icon:'▣',label:'Оборудование',hint:'Агенты и устройства'}]}
 ];
 const items=RADIO_NAV_GROUPS.flatMap(group=>group.items);
 export const RADIO_WORKSPACE_TABS=items.map(i=>i.id);
@@ -78,15 +68,15 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
     <button type="button" onClick={()=>onSelect('home')} title="На эфирный центр"
      className="grid h-10 w-10 place-items-center rounded-xl bg-violet-700 font-black text-white">R</button>
     <div className="min-w-0 flex-1">
-     <p className="text-[10px] font-bold uppercase tracking-[.15em] opacity-55">MEDIA · РАФ · RAW / ПОЛИТЕХ-FM</p>
-     <p className="truncate font-bold text-base">{current.label}</p>
+     <p className="text-[10px] font-bold uppercase tracking-[.15em] opacity-55">ПОЛИТЕХ-FM · RADIO COMMAND STUDIO</p>
+     <p className="truncate font-bold text-base">{tab==='home'?'Эфирная студия':current.label}</p>
     </div>
-    <div className="hidden xl:flex items-center gap-2 text-xs">
+    <div className="hidden 2xl:flex items-center gap-2 text-xs">
      <span className="rounded-full border border-current/15 px-3 py-1.5">{stats?.assets??0} аудиозаписей</span>
      <span className="rounded-full border border-current/15 px-3 py-1.5">{stats?.playlists??0} плейлистов</span>
      <span className="rounded-full border border-current/15 px-3 py-1.5">{stats?.slots??0} событий</span>
     </div>
-    <button type="button" onClick={()=>onSelect('schedule')} className="hidden rounded-xl bg-violet-700 px-3 py-2 text-xs font-semibold text-white sm:block">Сетка эфира ↗</button>
+    
    </header>
    <div className="flex min-w-0">
     {mobileOpen&&<button type="button" aria-label="Закрыть меню" className="absolute inset-0 z-30 bg-black/50 lg:hidden" onClick={()=>setMobileOpen(false)}/>}
