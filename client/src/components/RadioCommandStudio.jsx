@@ -4,6 +4,7 @@ import {api} from '../api/client.js';
 import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
+import {useRadioLufsMeter} from '../hooks/useRadioLufsMeter.js';
 
 const zone='Europe/Moscow';
 const clock=(value)=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -27,6 +28,7 @@ function Panel({title,action,children,extraClass=''}) {
 export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[],onOpen}){
  const [now,setNow]=useState(()=>Date.now());
  const {audioRef,playing,reconnecting,error:playbackError,audioEvents}=useRadioStreamRecovery();
+ const loudness=useRadioLufsMeter(audioRef,playing);
  const [volume,setVolume]=useState(0.8);
  const [muted,setMuted]=useState(false);
  const [lastPlaying,setLastPlaying]=useState(null);
@@ -112,6 +114,14 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <audio ref={audioRef} {...audioEvents} preload="none" src="/api/radio-agent/listen" onPlaying={()=>setLastPlaying(Date.now())} aria-label="MP3-поток Политех-FM"/>
      {playbackError&&<p className="rcs-player-error" role="alert">{playbackError}</p>}
+     <div className="rcs-lufs" aria-live="off">
+      <div className="rcs-lufs-title"><strong>Громкость эфира · LUFS</strong><span>EBU R128 · измерение декодированного MP3</span></div>
+      <div className="rcs-lufs-values">
+       <div><span>Momentary · 400 мс</span><strong>{loudness.state==='measuring'&&loudness.momentary!==null?loudness.momentary.toFixed(1):'—'} <small>LUFS</small></strong></div>
+       <div><span>Short-term · 3 с</span><strong>{loudness.state==='measuring'&&loudness.shortTerm!==null?loudness.shortTerm.toFixed(1):'—'} <small>LUFS</small></strong></div>
+      </div>
+      <p>{loudness.state==='unsupported'?'Измеритель недоступен в этом браузере или при текущей частоте дискретизации.':loudness.state==='warming'?'Накапливаем данные для измерения…':loudness.state==='measuring'?'Измеряется принимаемый MP3, не исходный PCM до кодирования.':'Нажмите Play, чтобы измерить громкость принимаемого эфира.'}</p>
+     </div>
      <div className="rcs-player-footer"><small>Локальное прослушивание — не управление эфиром</small><small>{lastPlaying?'Последнее воспроизведение: '+clock(lastPlaying):'Ожидание запуска'}</small></div>
     </div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
