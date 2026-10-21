@@ -118,7 +118,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     {queueOpen&&(tab==='tracks'?<RadioUpcomingQueue entries={upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>:<div className="rcs-schedule-items">{planned.map(s=><button type="button" key={s.id} onClick={()=>onOpen('schedule')}><span>{fmt(s.startAt)}</span><strong>{s.title||s.name||s.playlist?.name||'Передача'}</strong><span>↗</span></button>)}{!planned.length&&<p>Нет предстоящих событий в загруженной сетке.</p>}</div>)}
     <p className="rcs-disclaimer">Очередь отображает утверждённый план, а не ручное управление текущим PCM.</p>
    </Panel>
-       <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical" aria-label="Серверный измеритель громкости">
+       <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical rcs-meter-panel" aria-label="Серверный измеритель громкости">
      <div className="rcs-lufs-title"><strong>Уровень эфира · EBU R128</strong><span>Серверный MP3</span></div>
      <div className="rcs-meter-row">
       {[
