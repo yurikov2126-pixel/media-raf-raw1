@@ -13,6 +13,7 @@ import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
 import RadioEsp32Registry from '../components/RadioEsp32Registry.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
+import RadioAutoPlaylistManager from '../components/RadioAutoPlaylistManager.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
 import RadioJingleSettings from '../components/RadioJingleSettings.jsx';
 import RadioPlayoutHistory from '../components/RadioPlayoutHistory.jsx';
@@ -322,6 +323,7 @@ export default function Radio() {
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
     {tab === 'home' && <RadioControlRoom token={token} onOpen={openWorkspace} />}
+    {tab === 'auto-playlists' && <RadioAutoPlaylistManager token={token}/>}
     {tab === 'automation' && <section className="space-y-5">
       <RadioSourceControl token={token}/>
       <RadioAutoDjSettings token={token} playlists={playlists}/>
