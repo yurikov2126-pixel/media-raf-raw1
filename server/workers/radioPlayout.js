@@ -227,7 +227,9 @@ async function current() {
         const shiftedCursor=resolveRadioCursor([shifted],nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS});
         const asset=shiftedCursor.track?shifted.playlist.items[shiftedCursor.track.index].asset:null;
         return {cursor:shiftedCursor,asset,isLastScheduledTrack:!!shiftedCursor.track && shiftedCursor.track.index===shifted.playlist.items.length-1,
-          nextTrackId:scheduledSuccessor(shifted.playlist.items,shiftedCursor)};
+          nextTrackId:scheduledSuccessor(shifted.playlist.items,shiftedCursor),
+          delayedShiftProof:{slotId:shifted.id,originalEndMs:delayed.endAt.getTime(),
+            actualEndMs:delayedScheduledSlot.actualEndMs}};
       }
       delayedScheduledSlot=null;
     }
@@ -489,8 +491,8 @@ async function run() {
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
       continue;
     }
-    let cursor,asset,nextTrackId,isLastScheduledTrack;
-    try { ({cursor,asset,nextTrackId,isLastScheduledTrack}=await current()); }
+    let cursor,asset,nextTrackId,isLastScheduledTrack,delayedShiftProof;
+    try { ({cursor,asset,nextTrackId,isLastScheduledTrack,delayedShiftProof}=await current()); }
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
     state.slotId=cursor.slot?.id||null;
     if(!asset) {
@@ -971,10 +973,9 @@ async function run() {
                 reverseReservedTarget=reservation;
                 // Capture the verified delayed-show clock while its cursor is active.
                 // It can change/clear before asynchronous authorization runs.
-                reverseReservedShift=delayedScheduledSlot?.id===reservation.slotId&&
-                  delayedScheduledSlot.actualEndMs===reservation.slotEndMs
-                  ?{slotId:reservation.slotId,originalEndMs:delayedScheduledSlot.originalEndMs,
-                    actualEndMs:delayedScheduledSlot.actualEndMs}:null;
+                reverseReservedShift=delayedShiftProof?.slotId===reservation.slotId&&
+                  delayedShiftProof.actualEndMs===reservation.slotEndMs
+                  ?{...delayedShiftProof}:null;
                 if(!prewarmed&&!prewarming){
                   void warmSuccessor({nextTrackId:reservation.assetId,musicCount:0,
                     currentTrackId:asset.id,reverse:true});
