@@ -5,7 +5,6 @@ const duration=ms=>Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padSt
 export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSaved,onPublished}){
  const [items,setItems]=useState(()=>Array.isArray(config.draftItems)?config.draftItems:[]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const [addId,setAddId]=useState('');
  const [libraryQuery,setLibraryQuery]=useState('');
  const [editingIndex,setEditingIndex]=useState(null);
  const [dragIndex,setDragIndex]=useState(null);
@@ -59,8 +58,6 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
    await onPublished?.();
   }catch(e){setError(e.message);}finally{setBusy(false);}
  };
- const add=()=>{const a=assets.find(x=>x.id===addId);if(!a)return;
-  change(old=>[...old,{assetId:a.id,kind:'MUSIC',pinned:false,fadeMs:config.fadeMs||0,durationMs:a.durationMs}]);setAddId('');};
  const raw=items.reduce((sum,x,i)=>sum+(x.durationMs||assets.find(a=>a.id===x.assetId)?.durationMs||0)-
   (i&&x.kind==='MUSIC'&&items[i-1].kind==='MUSIC'?x.fadeMs||0:0),0);
  return <div className="space-y-3 rounded-2xl border border-current/15 p-3 sm:p-4">
@@ -124,12 +121,6 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
           className="rounded-lg bg-violet-700 px-3 py-1.5 text-xs text-white">Добавить</button>
       </div>)}
     </div>
-  </div>
-  <div className="flex flex-wrap gap-2">
-   <select aria-label="Добавить запись" className="min-w-0 flex-1 rounded-xl border border-current/20 bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-slate-100" value={addId} onChange={e=>setAddId(e.target.value)}>
-    <option value="">Выбрать песню из аудиотеки</option>{assets.map(a=><option value={a.id} key={a.id}>{a.name}</option>)}
-   </select>
-   <button type="button" disabled={!addId} onClick={add} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Добавить</button>
   </div>
   <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={save} className="rounded-xl bg-violet-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Сохранить черновик</button>
   <button type="button" disabled={busy||!Array.isArray(config.draftItems)||!config.draftItems.length} onClick={publish} className="rounded-xl border border-emerald-600/50 px-4 py-2 font-semibold text-emerald-700 dark:text-emerald-300 disabled:opacity-50">Создать эфирную версию</button></div>
