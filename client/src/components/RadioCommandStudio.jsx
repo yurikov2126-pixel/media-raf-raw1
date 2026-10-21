@@ -4,6 +4,7 @@ import {api} from '../api/client.js';
 import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
+import {RADIO_PRESETS,RADIO_WIDGETS,loadRadioLayout,saveRadioLayout,moveRadioWidget,normalizeRadioLayout} from './radioWorkspaceLayout.js';
 
 
 const zone='Europe/Moscow';
@@ -57,6 +58,27 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
  const [report,setReport]=useState(null),[metadata,setMetadata]=useState(null),[worker,setWorker]=useState(null),[amp,setAmp]=useState(null),[health,setHealth]=useState(null);
  const [results,setResults]=useState({}),[loadedAt,setLoadedAt]=useState(null),[refreshing,setRefreshing]=useState(false);
  const loudness=worker?.loudness;
+ const [layout,setLayout]=useState(()=>loadRadioLayout('radio-os2-layout'));
+ const [layoutEditing,setLayoutEditing]=useState(false);
+ const [dragging,setDragging]=useState(null);
+ useEffect(()=>saveRadioLayout('radio-os2-layout',layout),[layout]);
+ const patchLayout=callback=>setLayout(previous=>normalizeRadioLayout(callback(normalizeRadioLayout(previous))));
+ const applyPreset=name=>{setLayout(normalizeRadioLayout(RADIO_PRESETS[name]));setLayoutEditing(false);};
+ const widget=(id,content)=>{
+  if(layout.hidden.includes(id))return null;
+  const title=RADIO_WIDGETS.find(entry=>entry.id===id)?.name||id;
+  return <div className={'rcs-os-widget '+(layout.wide.includes(id)?'rcs-os-wide':'')} key={id}
+   style={{order:layout.order.indexOf(id)}} onDragOver={layoutEditing?event=>event.preventDefault():undefined}
+   onDrop={layoutEditing?event=>{event.preventDefault();if(dragging)patchLayout(previous=>moveRadioWidget(previous,dragging,id));setDragging(null);}:undefined}>
+   {layoutEditing&&<div className="rcs-os-widget-tools">
+    <button type="button" draggable onDragStart={event=>{setDragging(id);event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',id);}} onDragEnd={()=>setDragging(null)} aria-label={'Перетащить '+title}>⠿ Переместить</button>
+    <strong>{title}</strong>
+    <button type="button" onClick={()=>patchLayout(previous=>({...previous,wide:previous.wide.includes(id)?previous.wide.filter(x=>x!==id):[...previous.wide,id]}))}>{layout.wide.includes(id)?'Обычная ширина':'На всю ширину'}</button>
+    {id!=='onair'&&<button type="button" onClick={()=>patchLayout(previous=>({...previous,hidden:[...previous.hidden,id]}))}>Скрыть</button>}
+   </div>}
+   {content}
+  </div>;
+ };
  const [queueOpen,setQueueOpen]=useState(true),[tab,setTab]=useState('tracks'),[details,setDetails]=useState(false);
  const refresh=useCallback(async()=>{
   setRefreshing(true);
@@ -90,7 +112,13 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     <button type="button" className="rcs-primary" onClick={()=>onOpen('studio')}>Открыть студию ↗</button>
    </div>
   </header>
-  <div className="rcs-grid">
+  <div className="rcs-os-toolbar" aria-label="Рабочее пространство Radio OS">
+   <div className="rcs-os-presets"><span>Рабочее пространство</span>{[['air','Эфир'],['editor','Редактор'],['monitoring','Мониторинг']].map(([id,label])=><button key={id} type="button" onClick={()=>applyPreset(id)}>{label}</button>)}</div>
+   <button type="button" className={layoutEditing?'rcs-os-edit-active':''} onClick={()=>setLayoutEditing(v=>!v)} aria-pressed={layoutEditing}>{layoutEditing?'Готово':'Настроить панели'}</button>
+  </div>
+  {layoutEditing&&<div className="rcs-os-restore"><span>Скрытые панели:</span>{RADIO_WIDGETS.filter(entry=>layout.hidden.includes(entry.id)).map(entry=><button key={entry.id} type="button" onClick={()=>patchLayout(previous=>({...previous,hidden:previous.hidden.filter(id=>id!==entry.id)}))}>+ {entry.name}</button>)}{!layout.hidden.length&&<span>Нет</span>}<button type="button" onClick={()=>applyPreset('air')}>Сбросить расположение</button></div>}
+  <div className="rcs-grid rcs-os-grid">
+   {widget('onair',<>
    <section className="rcs-onair">
     <div className="rcs-onair-top"><span className="rcs-eyebrow">● СЕЙЧАС В ЭФИРЕ</span><span className="rcs-source">{results.metadata?sourceName[source]||source:'Источник неизвестен'}</span><span className="rcs-onair-indicator">{running?'ON AIR':'НЕ ПОДТВЕРЖДЕНО'}</span></div>
     <div className="rcs-track">
@@ -113,6 +141,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     <div className="rcs-cover-player-status" role="status">{reconnecting?'Переподключаем поток…':playing?'● Контрольное прослушивание активно':playbackError?'Ошибка прослушивания: '+playbackError:'Нажмите Play на обложке для прослушивания'}</div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
    </section>
+   </>)}
+   {widget('queue',<>
    <div className="rcs-right-rail">
    <Panel title="Далее в эфире" extraClass="rcs-queue" action={<button type="button" onClick={()=>setQueueOpen(x=>!x)} aria-expanded={queueOpen}>{queueOpen?'Свернуть':'Развернуть'}</button>}>
     <div className="rcs-tabs" role="tablist" aria-label="Тип очереди"><button type="button" role="tab" aria-selected={tab==='tracks'} className={tab==='tracks'?'selected':''} onClick={()=>setTab('tracks')}>Ближайшие передачи</button><button type="button" role="tab" aria-selected={tab==='grid'} className={tab==='grid'?'selected':''} onClick={()=>setTab('grid')}>Сетка</button></div>
@@ -143,6 +173,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      <p className="rcs-meter-state" role="status">{!results.worker?'Нет связи с PCM Worker':!loudness?'Сервер не передал loudness. Проверьте перезапуск Worker после обновления.':loudness.status==='DISABLED'?'Измеритель отключён (RADIO_LUFS_ENABLED=false).':loudness.status==='OVERLOADED'?'Анализатор перегружен: '+(loudness.lastError||'нет подробностей'):loudness.status==='UNAVAILABLE'?'FFmpeg-анализатор недоступен: '+(loudness.lastError||'неизвестная ошибка'):loudness.stale?'Показания устарели. Последний замер: '+(loudness.updatedAt||'нет'):loudness.status==='STARTING'?'Анализатор запускается; получено MP3-частей: '+(loudness.receivedChunks??0):'Серверный замер активен; данные MP3 после кодирования.'}</p>
     </aside>
    </div>
+   </>)}
+   {widget('sources',<>
    <Panel title="Источники и управление" extraClass="rcs-sources" action={<button type="button" onClick={()=>onOpen('automation')}>Автоматизация ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Основной источник" state={results.metadata?running:null} detail={results.metadata?sourceName[source]||source:'Нет телеметрии'} onClick={()=>onOpen('automation')}/>
@@ -151,6 +183,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      <Status title="Поток" state={results.report?Boolean(report?.stream):null} detail={report?.stream?.status||'Нет отчёта сервера'} onClick={()=>onOpen('history')}/>
     </div>
    </Panel>
+   </>)}
+   {widget('diagnostics',<>
    <Panel title="Диагностика и мониторинг" extraClass="rcs-diagnostics" action={<button type="button" onClick={()=>onOpen('history')}>Открыть мониторинг ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Playout Worker" state={results.worker?true:null} detail={results.worker?'Телеметрия отвечает':'Данные недоступны'}/>
@@ -179,9 +213,12 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     <button type="button" className="rcs-details-toggle" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>{details?'Скрыть сведения':'Подробности подключения и усилителя'}</button>
     {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p><RadioAmplifierControl token={token}/></div>}
    </Panel>
+   </>)}
+   {widget('actions',<>
    <Panel title="Быстрые действия" extraClass="rcs-actions">
     <div className="rcs-action-grid">{[['▦','Открыть сетку','schedule'],['☷','Плейлисты','playlists'],['♫','Медиатека','assets'],['⚙','Автоматизация','automation'],['▥','Мониторинг','history'],['▣','Оборудование','equipment']].map(([icon,label,id])=><button key={id} type="button" onClick={()=>onOpen(id)}><span>{icon}</span><strong>{label}</strong><span>↗</span></button>)}</div>
    </Panel>
+   </>)}
   </div>
  </div>;
 }
