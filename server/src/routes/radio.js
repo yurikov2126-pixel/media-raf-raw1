@@ -1058,8 +1058,10 @@ router.patch('/schedule/:id', safe(async (req, res) => {
 }));
 
 router.delete('/schedule/:id', safe(async (req, res) => {
-    const result = await prisma.radioScheduleSlot.deleteMany({ where: { id: req.params.id, startAt: { gt: new Date() } } });
-    if (!result.count) return res.status(404).json({ error: 'Будущий эфир не найден' });
+    const result = await prisma.radioScheduleSlot.deleteMany({
+        where: { id: req.params.id, endAt: { gt: new Date() } },
+    });
+    if (!result.count) return res.status(404).json({ error: 'Текущая или будущая передача не найдена' });
     res.json({ ok: true });
 }));
 

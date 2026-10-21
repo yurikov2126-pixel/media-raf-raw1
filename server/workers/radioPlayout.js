@@ -669,6 +669,24 @@ async function run() {
       }catch(error){state.lastError=error.message;}
       finally{polling=false;}
     },3000):null;
+    // An admin may remove an active broadcast. Revoke the old decoder promptly;
+    // the next cursor selection chooses an approved replacement or AutoDJ.
+    const activeSlotWatchdog=cursor.status==='SCHEDULED'&&cursor.slot?.id
+      ?setInterval(async()=>{
+        if(stopping||decoder!==child||publicLive.onAir)return;
+        try{
+          const slot=await prisma.radioScheduleSlot.findUnique({
+            where:{id:cursor.slot.id},select:{id:true,playlistId:true,endAt:true,
+              playlist:{select:{status:true}}}
+          });
+          if(!slot||slot.playlistId!==cursor.slot.playlistId||
+             slot.playlist?.status!=='APPROVED'||slot.endAt.getTime()<=Date.now()){
+            recordBoundary({source:'SCHEDULED',reason:'SLOT_REVOKED',
+              slotId:cursor.slot.id,trackId:asset.id});
+            child.kill('SIGTERM');
+          }
+        }catch(error){state.lastError='Schedule revocation check: '+error.message;}
+      },1000):null;
     let ended=false, exitCode=null;
     let truncatedAtBoundary=false;
     child.stderr.on('data',buf=>{const msg=buf.toString().slice(-500);if(!isIgnorableMediaNotice(msg))state.lastError=msg;});
@@ -1289,6 +1307,7 @@ async function run() {
       state.pcmStaging.droppedTailBytes+=pcmStaging.droppedTailBytes;
     }
     if(watchdog)clearInterval(watchdog);
+    if(activeSlotWatchdog)clearInterval(activeSlotWatchdog);
     // Flush natural ffmpeg exit before counting a completed track. Stream EOF
     // can arrive before the child 'close' event; without this the on-air
     // jingle interval counter would sometimes never advance.
