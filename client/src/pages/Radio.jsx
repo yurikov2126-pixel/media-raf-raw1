@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioControlRoom from '../components/RadioControlRoom.jsx';
+import RadioCommandOverview from '../components/RadioCommandOverview.jsx';
 import RadioAssetManager from '../components/RadioAssetManager.jsx';
 import RadioScheduleBoard from '../components/RadioScheduleBoard.jsx';
 import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
@@ -327,7 +328,7 @@ export default function Radio() {
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
-    {tab === 'home' && <RadioControlRoom token={token} onOpen={openWorkspace} />}
+    {tab === 'home' && <section className="space-y-5"><RadioCommandOverview slots={slots} playlists={playlists} assets={assets} onOpen={openWorkspace} onRefresh={refresh}/><RadioControlRoom token={token} onOpen={openWorkspace}/></section>}
     {tab === 'auto-playlists' && <section className="space-y-5"><RadioAutoPlaylistManager token={token} onPublished={refresh}/><RadioAutoPlaylistRecurrence token={token}/></section>}
     {tab === 'automation' && <section className="space-y-5">
       <RadioSourceControl token={token}/>
