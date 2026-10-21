@@ -23,7 +23,7 @@ import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
-import { isPcmBoundaryAligned } from '../src/lib/radioPcmBoundaryClock.js';
+import { isPcmBoundaryAligned, reverseAuthorityFresh } from '../src/lib/radioPcmBoundaryClock.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
@@ -705,7 +705,7 @@ async function run() {
               (preparedSlot.seekMs===reverseReservedTarget.seekMs&&!preparedSlot.iterator))&&
             !preparedSlot.child.killed&&
             (liveMixSession?.direction==='REVERSE'||
-              (!!reverseMixAuthorityAt&&Date.now()-reverseMixAuthorityAt<2200))&&
+              reverseAuthorityFresh({confirmedAtMs:reverseMixAuthorityAt,nowMs:Date.now(),boundaryMs:boundary}))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
             (liveMixSession||isPcmBoundaryAligned({remainingMs:remaining,emittedBytes,boundaryMs:boundary,nowMs:Date.now(),bytesPerMs:PCM_BYTES_PER_MS}))&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
@@ -769,6 +769,19 @@ async function run() {
               trackInitialRemainingMs:Math.round(remaining),
               emittedMs:Math.round(emittedBytes/PCM_BYTES_PER_MS),
               windowReached:emittedBytes>=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES),
+              reverseAuthorityAgeMs:cursor.status==='SCHEDULED'&&reverseMixAuthorityAt
+                ?Date.now()-reverseMixAuthorityAt:null,
+              pcmWindowStartMs:(fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES)/PCM_BYTES_PER_MS,
+              bytesUntilWindow:Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES-emittedBytes),
+              incomingChunkBytes:output.length,
+              sourceIdentityOk:cursor.status==='SCHEDULED'
+                ?reverseReservedTarget?.slotId===cursor.slot?.id&&preparedSlot?.assetId===reverseReservedTarget?.assetId
+                :preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot?.scheduledSlotId,
+              preparedSeekOk:cursor.status==='SCHEDULED'
+                ?preparedSlot?.seekMs===reverseReservedTarget?.seekMs&&!preparedSlot?.iterator
+                :!preparedSlot?.iterator,
+              decoderAlive:!!preparedSlot&&!preparedSlot.child.killed,
+
               at:new Date().toISOString()}));
           }
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
@@ -1032,7 +1045,7 @@ async function run() {
               // A finish-current-track handoff may shift the effective show end.
               // Accept only the exact internally recorded shift for this slot;
               // an arbitrary database/end-time mismatch remains fail-closed.
-              const dbEndMs=slot?.endAt?Date.parse(slot.endAt):NaN;
+              const dbEndMs=slot?.endAt instanceof Date?slot.endAt.getTime():NaN;
               const verifiedDelayedEnd=!!reverseReservedShift&&
                 reverseReservedTarget===reservation&&
                 reverseReservedShift.slotId===reservation.slotId&&
@@ -1062,8 +1075,8 @@ async function run() {
                   console.warn('RADIO_SLOT_END_MISMATCH',JSON.stringify({
                   slotId:reservation.slotId,
                   reservedEndMs:reservation.slotEndMs,
-                  databaseEndMs:slot?.endAt?Date.parse(slot.endAt):null,
-                  differenceMs:slot?.endAt?Date.parse(slot.endAt)-reservation.slotEndMs:null,
+                  databaseEndMs:Number.isFinite(dbEndMs)?dbEndMs:null,
+                  differenceMs:Number.isFinite(dbEndMs)?dbEndMs-reservation.slotEndMs:null,
                   shift:reverseReservedShift,
                   reservationStillActive:reverseReservedTarget===reservation,
                   activeShiftId:delayedScheduledSlot?.id||null,
