@@ -94,14 +94,14 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
      {nav}
     </aside>
     <main className="min-w-0 flex-1 space-y-5 p-3 pb-24 sm:p-5 sm:pb-6 lg:p-6">
-     <div className="radio-v3-context flex flex-wrap items-center justify-between gap-2">
+     {tab!=='home'&&<div className="radio-v3-context flex flex-wrap items-center justify-between gap-2">
       <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider opacity-50">{activeGroup?.title||'Радиостанция'}</p>
        <h1 className="text-lg font-bold sm:text-xl">{current.label}</h1></div>
       <div className="flex flex-wrap gap-2">
        <button type="button" onClick={()=>onSelect('home')} className="rounded-xl border border-current/15 px-3 py-2 text-xs">Сейчас в эфире</button>
        <button type="button" onClick={()=>onSelect('auto-playlists')} className="rounded-xl border border-current/15 px-3 py-2 text-xs">Автоплейлисты</button>
       </div>
-     </div>
+     </div>}
      {children}
     </main>
    </div>
