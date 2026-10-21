@@ -1,3 +1,4 @@
+import {validateRadioAutoPlaylistRule,materializeRadioAutoPlaylistRules} from '../lib/radioAutoPlaylistRecurrence.js';
 import {validateAutoPlaylistDraft} from '../lib/radioAutoPlaylistDraft.js';
 import {prepareAutoPlaylistPublication} from '../lib/radioAutoPlaylistPublication.js';
 import {validateAutoPlaylistInput,previewAutoPlaylist} from '../lib/radioAutoPlaylistService.js';
@@ -869,6 +870,35 @@ router.post('/schedule', safe(async (req, res) => {
 
 // Explicit one-off scheduling: atomically freeze an AutoPlaylist draft and
 // reserve its real PCM-accounted duration, never mutating the live slot.
+router.get('/auto-playlist-rules',safe(async (_req,res)=>{
+ res.json({rules:await prisma.radioAutoPlaylistRule.findMany({
+  include:{autoPlaylist:{select:{id:true,name:true}}},orderBy:{createdAt:'desc'},take:200})});
+}));
+router.post('/auto-playlist-rules',safe(async (req,res)=>{
+ let data;try{data=validateRadioAutoPlaylistRule(req.body);}
+ catch(e){return res.status(400).json({error:e.message});}
+ const autoPlaylistId=req.body?.autoPlaylistId;
+ if(typeof autoPlaylistId!=='string'||!await prisma.radioAutoPlaylist.findUnique({where:{id:autoPlaylistId}}))
+  return res.status(400).json({error:'Автоплейлист не найден'});
+ const rule=await prisma.radioAutoPlaylistRule.create({data:{...data,autoPlaylistId,createdBy:req.user.id}});
+ res.status(201).json({rule});
+}));
+router.patch('/auto-playlist-rules/:id',safe(async (req,res)=>{
+ let data;try{data=validateRadioAutoPlaylistRule(req.body);}
+ catch(e){return res.status(400).json({error:e.message});}
+ const result=await prisma.radioAutoPlaylistRule.updateMany({where:{id:req.params.id},data});
+ if(!result.count)return res.status(404).json({error:'Правило не найдено'});
+ res.json({ok:true});
+}));
+router.delete('/auto-playlist-rules/:id',safe(async (req,res)=>{
+ const result=await prisma.radioAutoPlaylistRule.deleteMany({where:{id:req.params.id}});
+ if(!result.count)return res.status(404).json({error:'Правило не найдено'});
+ res.json({ok:true});
+}));
+// Explicit preview of the upcoming scheduler. Does not erase any existing slots.
+router.post('/auto-playlist-rules/materialize',safe(async (_req,res)=>{
+ res.json({summary:await materializeRadioAutoPlaylistRules()});
+}));
 router.post('/schedule/auto-playlist',safe(async (req,res)=>{
  const id=req.body?.autoPlaylistId;
  const startAt=broadcastStart(req.body);

@@ -1380,5 +1380,30 @@ model RadioAutoPlaylist {
   createdBy       String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  recurrenceRules RadioAutoPlaylistRule[]
   @@index([sourceFolderId])
+}
+
+model RadioAutoPlaylistRule {
+  id String @id @default(cuid())
+  autoPlaylistId String
+  autoPlaylist RadioAutoPlaylist @relation(fields:[autoPlaylistId],references:[id],onDelete:Cascade)
+  weekdays Json @default("[]")
+  startMinute Int
+  enabled Boolean @default(false)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  slots RadioAutoPlaylistRuleSlot[]
+  @@index([enabled])
+}
+
+model RadioAutoPlaylistRuleSlot {
+  id String @id @default(cuid())
+  ruleId String
+  rule RadioAutoPlaylistRule @relation(fields:[ruleId],references:[id],onDelete:Cascade)
+  localDate String
+  slotId String @unique
+  createdAt DateTime @default(now())
+  @@unique([ruleId,localDate])
 }
