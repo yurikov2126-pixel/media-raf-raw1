@@ -1000,25 +1000,42 @@ async function run() {
                   select:{id:true},orderBy:{startAt:'asc'}
                 })
               ]);
+              // A finish-current-track handoff may shift the effective show end.
+              // Accept only the exact internally recorded shift for this slot;
+              // an arbitrary database/end-time mismatch remains fail-closed.
+              const dbEndMs=slot?.endAt?Date.parse(slot.endAt):NaN;
+              const verifiedDelayedEnd=!!delayedScheduledSlot&&
+                delayedScheduledSlot.id===reservation.slotId&&
+                delayedScheduledSlot.originalEndMs===dbEndMs&&
+                delayedScheduledSlot.actualEndMs===reservation.slotEndMs;
+              const endMatches=dbEndMs===reservation.slotEndMs||verifiedDelayedEnd;
               const reason=slot?.playlist?.status!=='APPROVED'?'SLOT_NOT_APPROVED':
-                Date.parse(slot.endAt)!==reservation.slotEndMs?'SLOT_END_CHANGED':
+                !endMatches?'SLOT_END_CHANGED':
                 !settings.enabled?'AUTO_DJ_DISABLED':
                 settings.playlistId!==reservation.playlistId?'PLAYLIST_CHANGED':
                 active?'NEXT_SCHEDULE_ACTIVE':
                 publicLive.onAir?'PUBLIC_LIVE':
                 reverseReservedTarget!==reservation?'RESERVATION_CHANGED':null;
-              if(!reason)reverseMixAuthorityAt=Date.now();
+              if(!reason){
+                reverseMixAuthorityAt=Date.now();
+                if(verifiedDelayedEnd)console.info('RADIO_REVERSE_AUTHORITY',JSON.stringify({
+                  status:'DELAYED_SLOT_CONFIRMED',slotId:reservation.slotId,
+                  originalEndMs:dbEndMs,actualEndMs:reservation.slotEndMs,
+                  at:new Date().toISOString()}));
+              }
               if(!reason||state.reverseHandover.lastAuthorityReason!==reason)
                 console.info('RADIO_REVERSE_AUTHORITY',JSON.stringify({
                   status:reason?'BLOCKED':'CONFIRMED',reason,
                   slotId:reservation.slotId,targetId:reservation.assetId,at:new Date().toISOString()}));
               if(reason==='SLOT_END_CHANGED'){
-                console.warn('RADIO_SLOT_END_MISMATCH',JSON.stringify({
+                if(state.reverseHandover.lastEndMismatchKey!==reservation.slotId+':'+dbEndMs)
+                  console.warn('RADIO_SLOT_END_MISMATCH',JSON.stringify({
                   slotId:reservation.slotId,
                   reservedEndMs:reservation.slotEndMs,
                   databaseEndMs:slot?.endAt?Date.parse(slot.endAt):null,
                   differenceMs:slot?.endAt?Date.parse(slot.endAt)-reservation.slotEndMs:null,
                   at:new Date().toISOString()}));
+                state.reverseHandover.lastEndMismatchKey=reservation.slotId+':'+dbEndMs;
               }
               state.reverseHandover.lastAuthorityReason=reason;
             }catch(error){state.lastError='Reverse crossfade authority: '+error.message;
