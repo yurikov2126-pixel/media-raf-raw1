@@ -29,8 +29,10 @@ def playback_report(primary, fallback, relay, now=None):
     else:
         playback = "STOPPED"
     # Packet freshness is only meaningful for the central stream, not local cache.
+    source = "CENTRAL" if alive_primary else "LOCAL_RESERVE" if alive_reserve else "NONE"
     return {
         "playback": playback,
+        "source": source,
         "outputDevice": "VLC (устройство вывода не подтверждено)",
         "lastPacketAgeMs": min(86400000, int(age * 1000)) if alive_primary and age is not None else None,
         "error": "LOCAL_STREAM_FAILED" if failed and not alive_reserve else "",
