@@ -1,21 +1,43 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {api} from '../api/client.js';
+import {mergePinnedAutoPlaylist} from './radioAutoPlaylistPinned.js';
 const duration=ms=>Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padStart(2,'0');
 export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSaved}){
  const [items,setItems]=useState(()=>Array.isArray(config.draftItems)?config.draftItems:[]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [addId,setAddId]=useState('');
+ const [dragIndex,setDragIndex]=useState(null);
+ const gesture=useRef(null);
  useEffect(()=>{setItems(Array.isArray(config.draftItems)?config.draftItems:[]);setError('');setNotice('');},[config.id,config.draftItems]);
  const call=(path,options)=>api('/radio'+path,{token,...options});
  const change=(fn)=>{setItems(previous=>fn(previous));setNotice('Есть несохранённые изменения');};
- const move=(index,to)=>change(a=>{if(to<0||to>=a.length)return a;const copy=[...a];copy.splice(to,0,...copy.splice(index,1));return copy;});
+ const move=(index,to)=>change(a=>{if(to<0||to>=a.length||index===to)return a;const copy=[...a];copy.splice(to,0,...copy.splice(index,1));return copy;});
+ const beginPointer=(event,index)=>{
+  if(event.pointerType==='mouse'&&event.button!==0)return;
+  event.preventDefault();event.stopPropagation();
+  gesture.current={pointerId:event.pointerId,from:index,to:index,startY:event.clientY,moved:false};
+  event.currentTarget.setPointerCapture(event.pointerId);
+  setDragIndex(index);
+ };
+ const trackPointer=event=>{
+  const active=gesture.current;
+  if(!active||event.pointerId!==active.pointerId)return;
+  if(Math.abs(event.clientY-active.startY)>5)active.moved=true;
+  const el=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-auto-draft-index]');
+  if(el){const next=Number(el.dataset.autoDraftIndex);if(Number.isInteger(next)){active.to=next;setDragIndex(next);}}
+ };
+ const endPointer=event=>{
+  const active=gesture.current;
+  if(!active||event.pointerId!==active.pointerId)return;
+  gesture.current=null;setDragIndex(null);
+  if(active.to!==active.from)move(active.from,active.to);
+ };
  const generate=async()=>{
-  if(items.some(x=>x.pinned)&&!window.confirm('Создать новый список? Закреплённые записи текущей версии будут заменены.'))return;
   setBusy(true);setError('');
   try{
    const data=await call('/auto-playlists/'+config.id+'/preview');
-   setItems(data.preview.items.map(x=>({...x,pinned:false,fadeMs:Math.round(x.fadeMs||0)})));
-   setNotice('Новая подборка сформирована. Сохраните её вручную.');
+   setItems(previous=>mergePinnedAutoPlaylist(previous,data.preview.items.map(x=>({...x,pinned:false,fadeMs:Math.round(x.fadeMs||0)}))));
+   setNotice('Подборка обновлена, закреплённые позиции сохранены. Сохраните черновик вручную.');
   }catch(e){setError(e.message);}finally{setBusy(false);}
  };
  const save=async()=>{
@@ -34,17 +56,17 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
   <div className="flex flex-wrap items-center justify-between gap-2"><div>
    <h3 className="font-semibold">Редактор: {config.name}</h3>
    <p className="text-xs opacity-65">{items.length} записей · около {duration(Math.max(0,raw))} · черновик не в эфире</p></div>
-   <button type="button" onClick={generate} disabled={busy} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Сформировать заново</button>
+   <button type="button" onClick={generate} disabled={busy} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Обновить, сохранив закреплённые</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {notice&&<p role="status" className="text-sm opacity-75">{notice}</p>}
   <div className="max-h-[480px] space-y-1 overflow-auto">
-   {items.map((item,index)=><div key={index} className="flex flex-wrap items-center gap-2 rounded-xl border border-current/10 p-2 text-sm">
-    <span className="w-7 opacity-50">{index+1}.</span>
+   {items.map((item,index)=><div key={index} data-auto-draft-index={index} className={"flex flex-wrap items-center gap-2 rounded-xl border p-2 text-sm "+(dragIndex===index?"border-violet-500 bg-violet-500/10":"border-current/10")}>
+    <button type="button" disabled={busy} aria-label={`Перетащить композицию ${index+1}`} title="Удерживайте и перетащите" onPointerDown={e=>beginPointer(e,index)} onPointerMove={trackPointer} onPointerUp={endPointer} onPointerCancel={endPointer}
+      style={{touchAction:'none'}} className="w-10 shrink-0 cursor-grab touch-none select-none rounded-lg border border-current/15 px-2 py-2 active:cursor-grabbing">⠿</button>
+    <span className="w-6 shrink-0 opacity-50">{index+1}.</span>
     <div className="min-w-40 flex-1"><p className="truncate font-medium">{assets.find(a=>a.id===item.assetId)?.name||item.assetId}</p>
      <p className="text-xs opacity-55">{item.kind==='JINGLE'?'Джингл':'Музыка'} · {duration(item.durationMs||0)}</p></div>
-    <button type="button" onClick={()=>move(index,index-1)} disabled={!index} aria-label="Выше" className="rounded-lg border border-current/15 px-2 py-1">↑</button>
-    <button type="button" onClick={()=>move(index,index+1)} disabled={index===items.length-1} aria-label="Ниже" className="rounded-lg border border-current/15 px-2 py-1">↓</button>
     <button type="button" onClick={()=>change(a=>a.map((x,i)=>i===index?{...x,pinned:!x.pinned}:x))}
      aria-label={item.pinned?'Открепить':'Закрепить'} className={'rounded-lg border px-2 py-1 '+(item.pinned?'border-violet-500 text-violet-700 dark:text-violet-300':'border-current/15')}>{item.pinned?'Закреплено':'Закрепить'}</button>
     <button type="button" onClick={()=>change(a=>a.filter((_,i)=>i!==index))} className="rounded-lg border border-red-500/30 px-2 py-1 text-red-700 dark:text-red-300">Убрать</button>
