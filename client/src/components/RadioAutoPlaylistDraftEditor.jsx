@@ -1,21 +1,22 @@
 import {useEffect,useState} from 'react';
 import {api} from '../api/client.js';
+import {mergePinnedAutoPlaylist} from './radioAutoPlaylistPinned.js';
 const duration=ms=>Math.floor(ms/60000)+':'+String(Math.floor(ms/1000)%60).padStart(2,'0');
 export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSaved}){
  const [items,setItems]=useState(()=>Array.isArray(config.draftItems)?config.draftItems:[]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [addId,setAddId]=useState('');
+ const [dragIndex,setDragIndex]=useState(null);
  useEffect(()=>{setItems(Array.isArray(config.draftItems)?config.draftItems:[]);setError('');setNotice('');},[config.id,config.draftItems]);
  const call=(path,options)=>api('/radio'+path,{token,...options});
  const change=(fn)=>{setItems(previous=>fn(previous));setNotice('Есть несохранённые изменения');};
  const move=(index,to)=>change(a=>{if(to<0||to>=a.length)return a;const copy=[...a];copy.splice(to,0,...copy.splice(index,1));return copy;});
  const generate=async()=>{
-  if(items.some(x=>x.pinned)&&!window.confirm('Создать новый список? Закреплённые записи текущей версии будут заменены.'))return;
   setBusy(true);setError('');
   try{
    const data=await call('/auto-playlists/'+config.id+'/preview');
-   setItems(data.preview.items.map(x=>({...x,pinned:false,fadeMs:Math.round(x.fadeMs||0)})));
-   setNotice('Новая подборка сформирована. Сохраните её вручную.');
+   setItems(previous=>mergePinnedAutoPlaylist(previous,data.preview.items.map(x=>({...x,pinned:false,fadeMs:Math.round(x.fadeMs||0)}))));
+   setNotice('Подборка обновлена, закреплённые позиции сохранены. Сохраните черновик вручную.');
   }catch(e){setError(e.message);}finally{setBusy(false);}
  };
  const save=async()=>{
@@ -34,13 +35,13 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
   <div className="flex flex-wrap items-center justify-between gap-2"><div>
    <h3 className="font-semibold">Редактор: {config.name}</h3>
    <p className="text-xs opacity-65">{items.length} записей · около {duration(Math.max(0,raw))} · черновик не в эфире</p></div>
-   <button type="button" onClick={generate} disabled={busy} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Сформировать заново</button>
+   <button type="button" onClick={generate} disabled={busy} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Обновить, сохранив закреплённые</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {notice&&<p role="status" className="text-sm opacity-75">{notice}</p>}
   <div className="max-h-[480px] space-y-1 overflow-auto">
-   {items.map((item,index)=><div key={index} className="flex flex-wrap items-center gap-2 rounded-xl border border-current/10 p-2 text-sm">
-    <span className="w-7 opacity-50">{index+1}.</span>
+   {items.map((item,index)=><div key={index} draggable={!busy} onDragStart={e=>{setDragIndex(index);e.dataTransfer.effectAllowed="move";}} onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";}} onDrop={e=>{e.preventDefault();if(dragIndex!==null)move(dragIndex,index);setDragIndex(null);}} onDragEnd={()=>setDragIndex(null)} className={"flex flex-wrap items-center gap-2 rounded-xl border p-2 text-sm "+(dragIndex===index?"border-violet-500 bg-violet-500/10":"border-current/10")}>
+    <span title="Перетащите мышью для перемещения" className="w-7 cursor-grab select-none opacity-50">⠿ {index+1}.</span>
     <div className="min-w-40 flex-1"><p className="truncate font-medium">{assets.find(a=>a.id===item.assetId)?.name||item.assetId}</p>
      <p className="text-xs opacity-55">{item.kind==='JINGLE'?'Джингл':'Музыка'} · {duration(item.durationMs||0)}</p></div>
     <button type="button" onClick={()=>move(index,index-1)} disabled={!index} aria-label="Выше" className="rounded-lg border border-current/15 px-2 py-1">↑</button>
