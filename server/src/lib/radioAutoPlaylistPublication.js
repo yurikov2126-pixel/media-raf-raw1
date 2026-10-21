@@ -7,6 +7,9 @@ import {validatePlaylistTransitions,validateTransitionSpans,scheduledPlaylistDur
 export function prepareAutoPlaylistPublication(draft,assets){
  const {items}=validateAutoPlaylistDraft(draft,assets);
  if(!items.length)throw new RangeError('Сначала сохраните непустой черновик');
+ if(items.length<3||items[0].kind!=='JINGLE'||items.at(-1).kind!=='JINGLE'||
+    !items.some(x=>x.kind==='MUSIC'))
+  throw new RangeError('Автоплейлист должен начинаться и заканчиваться джинглом и содержать музыку');
  const assetIds=items.map(x=>x.assetId);
  const transitions=items.slice(0,-1).map((source,index)=>{
   const target=items[index+1];
