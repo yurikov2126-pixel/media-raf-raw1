@@ -43,3 +43,18 @@ describe('Dual-deck PCM handover',()=>{
   expect(()=>mixDualDeckPcm(frame(10),frame(10,24),config)).toThrow();
  });
 });
+
+describe('live sCurve level behavior',()=>{
+ it('keeps an equal-amplitude in-phase crossover at the input level',()=>{
+  const pcm=mixDualDeckPcm(frame(22000,12000),frame(22000,12000),{overlapMs:250,curve:'sCurve'}).pcm;
+  expect(pcm.readInt16LE(0)).toBe(22000);
+  expect(pcm.readInt16LE(24000)).toBe(22000);
+  expect(pcm.readInt16LE(pcm.length-4)).toBe(22000);
+ });
+ it('starts and ends with a gentle envelope',()=>{
+  const pcm=mixDualDeckPcm(frame(16000,12000),frame(0,12000),{overlapMs:250,curve:'sCurve'}).pcm;
+  expect(pcm.readInt16LE(0)).toBe(16000);
+  expect(Math.abs(pcm.readInt16LE(4)-pcm.readInt16LE(0))).toBeLessThanOrEqual(1);
+  expect(Math.abs(pcm.readInt16LE(pcm.length-4))).toBeLessThanOrEqual(1);
+ });
+});
