@@ -748,6 +748,9 @@ async function run() {
                 !!prewarmed?.sourceAuthorityConfirmedAt,
               pcmLeftMs:Math.round(audioLeft),boundaryLeftMs:Math.round(timeLeft),
               driftMs:Math.round(audioLeft-timeLeft),
+              scheduledBoundaryMs:boundary,
+              trackInitialRemainingMs:Math.round(remaining),
+              emittedMs:Math.round(emittedBytes/PCM_BYTES_PER_MS),
               windowReached:emittedBytes>=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES),
               at:new Date().toISOString()}));
           }
@@ -1009,6 +1012,14 @@ async function run() {
                 console.info('RADIO_REVERSE_AUTHORITY',JSON.stringify({
                   status:reason?'BLOCKED':'CONFIRMED',reason,
                   slotId:reservation.slotId,targetId:reservation.assetId,at:new Date().toISOString()}));
+              if(reason==='SLOT_END_CHANGED'){
+                console.warn('RADIO_SLOT_END_MISMATCH',JSON.stringify({
+                  slotId:reservation.slotId,
+                  reservedEndMs:reservation.slotEndMs,
+                  databaseEndMs:slot?.endAt?Date.parse(slot.endAt):null,
+                  differenceMs:slot?.endAt?Date.parse(slot.endAt)-reservation.slotEndMs:null,
+                  at:new Date().toISOString()}));
+              }
               state.reverseHandover.lastAuthorityReason=reason;
             }catch(error){state.lastError='Reverse crossfade authority: '+error.message;
               console.warn('RADIO_REVERSE_AUTHORITY',JSON.stringify({status:'ERROR',reason:error.message,at:new Date().toISOString()}));}
