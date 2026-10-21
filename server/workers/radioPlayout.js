@@ -979,6 +979,13 @@ async function run() {
                   void warmSuccessor({nextTrackId:reservation.assetId,musicCount:0,
                     currentTrackId:asset.id,reverse:true});
                 }
+                console.info('RADIO_REVERSE_SHIFT_SNAPSHOT',JSON.stringify({
+                  slotId:reservation.slotId,reservedEndMs:reservation.slotEndMs,
+                  shift:reverseReservedShift,
+                  activeShiftId:delayedScheduledSlot?.id||null,
+                  activeShiftOriginalEndMs:delayedScheduledSlot?.originalEndMs??null,
+                  activeShiftActualEndMs:delayedScheduledSlot?.actualEndMs??null,
+                  at:new Date().toISOString()}));
                 state.reverseTargetReservation.reserved++;
                 state.reverseTargetReservation.last={status:'RESERVED',assetId:reservation.assetId,
                   slotId:reservation.slotId,at:new Date().toISOString()};
@@ -1042,6 +1049,9 @@ async function run() {
                   reservedEndMs:reservation.slotEndMs,
                   databaseEndMs:slot?.endAt?Date.parse(slot.endAt):null,
                   differenceMs:slot?.endAt?Date.parse(slot.endAt)-reservation.slotEndMs:null,
+                  shift:reverseReservedShift,
+                  reservationStillActive:reverseReservedTarget===reservation,
+                  activeShiftId:delayedScheduledSlot?.id||null,
                   at:new Date().toISOString()}));
                 state.reverseHandover.lastEndMismatchKey=reservation.slotId+':'+dbEndMs;
               }
