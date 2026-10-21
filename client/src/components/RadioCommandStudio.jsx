@@ -121,16 +121,15 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <div className="rcs-lufs-title"><strong>Громкость эфирного потока · EBU R128</strong><span>Серверный анализ · MP3 после кодирования</span></div>
       <div className="rcs-lufs-values rcs-lufs-three">
        {[
-        ['LUFS-M',loudness?.momentary,'Громкость за 400 мс'],
-        ['LUFS-I',loudness?.integrated,'Интегральная громкость с начала анализа'],
-        ['True Peak',loudness?.truePeak,'Пиковый уровень после передискретизации']
-       ].map(([name,value,hint])=><div key={name} title={hint}>
+        ['LUFS-M','momentary',loudness?.momentary,'Громкость за 400 мс',-60,0],
+        ['LUFS-I','integrated',loudness?.integrated,'Интегральная громкость с начала анализа',-60,0],
+        ['True Peak','truePeak',loudness?.truePeak,'Пиковый уровень после передискретизации',-40,0]
+       ].map(([name,key,value,hint,min,max])=><div key={name} title={hint}>
         <span>{name}</span><strong>{loudness?.status==='RUNNING'&&!loudness.stale&&Number.isFinite(value)?value.toFixed(1):'—'} <small>{name==='True Peak'?'dBTP':'LUFS'}</small></strong>
+        <div className="rcs-lufs-mini" role="img" aria-label={'График '+name+' за последние 40 измерений'}>
+         {lufsHistory.map((sample,i)=><i key={sample.at+'-'+i} style={{height:(Number.isFinite(sample[key])?Math.max(3,Math.min(100,(sample[key]-min)/(max-min)*100)):3)+'%'}} />)}
+        </div>
        </div>)}
-      </div>
-      <div className="rcs-lufs-chart" role="img" aria-label="Последние подтверждённые значения LUFS-M за период до семи минут">
-       {lufsHistory.map((sample,i)=><span key={sample.at+'-'+i} title={Number.isFinite(sample.momentary)?sample.momentary.toFixed(1)+' LUFS-M':'нет данных'} style={{height:(Number.isFinite(sample.momentary)?Math.max(4,Math.min(100,(sample.momentary+60)*2)):3)+'%'}}/>)}
-       {!lufsHistory.length&&<p>История появится после первых измерений</p>}
       </div>
       <p>{!loudness?.enabled?'Серверный измеритель отключён.':loudness.stale||loudness.status!=='RUNNING'?'Измерения недоступны либо устарели.':'Измерения выходного MP3-потока сервером (обновление интерфейса раз в 10 с).'} Значения не измеряют аналоговый выход усилителя.</p>
      </div>
