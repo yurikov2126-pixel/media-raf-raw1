@@ -23,8 +23,9 @@ export function fitAutoPlaylistWindow(items,tracks,{targetMs,fadeMs=2000,minTrac
  const measure=autoPlaylistDraftDuration;
  // The initial generator is greedy. A bounded tail-search fills remaining time
  // using complete songs and respects the selected separation when possible.
- let result=base,remaining=targetMs-measure(result),added=0;
- if(remaining<0)return {items:result,durationMs:measure(result),remainingMs:remaining,warnings:['OVER_TARGET']};
+ const closing=base.at(-1)?.kind==='JINGLE'?base.pop():null;
+ let result=base,remaining=targetMs-measure(result)-(closing?.durationMs||0),added=0;
+ if(remaining<0)return {items:closing?[...result,closing]:result,durationMs:measure(result)+(closing?.durationMs||0),remainingMs:remaining,warnings:['OVER_TARGET']};
  for(let step=0;step<20&&remaining>=15000;step++){
   const history=result.filter(x=>x.kind==='MUSIC');
   const blockedIds=new Set((minTrackGap?history.slice(-minTrackGap):[]).map(x=>x.assetId));
@@ -41,6 +42,7 @@ export function fitAutoPlaylistWindow(items,tracks,{targetMs,fadeMs=2000,minTrac
   result=[...result,{assetId:fit.asset.id,kind:'MUSIC',durationMs:fit.asset.durationMs,fadeMs:fit.fade}];
   remaining-=fit.net;added++;
  }
+ if(closing)result=[...result,closing];
  const warnings=[];
  if(remaining>0)warnings.push('WINDOW_UNFILLED');
  return {items:result,durationMs:measure(result),remainingMs:remaining,added,warnings};
