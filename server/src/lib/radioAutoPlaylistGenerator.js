@@ -64,9 +64,10 @@ export function generateRadioAutoPlaylist({tracks,jingles=[],durationMs,fadeMs=2
    }
   }
  }
+ if(!songCount)return {items:[],durationMs:0,warnings:['NO_MUSIC_FIT']};
  items.push({assetId:closing.id,kind:'JINGLE',durationMs:closing.durationMs,fadeMs:0});
  elapsed+=closing.durationMs;
- if(!songCount)warnings.push('NO_MUSIC_FIT');
+
  if(elapsed<durationMs)warnings.push('UNFILLED_DURATION');
  return {items,durationMs:Math.round(elapsed),warnings};
 }
