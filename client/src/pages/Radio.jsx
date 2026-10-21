@@ -4,8 +4,8 @@ import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
-import RadioControlRoom from '../components/RadioControlRoom.jsx';
-import RadioCommandOverview from '../components/RadioCommandOverview.jsx';
+import RadioCommandStudio from '../components/RadioCommandStudio.jsx';
+
 import RadioAssetManager from '../components/RadioAssetManager.jsx';
 import RadioScheduleBoard from '../components/RadioScheduleBoard.jsx';
 import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
@@ -331,7 +331,7 @@ export default function Radio() {
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
-    {tab === 'home' && <section className="space-y-5"><RadioControlRoom token={token} onOpen={openWorkspace}/><RadioCommandOverview slots={slots} playlists={playlists} assets={assets} onOpen={openWorkspace} onRefresh={refresh}/></section>}
+    {tab === 'home' && <RadioCommandStudio token={token} slots={slots} playlists={playlists} assets={assets} onOpen={openWorkspace}/>}
     {tab === 'auto-playlists' && <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-current/15 p-3">
         <p className="text-sm opacity-75">Генерация и редактор плейлистов. Регулярное расписание теперь управляется в Центре автоматизации.</p>
