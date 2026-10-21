@@ -614,6 +614,8 @@ async function run() {
     let sourceClockPlanned=false;
     let reverseClockPlanned=false;
     let crossfadeAuthorityRequested=false;
+    let overlapDecisionLogged=false;
+    let reverseAuthorityInFlight=false;
     // An admin can disable Auto-DJ or schedule a new broadcast while a song is playing.
     // Interrupt the decoder promptly; the shared encoder stays alive.
     let polling=false;
@@ -731,6 +733,23 @@ async function run() {
                 remainingMs:Math.round(remaining-emittedBytes/PCM_BYTES_PER_MS),
                 boundaryInMs:Math.round(boundary-Date.now()),at:new Date().toISOString()}));
             state.liveOverlapGate.last={reason,mode:cursor.status,at:new Date().toISOString()};
+          }
+          if(LIVE_SOURCE_CROSSFADE_ENABLED&&!overlapDecisionLogged&&
+            Number.isFinite(boundary)&&boundary-Date.now()<=2400&&boundary-Date.now()>0&&
+            (cursor.status==='SCHEDULED'?isLastScheduledTrack:cursor.status==='AUTO_DJ')){
+            overlapDecisionLogged=true;
+            const timeLeft=boundary-Date.now();
+            const audioLeft=(fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS;
+            console.info('RADIO_CROSSFADE_DECISION',JSON.stringify({
+              direction:cursor.status==='SCHEDULED'?'REVERSE':'FORWARD',
+              eligible,slotId:cursor.slot?.id||null,targetId:prewarmed?.assetId||null,
+              prepared:!!prewarmed,
+              authority:cursor.status==='SCHEDULED'?!!reverseMixAuthorityAt:
+                !!prewarmed?.sourceAuthorityConfirmedAt,
+              pcmLeftMs:Math.round(audioLeft),boundaryLeftMs:Math.round(timeLeft),
+              driftMs:Math.round(audioLeft-timeLeft),
+              windowReached:emittedBytes>=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES),
+              at:new Date().toISOString()}));
           }
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
           const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
@@ -962,7 +981,8 @@ async function run() {
         }
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
           isLastScheduledTrack&&reverseReservedTarget&&prewarmed?.assetId===reverseReservedTarget.assetId&&
-          !reverseMixAuthorityAt&&boundary-Date.now()<=4500&&boundary-Date.now()>1700){
+          !reverseMixAuthorityAt&&!reverseAuthorityInFlight&&boundary-Date.now()<=4500&&boundary-Date.now()>1700){
+          reverseAuthorityInFlight=true;
           const reservation=reverseReservedTarget;
           void (async()=>{
             try{
@@ -977,12 +997,22 @@ async function run() {
                   select:{id:true},orderBy:{startAt:'asc'}
                 })
               ]);
-              if(slot?.playlist?.status==='APPROVED'&&
-                Date.parse(slot.endAt)===reservation.slotEndMs&&
-                settings.enabled&&settings.playlistId===reservation.playlistId&&
-                !active&&!publicLive.onAir&&reverseReservedTarget===reservation)
-                reverseMixAuthorityAt=Date.now();
-            }catch(error){state.lastError='Reverse crossfade authority: '+error.message;}
+              const reason=slot?.playlist?.status!=='APPROVED'?'SLOT_NOT_APPROVED':
+                Date.parse(slot.endAt)!==reservation.slotEndMs?'SLOT_END_CHANGED':
+                !settings.enabled?'AUTO_DJ_DISABLED':
+                settings.playlistId!==reservation.playlistId?'PLAYLIST_CHANGED':
+                active?'NEXT_SCHEDULE_ACTIVE':
+                publicLive.onAir?'PUBLIC_LIVE':
+                reverseReservedTarget!==reservation?'RESERVATION_CHANGED':null;
+              if(!reason)reverseMixAuthorityAt=Date.now();
+              if(!reason||state.reverseHandover.lastAuthorityReason!==reason)
+                console.info('RADIO_REVERSE_AUTHORITY',JSON.stringify({
+                  status:reason?'BLOCKED':'CONFIRMED',reason,
+                  slotId:reservation.slotId,targetId:reservation.assetId,at:new Date().toISOString()}));
+              state.reverseHandover.lastAuthorityReason=reason;
+            }catch(error){state.lastError='Reverse crossfade authority: '+error.message;
+              console.warn('RADIO_REVERSE_AUTHORITY',JSON.stringify({status:'ERROR',reason:error.message,at:new Date().toISOString()}));}
+            finally{reverseAuthorityInFlight=false;}
           })();
         }
         // Reverse transition admission is observational until the AutoDJ
