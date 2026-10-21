@@ -6,6 +6,7 @@
  */
 import 'dotenv/config';
 import http from 'node:http';
+import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -181,12 +182,14 @@ function authorized(req) {
   const a=Buffer.from(provided), b=Buffer.from(secret);
   return a.length===b.length && timingSafeEqual(a,b);
 }
+const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUFS_ENABLED!=='false'});
 function startEncoder() {
   encoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin',
     '-f','s16le','-ar','48000','-ac','2','-i','pipe:0',
     '-c:a','libmp3lame','-b:a','128k','-ar','48000','-f','mp3','-write_xing','0','pipe:1'],
     {stdio:['pipe','pipe','pipe']});
   encoder.stdout.on('data',data=>{
+    loudnessMeter.observe(data);
     state.frames+=1;
     for(const res of listeners) {
       if(!res.write(data)) {
@@ -1514,7 +1517,7 @@ const server=http.createServer((req,res)=>{
   }
   if(req.url==='/health') {
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({...state,connected:listeners.size}));return;
+    res.end(JSON.stringify({...state,loudness:loudnessMeter.snapshot(),connected:listeners.size}));return;
   }
   if(req.url!=='/stream') {res.writeHead(404).end();return;}
   res.writeHead(200,{'Content-Type':'audio/mpeg','Cache-Control':'private, no-store, no-transform',
