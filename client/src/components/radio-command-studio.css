@@ -228,3 +228,12 @@
 .radio-workspace .rcs-agent-row small{font-size:11px;color:var(--rc-sub)}
 .radio-workspace .rcs-health-warning{border:1px solid #e5a03f;background:#fef3c7;color:#7c3408;border-radius:10px;padding:11px;margin-top:12px;font-size:12px;font-weight:650}
 [data-theme="dark"] .radio-workspace .rcs-health-warning,.dark .radio-workspace .rcs-health-warning{background:#43321f;color:#fde68a;border-color:#b78342}
+
+
+.radio-workspace .rcs-agent-audio-list{display:grid;gap:7px;margin-top:12px}
+.radio-workspace .rcs-audio-caption{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:750;color:var(--rc-sub)}
+.radio-workspace .rcs-agent-audio-row{display:grid;grid-template-columns:1fr 1.5fr;gap:4px 10px;padding:11px;border:1px solid var(--rc-border);background:var(--rc-alt);border-radius:10px;color:var(--rc-ink)}
+.radio-workspace .rcs-agent-audio-row strong{font-size:12px}
+.radio-workspace .rcs-agent-audio-row span{font-size:12px}
+.radio-workspace .rcs-agent-audio-row small{grid-column:1/-1;font-size:11px;color:var(--rc-sub)}
+@media(max-width:520px){.radio-workspace .rcs-agent-audio-row{grid-template-columns:1fr}}
