@@ -332,6 +332,26 @@ router.post('/auto-playlists/:id/publish',safe(async (req,res)=>{
  if(published.error)return res.status(published.status).json({error:published.error});
  res.status(201).json(published);
 }));
+router.post('/auto-playlists/:id/generate-playlist',safe(async (req,res)=>{
+ const generated=await prisma.$transaction(async tx=>{
+  const config=await tx.radioAutoPlaylist.findUnique({where:{id:req.params.id}});
+  if(!config)return {status:404,error:'Автоплейлист не найден'};
+  const preview=await previewAutoPlaylist(config,{db:tx,seed:String(Date.now())});
+  if(!preview.items.length)return {status:400,error:'Нет подходящих треков или обязательных джинглов'};
+  const ids=[...new Set(preview.items.map(item=>item.assetId))];
+  const assets=await tx.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
+  let ready;
+  try{ready=prepareAutoPlaylistPublication(preview.items.map(item=>({...item,pinned:false,fadeMs:Math.round(item.fadeMs||0)})),assets);}
+  catch(e){if(e instanceof TypeError||e instanceof RangeError)return {status:400,error:e.message};throw e;}
+  const playlist=await tx.radioPlaylist.create({data:{name:config.name+' · '+new Date().toISOString().slice(0,16).replace('T',' '),
+   description:'Автоплейлист · сгенерированная версия',status:'APPROVED',createdBy:req.user.id,
+   approvedBy:req.user.id,approvedAt:new Date()}});
+  await writeRadioPlaylistItems(tx,playlist.id,ready.assetIds,ready.transitions);
+  return {playlist:await tx.radioPlaylist.findUnique({where:{id:playlist.id},include:playlistInclude})};
+ },{maxWait:10000,timeout:60000});
+ if(generated.error)return res.status(generated.status).json({error:generated.error});
+ res.status(201).json(generated);
+}));
 router.post('/auto-playlists/preview',safe(async (req,res)=>{
  let input;
  try{input=validateAutoPlaylistInput(req.body);}
@@ -870,6 +890,16 @@ router.post('/schedule', safe(async (req, res) => {
 
 // Explicit one-off scheduling: atomically freeze an AutoPlaylist draft and
 // reserve its real PCM-accounted duration, never mutating the live slot.
+router.get('/auto-playlist-automation',safe(async (_req,res)=>{
+ const settings=await prisma.radioAutoPlaylistAutomationSettings.findUnique({where:{id:1}});
+ res.json({enabled:settings?.enabled===true});
+}));
+router.put('/auto-playlist-automation',safe(async (req,res)=>{
+ if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Некорректный переключатель'});
+ const settings=await prisma.radioAutoPlaylistAutomationSettings.upsert({where:{id:1},
+  create:{id:1,enabled:req.body.enabled},update:{enabled:req.body.enabled}});
+ res.json({enabled:settings.enabled});
+}));
 router.get('/auto-playlist-rules',safe(async (_req,res)=>{
  res.json({rules:await prisma.radioAutoPlaylistRule.findMany({
   include:{autoPlaylist:{select:{id:true,name:true}}},orderBy:{createdAt:'desc'},take:200})});

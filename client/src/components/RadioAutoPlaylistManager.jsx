@@ -5,7 +5,7 @@ const defaults={name:'',sourceFolderId:'',includeChildren:true,targetMinutes:60,
  minTrackGap:20,minArtistGap:3,jingleAssetIds:[],jingleEvery:3,fadeMs:2000};
 const field='w-full rounded-xl border border-current/20 bg-white/75 p-2.5 text-slate-900 dark:bg-slate-900/80 dark:text-slate-100';
 const time=ms=>{const total=Math.round(ms/1000);return Math.floor(total/60)+':'+String(total%60).padStart(2,'0');};
-export default function RadioAutoPlaylistManager({token}){
+export default function RadioAutoPlaylistManager({token,onPublished}){
  const [list,setList]=useState([]),[folders,setFolders]=useState([]),[assets,setAssets]=useState([]);
  const [current,setCurrent]=useState({...defaults}),[editing,setEditing]=useState(null);
  const [preview,setPreview]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -29,6 +29,11 @@ export default function RadioAutoPlaylistManager({token}){
   const r=await call('/auto-playlists/preview',{method:'POST',body:current});
   setPreview(r.preview);
  });
+ const generateAndSave=p=>execute(async()=>{
+  const result=await call('/auto-playlists/'+p.id+'/generate-playlist',{method:'POST'});
+  setNotice('Плейлист «'+result.playlist.name+'» добавлен в общий список плейлистов');
+  await onPublished?.();
+ });
  const remove=p=>{if(!window.confirm('Удалить настройки автоплейлиста «'+p.name+'»?'))return;
   execute(async()=>{await call('/auto-playlists/'+p.id,{method:'DELETE'});await reload();setNotice('Автоплейлист удалён');});
  };
@@ -48,6 +53,7 @@ export default function RadioAutoPlaylistManager({token}){
     <h3 className="font-semibold">{p.name}</h3>
     <p className="mt-1 text-xs opacity-70">{p.sourceFolder?.name||'Папка'} · {p.targetMinutes} мин · интервал по исполнителю {p.minArtistGap}</p>
     <div className="mt-3 flex gap-2">
+     <button type="button" disabled={busy} onClick={()=>generateAndSave(p)} className="rounded-lg bg-violet-700 px-3 py-2 text-sm text-white">Сгенерировать в плейлисты</button>
      <button type="button" onClick={()=>{setDraftId(p.id);setOpen(false);}} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Редактор</button>
      <button type="button" onClick={()=>edit(p)} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Настроить</button>
      <button type="button" onClick={()=>remove(p)} disabled={busy} className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-700 dark:text-red-300">Удалить</button>
@@ -55,7 +61,7 @@ export default function RadioAutoPlaylistManager({token}){
    </article>)}
   </div>
   {!list.length&&!open&&<p className="rounded-xl border border-dashed border-current/20 p-5 text-center text-sm opacity-70">Автоплейлистов пока нет. Создайте первый из существующей папки аудиотеки.</p>}
-  {draftId&&list.find(p=>p.id===draftId)&&<RadioAutoPlaylistDraftEditor token={token} config={list.find(p=>p.id===draftId)} assets={assets} onSaved={reload}/>}
+  {draftId&&list.find(p=>p.id===draftId)&&<RadioAutoPlaylistDraftEditor token={token} config={list.find(p=>p.id===draftId)} assets={assets} onSaved={reload} onPublished={onPublished}/>}
   {open&&<form onSubmit={save} className="space-y-4 rounded-2xl border border-current/20 p-4">
    <div className="flex items-center justify-between gap-2"><h3 className="font-semibold">{editing?'Настройка автоплейлиста':'Создание автоплейлиста'}</h3>
     <button type="button" onClick={()=>setOpen(false)} className="rounded-lg border border-current/20 px-3 py-1.5 text-sm">Закрыть</button></div>
