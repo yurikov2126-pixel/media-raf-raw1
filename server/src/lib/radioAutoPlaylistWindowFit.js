@@ -27,8 +27,8 @@ export function fitAutoPlaylistWindow(items,tracks,{targetMs,fadeMs=2000,minTrac
  if(remaining<0)return {items:result,durationMs:measure(result),remainingMs:remaining,warnings:['OVER_TARGET']};
  for(let step=0;step<20&&remaining>=15000;step++){
   const history=result.filter(x=>x.kind==='MUSIC');
-  const blockedIds=new Set(history.slice(-minTrackGap).map(x=>x.assetId));
-  const blockedArtists=new Set(history.slice(-minArtistGap).map(x=>artist(byId.get(x.assetId))).filter(Boolean));
+  const blockedIds=new Set((minTrackGap?history.slice(-minTrackGap):[]).map(x=>x.assetId));
+  const blockedArtists=new Set((minArtistGap?history.slice(-minArtistGap):[]).map(x=>artist(byId.get(x.assetId))).filter(Boolean));
   let candidates=eligible.filter(x=>!blockedIds.has(x.id)&&(!artist(x)||!blockedArtists.has(artist(x))));
   if(!candidates.length)break;
   const prior=result.at(-1);
