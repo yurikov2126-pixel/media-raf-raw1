@@ -192,3 +192,29 @@
 @keyframes rcs-cover-pulse{50%{box-shadow:0 0 0 14px #a78bfa1a,0 0 30px #a78bfa6c}}
 @media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-areas:"onair" "queue" "meters" "sources" "diagnostics" "actions";grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-queue{min-height:0}.radio-workspace .rcs-meter-panel .rcs-meter-gauge{height:125px}}
 @media(prefers-reduced-motion:reduce){.radio-workspace .rcs-cover-interactive.is-playing .rcs-cover-play{animation:none}.radio-workspace .rcs-cover-play{transition:none}}
+
+
+/* Command Studio: fixed cover positioning and independent stacked right rail. */
+.radio-workspace .rcs-grid{grid-template-areas:"onair right" "sources right" "diagnostics actions";align-items:start}
+.radio-workspace .rcs-onair{grid-area:onair;align-self:start;height:auto}
+.radio-workspace .rcs-right-rail{grid-area:right;min-width:0;display:flex;flex-direction:column;gap:14px;align-self:start}
+.radio-workspace .rcs-right-rail .rcs-queue{min-height:0;max-height:none;align-self:auto}
+.radio-workspace .rcs-right-rail .rcs-meter-panel{margin:0;min-height:0;align-self:auto}
+.radio-workspace .rcs-right-rail .rcs-meter-row{flex:none}
+.radio-workspace .rcs-right-rail .rcs-meter-state{margin-top:10px}
+.radio-workspace .rcs-right-rail .rcs-meter-gauge{height:155px}
+.radio-workspace .rcs-right-rail .rcs-meter-panel{background:var(--rc-panel);border:1px solid var(--rc-border);color:var(--rc-ink);box-shadow:0 8px 30px #0a18300a}
+.radio-workspace .rcs-right-rail .rcs-meter-panel .rcs-lufs-title strong,
+.radio-workspace .rcs-right-rail .rcs-meter-label,
+.radio-workspace .rcs-right-rail .rcs-meter-number{color:var(--rc-ink)}
+.radio-workspace .rcs-right-rail .rcs-lufs-title span,
+.radio-workspace .rcs-right-rail .rcs-meter-unit,
+.radio-workspace .rcs-right-rail .rcs-meter-state{color:var(--rc-sub)}
+.radio-workspace .rcs-right-rail .rcs-meter{background:var(--rc-alt);border:1px solid var(--rc-border);border-radius:12px;padding:10px 5px}
+.radio-workspace .rcs-cover-interactive{display:grid;place-items:center;position:relative;flex-shrink:0;overflow:hidden}
+.radio-workspace .rcs-cover-interactive>span:first-child{grid-area:1/1}
+.radio-workspace .rcs-cover-play{position:absolute;inset:auto;top:50%;left:50%;right:auto;bottom:auto;margin:0;display:grid;place-items:center;transform:translate(-50%,-50%);line-height:1;padding:0;aspect-ratio:1}
+.radio-workspace .rcs-cover-play:hover{transform:translate(-50%,-50%) scale(1.08)}
+.radio-workspace .rcs-cover-play:focus-visible{outline:3px solid #fff;outline-offset:4px}
+@media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-areas:"onair" "right" "sources" "diagnostics" "actions";grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-right-rail{gap:12px}}
+@media(prefers-reduced-motion:reduce){.radio-workspace .rcs-cover-play:hover{transform:translate(-50%,-50%)}}
