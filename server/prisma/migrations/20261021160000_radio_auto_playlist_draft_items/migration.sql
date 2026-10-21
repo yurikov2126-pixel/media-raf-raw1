@@ -1,0 +1,1 @@
+ALTER TABLE "RadioAutoPlaylist" ADD COLUMN "draftItems" JSONB;
