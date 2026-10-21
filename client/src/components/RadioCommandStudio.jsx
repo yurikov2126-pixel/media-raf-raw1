@@ -27,7 +27,31 @@ function Panel({title,action,children,extraClass=''}) {
 export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[],onOpen}){
  const [now,setNow]=useState(()=>Date.now());
  const {audioRef,playing,reconnecting,error:playbackError,audioEvents}=useRadioStreamRecovery();
- const [playerOpen,setPlayerOpen]=useState(false);
+ const [volume,setVolume]=useState(0.8);
+ const [muted,setMuted]=useState(false);
+ const [lastPlaying,setLastPlaying]=useState(null);
+ useEffect(()=>{if(audioRef.current)audioRef.current.volume=volume;},[]);
+ const [playerBusy,setPlayerBusy]=useState(false);
+ const togglePlayback=async()=>{
+  const node=audioRef.current;if(!node)return;
+  if(!node.paused){node.pause();return;}
+  setPlayerBusy(true);
+  try{await node.play();}catch{/* Browser playback policy or network error surfaced by audio events. */}
+  finally{setPlayerBusy(false);}
+ };
+ const reconnect=async()=>{
+  const node=audioRef.current;if(!node)return;
+  const shouldResume=!node.paused||playing;
+  node.pause();node.src='/api/radio-agent/listen?manual='+Date.now();node.load();
+  if(shouldResume){try{await node.play();}catch{/* Visible audio error below. */}}
+ };
+ const updateVolume=value=>{
+  const next=Number(value);setVolume(next);
+  if(audioRef.current)audioRef.current.volume=next;
+  if(next>0){setMuted(false);if(audioRef.current)audioRef.current.muted=false;}
+ };
+ const toggleMute=()=>{setMuted(v=>{if(audioRef.current)audioRef.current.muted=!v;return !v;});};
+
  const [report,setReport]=useState(null),[metadata,setMetadata]=useState(null),[worker,setWorker]=useState(null),[amp,setAmp]=useState(null);
  const [results,setResults]=useState({}),[loadedAt,setLoadedAt]=useState(null),[refreshing,setRefreshing]=useState(false);
  const [queueOpen,setQueueOpen]=useState(true),[tab,setTab]=useState('tracks'),[details,setDetails]=useState(false);
@@ -73,12 +97,22 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <small>Прогресс расчётный по данным Worker; не подтверждает слышимый сигнал на удалённом устройстве.</small>
      </div>
     </div>
-    <div className="rcs-listen">
-     <div className="rcs-listen-header"><div><strong>Контрольное прослушивание</strong><small>{playing?'MP3-поток воспроизводится':reconnecting?'Переподключение к потоку': 'Локальное прослушивание эфира'}</small></div>
-      <button type="button" aria-expanded={playerOpen} onClick={()=>setPlayerOpen(v=>!v)}>{playerOpen?'Скрыть плеер':'Открыть плеер'} ↗</button>
+    <div className="rcs-player" aria-label="Контрольный эфирный плеер">
+     <div className="rcs-player-main">
+      <button className="rcs-player-play" type="button" disabled={playerBusy} onClick={()=>void togglePlayback()} aria-label={playing?'Приостановить локальное прослушивание':'Слушать эфир'}>{playing?'Ⅱ':'▶'}</button>
+      <div className="rcs-player-info"><div><strong>ПОЛИТЕХ-FM · LIVE</strong><span className={'rcs-player-dot '+(playing?'playing':'')}/></div>
+       <p role="status">{reconnecting?'Переподключение…':playing?'Поток воспроизводится':playbackError?'Ошибка подключения':'Прослушивание выключено'}</p>
+      </div>
+      <div className="rcs-player-controls">
+       <button type="button" onClick={toggleMute} aria-label={muted?'Включить звук':'Выключить звук'} title={muted?'Включить звук':'Выключить звук'}>{muted||volume===0?'◌':'♫'}</button>
+       <input aria-label="Громкость локального прослушивания" type="range" min="0" max="1" step="0.05" value={volume} onChange={e=>updateVolume(e.target.value)}/>
+       <button type="button" onClick={()=>void reconnect()} title="Переподключиться" aria-label="Переподключить MP3-поток">↻</button>
+       <a href="/radio/live" target="_blank" rel="noopener noreferrer" title="Открыть эфирный плеер в отдельной вкладке" aria-label="Открыть эфирный плеер в отдельной вкладке">↗</a>
+      </div>
      </div>
-     {playerOpen&&<div className="rcs-listen-player"><audio ref={audioRef} {...audioEvents} preload="none" controls src="/api/radio-agent/listen" aria-label="Прослушивание публичного MP3-потока Политех-FM"/>
-      {playbackError&&<p role="status">{playbackError}</p>}<small>Управление здесь изменяет только локальное воспроизведение в браузере, не эфир.</small></div>}
+     <audio ref={audioRef} {...audioEvents} preload="none" src="/api/radio-agent/listen" onPlaying={()=>setLastPlaying(Date.now())} aria-label="MP3-поток Политех-FM"/>
+     {playbackError&&<p className="rcs-player-error" role="alert">{playbackError}</p>}
+     <div className="rcs-player-footer"><small>Локальное прослушивание — не управление эфиром</small><small>{lastPlaying?'Последнее воспроизведение: '+clock(lastPlaying):'Ожидание запуска'}</small></div>
     </div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
    </section>
