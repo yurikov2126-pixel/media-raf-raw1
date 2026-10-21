@@ -4,10 +4,12 @@ import {spawn} from 'node:child_process';
 
 export function parseEbur128Frame(line){
  if(!/(?:^|\s)M:\s/.test(line)||!/(?:^|\s)I:\s/.test(line))return null;
- const value=name=>{const match=line.match(new RegExp('(?:^|\\\\s)'+name+':\\\\s*(-?(?:\\\\d+(?:\\\\.\\\\d+)?|inf))','i'));return match?Number(match[1]):null;};
+ const read=pattern=>{const match=line.match(pattern);return match?Number(match[1]):null;};
+ const m=read(/(?:^|\s)M:\s*(-?(?:\d+(?:\.\d+)?|inf))/i);
+ const i=read(/(?:^|\s)I:\s*(-?(?:\d+(?:\.\d+)?|inf))/i);
  const peakPart=line.match(/(?:^|\s)TPK:\s*([^a-zA-Z]*?)(?:\s*dBFS|$)/);
  const peaks=peakPart?peakPart[1].trim().split(/\s+/).map(Number).filter(Number.isFinite):[];
- return {momentary:value('M'),integrated:value('I'),truePeak:peaks.length?Math.max(...peaks):null};
+ return {momentary:m,integrated:i,truePeak:peaks.length?Math.max(...peaks):null};
 }
 
 export function createStationLufsMeter({ffmpeg='ffmpeg',enabled=true}={}){
