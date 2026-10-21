@@ -20,6 +20,7 @@ class AudioTelemetryTests(unittest.TestCase):
         result=playback_report(primary,None,Relay(8),100)
         self.assertEqual(result['playback'],'BUFFERING')
         self.assertEqual(result['lastPacketAgeMs'],8000)
+        self.assertEqual(result['source'],'CENTRAL')
 
     def test_reserve_is_not_reported_as_central_packets(self):
         reserve=Mock()
@@ -27,10 +28,12 @@ class AudioTelemetryTests(unittest.TestCase):
         result=playback_report(None,reserve,Relay(None),100)
         self.assertEqual(result['playback'],'PLAYING')
         self.assertIsNone(result['lastPacketAgeMs'])
+        self.assertEqual(result['source'],'LOCAL_RESERVE')
 
     def test_failed_relay(self):
         result=playback_report(None,None,Relay(None,True),100)
         self.assertEqual(result['playback'],'ERROR')
+        self.assertEqual(result['source'],'NONE')
 
     @patch('audio_telemetry.urlopen')
     def test_authorized_http_report(self,open_mock):
