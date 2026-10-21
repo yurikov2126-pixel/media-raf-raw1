@@ -3,7 +3,7 @@ import {api} from '../api/client.js';
 import RadioPlayoutHistory from './RadioPlayoutHistory.jsx';
 
 const fmt=date=>date?new Date(date).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
-const number=value=>Number.isFinite(Number(value))?Number(value):'—';
+const number=value=>value===null||value===undefined?'—':Number.isFinite(Number(value))?Number(value):'—';
 const badge=(ok,unknown=false)=>unknown?'Нет данных':ok?'Работает':'Требует внимания';
 export default function RadioMonitoringCenter({token,onOpen}){
  const [data,setData]=useState(null),[worker,setWorker]=useState(null),[error,setError]=useState('');
