@@ -94,7 +94,14 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
    <section className="rcs-onair">
     <div className="rcs-onair-top"><span className="rcs-eyebrow">● СЕЙЧАС В ЭФИРЕ</span><span className="rcs-source">{results.metadata?sourceName[source]||source:'Источник неизвестен'}</span><span className="rcs-onair-indicator">{running?'ON AIR':'НЕ ПОДТВЕРЖДЕНО'}</span></div>
     <div className="rcs-track">
-     <div className="rcs-cover" aria-hidden="true"><span>♫</span></div>
+     <div className={'rcs-cover rcs-cover-interactive '+(playing?'is-playing':'')}>
+      <span aria-hidden="true">♫</span>
+      <button className="rcs-cover-play" type="button" disabled={playerBusy} onClick={()=>void togglePlayback()}
+       aria-label={playing?'Остановить прослушивание эфира':'Слушать эфир'} title={playing?'Пауза':'Слушать эфир'}>
+       {reconnecting||playerBusy?'…':playing?'Ⅱ':'▶'}
+      </button>
+      <span className="rcs-cover-live">{playing?'● СЛУШАЕТЕ':'LIVE'}</span>
+     </div>
      <div className="rcs-track-main"><p className="rcs-eyebrow">ФАКТИЧЕСКИЕ МЕТАДАННЫЕ PCM</p><h2>{formatTrack}</h2>
       <p>{metadata?.slot?.name||metadata?.slot?.playlist?.name||'Политех-FM'}</p>
       <div className="rcs-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-label="Позиция текущей записи"><span style={{width:progress+'%'}}/></div>
@@ -102,25 +109,16 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <small>Прогресс расчётный по данным Worker; не подтверждает слышимый сигнал на удалённом устройстве.</small>
      </div>
     </div>
-    <div className="rcs-monitor-layout">
-    <div className="rcs-player" aria-label="Контрольный эфирный плеер">
-     <div className="rcs-player-main">
-      <button className="rcs-player-play" type="button" disabled={playerBusy} onClick={()=>void togglePlayback()} aria-label={playing?'Приостановить локальное прослушивание':'Слушать эфир'}>{playing?'Ⅱ':'▶'}</button>
-      <div className="rcs-player-info"><div><strong>ПОЛИТЕХ-FM · LIVE</strong><span className={'rcs-player-dot '+(playing?'playing':'')}/></div>
-       <p role="status">{reconnecting?'Переподключение…':playing?'Поток воспроизводится':playbackError?'Ошибка подключения':'Прослушивание выключено'}</p>
-      </div>
-      <div className="rcs-player-controls">
-       <button type="button" onClick={toggleMute} aria-label={muted?'Включить звук':'Выключить звук'} title={muted?'Включить звук':'Выключить звук'}>{muted||volume===0?'◌':'♫'}</button>
-       <input aria-label="Громкость локального прослушивания" type="range" min="0" max="1" step="0.05" value={volume} onChange={e=>updateVolume(e.target.value)}/>
-       <button type="button" onClick={()=>void reconnect()} title="Переподключиться" aria-label="Переподключить MP3-поток">↻</button>
-       <a href="/radio/live" target="_blank" rel="noopener noreferrer" title="Открыть эфирный плеер в отдельной вкладке" aria-label="Открыть эфирный плеер в отдельной вкладке">↗</a>
-      </div>
-     </div>
-     <audio ref={audioRef} {...audioEvents} preload="none" src="/api/radio-agent/listen" onPlaying={()=>setLastPlaying(Date.now())} aria-label="MP3-поток Политех-FM"/>
-     {playbackError&&<p className="rcs-player-error" role="alert">{playbackError}</p>}
-     <div className="rcs-player-footer"><small>Локальное прослушивание — не управление эфиром</small><small>{lastPlaying?'Последнее воспроизведение: '+clock(lastPlaying):'Ожидание запуска'}</small></div>
-    </div>
-    <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical" aria-label="Серверный измеритель громкости">
+    <audio ref={audioRef} {...audioEvents} preload="none" src="/api/radio-agent/listen" onPlaying={()=>setLastPlaying(Date.now())} aria-label="MP3-поток Политех-FM"/>
+    <div className="rcs-cover-player-status" role="status">{reconnecting?'Переподключаем поток…':playing?'● Контрольное прослушивание активно':playbackError?'Ошибка прослушивания: '+playbackError:'Нажмите Play на обложке для прослушивания'}</div>
+    <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
+   </section>
+   <Panel title="Далее в эфире" extraClass="rcs-queue" action={<button type="button" onClick={()=>setQueueOpen(x=>!x)} aria-expanded={queueOpen}>{queueOpen?'Свернуть':'Развернуть'}</button>}>
+    <div className="rcs-tabs" role="tablist" aria-label="Тип очереди"><button type="button" role="tab" aria-selected={tab==='tracks'} className={tab==='tracks'?'selected':''} onClick={()=>setTab('tracks')}>Ближайшие передачи</button><button type="button" role="tab" aria-selected={tab==='grid'} className={tab==='grid'?'selected':''} onClick={()=>setTab('grid')}>Сетка</button></div>
+    {queueOpen&&(tab==='tracks'?<RadioUpcomingQueue entries={upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>:<div className="rcs-schedule-items">{planned.map(s=><button type="button" key={s.id} onClick={()=>onOpen('schedule')}><span>{fmt(s.startAt)}</span><strong>{s.title||s.name||s.playlist?.name||'Передача'}</strong><span>↗</span></button>)}{!planned.length&&<p>Нет предстоящих событий в загруженной сетке.</p>}</div>)}
+    <p className="rcs-disclaimer">Очередь отображает утверждённый план, а не ручное управление текущим PCM.</p>
+   </Panel>
+       <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical" aria-label="Серверный измеритель громкости">
      <div className="rcs-lufs-title"><strong>Уровень эфира · EBU R128</strong><span>Серверный MP3</span></div>
      <div className="rcs-meter-row">
       {[
@@ -143,14 +141,6 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <p className="rcs-meter-state" role="status">{!results.worker?'Нет связи с PCM Worker':!loudness?'Сервер не передал loudness. Проверьте перезапуск Worker после обновления.':loudness.status==='DISABLED'?'Измеритель отключён (RADIO_LUFS_ENABLED=false).':loudness.status==='OVERLOADED'?'Анализатор перегружен: '+(loudness.lastError||'нет подробностей'):loudness.status==='UNAVAILABLE'?'FFmpeg-анализатор недоступен: '+(loudness.lastError||'неизвестная ошибка'):loudness.stale?'Показания устарели. Последний замер: '+(loudness.updatedAt||'нет'):loudness.status==='STARTING'?'Анализатор запускается; получено MP3-частей: '+(loudness.receivedChunks??0):'Серверный замер активен; данные MP3 после кодирования.'}</p>
     </aside>
-    </div>
-    <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
-   </section>
-   <Panel title="Далее в эфире" extraClass="rcs-queue" action={<button type="button" onClick={()=>setQueueOpen(x=>!x)} aria-expanded={queueOpen}>{queueOpen?'Свернуть':'Развернуть'}</button>}>
-    <div className="rcs-tabs" role="tablist" aria-label="Тип очереди"><button type="button" role="tab" aria-selected={tab==='tracks'} className={tab==='tracks'?'selected':''} onClick={()=>setTab('tracks')}>Ближайшие передачи</button><button type="button" role="tab" aria-selected={tab==='grid'} className={tab==='grid'?'selected':''} onClick={()=>setTab('grid')}>Сетка</button></div>
-    {queueOpen&&(tab==='tracks'?<RadioUpcomingQueue entries={upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>:<div className="rcs-schedule-items">{planned.map(s=><button type="button" key={s.id} onClick={()=>onOpen('schedule')}><span>{fmt(s.startAt)}</span><strong>{s.title||s.name||s.playlist?.name||'Передача'}</strong><span>↗</span></button>)}{!planned.length&&<p>Нет предстоящих событий в загруженной сетке.</p>}</div>)}
-    <p className="rcs-disclaimer">Очередь отображает утверждённый план, а не ручное управление текущим PCM.</p>
-   </Panel>
    <Panel title="Источники и управление" extraClass="rcs-sources" action={<button type="button" onClick={()=>onOpen('automation')}>Автоматизация ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Основной источник" state={results.metadata?running:null} detail={results.metadata?sourceName[source]||source:'Нет телеметрии'} onClick={()=>onOpen('automation')}/>
