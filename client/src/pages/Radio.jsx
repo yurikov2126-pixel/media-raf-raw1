@@ -14,6 +14,7 @@ import '../styles/radio-workspace.css';
 import RadioSourceControl from '../components/RadioSourceControl.jsx';
 import RadioEsp32Registry from '../components/RadioEsp32Registry.jsx';
 import RadioAutoDjSettings from '../components/RadioAutoDjSettings.jsx';
+import RadioAutomationConsole from '../components/RadioAutomationConsole.jsx';
 import RadioAutoPlaylistManager from '../components/RadioAutoPlaylistManager.jsx';
 import RadioAutoPlaylistRecurrence from '../components/RadioAutoPlaylistRecurrence.jsx';
 import RadioRotationSettings from '../components/RadioRotationSettings.jsx';
@@ -331,15 +332,11 @@ export default function Radio() {
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
     {tab === 'home' && <section className="space-y-5"><RadioCommandOverview slots={slots} playlists={playlists} assets={assets} onOpen={openWorkspace} onRefresh={refresh}/><RadioControlRoom token={token} onOpen={openWorkspace}/></section>}
     {tab === 'auto-playlists' && <section className="space-y-5"><RadioAutoPlaylistManager token={token} onPublished={refresh}/><RadioAutoPlaylistRecurrence token={token}/></section>}
-    {tab === 'automation' && <section className="space-y-5">
-      <RadioSourceControl token={token}/>
-      <RadioAutoDjSettings token={token} playlists={playlists}/>
-      <RadioRotationSettings token={token} assets={assets}/>
-      <RadioJingleSettings token={token} assets={assets}/>
-    </section>}
-    {tab === 'processing' && <section className="space-y-5">
-      <RadioAudioProcessing token={token}/>
-      <RadioCueEditor token={token} assets={assets}/>
+    {tab === 'automation' && <RadioAutomationConsole token={token} playlists={playlists} assets={assets} onOpen={openWorkspace}/>} 
+    {tab === 'processing' && <section className="space-y-3 rounded-2xl border border-current/15 p-4">
+      <h2 className="text-lg font-semibold">Настройки звука перенесены в Центр автоматизации</h2>
+      <p className="text-sm opacity-70">Обработка звука и точки воспроизведения находятся в разделе «Автоматизация и звук». Старую ссылку сохранили для совместимости.</p>
+      <button type="button" className="self-start rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white" onClick={()=>openWorkspace('automation')}>Открыть центр автоматизации →</button>
     </section>}
     {tab === 'assets' && <RadioAssetManager assets={assets} token={token} refresh={refresh} preview={preview} rename={renameAsset} remove={deleteAsset} uploadPanel={<><details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
         <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
