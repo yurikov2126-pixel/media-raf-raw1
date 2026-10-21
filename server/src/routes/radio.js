@@ -332,6 +332,26 @@ router.post('/auto-playlists/:id/publish',safe(async (req,res)=>{
  if(published.error)return res.status(published.status).json({error:published.error});
  res.status(201).json(published);
 }));
+router.post('/auto-playlists/:id/generate-playlist',safe(async (req,res)=>{
+ const generated=await prisma.$transaction(async tx=>{
+  const config=await tx.radioAutoPlaylist.findUnique({where:{id:req.params.id}});
+  if(!config)return {status:404,error:'Автоплейлист не найден'};
+  const preview=await previewAutoPlaylist(config,{db:tx,seed:String(Date.now())});
+  if(!preview.items.length)return {status:400,error:'Нет подходящих треков или обязательных джинглов'};
+  const ids=[...new Set(preview.items.map(item=>item.assetId))];
+  const assets=await tx.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
+  let ready;
+  try{ready=prepareAutoPlaylistPublication(preview.items.map(item=>({...item,pinned:false,fadeMs:Math.round(item.fadeMs||0)})),assets);}
+  catch(e){if(e instanceof TypeError||e instanceof RangeError)return {status:400,error:e.message};throw e;}
+  const playlist=await tx.radioPlaylist.create({data:{name:config.name+' · '+new Date().toISOString().slice(0,16).replace('T',' '),
+   description:'Автоплейлист · сгенерированная версия',status:'APPROVED',createdBy:req.user.id,
+   approvedBy:req.user.id,approvedAt:new Date()}});
+  await writeRadioPlaylistItems(tx,playlist.id,ready.assetIds,ready.transitions);
+  return {playlist:await tx.radioPlaylist.findUnique({where:{id:playlist.id},include:playlistInclude})};
+ },{maxWait:10000,timeout:60000});
+ if(generated.error)return res.status(generated.status).json({error:generated.error});
+ res.status(201).json(generated);
+}));
 router.post('/auto-playlists/preview',safe(async (req,res)=>{
  let input;
  try{input=validateAutoPlaylistInput(req.body);}
