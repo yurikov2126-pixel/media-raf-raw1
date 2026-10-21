@@ -338,3 +338,15 @@
 .radio-workspace.radio-v4 :is(.radio-v3-overview,.radio-v41-detail,.radio-v41-control) button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}
 @media(max-width:640px){.radio-workspace.radio-v4 .radio-v41-tabs button{padding:.6rem .8rem}.radio-workspace.radio-v4 .radio-v41-detail{padding:.85rem}}
 @media(prefers-reduced-motion:reduce){.radio-workspace.radio-v4 .radio-v41-tabs button{transition:none}}
+
+
+/* RADIO 4.2: live queue uses the same independent light/dark palette. */
+.radio-workspace.radio-v4 .radio-v42-queue{width:100%;background:var(--r-card);color:var(--r-text);border-color:var(--r-line)}
+.radio-workspace.radio-v4 .radio-v42-queue-item{background:var(--r-card);color:var(--r-text);border-color:var(--r-line)}
+.radio-workspace.radio-v4 .radio-v42-queue-item>button:hover{background:var(--r-hover)}
+.radio-workspace.radio-v4 .radio-v42-queue-time{background:var(--r-soft);color:var(--r-accent)}
+.radio-workspace.radio-v4 .radio-v42-queue-details{background:var(--r-soft);color:var(--r-text);border-color:var(--r-line)}
+.radio-workspace.radio-v4 .radio-v42-queue-details ol li:nth-child(odd){background:var(--r-card)}
+.radio-workspace.radio-v4 .radio-v42-queue-details button{background:var(--r-card);color:var(--r-accent);border-color:var(--r-line)}
+.radio-workspace.radio-v4 .radio-v42-queue-details button:hover{background:var(--r-hover)}
+.radio-workspace.radio-v4 .radio-v42-queue :is(.opacity-55,.opacity-65,.opacity-70,.opacity-80){color:var(--r-muted);opacity:1}

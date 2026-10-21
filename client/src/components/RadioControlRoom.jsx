@@ -60,8 +60,8 @@ export default function RadioControlRoom({token,onOpen}){
    {activePanel==='next'&&<>
     <h3>Следующая композиция</h3>
     <p>{onAir?.nextTrack?[onAir.nextTrack.artist,onAir.nextTrack.title].filter(Boolean).join(' — ')||onAir.nextTrack.name:'Следующая композиция пока не определена'}</p>
-    <button type="button" onClick={()=>setQueueExpanded(v=>!v)} aria-expanded={queueExpanded}>{queueExpanded?'Свернуть расписание':'Показать ближайшие передачи'}</button>
-    {queueExpanded&&<RadioUpcomingQueue entries={data?.upcoming} onSchedule={()=>onOpen('schedule')}/>}
+    <button type="button" onClick={()=>setQueueExpanded(v=>!v)} aria-expanded={queueExpanded}>{queueExpanded?'Свернуть расписание':'Показать очередь передач'}</button>
+    {queueExpanded&&<RadioUpcomingQueue entries={data?.upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>}
    </>}
    {activePanel==='grid'&&<><h3>Эфирная сетка</h3><p>{upcoming?((upcoming.name||upcoming.playlist?.name||'Передача')+' · '+displayTime(upcoming.startAt)):'Ближайшие передачи не назначены'}</p><button type="button" onClick={()=>onOpen('schedule')}>Открыть календарь ↗</button></>}
    {activePanel==='source'&&<><h3>Фактический источник</h3><p>{onAir?.available?modes[onAir.mode]||onAir.mode:'Нет подтверждения источника'}</p><button type="button" onClick={()=>onOpen('automation')}>Настройки AutoDJ ↗</button></>}
@@ -180,7 +180,6 @@ export default function RadioControlRoom({token,onOpen}){
    </div>
   </section>
   </>}
-  <RadioUpcomingQueue entries={data?.upcoming} onSchedule={()=>onOpen('schedule')}/>
   <div className="text-right"><button type="button" onClick={()=>setDetails(v=>!v)} className="rounded-xl border border-current/10 px-4 py-2 text-xs opacity-75">{details?'Скрыть сведения':'Дополнительные сведения о состоянии'}</button></div>
   {details&&<section className="rounded-xl border border-current/10 p-4 text-sm"><p>Центральный Worker: {onAir?.mode||'недоступен'} · Расчётный курсор: {data?.cursor?.status||'—'} · Поток: {data?.stream?.status||'—'}</p><p className="mt-2 opacity-65">Данные поступают от существующих API. Мониторинг не включает эфир и не управляет усилителем.</p></section>}
  </div>;
