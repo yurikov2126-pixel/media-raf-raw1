@@ -30,6 +30,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
  const [volume,setVolume]=useState(0.8);
  const [muted,setMuted]=useState(false);
  const [lastPlaying,setLastPlaying]=useState(null);
+ useEffect(()=>{if(audioRef.current)audioRef.current.volume=volume;},[]);
  const [playerBusy,setPlayerBusy]=useState(false);
  const togglePlayback=async()=>{
   const node=audioRef.current;if(!node)return;
