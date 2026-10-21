@@ -13,13 +13,18 @@ export function generateRadioAutoPlaylist({tracks,jingles=[],durationMs,fadeMs=2
  const ids=new Set();const unique=songs.filter(a=>!ids.has(a.id)&&ids.add(a.id));
  const jinglesValid=(jingles||[]).filter(valid).filter(a=>!ids.has(a.id));
  if(!unique.length)return {items:[],durationMs:0,warnings:['NO_VALID_TRACKS']};
+ if(!jinglesValid.length)return {items:[],durationMs:0,warnings:['REQUIRED_BOUNDARY_JINGLES_MISSING']};
+ const opening=jinglesValid[0];
+ const closing=jinglesValid.length>1?jinglesValid[1]:jinglesValid[0];
+ const musicBudget=durationMs-opening.durationMs-closing.durationMs;
+ if(musicBudget<15000)return {items:[],durationMs:0,warnings:['NO_ROOM_FOR_BOUNDARY_JINGLES']};
  // Stable seeded shuffle, reproducible during preview and snapshot creation.
  let state=2166136261;
  for(const char of String(seed))state=Math.imul(state^char.charCodeAt(0),16777619)>>>0;
  const next=()=>((state=Math.imul(state,1664525)+1013904223>>>0)/4294967296);
  const pool=[...unique];
  if(order!=='ORDERED')for(let i=pool.length-1;i>0;i--){const j=Math.floor(next()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
- const items=[],warnings=[];let elapsed=0,songCount=0,jingleIndex=0;
+ const items=[{assetId:opening.id,kind:'JINGLE',durationMs:opening.durationMs,fadeMs:0}],warnings=[];let elapsed=opening.durationMs,songCount=0,jingleIndex=0;
  const history=[];const recentArtists=[];
  const normalizeArtist=value=>typeof value==='string'?value.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('ru-RU'):'';
  const artistOf=x=>normalizeArtist(x.artist??x.tags?.artist);
@@ -38,21 +43,30 @@ export function generateRadioAutoPlaylist({tracks,jingles=[],durationMs,fadeMs=2
     order==='SMART'?options.reduce((best,x,i)=>((history.lastIndexOf(x.id)<history.lastIndexOf(options[best].id))?i:best),0):
       Math.floor(next()*options.length);
   const song=options[index];
-  const transition=items.length?Math.min(fadeMs,song.durationMs/2,items.at(-1).durationMs/2):0;
+  const transition=items.at(-1)?.kind==='MUSIC'?Math.min(fadeMs,song.durationMs/2,items.at(-1).durationMs/2):0;
   const net=song.durationMs-transition;
-  if(elapsed+net>durationMs)break; // never truncate tracks silently
+  if(elapsed+net+closing.durationMs>durationMs){
+   const fit=options.filter(x=>{const fade=items.at(-1)?.kind==='MUSIC'?Math.min(fadeMs,x.durationMs/2,items.at(-1).durationMs/2):0;return elapsed+x.durationMs-fade+closing.durationMs<=durationMs;}).sort((a,b)=>b.durationMs-a.durationMs)[0];
+   if(!fit)break;
+   const altFade=items.at(-1)?.kind==='MUSIC'?Math.min(fadeMs,fit.durationMs/2,items.at(-1).durationMs/2):0;
+   items.push({assetId:fit.id,kind:'MUSIC',durationMs:fit.durationMs,fadeMs:altFade});
+   elapsed+=fit.durationMs-altFade;songCount++;history.push(fit.id);if(artistOf(fit))recentArtists.push(artistOf(fit));
+   continue;
+  } // reserve mandatory closing jingle
   items.push({assetId:song.id,kind:'MUSIC',durationMs:song.durationMs,fadeMs:transition});
   elapsed+=net;songCount++;history.push(song.id);if(artistOf(song))recentArtists.push(artistOf(song));
   if(jingleEvery&&songCount%jingleEvery===0&&jinglesValid.length){
    const jingle=jinglesValid[jingleIndex++%jinglesValid.length];
    // Jingles default to a clean sequential insertion, avoiding ducking until designed.
-   if(elapsed+jingle.durationMs<=durationMs){
+   if(elapsed+jingle.durationMs+closing.durationMs<=durationMs){
     items.push({assetId:jingle.id,kind:'JINGLE',durationMs:jingle.durationMs,fadeMs:0});
     elapsed+=jingle.durationMs;
    }
   }
  }
- if(!jinglesValid.length&&jingleEvery)warnings.push('NO_JINGLES');
+ items.push({assetId:closing.id,kind:'JINGLE',durationMs:closing.durationMs,fadeMs:0});
+ elapsed+=closing.durationMs;
+ if(!songCount)warnings.push('NO_MUSIC_FIT');
  if(elapsed<durationMs)warnings.push('UNFILLED_DURATION');
  return {items,durationMs:Math.round(elapsed),warnings};
 }
