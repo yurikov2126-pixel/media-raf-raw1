@@ -109,6 +109,7 @@ let scheduledEntryOverlap=null;
 let reverseReservedTarget=null;
 let reverseReservedShift=null;
 let reverseMixAuthorityAt=null;
+let reverseMixAuthorityReservation=null;
 let reverseReserveInFlight=false;
 state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null,blocked:0,reasons:{}};
 function reversePrewarmBlocked(reason,details={}){
@@ -275,6 +276,9 @@ async function current() {
       autoDjEnabled:settings.enabled,publicLive:publicLive.onAir
     });
     reverseReservedTarget=null;
+    reverseMixAuthorityAt=null;
+    reverseMixAuthorityReservation=null;
+    reverseReservedShift=null;
     if(decision.valid&&(!reservation.consumedFrames || (prewarmed?.assetId===reservation.assetId&&
       prewarmed.seekMs===reservation.seekMs+reservation.consumedFrames/48&&
       !prewarmed.child.killed))){
@@ -705,7 +709,8 @@ async function run() {
               (preparedSlot.seekMs===reverseReservedTarget.seekMs&&!preparedSlot.iterator))&&
             !preparedSlot.child.killed&&
             (liveMixSession?.direction==='REVERSE'||
-              reverseAuthorityFresh({confirmedAtMs:reverseMixAuthorityAt,nowMs:Date.now(),boundaryMs:boundary}))&&
+              (reverseMixAuthorityReservation===reverseReservedTarget&&
+                reverseAuthorityFresh({confirmedAtMs:reverseMixAuthorityAt,nowMs:Date.now(),boundaryMs:boundary})))&&
             remaining>=LIVE_SOURCE_OVERLAP_MS&&!liveMixDisabled&&
             (liveMixSession||isPcmBoundaryAligned({remainingMs:remaining,emittedBytes,boundaryMs:boundary,nowMs:Date.now(),bytesPerMs:PCM_BYTES_PER_MS}))&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
@@ -769,6 +774,8 @@ async function run() {
               trackInitialRemainingMs:Math.round(remaining),
               emittedMs:Math.round(emittedBytes/PCM_BYTES_PER_MS),
               windowReached:emittedBytes>=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES),
+              reverseAuthorityReservationMatches:cursor.status==='SCHEDULED'
+                ?reverseMixAuthorityReservation===reverseReservedTarget:null,
               reverseAuthorityAgeMs:cursor.status==='SCHEDULED'&&reverseMixAuthorityAt
                 ?Date.now()-reverseMixAuthorityAt:null,
               pcmWindowStartMs:(fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES)/PCM_BYTES_PER_MS,
@@ -998,6 +1005,10 @@ async function run() {
               if(!reservation){reversePrewarmBlocked('RESERVATION_REJECTED');return;}
               if(reservation&&!reverseReservedTarget){
                 reverseReservedTarget=reservation;
+                // Never reuse authorization from the preceding scheduled show.
+                reverseMixAuthorityAt=null;
+                reverseMixAuthorityReservation=null;
+                state.reverseHandover.lastAuthorityReason=null;
                 // Capture the verified delayed-show clock while its cursor is active.
                 // It can change/clear before asynchronous authorization runs.
                 reverseReservedShift=delayedShiftProof?.slotId===reservation.slotId&&
@@ -1061,6 +1072,7 @@ async function run() {
                 reverseReservedTarget!==reservation?'RESERVATION_CHANGED':null;
               if(!reason){
                 reverseMixAuthorityAt=Date.now();
+                reverseMixAuthorityReservation=reservation;
                 if(verifiedDelayedEnd)console.info('RADIO_REVERSE_AUTHORITY',JSON.stringify({
                   status:'DELAYED_SLOT_CONFIRMED',slotId:reservation.slotId,
                   originalEndMs:dbEndMs,actualEndMs:reservation.slotEndMs,
