@@ -6,6 +6,8 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
  const [items,setItems]=useState(()=>Array.isArray(config.draftItems)?config.draftItems:[]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [addId,setAddId]=useState('');
+ const [catalogueQuery,setCatalogueQuery]=useState('');
+ const [addAt,setAddAt]=useState('end');
  const [dragIndex,setDragIndex]=useState(null);
  const gesture=useRef(null);
  useEffect(()=>{setItems(Array.isArray(config.draftItems)?config.draftItems:[]);setError('');setNotice('');},[config.id,config.draftItems]);
@@ -57,7 +59,9 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
   }catch(e){setError(e.message);}finally{setBusy(false);}
  };
  const add=()=>{const a=assets.find(x=>x.id===addId);if(!a)return;
-  change(old=>[...old,{assetId:a.id,kind:'MUSIC',pinned:false,fadeMs:config.fadeMs||0,durationMs:a.durationMs}]);setAddId('');};
+  change(old=>{const updated=[...old];const position=addAt==='end'?updated.length:Number(addAt);
+   updated.splice(Math.max(0,Math.min(updated.length,position)),0,{assetId:a.id,kind:'MUSIC',pinned:false,fadeMs:config.fadeMs||0,durationMs:a.durationMs});
+   return updated;});setAddId('');};
  const raw=items.reduce((sum,x,i)=>sum+(x.durationMs||assets.find(a=>a.id===x.assetId)?.durationMs||0)-
   (i&&x.kind==='MUSIC'&&items[i-1].kind==='MUSIC'?x.fadeMs||0:0),0);
  return <div className="space-y-3 rounded-2xl border border-current/15 p-3 sm:p-4">
@@ -68,24 +72,33 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {notice&&<p role="status" className="text-sm opacity-75">{notice}</p>}
-  <div className="max-h-[480px] space-y-1 overflow-auto">
+  <div className="space-y-1">
    {items.map((item,index)=><div key={index} data-auto-draft-index={index} className={"flex flex-wrap items-center gap-2 rounded-xl border p-2 text-sm "+(dragIndex===index?"border-violet-500 bg-violet-500/10":"border-current/10")}>
     <button type="button" disabled={busy} aria-label={`Перетащить композицию ${index+1}`} title="Удерживайте и перетащите" onPointerDown={e=>beginPointer(e,index)} onPointerMove={trackPointer} onPointerUp={endPointer} onPointerCancel={endPointer}
       style={{touchAction:'none'}} className="w-10 shrink-0 cursor-grab touch-none select-none rounded-lg border border-current/15 px-2 py-2 active:cursor-grabbing">⠿</button>
     <span className="w-6 shrink-0 opacity-50">{index+1}.</span>
     <div className="min-w-40 flex-1"><p className="truncate font-medium">{assets.find(a=>a.id===item.assetId)?.name||item.assetId}</p>
      <p className="text-xs opacity-55">{item.kind==='JINGLE'?'Джингл':'Музыка'} · {duration(item.durationMs||0)}</p></div>
+    <select aria-label={`Тип записи ${index+1}`} value={item.kind} onChange={e=>change(a=>a.map((x,i)=>i===index?{...x,kind:e.target.value,fadeMs:e.target.value==='JINGLE'?0:x.fadeMs}:x))} className="rounded-lg border border-current/15 bg-white p-1 text-slate-900 dark:bg-slate-900 dark:text-white"><option value="MUSIC">Музыка</option><option value="JINGLE">Джингл</option></select>
     <button type="button" onClick={()=>change(a=>a.map((x,i)=>i===index?{...x,pinned:!x.pinned}:x))}
      aria-label={item.pinned?'Открепить':'Закрепить'} className={'rounded-lg border px-2 py-1 '+(item.pinned?'border-violet-500 text-violet-700 dark:text-violet-300':'border-current/15')}>{item.pinned?'Закреплено':'Закрепить'}</button>
     <button type="button" onClick={()=>change(a=>a.filter((_,i)=>i!==index))} className="rounded-lg border border-red-500/30 px-2 py-1 text-red-700 dark:text-red-300">Убрать</button>
    </div>)}
   </div>
-  <div className="flex flex-wrap gap-2">
+  <div className="space-y-3 rounded-xl border border-current/15 p-3">
+   <h4 className="font-semibold">Добавить композицию из аудиотеки</h4>
+   <div className="grid gap-2 sm:grid-cols-2">
+    <label className="text-sm">Поиск по названию<input className="mt-1 w-full rounded-xl border border-current/20 bg-transparent p-2" value={catalogueQuery} onChange={e=>setCatalogueQuery(e.target.value)} placeholder="Название композиции"/></label>
+    <label className="text-sm">Вставить после позиции<select className="mt-1 w-full rounded-xl border border-current/20 bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white" value={addAt} onChange={e=>setAddAt(e.target.value)}>
+     <option value="end">В конец списка</option>{items.map((item,i)=><option key={i} value={i+1}>После № {i+1} · {assets.find(a=>a.id===item.assetId)?.name||item.assetId}</option>)}
+    </select></label>
+   </div>
+   <div className="flex flex-wrap gap-2">
    <select aria-label="Добавить запись" className="min-w-0 flex-1 rounded-xl border border-current/20 bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-slate-100" value={addId} onChange={e=>setAddId(e.target.value)}>
-    <option value="">Выбрать песню из аудиотеки</option>{assets.map(a=><option value={a.id} key={a.id}>{a.name}</option>)}
+    <option value="">Выбрать песню из аудиотеки</option>{assets.filter(a=>a.name.toLocaleLowerCase('ru-RU').includes(catalogueQuery.toLocaleLowerCase('ru-RU'))).map(a=><option value={a.id} key={a.id}>{a.name}</option>)}
    </select>
    <button type="button" disabled={!addId} onClick={add} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Добавить</button>
-  </div>
+  </div></div>
   <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={save} className="rounded-xl bg-violet-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Сохранить черновик</button>
   <button type="button" disabled={busy||!Array.isArray(config.draftItems)||!config.draftItems.length} onClick={publish} className="rounded-xl border border-emerald-600/50 px-4 py-2 font-semibold text-emerald-700 dark:text-emerald-300 disabled:opacity-50">Создать эфирную версию</button></div>
   <p className="text-xs opacity-65">Публикуется только последняя сохранённая версия. Публикация не запускает эфир и не добавляет событие в расписание.</p>

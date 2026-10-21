@@ -17,14 +17,15 @@ export function fitAutoPlaylistWindow(items,tracks,{targetMs,fadeMs=2000,minTrac
  if(!Number.isSafeInteger(targetMs)||targetMs<60000||targetMs>12*3600000)
   throw new RangeError('Invalid broadcast window');
  const base=items.map(x=>({...x}));
+ const finalJingle=base.at(-1)?.kind==='JINGLE'?base.pop():null;
  const eligible=tracks.filter(a=>a&&typeof a.id==='string'&&Number.isSafeInteger(a.durationMs)&&a.durationMs>=15000);
  const artist=x=>typeof x?.artist==='string'?x.artist.trim().toLocaleLowerCase('ru-RU'):'';
  const byId=new Map(eligible.map(a=>[a.id,a]));
  const measure=autoPlaylistDraftDuration;
  // The initial generator is greedy. A bounded tail-search fills remaining time
  // using complete songs and respects the selected separation when possible.
- let result=base,remaining=targetMs-measure(result),added=0;
- if(remaining<0)return {items:result,durationMs:measure(result),remainingMs:remaining,warnings:['OVER_TARGET']};
+ let result=base,remaining=targetMs-measure(finalJingle?[...base,finalJingle]:base),added=0;
+ if(remaining<0)return {items:finalJingle?[...result,finalJingle]:result,durationMs:targetMs-remaining,remainingMs:remaining,warnings:['OVER_TARGET']};
  for(let step=0;step<20&&remaining>=15000;step++){
   const history=result.filter(x=>x.kind==='MUSIC');
   const blockedIds=new Set((minTrackGap?history.slice(-minTrackGap):[]).map(x=>x.assetId));
@@ -43,5 +44,6 @@ export function fitAutoPlaylistWindow(items,tracks,{targetMs,fadeMs=2000,minTrac
  }
  const warnings=[];
  if(remaining>0)warnings.push('WINDOW_UNFILLED');
- return {items:result,durationMs:measure(result),remainingMs:remaining,added,warnings};
+ const complete=finalJingle?[...result,finalJingle]:result;
+ return {items:complete,durationMs:measure(complete),remainingMs:targetMs-measure(complete),added,warnings};
 }

@@ -6,9 +6,11 @@ export default function RadioAutoPlaylistRecurrence({token}){
  const call=useCallback((path,options)=>api('/radio'+path,{token,...options}),[token]);
  const [rules,setRules]=useState([]),[auto,setAuto]=useState([]),[folderId,setFolderId]=useState('');
  const [weekdays,setWeekdays]=useState([1,2,3,4,5]),[clock,setClock]=useState('08:00');
+ const [automationEnabled,setAutomationEnabled]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const load=useCallback(async()=>{
-  const [r,a]=await Promise.all([call('/auto-playlist-rules'),call('/auto-playlists')]);
+  const [r,a,automation]=await Promise.all([call('/auto-playlist-rules'),call('/auto-playlists'),call('/auto-playlist-automation')]);
+  setAutomationEnabled(automation.enabled===true);
   setRules(r.rules||[]);setAuto(a.autoPlaylists||[]);
  },[call]);
  useEffect(()=>{load().catch(e=>setError(e.message));},[load]);
@@ -25,6 +27,10 @@ export default function RadioAutoPlaylistRecurrence({token}){
  const del=rule=>{if(!window.confirm('Удалить правило? Уже созданные эфиры останутся в сетке.'))return;
   run(async()=>{await call('/auto-playlist-rules/'+rule.id,{method:'DELETE'});setNotice('Правило удалено');});
  };
+ const switchAutomation=()=>run(async()=>{
+  const r=await call('/auto-playlist-automation',{method:'PUT',body:{enabled:!automationEnabled}});
+  setNotice(r.enabled?'Автоматическая подготовка включена':'Автоматическая подготовка выключена');
+ });
  const prepare=()=>run(async()=>{const r=await call('/auto-playlist-rules/materialize',{method:'POST'});
   setNotice('Создано '+r.summary.created+' · конфликты '+r.summary.conflicts+' · пропущено '+r.summary.skipped+
    (r.summary.errors.length?' · ошибок '+r.summary.errors.length:''));});
@@ -33,6 +39,7 @@ export default function RadioAutoPlaylistRecurrence({token}){
    <p className="mt-1 text-sm opacity-70">Подготовка эфирных слотов на ближайшие 7 дней. Время московское, UTC+3. Созданные эфирные версии больше не меняются.</p></div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {notice&&<p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
+  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-current/15 p-3"><div><p className="text-sm font-semibold">Фоновая подготовка эфира</p><p className="text-xs opacity-65">{automationEnabled?'Включена · проверка каждый час':'Выключена'} · только активные правила</p></div><button type="button" disabled={busy} onClick={switchAutomation} className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{automationEnabled?'Отключить':'Включить и тестировать'}</button></div>
   <form onSubmit={add} className="space-y-3 rounded-xl border border-current/15 p-3">
    <label className="block text-sm">Автоплейлист
     <select className={style} required value={folderId} onChange={e=>setFolderId(e.target.value)}>
@@ -56,6 +63,6 @@ export default function RadioAutoPlaylistRecurrence({token}){
    <button type="button" disabled={busy} onClick={()=>del(rule)} className="rounded-lg border border-red-500/30 px-3 py-2 text-red-700 dark:text-red-300">Удалить</button>
   </div>)}
   <button type="button" onClick={prepare} disabled={busy} className="rounded-xl border border-current/25 px-4 py-2 text-sm">Подготовить ближайшие 7 дней вручную</button>
-  <p className="text-xs opacity-65">Автоматическое фоновое выполнение дополнительно требует серверной настройки RADIO_AUTO_PLAYLIST_RECURRENCE_ENABLED=true. Конфликтующие слоты не заменяются.</p>
+  <p className="text-xs opacity-65">Настройка сохраняется на сервере без перезапуска радиовещания. Конфликтующие слоты пропускаются. Для каждого автоплейлиста включите правило с днями и временем.</p>
  </section>;
 }
