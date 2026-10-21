@@ -102,6 +102,7 @@ state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,cloc
 let lastDecodedSource=null;
 let scheduledEntryOverlap=null;
 let reverseReservedTarget=null;
+let reverseReservedShift=null;
 let reverseMixAuthorityAt=null;
 let reverseReserveInFlight=false;
 state.reverseTargetReservation={reserved:0,used:0,invalidated:0,last:null,blocked:0,reasons:{}};
@@ -968,6 +969,12 @@ async function run() {
               if(!reservation){reversePrewarmBlocked('RESERVATION_REJECTED');return;}
               if(reservation&&!reverseReservedTarget){
                 reverseReservedTarget=reservation;
+                // Capture the verified delayed-show clock while its cursor is active.
+                // It can change/clear before asynchronous authorization runs.
+                reverseReservedShift=delayedScheduledSlot?.id===reservation.slotId&&
+                  delayedScheduledSlot.actualEndMs===reservation.slotEndMs
+                  ?{slotId:reservation.slotId,originalEndMs:delayedScheduledSlot.originalEndMs,
+                    actualEndMs:delayedScheduledSlot.actualEndMs}:null;
                 if(!prewarmed&&!prewarming){
                   void warmSuccessor({nextTrackId:reservation.assetId,musicCount:0,
                     currentTrackId:asset.id,reverse:true});
@@ -1004,10 +1011,11 @@ async function run() {
               // Accept only the exact internally recorded shift for this slot;
               // an arbitrary database/end-time mismatch remains fail-closed.
               const dbEndMs=slot?.endAt?Date.parse(slot.endAt):NaN;
-              const verifiedDelayedEnd=!!delayedScheduledSlot&&
-                delayedScheduledSlot.id===reservation.slotId&&
-                delayedScheduledSlot.originalEndMs===dbEndMs&&
-                delayedScheduledSlot.actualEndMs===reservation.slotEndMs;
+              const verifiedDelayedEnd=!!reverseReservedShift&&
+                reverseReservedTarget===reservation&&
+                reverseReservedShift.slotId===reservation.slotId&&
+                reverseReservedShift.originalEndMs===dbEndMs&&
+                reverseReservedShift.actualEndMs===reservation.slotEndMs;
               const endMatches=dbEndMs===reservation.slotEndMs||verifiedDelayedEnd;
               const reason=slot?.playlist?.status!=='APPROVED'?'SLOT_NOT_APPROVED':
                 !endMatches?'SLOT_END_CHANGED':
