@@ -168,3 +168,27 @@
 .radio-workspace .rcs-meter-state{margin-top:auto;color:#dfd4ed;font-size:11px;line-height:1.5}
 @media(max-width:1500px){.radio-workspace .rcs-monitor-layout{grid-template-columns:1fr}.radio-workspace .rcs-meter-gauge{height:85px}}
 @media(prefers-reduced-motion:reduce){.radio-workspace .rcs-meter-fill{transition:none}}
+
+
+/* Approved cover interaction and compact two-level right rail. */
+.radio-workspace .rcs-grid{grid-template-areas:"onair queue" "onair meters" "sources meters" "diagnostics actions";grid-template-columns:minmax(0,1.55fr) minmax(320px,1fr);align-items:start}
+.radio-workspace .rcs-onair{grid-area:onair;align-self:stretch}
+.radio-workspace .rcs-queue{grid-area:queue;min-height:0;align-self:start}
+.radio-workspace .rcs-meter-panel{grid-area:meters;align-self:stretch}
+.radio-workspace .rcs-sources{grid-area:sources}
+.radio-workspace .rcs-diagnostics{grid-area:diagnostics}
+.radio-workspace .rcs-actions{grid-area:actions}
+.radio-workspace .rcs-cover-interactive{position:relative;overflow:hidden;isolation:isolate}
+.radio-workspace .rcs-cover-play{position:absolute;inset:0;margin:auto;width:76px;height:76px;border-radius:999px;border:2px solid #ffffffd9;background:#26173f9c;backdrop-filter:blur(9px);color:white;font-size:29px;display:grid;place-items:center;z-index:2;box-shadow:0 0 0 9px #ffffff12,0 10px 35px #13092170;transition:transform .18s,box-shadow .2s}
+.radio-workspace .rcs-cover-play:hover{transform:scale(1.11);box-shadow:0 0 0 14px #ffffff1f,0 12px 36px #1a0b4970}
+.radio-workspace .rcs-cover-interactive.is-playing .rcs-cover-play{box-shadow:0 0 0 9px #a78bfa35,0 0 24px #a78bfa80;animation:rcs-cover-pulse 2.4s ease-in-out infinite}
+.radio-workspace .rcs-cover-live{position:absolute;left:9px;bottom:9px;z-index:3;font-size:10px;letter-spacing:.07em;font-weight:800;color:white;background:#16142acc;border:1px solid #ffffff6e;border-radius:7px;padding:4px 8px}
+.radio-workspace .rcs-cover-player-status{font-size:11px;color:#d9cee9;margin:-8px 0 16px}
+.radio-workspace .rcs-meter-panel .rcs-meter-gauge{height:145px}
+.radio-workspace .rcs-queue .radio-v42-queue{max-height:260px;overflow-y:auto}
+.radio-workspace .rcs-queue .rcs-panel-head{margin-bottom:8px}
+.radio-workspace .rcs-queue .rcs-tabs{margin-bottom:5px}
+.radio-workspace .rcs-queue .rcs-disclaimer{margin-top:7px}
+@keyframes rcs-cover-pulse{50%{box-shadow:0 0 0 14px #a78bfa1a,0 0 30px #a78bfa6c}}
+@media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-areas:"onair" "queue" "meters" "sources" "diagnostics" "actions";grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-queue{min-height:0}.radio-workspace .rcs-meter-panel .rcs-meter-gauge{height:125px}}
+@media(prefers-reduced-motion:reduce){.radio-workspace .rcs-cover-interactive.is-playing .rcs-cover-play{animation:none}.radio-workspace .rcs-cover-play{transition:none}}
