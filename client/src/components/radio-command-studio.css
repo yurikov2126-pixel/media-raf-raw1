@@ -218,3 +218,13 @@
 .radio-workspace .rcs-cover-play:focus-visible{outline:3px solid #fff;outline-offset:4px}
 @media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-areas:"onair" "right" "sources" "diagnostics" "actions";grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-right-rail{gap:12px}}
 @media(prefers-reduced-motion:reduce){.radio-workspace .rcs-cover-play:hover{transform:translate(-50%,-50%)}}
+
+
+/* Read-only device monitoring: scoped to Radio Command Studio in both themes. */
+.radio-workspace .rcs-agent-list{display:grid;gap:7px;margin-top:12px}
+.radio-workspace .rcs-agent-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px 10px;border:1px solid var(--rc-border);border-radius:10px;background:var(--rc-alt);padding:9px 12px;color:var(--rc-ink)}
+.radio-workspace .rcs-agent-row strong{font-size:12px;flex:1;min-width:110px}
+.radio-workspace .rcs-agent-row>span:not(.rcs-led){font-size:11px;font-weight:700}
+.radio-workspace .rcs-agent-row small{font-size:11px;color:var(--rc-sub)}
+.radio-workspace .rcs-health-warning{border:1px solid #e5a03f;background:#fef3c7;color:#7c3408;border-radius:10px;padding:11px;margin-top:12px;font-size:12px;font-weight:650}
+[data-theme="dark"] .radio-workspace .rcs-health-warning,.dark .radio-workspace .rcs-health-warning{background:#43321f;color:#fde68a;border-color:#b78342}
