@@ -284,6 +284,17 @@ async function current() {
       !prewarmed.child.killed))){
       const chosen=catalog.find(a=>a.id===reservation.assetId);
       if(chosen){
+        // The reserved deck may continue playing until another scheduled
+        // programme begins. Preserve that upcoming wall-clock boundary so
+        // scheduled prewarm/authority and FORWARD PCM overlap can run.
+        // Without this, the resumed AutoDJ cursor has until:null (Infinity)
+        // and its watchdog abruptly kills the deck at the next slot.
+        const nextScheduled=!settings.finishTrackBeforeSchedule
+          ?await prisma.radioScheduleSlot.findFirst({
+            where:{startAt:{gt:now},playlist:{status:'APPROVED'}},
+            select:{startAt:true},orderBy:{startAt:'asc'}
+          }):null;
+        const nextBoundaryMs=nextScheduled?.startAt?.getTime()??Infinity;
         state.reverseTargetReservation.used++;
         state.reverseTargetReservation.last={status:'USED',assetId:chosen.id,at:new Date().toISOString()};
         return {cursor:{status:'AUTO_DJ',at:now.toISOString(),slot:null,
@@ -291,7 +302,7 @@ async function current() {
             offsetMs:(reservation.consumedFrames||0)/48,
             seekMs:reservation.seekMs+(reservation.consumedFrames||0)/48,
             durationMs:reservation.durationMs},
-          until:null},asset:chosen};
+          until:Number.isFinite(nextBoundaryMs)?new Date(nextBoundaryMs).toISOString():null},asset:chosen};
       }
     }
     state.reverseTargetReservation.invalidated++;
