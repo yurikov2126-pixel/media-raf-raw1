@@ -4,7 +4,7 @@ import {api} from '../api/client.js';
 import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
 import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
-import {useRadioLufsMeter} from '../hooks/useRadioLufsMeter.js';
+
 
 const zone='Europe/Moscow';
 const clock=(value)=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -28,7 +28,8 @@ function Panel({title,action,children,extraClass=''}) {
 export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[],onOpen}){
  const [now,setNow]=useState(()=>Date.now());
  const {audioRef,playing,reconnecting,error:playbackError,audioEvents}=useRadioStreamRecovery();
- const loudness=useRadioLufsMeter(audioRef,playing);
+ const loudness=worker?.loudness;
+ const [lufsHistory,setLufsHistory]=useState([]);
  const [volume,setVolume]=useState(0.8);
  const [muted,setMuted]=useState(false);
  const [lastPlaying,setLastPlaying]=useState(null);
@@ -63,6 +64,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
   const entries=await Promise.all(Object.entries(paths).map(async([key,path])=>{try{return[key,{value:await api(path,{token}),ok:true}];}catch{return[key,{value:null,ok:false}];}}));
   const map=Object.fromEntries(entries);setReport(map.report.value);setMetadata(map.metadata.value);
   setWorker(map.worker.value);setAmp(map.amp.value);
+  const measured=map.worker.value?.loudness;
+  if(measured?.status==='RUNNING'&&!measured.stale){setLufsHistory(prev=>[...prev.slice(-39),{at:Date.now(),momentary:measured.momentary,integrated:measured.integrated,truePeak:measured.truePeak}]);}
   setResults(Object.fromEntries(entries.map(([key,v])=>[key,v.ok])));setLoadedAt(Date.now());setRefreshing(false);
  },[token]);
  useEffect(()=>{void refresh();const tick=setInterval(()=>void refresh(),10000);return()=>clearInterval(tick);},[refresh]);
@@ -114,13 +117,22 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <audio ref={audioRef} {...audioEvents} preload="none" src="/api/radio-agent/listen" onPlaying={()=>setLastPlaying(Date.now())} aria-label="MP3-поток Политех-FM"/>
      {playbackError&&<p className="rcs-player-error" role="alert">{playbackError}</p>}
-     <div className="rcs-lufs" aria-live="off">
-      <div className="rcs-lufs-title"><strong>Громкость эфира · LUFS</strong><span>EBU R128 · измерение декодированного MP3</span></div>
-      <div className="rcs-lufs-values">
-       <div><span>Momentary · 400 мс</span><strong>{loudness.state==='measuring'&&loudness.momentary!==null?loudness.momentary.toFixed(1):'—'} <small>LUFS</small></strong></div>
-       <div><span>Short-term · 3 с</span><strong>{loudness.state==='measuring'&&loudness.shortTerm!==null?loudness.shortTerm.toFixed(1):'—'} <small>LUFS</small></strong></div>
+     <div className="rcs-lufs rcs-server-lufs" aria-label="Серверные показатели громкости">
+      <div className="rcs-lufs-title"><strong>Громкость эфирного потока · EBU R128</strong><span>Серверный анализ · MP3 после кодирования</span></div>
+      <div className="rcs-lufs-values rcs-lufs-three">
+       {[
+        ['LUFS-M',loudness?.momentary,'Громкость за 400 мс'],
+        ['LUFS-I',loudness?.integrated,'Интегральная громкость с начала анализа'],
+        ['True Peak',loudness?.truePeak,'Пиковый уровень после передискретизации']
+       ].map(([name,value,hint])=><div key={name} title={hint}>
+        <span>{name}</span><strong>{loudness?.status==='RUNNING'&&!loudness.stale&&Number.isFinite(value)?value.toFixed(1):'—'} <small>{name==='True Peak'?'dBTP':'LUFS'}</small></strong>
+       </div>)}
       </div>
-      <p>{loudness.state==='unsupported'?'Измеритель недоступен в этом браузере или при текущей частоте дискретизации.':loudness.state==='warming'?'Накапливаем данные для измерения…':loudness.state==='measuring'?'Измеряется принимаемый MP3, не исходный PCM до кодирования.':'Нажмите Play, чтобы измерить громкость принимаемого эфира.'}</p>
+      <div className="rcs-lufs-chart" role="img" aria-label="Последние подтверждённые значения LUFS-M за период до семи минут">
+       {lufsHistory.map((sample,i)=><span key={sample.at+'-'+i} title={Number.isFinite(sample.momentary)?sample.momentary.toFixed(1)+' LUFS-M':'нет данных'} style={{height:(Number.isFinite(sample.momentary)?Math.max(4,Math.min(100,(sample.momentary+60)*2)):3)+'%'}}/>)}
+       {!lufsHistory.length&&<p>История появится после первых измерений</p>}
+      </div>
+      <p>{!loudness?.enabled?'Серверный измеритель отключён.':loudness.stale||loudness.status!=='RUNNING'?'Измерения недоступны либо устарели.':'Измерения выходного MP3-потока сервером (обновление интерфейса раз в 10 с).'} Значения не измеряют аналоговый выход усилителя.</p>
      </div>
      <div className="rcs-player-footer"><small>Локальное прослушивание — не управление эфиром</small><small>{lastPlaying?'Последнее воспроизведение: '+clock(lastPlaying):'Ожидание запуска'}</small></div>
     </div>
