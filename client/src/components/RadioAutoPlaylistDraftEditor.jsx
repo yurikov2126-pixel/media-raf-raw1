@@ -73,7 +73,7 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
   {notice&&<p role="status" className="text-sm opacity-75">{notice}</p>}
   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-current/15 p-3">
     <div><p className="text-sm font-semibold">Полный список композиций</p>
-      <p className="text-xs opacity-65">Все ${items.length} записей показаны в исходном порядке. Перетаскивайте за ручку слева.</p></div>
+      <p className="text-xs opacity-65">Все {items.length} записей показаны в исходном порядке. Перетаскивайте за ручку слева.</p></div>
     <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm" onClick={()=>setEditingIndex(null)}>Закрыть редактирование</button>
   </div>
   <div className="space-y-2">
