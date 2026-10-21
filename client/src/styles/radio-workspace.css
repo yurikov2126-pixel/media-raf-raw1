@@ -361,3 +361,49 @@
 .radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat .opacity-65,
 .radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat .opacity-60{opacity:1!important;color:var(--radio-muted)!important}
 @media(min-width:1536px){.radio-workspace.radio-v3 .radio-station-clock{min-height:0}}
+
+
+/* RADIO 3.0 THEME NORMALIZATION — canonical surfaces, appended after legacy overrides. */
+.radio-workspace.radio-v3{
+ --r3-bg:#f3f5fb;--r3-surface:#fff;--r3-soft:#f0effb;
+ --r3-ink:#152139;--r3-muted:#475569;--r3-border:#c7d0e1;--r3-action:#5b21b6;
+ color:var(--r3-ink)!important;background:var(--r3-bg)!important
+}
+.dark .radio-workspace.radio-v3{
+ --r3-bg:#10121f;--r3-surface:#1e2234;--r3-soft:#29243e;
+ --r3-ink:#f8fafc;--r3-muted:#cbd5e1;--r3-border:#47536e;--r3-action:#c4b5fd;
+}
+.radio-workspace.radio-v3 .radio-shell{background:var(--r3-bg)!important;color:var(--r3-ink)!important;border:1px solid var(--r3-border)}
+.radio-workspace.radio-v3 .radio-v3-header,
+.radio-workspace.radio-v3 .radio-v3-sidebar{background:var(--r3-surface)!important;color:var(--r3-ink)!important;border-color:var(--r3-border)!important}
+.radio-workspace.radio-v3 .radio-v3-context{color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-context :is(h1,h2,p,button){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-overview>div:first-child,
+.radio-workspace.radio-v3 .radio-v3-overview>div:nth-child(2){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-overview>div:first-child :is(h1,h2,p),
+.radio-workspace.radio-v3 .radio-v3-overview>div:nth-child(2) button:not(.bg-violet-700){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat,
+.radio-workspace.radio-v3 .radio-automation-stat,
+.radio-workspace.radio-v3 .radio-v3-overview .rounded-2xl,
+.radio-workspace.radio-v3 .radio-station-clock,
+.radio-workspace.radio-v3 .radio-onair-status{background:var(--r3-surface)!important;color:var(--r3-ink)!important;border-color:var(--r3-border)!important}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat :is(h2,h3,p,strong,button){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat .text-violet-700{color:var(--r3-action)!important}
+.radio-workspace.radio-v3 .radio-v3-overview :is(.opacity-50,.opacity-55,.opacity-60,.opacity-65,.opacity-70,.opacity-75),
+.radio-workspace.radio-v3 .radio-station-clock :is(.opacity-50,.opacity-55,.opacity-60,.opacity-65,.opacity-70,.opacity-75){color:var(--r3-muted)!important;opacity:1!important}
+.radio-workspace.radio-v3 .radio-v3-overview .radio-v3-stat :is(.opacity-50,.opacity-55,.opacity-60,.opacity-65,.opacity-70){color:var(--r3-muted)!important}
+.radio-workspace.radio-v3 .radio-station-clock :is(p,strong,h1,h2,h3){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-onair-status :is(span,strong,button){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-v3-overview button.bg-violet-700{color:white!important;background:#6d28d9!important}
+.radio-workspace.radio-v3 .radio-v3-overview :is(select,input,button:not(.bg-violet-700)){border-color:var(--r3-border)!important}
+.radio-workspace.radio-v3 .radio-v3-overview select{background:var(--r3-surface)!important;color:var(--r3-ink)!important;min-height:34px}
+.radio-workspace.radio-v3 .radio-v3-overview button:not(.bg-violet-700){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-nav-item-active{background:rgba(139,92,246,.16)!important;color:var(--r3-action)!important}
+.radio-workspace.radio-v3 .radio-v3-sidebar .radio-nav-group{color:var(--r3-muted)!important}
+.radio-workspace.radio-v3 .radio-v3-sidebar .radio-nav-item:not(.radio-nav-item-active){color:var(--r3-ink)!important}
+.radio-workspace.radio-v3 .radio-station-clock{align-self:start!important;min-height:0!important}
+.radio-workspace.radio-v3 .radio-on-air-card{background:#17132f!important;color:#f8fafc!important}
+.radio-workspace.radio-v3 .radio-on-air-card :is(.text-slate-400,.text-slate-300){color:#d1d5ed!important}
+.radio-workspace.radio-v3 :is(.radio-v3-stat,.radio-station-clock,.radio-onair-status){box-shadow:0 4px 15px rgb(15 23 42 / .035)}
+.dark .radio-workspace.radio-v3 :is(.radio-v3-stat,.radio-station-clock,.radio-onair-status){box-shadow:0 4px 15px rgb(0 0 0 / .15)}
+@media(max-width:767px){.radio-workspace.radio-v3 .radio-station-clock{min-height:unset!important}}

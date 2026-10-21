@@ -6,11 +6,10 @@ export default function RadioCommandOverview({slots=[],playlists=[],assets=[],on
  const [showAll,setShowAll]=useState(false);
  const [showStats,setShowStats]=useState(false);
  const [filter,setFilter]=useState('all');
+ const [expandedSlot,setExpandedSlot]=useState(null);
  const upcoming=useMemo(()=>slots.filter(s=>s?.endAt&&Date.parse(s.endAt)>Date.now())
   .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)),[slots]);
  const visible=upcoming.filter(s=>filter==='all'||(filter==='scheduled'?!!s.playlistId:!s.playlistId));
- const next=upcoming[0];
- const live=next&&Date.parse(next.startAt)<=Date.now()?next:null;
  const published=playlists.filter(p=>p.status==='APPROVED').length;
  return <section className="radio-v3-overview space-y-3" aria-label="Рабочая панель радиостанции">
   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -57,14 +56,22 @@ export default function RadioCommandOverview({slots=[],playlists=[],assets=[],on
      {!visible.length&&<p className="text-sm opacity-65">В загруженном интервале нет запланированных передач.</p>}
      {visible.slice(0,showAll?20:4).map(s=>{
       const started=Date.parse(s.startAt)<=Date.now();
-      return <button key={s.id} type="button" onClick={()=>onOpen("schedule")} title="Открыть передачу в сетке" className="flex w-full items-center gap-3 rounded-xl border border-current/20 p-3 text-left transition-colors hover:bg-violet-500/10">
+      const playlist=playlists.find(p=>p.id===s.playlistId);
+      return <div key={s.id} className="rounded-xl border border-current/20 p-2">
+       <button type="button" onClick={()=>setExpandedSlot(v=>v===s.id?null:s.id)} aria-expanded={expandedSlot===s.id} title="Посмотреть событие" className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-violet-500/10">
        <span className={'h-9 w-1 shrink-0 rounded-full '+(started?'bg-rose-500':'bg-violet-500')}/>
        <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{s.playlist?.name||s.title||'Передача'}</p>
         <p className="text-xs opacity-60">{fmt(s.startAt)}–{fmt(s.endAt)} · {started?'В пределах запланированного времени':'Через '+secs(Date.parse(s.startAt)-Date.now())}</p>
        </div>
-       <span className="text-[11px] opacity-75">{s.playlistId?'Плейлист':'План'} ↗</span>
-      </button>;
+       <span className="text-[11px] opacity-75">{expandedSlot===s.id?'Скрыть':'Подробнее'} ⌄</span>
+       </button>
+       {expandedSlot===s.id&&<div className="mt-2 space-y-2 border-t border-current/15 px-2 pt-3">
+        <p className="text-xs">Событие: {fmt(s.startAt)}–{fmt(s.endAt)} · {s.playlistId?'Плейлист':'План без плейлиста'}</p>
+        {playlist?.items?.length>0?<div className="max-h-48 space-y-1 overflow-y-auto">{playlist.items.slice(0,30).map((item,index)=><p key={item.id||index} className="text-xs opacity-80">{index+1}. {assets.find(a=>a.id===item.assetId)?.name||item.asset?.name||item.assetId}</p>)}</div>:<p className="text-xs opacity-75">Подробный список треков недоступен в текущей выборке.</p>}
+        <button type="button" onClick={()=>onOpen('schedule')} className="rounded-lg border border-current/25 px-3 py-2 text-xs font-semibold">Открыть в сетке вещания ↗</button>
+       </div>}
+      </div>;
      })}
     </div>
     <p className="mt-3 text-xs opacity-55">Это расписание, не подтверждение фактического звучания. Реальный источник показывается эфирным монитором.</p>
