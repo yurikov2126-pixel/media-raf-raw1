@@ -261,13 +261,13 @@
 /* RADIO 4 — standalone, coherent dual-theme design system.
    Intentionally supersedes the abandoned Radio 3 patch cascade. */
 .radio-workspace.radio-v4{
- --r-bg:#f2f5fb;--r-card:#fff;--r-soft:#eaf0fa;--r-text:#16243a;--r-muted:#475569;
+ --r-bg:#eef2f9;--r-card:#ffffff;--r-soft:#e6ecfa;--r-text:#14223b;--r-muted:#43536d;
  --r-line:#c8d2e2;--r-accent:#5b21b6;--r-hover:#ede9fe;--r-header:#fff;
  --r-onair:#17172d;--r-onair2:#2a2448;--r-onair-text:#f8fafc;
  color:var(--r-text);background:var(--r-bg);color-scheme:light;isolation:isolate;
 }
 .dark .radio-workspace.radio-v4{
- --r-bg:#0f1422;--r-card:#1c2638;--r-soft:#27334a;--r-text:#f3f6fc;--r-muted:#c1ccdd;
+ --r-bg:#0c1322;--r-card:#1b2940;--r-soft:#263a55;--r-text:#f5f7ff;--r-muted:#d3dceb;
  --r-line:#41516a;--r-accent:#c4b5fd;--r-hover:#342d52;--r-header:#171f30;
  --r-onair:#18142e;--r-onair2:#30244e;--r-onair-text:#fff;
  color-scheme:dark;
@@ -323,3 +323,18 @@
 @media(max-width:1023px){.radio-workspace.radio-v4 .radio-v3-sidebar{box-shadow:0 25px 65px rgba(0,0,0,.25)}}
 @media(max-width:639px){.radio-workspace.radio-v4 main{padding-bottom:calc(110px + env(safe-area-inset-bottom))}.radio-workspace.radio-v4 .radio-v3-bottom{bottom:max(.5rem,env(safe-area-inset-bottom))}}
 @media(prefers-reduced-motion:reduce){.radio-workspace.radio-v4 *{animation:none!important;transition:none!important}}
+
+/* Radio 4.1 — interactive panels. All colors are local theme tokens. */
+.radio-workspace.radio-v4 .radio-v41-tabs{display:flex;gap:.35rem;overflow-x:auto;padding:.5rem;border:1px solid var(--r-line);border-radius:1rem;background:var(--r-card);scrollbar-width:thin}
+.radio-workspace.radio-v4 .radio-v41-tabs button{flex-shrink:0;padding:.65rem 1rem;min-height:42px;border-radius:.7rem;border:1px solid transparent;color:var(--r-muted);font-size:.83rem;font-weight:700;transition:background-color .15s,color .15s}
+.radio-workspace.radio-v4 .radio-v41-tabs button:hover{background:var(--r-hover);color:var(--r-text)}
+.radio-workspace.radio-v4 .radio-v41-tabs button[aria-current="page"]{background:var(--r-hover);color:var(--r-accent);border-color:var(--r-line)}
+.radio-workspace.radio-v4 .radio-v41-detail{padding:1rem 1.25rem;border:1px solid var(--r-line);background:var(--r-card);border-radius:1rem;color:var(--r-text);display:flex;flex-wrap:wrap;align-items:center;gap:.65rem 1.1rem}
+.radio-workspace.radio-v4 .radio-v41-detail h3{font-size:1rem;font-weight:800;color:var(--r-text);width:100%}
+.radio-workspace.radio-v4 .radio-v41-detail p{color:var(--r-muted);flex:1;min-width:180px}
+.radio-workspace.radio-v4 .radio-v41-detail button{border:1px solid var(--r-line);border-radius:.75rem;padding:.65rem .9rem;font-size:.85rem;font-weight:700;color:var(--r-accent);background:var(--r-soft)}
+.radio-workspace.radio-v4 .radio-v41-detail button:hover{background:var(--r-hover)}
+.radio-workspace.radio-v4 .radio-v41-detail>section{width:100%}
+.radio-workspace.radio-v4 :is(.radio-v3-overview,.radio-v41-detail,.radio-v41-control) button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}
+@media(max-width:640px){.radio-workspace.radio-v4 .radio-v41-tabs button{padding:.6rem .8rem}.radio-workspace.radio-v4 .radio-v41-detail{padding:.85rem}}
+@media(prefers-reduced-motion:reduce){.radio-workspace.radio-v4 .radio-v41-tabs button{transition:none}}
