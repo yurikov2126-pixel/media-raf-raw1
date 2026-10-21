@@ -331,7 +331,13 @@ export default function Radio() {
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
     {tab === 'home' && <section className="space-y-5"><RadioCommandOverview slots={slots} playlists={playlists} assets={assets} onOpen={openWorkspace} onRefresh={refresh}/><RadioControlRoom token={token} onOpen={openWorkspace}/></section>}
-    {tab === 'auto-playlists' && <section className="space-y-5"><RadioAutoPlaylistManager token={token} onPublished={refresh}/><RadioAutoPlaylistRecurrence token={token}/></section>}
+    {tab === 'auto-playlists' && <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-current/15 p-3">
+        <p className="text-sm opacity-75">Генерация и редактор плейлистов. Регулярное расписание теперь управляется в Центре автоматизации.</p>
+        <button type="button" onClick={()=>openWorkspace('automation')} className="rounded-xl border border-current/20 px-4 py-2 text-sm font-semibold">Управление автогенерацией ↗</button>
+      </div>
+      <RadioAutoPlaylistManager token={token} onPublished={refresh}/>
+    </section>}
     {tab === 'automation' && <RadioAutomationConsole token={token} playlists={playlists} assets={assets} onOpen={openWorkspace}/>} 
     {tab === 'processing' && <section className="space-y-3 rounded-2xl border border-current/15 p-4">
       <h2 className="text-lg font-semibold">Настройки звука перенесены в Центр автоматизации</h2>
