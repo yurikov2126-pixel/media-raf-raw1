@@ -170,8 +170,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <p className="rcs-audio-caption">Аудиовыход Windows Agent</p>
       {health.agents.agents.filter(a=>a.status!=='REVOKED').map(agent=><div className="rcs-agent-audio-row" key={agent.id}>
        <strong>{agent.name||'Радиокомпьютер'}</strong>
-       <span>{agent.audio?.status==='PLAYING'?'Воспроизведение подтверждено агентом':agent.audio?.status==='BUFFERING'?'Буферизация':agent.audio?.status==='STOPPED'?'Воспроизведение остановлено':agent.audio?.status==='ERROR'?'Ошибка аудиоустройства':agent.audio?.status==='DEGRADED'?'Пакеты давно не поступали':agent.audio?.status==='STALE'?'Аудиотелеметрия устарела':'Аудиотелеметрия ещё не поступала'}</span>
-       <small>{agent.audio?.reason&&agent.audio.status!=='UNKNOWN'?agent.audio.reason:''}</small>
+       <span>{agent.audio?.status==='PLAYING'?'VLC работает (звук на выходе не подтверждён)':agent.audio?.status==='BUFFERING'?'Буферизация':agent.audio?.status==='STOPPED'?'Воспроизведение остановлено':agent.audio?.status==='ERROR'?'Ошибка аудиоустройства':agent.audio?.status==='DEGRADED'?'Пакеты давно не поступали':agent.audio?.status==='STALE'?'Аудиотелеметрия устарела':'Аудиотелеметрия ещё не поступала'}</span>
+       <small>{agent.audio?.source==='CENTRAL'?'Источник: центральный MP3':agent.audio?.source==='LOCAL_RESERVE'?'Источник: локальный резерв':agent.audio?.source==='NONE'?'Источник не воспроизводится':'Источник не подтверждён'} · {Number.isFinite(agent.audio?.lastPacketAgeMs)?'Последний MP3-пакет '+Math.round(agent.audio.lastPacketAgeMs/1000)+' с назад':'Давность MP3-пакета неизвестна'}{agent.audio?.reason&&agent.audio.status!=='UNKNOWN'?' · '+agent.audio.reason:''}</small>
       </div>)}
      </div>}
     {results.health&&((health?.agents?.offline||0)>0||health?.amplifier?.connection==='OFFLINE')&&<p className="rcs-health-warning" role="alert">Внимание: {health.agents.offline||0} радиокомпьютеров без связи{health.amplifier.connection==='OFFLINE'?', усилитель ESP32 недоступен':''}. Проверить оборудование ↗</p>}
