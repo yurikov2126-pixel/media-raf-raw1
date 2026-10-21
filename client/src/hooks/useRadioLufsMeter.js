@@ -3,6 +3,8 @@ import {useEffect,useRef,useState} from 'react';
 export function useRadioLufsMeter(audioRef,playing){
  const [meter,setMeter]=useState({momentary:null,shortTerm:null,state:'idle'});
  const graph=useRef(null);
+ const isPlaying=useRef(false);
+ isPlaying.current=playing;
  useEffect(()=>{
   if(!playing){setMeter(v=>({...v,momentary:null,shortTerm:null,state:'idle'}));return;}
   let canceled=false;
@@ -29,7 +31,7 @@ export function useRadioLufsMeter(audioRef,playing){
     input.connect(worklet);worklet.connect(silent);silent.connect(ctx.destination);
     graph.current={ctx,input,worklet,silent};
     worklet.port.onmessage=e=>{
-     if(canceled)return;
+     if(!isPlaying.current)return;
      setMeter({momentary:e.data.momentary,shortTerm:e.data.shortTerm,state:'measuring'});
     };
     await ctx.resume();
