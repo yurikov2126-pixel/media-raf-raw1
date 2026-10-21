@@ -55,7 +55,11 @@ export default function RadioAutoPlaylistManager({token}){
    </article>)}
   </div>
   {!list.length&&!open&&<p className="rounded-xl border border-dashed border-current/20 p-5 text-center text-sm opacity-70">Автоплейлистов пока нет. Создайте первый из существующей папки аудиотеки.</p>}
-  {draftId&&list.find(p=>p.id===draftId)&&<RadioAutoPlaylistDraftEditor token={token} config={list.find(p=>p.id===draftId)} assets={assets} onSaved={reload}/>}
+  {draftId&&list.find(p=>p.id===draftId)&&<div role="dialog" aria-modal="true" aria-label="Редактор автоплейлиста" className="fixed inset-0 z-[250] overflow-y-auto bg-slate-50 p-2 text-slate-900 dark:bg-slate-950 dark:text-slate-100 sm:p-5">
+ <div className="mx-auto max-w-6xl"><div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-2 rounded-xl border border-current/15 bg-slate-50/95 p-3 backdrop-blur-xl dark:bg-slate-950/95">
+ <div><p className="text-xs opacity-60">ПОЛИТЕХ-FM · АВТОПЛЕЙЛИСТЫ</p><h3 className="font-bold">Полный редактор композиций</h3></div>
+ <button type="button" onClick={()=>setDraftId(null)} className="rounded-xl border border-current/20 px-4 py-2">✕ Закрыть</button></div>
+ <RadioAutoPlaylistDraftEditor token={token} config={list.find(p=>p.id===draftId)} assets={assets} onSaved={reload}/></div></div>}
   {open&&<form onSubmit={save} className="space-y-4 rounded-2xl border border-current/20 p-4">
    <div className="flex items-center justify-between gap-2"><h3 className="font-semibold">{editing?'Настройка автоплейлиста':'Создание автоплейлиста'}</h3>
     <button type="button" onClick={()=>setOpen(false)} className="rounded-lg border border-current/20 px-3 py-1.5 text-sm">Закрыть</button></div>
