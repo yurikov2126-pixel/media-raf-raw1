@@ -719,7 +719,8 @@ async function run() {
             !preparedSlot.child.killed&&!liveMixDisabled&&
             (liveMixSession?.direction==='FORWARD'||
               (!!preparedSlot.sourceAuthorityConfirmedAt&&
-               Date.now()-preparedSlot.sourceAuthorityConfirmedAt<2200))&&
+               preparedSlot.sourceAuthorityConfirmedAt<=Date.now()&&
+               Date.now()<boundary))&&
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
