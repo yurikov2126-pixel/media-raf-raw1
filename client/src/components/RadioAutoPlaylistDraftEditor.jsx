@@ -48,6 +48,14 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
    await onSaved?.();
   }catch(e){setError(e.message);}finally{setBusy(false);}
  };
+ const publish=async()=>{
+  if(!items.length||!window.confirm('Создать отдельный утверждённый плейлист из сохранённого черновика? Текущие несохранённые изменения не войдут в публикацию.'))return;
+  setBusy(true);setError('');
+  try{
+   const result=await call('/auto-playlists/'+config.id+'/publish',{method:'POST'});
+   setNotice('Создан утверждённый плейлист «'+result.playlist.name+'». Добавьте его в сетку вещания вручную.');
+  }catch(e){setError(e.message);}finally{setBusy(false);}
+ };
  const add=()=>{const a=assets.find(x=>x.id===addId);if(!a)return;
   change(old=>[...old,{assetId:a.id,kind:'MUSIC',pinned:false,fadeMs:config.fadeMs||0,durationMs:a.durationMs}]);setAddId('');};
  const raw=items.reduce((sum,x,i)=>sum+(x.durationMs||assets.find(a=>a.id===x.assetId)?.durationMs||0)-
@@ -78,6 +86,8 @@ export default function RadioAutoPlaylistDraftEditor({token,config,assets,onSave
    </select>
    <button type="button" disabled={!addId} onClick={add} className="rounded-xl border border-current/20 px-3 py-2 text-sm">Добавить</button>
   </div>
-  <button type="button" disabled={busy} onClick={save} className="rounded-xl bg-violet-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Сохранить черновик</button>
+  <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={save} className="rounded-xl bg-violet-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Сохранить черновик</button>
+  <button type="button" disabled={busy||!Array.isArray(config.draftItems)||!config.draftItems.length} onClick={publish} className="rounded-xl border border-emerald-600/50 px-4 py-2 font-semibold text-emerald-700 dark:text-emerald-300 disabled:opacity-50">Создать эфирную версию</button></div>
+  <p className="text-xs opacity-65">Публикуется только последняя сохранённая версия. Публикация не запускает эфир и не добавляет событие в расписание.</p>
  </div>;
 }
