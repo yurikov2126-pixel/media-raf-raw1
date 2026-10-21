@@ -1,6 +1,6 @@
 /* Politech-FM Radio Command Studio. Completely scoped, opaque, dual-theme surfaces. */
 .radio-workspace .rcs-home{--rc-bg:#f2f5fb;--rc-panel:#fff;--rc-border:#d5ddec;--rc-ink:#17243c;--rc-sub:#52637d;--rc-alt:#edf1fb;--rc-accent:#6433d4;--rc-glow:#f0eaff;color:var(--rc-ink);font-size:14px}
-.dark .radio-workspace .rcs-home{--rc-bg:#0e1423;--rc-panel:#1b2437;--rc-border:#39475e;--rc-ink:#f7f8ff;--rc-sub:#c2cce0;--rc-alt:#252e46;--rc-accent:#c4a8ff;--rc-glow:#30254c}
+[data-theme="dark"] .radio-workspace .rcs-home,.dark .radio-workspace .rcs-home,.radio-workspace[data-theme="dark"] .rcs-home{--rc-bg:#0e1423;--rc-panel:#1b2437;--rc-border:#39475e;--rc-ink:#f7f8ff;--rc-sub:#c2cce0;--rc-alt:#252e46;--rc-accent:#c4a8ff;--rc-glow:#30254c}
 .radio-workspace .rcs-home :is(button,select,input){font:inherit}
 .radio-workspace .rcs-home button{cursor:pointer;transition:background .14s,border-color .14s,transform .14s}
 .radio-workspace .rcs-home button:disabled{opacity:.6;cursor:wait}
@@ -67,3 +67,20 @@
 @media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-columns:1fr}.radio-workspace .rcs-queue{grid-row:2}}
 @media(max-width:680px){.radio-workspace .rcs-toolbar{padding:12px}.radio-workspace .rcs-toolbar-actions{width:100%}.radio-workspace .rcs-track{flex-direction:column;align-items:stretch}.radio-workspace .rcs-cover{width:100px;height:100px;font-size:50px}.radio-workspace .rcs-onair{padding:15px}.radio-workspace .rcs-status-grid{grid-template-columns:1fr}.radio-workspace .rcs-action-grid{grid-template-columns:1fr 1fr}}
 @media(prefers-reduced-motion:reduce){.radio-workspace .rcs-home button{transition:none}}
+
+/* Match approved Broadcast Studio + Radio OS composition on desktop. */
+.radio-workspace .rcs-grid{grid-template-areas:"onair queue" "sources queue" "diagnostics actions";grid-template-columns:minmax(0,1.55fr) minmax(330px,1fr)}
+.radio-workspace .rcs-onair{grid-area:onair}
+.radio-workspace .rcs-queue{grid-area:queue;align-self:stretch;min-height:380px}
+.radio-workspace .rcs-sources{grid-area:sources}
+.radio-workspace .rcs-diagnostics{grid-area:diagnostics}
+.radio-workspace .rcs-actions{grid-area:actions}
+.radio-workspace .rcs-queue .radio-v42-queue-item{background:var(--rc-alt);border-color:var(--rc-border);color:var(--rc-ink)}
+.radio-workspace .rcs-queue .radio-v42-queue-time{background:var(--rc-glow);color:var(--rc-accent)}
+.radio-workspace .rcs-queue .radio-v42-queue-details{background:var(--rc-alt);color:var(--rc-ink);border-color:var(--rc-border)}
+.radio-workspace .rcs-queue .radio-v42-queue :is(button,h3,p,strong,small,span){color:inherit}
+.radio-workspace .rcs-queue .radio-v42-queue button{border-color:var(--rc-border)}
+.radio-workspace .rcs-status-grid{gap:9px}
+.radio-workspace .rcs-panel:not(.rcs-queue){height:100%}
+@media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-areas:"onair" "queue" "sources" "diagnostics" "actions";grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-queue{min-height:0}}
+@media(min-width:1181px){.radio-workspace .rcs-queue .radio-v42-queue{max-height:660px;overflow-y:auto}}

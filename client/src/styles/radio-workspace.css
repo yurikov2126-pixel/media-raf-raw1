@@ -266,7 +266,7 @@
  --r-onair:#17172d;--r-onair2:#2a2448;--r-onair-text:#f8fafc;
  color:var(--r-text);background:var(--r-bg);color-scheme:light;isolation:isolate;
 }
-.dark .radio-workspace.radio-v4{
+[data-theme="dark"] .radio-workspace.radio-v4,.dark .radio-workspace.radio-v4,.radio-workspace.radio-v4[data-theme="dark"]{
  --r-bg:#0c1322;--r-card:#1b2940;--r-soft:#263a55;--r-text:#f5f7ff;--r-muted:#d3dceb;
  --r-line:#41516a;--r-accent:#c4b5fd;--r-hover:#342d52;--r-header:#171f30;
  --r-onair:#18142e;--r-onair2:#30244e;--r-onair-text:#fff;
