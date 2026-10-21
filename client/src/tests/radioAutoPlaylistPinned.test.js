@@ -15,6 +15,7 @@ describe('AutoPlaylist pinned regeneration',()=>{
   const original=[music('x'),music('y'),music('z'),music('pin',true)];
   const result=mergePinnedAutoPlaylist(original,[music('new')]);
   expect(result[3].assetId).toBe('pin');
+  expect(result.slice(0,3).map(x=>x.assetId)).toEqual(['new','x','y']);
  });
  it('preserves unlocked new result when no items are pinned',()=>{
   expect(mergePinnedAutoPlaylist([music('old')],[music('new')])).toEqual([music('new')]);
