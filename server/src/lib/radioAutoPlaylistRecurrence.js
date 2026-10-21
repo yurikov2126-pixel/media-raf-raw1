@@ -39,6 +39,10 @@ export async function materializeRadioAutoPlaylistRules({db=prisma,now=new Date(
     const config=rule.autoPlaylist;
     const preview=await previewAutoPlaylist(config,{db,seed:rule.id+':'+date.localDate});
     if(!preview.items.length){summary.errors.push({ruleId:rule.id,date:date.localDate,error:'EMPTY_PLAYLIST'});continue;}
+    if(preview.remainingMs<0){
+     summary.errors.push({ruleId:rule.id,date:date.localDate,error:'OVER_TARGET'});
+     continue;
+    }
     const ids=[...new Set(preview.items.map(x=>x.assetId))];
     const assets=await db.radioAsset.findMany({where:{id:{in:ids}},select:{id:true,durationMs:true}});
     const prepared=prepareAutoPlaylistPublication(preview.items.map(item=>({...item,pinned:false,fadeMs:Math.round(item.fadeMs||0)})),assets);
