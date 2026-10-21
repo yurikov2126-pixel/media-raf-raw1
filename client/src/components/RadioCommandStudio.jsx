@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {api} from '../api/client.js';
 import RadioAmplifierControl from './RadioAmplifierControl.jsx';
 import RadioUpcomingQueue from './RadioUpcomingQueue.jsx';
+import {useRadioStreamRecovery} from '../hooks/useRadioStreamRecovery.js';
 
 const zone='Europe/Moscow';
 const clock=(value)=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -25,6 +26,8 @@ function Panel({title,action,children,extraClass=''}) {
 
 export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[],onOpen}){
  const [now,setNow]=useState(()=>Date.now());
+ const {audioRef,playing,reconnecting,error:playbackError,audioEvents}=useRadioStreamRecovery();
+ const [playerOpen,setPlayerOpen]=useState(false);
  const [report,setReport]=useState(null),[metadata,setMetadata]=useState(null),[worker,setWorker]=useState(null),[amp,setAmp]=useState(null);
  const [results,setResults]=useState({}),[loadedAt,setLoadedAt]=useState(null),[refreshing,setRefreshing]=useState(false);
  const [queueOpen,setQueueOpen]=useState(true),[tab,setTab]=useState('tracks'),[details,setDetails]=useState(false);
@@ -69,6 +72,13 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <div className="rcs-time"><span>{totalMs?duration(playMs):'—'}</span><span>{totalMs?duration(totalMs):'—'}</span></div>
       <small>Прогресс расчётный по данным Worker; не подтверждает слышимый сигнал на удалённом устройстве.</small>
      </div>
+    </div>
+    <div className="rcs-listen">
+     <div className="rcs-listen-header"><div><strong>Контрольное прослушивание</strong><small>{playing?'MP3-поток воспроизводится':reconnecting?'Переподключение к потоку': 'Локальное прослушивание эфира'}</small></div>
+      <button type="button" aria-expanded={playerOpen} onClick={()=>setPlayerOpen(v=>!v)}>{playerOpen?'Скрыть плеер':'Открыть плеер'} ↗</button>
+     </div>
+     {playerOpen&&<div className="rcs-listen-player"><audio ref={audioRef} {...audioEvents} preload="none" controls src="/api/radio-agent/listen" aria-label="Прослушивание публичного MP3-потока Политех-FM"/>
+      {playbackError&&<p role="status">{playbackError}</p>}<small>Управление здесь изменяет только локальное воспроизведение в браузере, не эфир.</small></div>}
     </div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
    </section>
