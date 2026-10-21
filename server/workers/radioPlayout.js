@@ -17,6 +17,8 @@ import {planSourceHandover} from '../src/lib/radioSourceHandoverClock.js';
 import {planReverseHandover} from '../src/lib/radioReverseHandoverPlan.js';
 import {reserveReverseTarget,validateReverseTarget} from '../src/lib/radioReverseTargetReservation.js';
 import {RadioSourcePcmOverlap} from '../src/lib/radioSourcePcmOverlap.js';
+import {RadioStationPcmClock} from '../src/lib/radioStationPcmClock.js';
+import {RadioStationDualDeck} from '../src/lib/radioStationDualDeck.js';
 import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
@@ -63,6 +65,8 @@ const SCHEDULED_DEFAULT_OVERLAP_MS=Number.isSafeInteger(scheduledDefaultOverlap)
 // OFF by default: strict schedule-entry PCM overlap only, with on-air diagnostics.
 const LIVE_SOURCE_CROSSFADE_ENABLED=process.env.RADIO_LIVE_SOURCE_CROSSFADE_ENABLED==='true';
 const LIVE_SOURCE_OVERLAP_MS=1500;
+// Observe the redesigned station bus without changing a byte of public output.
+const STATION_DUAL_DECK_SHADOW_ENABLED=process.env.RADIO_STATION_DUAL_DECK_SHADOW_ENABLED==='true';
 const LIVE_SOURCE_OVERLAP_BYTES=LIVE_SOURCE_OVERLAP_MS*PCM_BYTES_PER_MS;
 // Non-fatal FFmpeg metadata notices must not overwrite real playout errors.
 function isIgnorableMediaNotice(value){
@@ -73,6 +77,7 @@ let decoder = null;
 let prewarmed=null;
 let prewarming=false;
 state.crossfadeQuality=createCrossfadeQualityState();
+state.stationDualDeck={enabled:STATION_DUAL_DECK_SHADOW_ENABLED,mode:'SHADOW_ONLY',last:null,observations:0};
 let lastPcmTail=null;
 state.transitions={prewarmed:0,used:0,missed:0,lastGapMs:null,
  crossfadeAttempted:0,crossfadeCompleted:0,crossfadeFallbacks:0,
@@ -655,6 +660,14 @@ async function run() {
     let emittedBytes=0;
     let warmRequested=false;
     const playedStart=Date.now();
+    // Shadow observes PCM already sent into the persistent encoder.
+    // The legacy route remains solely responsible for output until promoted.
+    const stationClock=STATION_DUAL_DECK_SHADOW_ENABLED&&Number.isFinite(boundary)&&
+      boundary>playedStart?new RadioStationPcmClock({overlapMs:LIVE_SOURCE_OVERLAP_MS}):null;
+    const stationDeck=stationClock?new RadioStationDualDeck({overlapMs:LIVE_SOURCE_OVERLAP_MS}):null;
+    if(stationClock)stationClock.arm({sourceId:asset.id,boundaryMs:boundary,startAtMs:playedStart});
+    let stationClockObservedBytes=0;
+    let stationClockLogged=false;
     const fadeIn=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||cursor.status==='AUTO_DJ');
     const fadeOut=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||(cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)));
     const fadeTotalBytes=Math.max(0,Math.floor(remaining*PCM_BYTES_PER_MS/4)*4);
@@ -1109,6 +1122,29 @@ async function run() {
             }
            }catch(error){state.lastError='Scheduled prewarm lookup: '+error.message;}
           })();
+        }
+        if(stationClock){
+          const delta=emittedBytes-stationClockObservedBytes;
+          if(delta>0){stationClock.emit(delta);stationClockObservedBytes=emittedBytes;}
+          if(!stationClockLogged&&boundary-Date.now()<2500&&boundary-Date.now()>0){
+            stationClockLogged=true;
+            const target=prewarmed;
+            const authority=cursor.status==='SCHEDULED'?
+              !!reverseMixAuthorityAt:!!target?.sourceAuthorityConfirmedAt;
+            const report=stationClock.decision(Date.now(),{
+              sourceReady:true,targetReady:!!target&&!target.child.killed,
+              authority,publicLive:publicLive.onAir});
+            state.stationDualDeck.observations++;
+            state.stationDualDeck.last={
+              mode:'SHADOW_ONLY',source:cursor.status,sourceId:asset.id,
+              targetId:target?.assetId||null,deckIdle:!stationDeck.active,
+              reason:report.reason,ok:report.ok,
+              driftMs:Math.round(report.driftMs),
+              boundaryInMs:Math.round(report.boundaryInMs),
+              emittedFrames:report.framesOut,at:new Date().toISOString()};
+            console.info('RADIO_STATION_DUAL_DECK_SHADOW',
+              JSON.stringify(state.stationDualDeck.last));
+          }
         }
         if(state.playout?.trackId===asset.id){
           if(!state.playout.startedAt)state.playout.startedAt=Date.now();
