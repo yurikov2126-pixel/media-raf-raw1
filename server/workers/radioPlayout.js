@@ -802,7 +802,14 @@ async function run() {
             emittedBytes+=plain.length;
           }
           const tail=output.subarray(plainBytes);
-          if(tail.length){
+          // Once all 72,000 frames have been mixed, later FFmpeg packets
+          // must not be submitted to the closed overlap engine or routed as
+          // a fallback from the already faded-out source.
+          if(tail.length && liveMixSession?.engine.snapshot().phase==='COMPLETED'){
+            state.liveSourceCrossfade.last={status:'POST_MIX_SOURCE_DISCARDED',
+              direction:liveMixSession.direction,discardedBytes:tail.length,
+              at:new Date().toISOString()};
+          }else if(tail.length){
             if(eligible){
               try{
                 if(!liveMixSession){
