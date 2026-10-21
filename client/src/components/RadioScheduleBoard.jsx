@@ -45,7 +45,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const dayEvents=useMemo(()=>scheduleLayout(events,selectedDay),[events,selectedDay]);
  const scheduleForDay=day=>scheduleLayout(events,day);
  const moveToDay=(event,day)=>{if(Date.parse(event.startAt)>Date.now())onDropSlot?.(event,day);};
- const drop=e=>{e.preventDefault();const target=events.find(s=>s.id===dragId);setDragId(null);if(target)moveToDay(target,selectedDay);};
+ const drop=(e,day)=>{e.preventDefault();const target=events.find(s=>s.id===dragId);setDragId(null);if(target)moveToDay(target,day);};
  const startDrag=(e,id)=>{setDragId(id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);};
  const card=(event,index,positioned=false)=> {
   const active=Date.parse(event.startAt)<=nowMs&&Date.parse(event.endAt)>nowMs;
@@ -66,7 +66,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const timeline=(day,items)=>{
   const nowMinute=day===today?minutes(nowMs):null;
   return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR}} onDragOver={e=>{if(dragId)e.preventDefault();}}
-   onDrop={drop} onClick={e=>{
+   onDrop={e=>drop(e,day)} onClick={e=>{
     if(!onCreateAt||e.target!==e.currentTarget)return;
     const rect=e.currentTarget.getBoundingClientRect();
     const offset=Math.max(0,Math.min(1439,Math.floor((e.clientY-rect.top)/HOUR*60/15)*15));
