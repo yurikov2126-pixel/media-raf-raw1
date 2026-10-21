@@ -870,6 +870,16 @@ router.post('/schedule', safe(async (req, res) => {
 
 // Explicit one-off scheduling: atomically freeze an AutoPlaylist draft and
 // reserve its real PCM-accounted duration, never mutating the live slot.
+router.get('/auto-playlist-automation',safe(async (_req,res)=>{
+ const settings=await prisma.radioAutoPlaylistAutomationSettings.findUnique({where:{id:1}});
+ res.json({enabled:settings?.enabled===true});
+}));
+router.put('/auto-playlist-automation',safe(async (req,res)=>{
+ if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Некорректный переключатель'});
+ const settings=await prisma.radioAutoPlaylistAutomationSettings.upsert({where:{id:1},
+  create:{id:1,enabled:req.body.enabled},update:{enabled:req.body.enabled}});
+ res.json({enabled:settings.enabled});
+}));
 router.get('/auto-playlist-rules',safe(async (_req,res)=>{
  res.json({rules:await prisma.radioAutoPlaylistRule.findMany({
   include:{autoPlaylist:{select:{id:true,name:true}}},orderBy:{createdAt:'desc'},take:200})});
