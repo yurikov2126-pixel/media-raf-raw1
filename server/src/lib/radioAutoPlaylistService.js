@@ -1,5 +1,6 @@
 import {prisma} from './prisma.js';
 import {generateRadioAutoPlaylist} from './radioAutoPlaylistGenerator.js';
+import {fitAutoPlaylistWindow} from './radioAutoPlaylistWindowFit.js';
 
 export function validateAutoPlaylistInput(input){
  if(!input||typeof input.name!=='string'||!input.name.trim()||input.name.length>140)
@@ -54,8 +55,15 @@ export async function collectAutoPlaylistAssets(config,db=prisma){
 }
 export async function previewAutoPlaylist(config,{db=prisma,seed='preview'}={}){
  const {tracks,jingles}=await collectAutoPlaylistAssets(config,db);
- return generateRadioAutoPlaylist({tracks,jingles,durationMs:config.targetMinutes*60000,
+ const targetMs=config.targetMinutes*60000;
+ const generated=generateRadioAutoPlaylist({tracks,jingles,durationMs:targetMs,
   fadeMs:config.fadeMs,jingleEvery:config.jingleEvery,
   minTrackGap:config.minTrackGap,minArtistGap:config.minArtistGap,
   order:config.trackOrder,seed});
+ if(!generated.items.length)return {...generated,targetMs,remainingMs:targetMs};
+ const fitted=fitAutoPlaylistWindow(generated.items,tracks,{targetMs,fadeMs:config.fadeMs,
+  minTrackGap:config.minTrackGap,minArtistGap:config.minArtistGap});
+ return {items:fitted.items,durationMs:fitted.durationMs,targetMs,
+  remainingMs:fitted.remainingMs,addedTailTracks:fitted.added,
+  warnings:[...new Set([...generated.warnings.filter(w=>w!=='UNFILLED_DURATION'),...fitted.warnings])]};
 }
