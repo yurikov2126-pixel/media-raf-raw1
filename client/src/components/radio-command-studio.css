@@ -134,3 +134,12 @@
 .radio-workspace .rcs-lufs-values strong small{font-size:11px;font-weight:600;color:#d8cdeb}
 .radio-workspace .rcs-lufs p{font-size:10px;line-height:1.5;color:#d8cdeb}
 @media(max-width:420px){.radio-workspace .rcs-lufs-values{gap:6px}.radio-workspace .rcs-lufs-values strong{font-size:19px}}
+
+
+/* Server-side EBU R128 telemetry; values come from the station Worker health API. */
+.radio-workspace .rcs-lufs-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.radio-workspace .rcs-server-lufs{margin-top:14px}
+.radio-workspace .rcs-lufs-chart{height:56px;margin:13px 0 8px;display:flex;gap:3px;align-items:flex-end;background:#171129;border:1px solid #655078;border-radius:9px;padding:7px;overflow:hidden}
+.radio-workspace .rcs-lufs-chart>span{flex:1;min-width:3px;max-width:18px;border-radius:3px 3px 0 0;background:linear-gradient(0deg,#7c3aed,#c4b5fd)}
+.radio-workspace .rcs-lufs-chart p{align-self:center;margin-inline:auto}
+@media(max-width:500px){.radio-workspace .rcs-lufs-three{grid-template-columns:1fr 1fr}.radio-workspace .rcs-lufs-three>div:last-child{grid-column:span 2}}
