@@ -827,7 +827,7 @@ async function run() {
                   const engine=new RadioSourcePcmOverlap({
                     source:{id:asset.id,mode:cursor.status},
                     target:{id:preparedSlot.assetId,mode:reverseEligible?'AUTO_DJ':'SCHEDULED'},
-                    overlapMs:LIVE_SOURCE_OVERLAP_MS,curve:'equalPower'
+                    overlapMs:LIVE_SOURCE_OVERLAP_MS,curve:'sCurve'
                   });
                   const ready=engine.start({sourceReady:true,targetReady:true,
                     slotAuthority:true,publicLive:publicLive.onAir});
