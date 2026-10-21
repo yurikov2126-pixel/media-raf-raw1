@@ -84,3 +84,16 @@
 .radio-workspace .rcs-panel:not(.rcs-queue){height:100%}
 @media(max-width:1180px){.radio-workspace .rcs-grid{grid-template-areas:"onair" "queue" "sources" "diagnostics" "actions";grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-queue{min-height:0}}
 @media(min-width:1181px){.radio-workspace .rcs-queue .radio-v42-queue{max-height:660px;overflow-y:auto}}
+
+
+/* Local broadcast monitoring — no effect on the output playout. */
+.radio-workspace .rcs-listen{border:1px solid #ffffff2d;border-radius:14px;padding:11px 14px;margin:2px 0 15px;background:#ffffff0a}
+.radio-workspace .rcs-listen-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.radio-workspace .rcs-listen-header strong{display:block;font-size:12px;color:#fff}
+.radio-workspace .rcs-listen-header small{display:block;color:#ded5ef;font-size:11px;margin-top:3px}
+.radio-workspace .rcs-listen-header button{border:1px solid #b4a0d7;background:#ffffff15;border-radius:10px;padding:7px 11px;color:#fff;font-size:12px}
+.radio-workspace .rcs-listen-header button:hover{background:#ffffff28}
+.radio-workspace .rcs-listen-player{display:grid;gap:7px;margin-top:12px}
+.radio-workspace .rcs-listen-player audio{width:100%;color-scheme:dark}
+.radio-workspace .rcs-listen-player p{font-size:12px;color:#fecdd3}
+.radio-workspace .rcs-listen-player small{font-size:11px;color:#ded5ef}
