@@ -149,3 +149,22 @@
 .radio-workspace .rcs-lufs-mini i{display:block;flex:1;max-width:10px;min-width:2px;min-height:2px;border-radius:2px 2px 0 0;background:#a78bfa}
 .radio-workspace .rcs-lufs-three>div:nth-child(2) .rcs-lufs-mini i{background:#67e8f9}
 .radio-workspace .rcs-lufs-three>div:nth-child(3) .rcs-lufs-mini i{background:#f9a8d4}
+
+
+/* Separate classic upright meter bank, not a waveform/history chart. */
+.radio-workspace .rcs-monitor-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,.85fr);gap:12px;margin-bottom:16px;align-items:stretch}
+.radio-workspace .rcs-monitor-layout .rcs-player{margin:0;height:100%;display:flex;flex-direction:column;justify-content:center}
+.radio-workspace .rcs-monitor-layout .rcs-player-footer{margin-top:auto;padding-top:12px}
+.radio-workspace .rcs-lufs-vertical{margin:0;background:#211a36;border-color:#79689b;display:flex;flex-direction:column;min-width:0;padding:12px}
+.radio-workspace .rcs-lufs-vertical .rcs-lufs-title strong{color:#fff}
+.radio-workspace .rcs-meter-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0;flex:1}
+.radio-workspace .rcs-meter{min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;color:#fff}
+.radio-workspace .rcs-meter-label{font-size:11px;white-space:nowrap;color:#eee5ff}
+.radio-workspace .rcs-meter-gauge{height:115px;width:min(100%,42px);position:relative;background:#0f1022;border:1px solid #85749d;border-radius:7px;overflow:hidden}
+.radio-workspace .rcs-meter-grid{position:absolute;inset:0;background:repeating-linear-gradient(to top,transparent 0,transparent calc(20% - 1px),#ffffff2b calc(20% - 1px),#ffffff2b 20%);z-index:2;pointer-events:none}
+.radio-workspace .rcs-meter-fill{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,#20c997 0%,#7bdc65 58%,#ffce54 82%,#f35b73 100%);transition:height .25s ease}
+.radio-workspace .rcs-meter-number{font-size:17px;color:#fff;font-variant-numeric:tabular-nums}
+.radio-workspace .rcs-meter-unit{font-size:10px;color:#dfd4ed}
+.radio-workspace .rcs-meter-state{margin-top:auto;color:#dfd4ed;font-size:11px;line-height:1.5}
+@media(max-width:1500px){.radio-workspace .rcs-monitor-layout{grid-template-columns:1fr}.radio-workspace .rcs-meter-gauge{height:85px}}
+@media(prefers-reduced-motion:reduce){.radio-workspace .rcs-meter-fill{transition:none}}
