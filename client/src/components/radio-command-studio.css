@@ -143,3 +143,9 @@
 .radio-workspace .rcs-lufs-chart>span{flex:1;min-width:3px;max-width:18px;border-radius:3px 3px 0 0;background:linear-gradient(0deg,#7c3aed,#c4b5fd)}
 .radio-workspace .rcs-lufs-chart p{align-self:center;margin-inline:auto}
 @media(max-width:500px){.radio-workspace .rcs-lufs-three{grid-template-columns:1fr 1fr}.radio-workspace .rcs-lufs-three>div:last-child{grid-column:span 2}}
+
+
+.radio-workspace .rcs-lufs-mini{height:36px;display:flex;align-items:end;gap:2px;margin-top:9px;padding:4px 0;border-top:1px solid #ffffff20}
+.radio-workspace .rcs-lufs-mini i{display:block;flex:1;max-width:10px;min-width:2px;min-height:2px;border-radius:2px 2px 0 0;background:#a78bfa}
+.radio-workspace .rcs-lufs-three>div:nth-child(2) .rcs-lufs-mini i{background:#67e8f9}
+.radio-workspace .rcs-lufs-three>div:nth-child(3) .rcs-lufs-mini i{background:#f9a8d4}
