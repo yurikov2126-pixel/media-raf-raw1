@@ -13,6 +13,8 @@ export default function RadioControlRoom({token,onOpen}){
  const [data,setData]=useState(null),[worker,setWorker]=useState(null),[error,setError]=useState('');
  const [now,setNow]=useState(()=>Date.now()),[details,setDetails]=useState(false);
  const [expandedMonitor,setExpandedMonitor]=useState(false);
+ const [activePanel,setActivePanel]=useState('now');
+ const [queueExpanded,setQueueExpanded]=useState(false);
  const {audioRef,playing:listening,error:audioError,reconnecting,audioEvents}=useRadioStreamRecovery();
  const {ingest,display:onAir,delay,config,setConfig,automaticMeasured,waiting}=useRadioMetadataSync(audioRef);
  useEffect(()=>{
@@ -47,7 +49,25 @@ export default function RadioControlRoom({token,onOpen}){
  const isWorking=onAir?.available&&onAir.mode!=='ERROR'&&onAir.mode!=='SILENCE';
  const upcoming=onAir?.upcomingSlot||data?.upcoming?.[0]||null;
  const untilUpcoming=upcoming?.startAt?Math.max(0,new Date(upcoming.startAt).getTime()-now):null;
- return <div className="space-y-4">
+ return <div className="radio-v41-control space-y-4">
+  <nav className="radio-v41-tabs" aria-label="Оперативные инструменты эфира">
+   {[
+    ['now','Сейчас'],['next','Далее'],['grid','Сетка'],['source','Источник'],['tech','Диагностика']
+   ].map(([id,label])=><button key={id} type="button" aria-current={activePanel===id?'page':undefined}
+    onClick={()=>{setActivePanel(id);if(id==='tech')setExpandedMonitor(true);}}>{label}</button>)}
+  </nav>
+  {activePanel!=='now'&&<section className="radio-v41-detail" aria-live="polite">
+   {activePanel==='next'&&<>
+    <h3>Следующая композиция</h3>
+    <p>{onAir?.nextTrack?[onAir.nextTrack.artist,onAir.nextTrack.title].filter(Boolean).join(' — ')||onAir.nextTrack.name:'Следующая композиция пока не определена'}</p>
+    <button type="button" onClick={()=>setQueueExpanded(v=>!v)} aria-expanded={queueExpanded}>{queueExpanded?'Свернуть расписание':'Показать ближайшие передачи'}</button>
+    {queueExpanded&&<RadioUpcomingQueue entries={data?.upcoming} onSchedule={()=>onOpen('schedule')}/>}
+   </>}
+   {activePanel==='grid'&&<><h3>Эфирная сетка</h3><p>{upcoming?((upcoming.name||upcoming.playlist?.name||'Передача')+' · '+displayTime(upcoming.startAt)):'Ближайшие передачи не назначены'}</p><button type="button" onClick={()=>onOpen('schedule')}>Открыть календарь ↗</button></>}
+   {activePanel==='source'&&<><h3>Фактический источник</h3><p>{onAir?.available?modes[onAir.mode]||onAir.mode:'Нет подтверждения источника'}</p><button type="button" onClick={()=>onOpen('automation')}>Настройки AutoDJ ↗</button></>}
+   {activePanel==='tech'&&<><h3>Технический мониторинг</h3><p>Данные центрального PCM Worker и диагностика переходов доступны ниже.</p><button type="button" onClick={()=>onOpen('history')}>Центр мониторинга ↗</button></>}
+  </section>}
+
   <div className="radio-onair-status flex flex-wrap items-center gap-x-5 gap-y-2 radio-panel rounded-2xl border p-3 text-sm">
     <span><strong>Эфир:</strong> {onAir?.available?modes[onAir.mode]||onAir.mode:'Нет связи'}</span>
     <span><strong>Слушателей:</strong> {onAir?.listenerCount??'—'}</span>
