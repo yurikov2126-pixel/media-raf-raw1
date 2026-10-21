@@ -76,6 +76,9 @@ export default function Radio() {
   const [pickSearch, setPickSearch] = useState('');
   const [uploading, setUploading] = useState(false);
   const [slotPlaylist, setSlotPlaylist] = useState('');
+  const [slotMode,setSlotMode]=useState('playlist');
+  const [slotAutoPlaylist,setSlotAutoPlaylist]=useState('');
+  const [autoPlaylists,setAutoPlaylists]=useState([]);
   const [slotTitle,setSlotTitle] = useState('');
   const [slotDuration,setSlotDuration] = useState(30);
   const [editSlotTitle,setEditSlotTitle] = useState('');
@@ -98,6 +101,7 @@ export default function Radio() {
     setAssets(a.assets); setPlaylists(p.playlists); setSlots(s.slots); setFolders(f.folders);
   }, [call, date]);
   useEffect(() => { refresh().catch(e => toast.error(e.message)); }, [refresh]);
+  useEffect(()=>{if(tab==='schedule')call('/auto-playlists').then(x=>setAutoPlaylists(x.autoPlaylists||[])).catch(e=>toast.error(e.message));},[tab,call]);
   const action = async (fn, successMessage = 'Изменения сохранены') => {
     try {
       await fn();
@@ -459,10 +463,37 @@ export default function Radio() {
         <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-lg">Добавить передачу в расписание</h3><button type="button" aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-1" onClick={()=>setCreateScheduleOpen(false)}>✕</button></div>
       <form onSubmit={e=>{e.preventDefault();
         const playlistId = slotPlaylist;
+        if(slotMode==='auto'){
+          if(!slotAutoPlaylist){toast.error('Выберите автоплейлист');return;}
+          if(!slotTime||new Date(slotTime+':00+03:00').getTime()<=Date.now()+60000){toast.error('Укажите время по Москве не ранее чем через минуту');return;}
+          if(repeatWeeks>1){toast.error('Повторение автоплейлистов добавим на следующем этапе');return;}
+          action(async()=>{
+            await call('/schedule/auto-playlist',{method:'POST',body:{autoPlaylistId:slotAutoPlaylist,startLocal:slotTime}});
+            setCreateScheduleOpen(false);
+          },'Автоплейлист добавлен в сетку');
+          return;
+        }
         if (!playlistId && (!slotTitle.trim() || slotDuration<1 || slotDuration>720)) { toast.error('Укажите название и длительность слота'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
         action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:playlistId||null,title:slotTitle,durationMinutes:slotDuration,startLocal:slotTime}});setCreateScheduleOpen(false);},'Передача добавлена в сетку');
       }} className="mt-4 space-y-3">
+        <label className="block text-sm">Тип эфирного события
+          <select className={inputStyle} value={slotMode} onChange={e=>setSlotMode(e.target.value)}>
+            <option value="playlist">Обычная передача или плейлист</option>
+            <option value="auto">Автоплейлист · сохранённый черновик</option>
+          </select>
+        </label>
+        {slotMode==='auto'?<div className="space-y-2 rounded-xl border border-violet-500/20 p-3">
+          <label className="block text-sm">Автоплейлист
+            <select className={inputStyle} required value={slotAutoPlaylist} onChange={e=>setSlotAutoPlaylist(e.target.value)}>
+              <option value="">Выберите автоплейлист</option>
+              {autoPlaylists.filter(p=>Array.isArray(p.draftItems)&&p.draftItems.length).map(p=>
+                <option key={p.id} value={p.id}>{p.name} · {p.draftItems.length} записей</option>)}
+            </select>
+          </label>
+          <p className="text-xs opacity-70">Будет создана отдельная утверждённая версия из последнего сохранённого черновика. Длительность вычисляется по трекам и переходам; пересечения эфира запрещены.</p>
+          <p className="text-xs text-amber-700 dark:text-amber-300">На данном этапе один эфирный слот; регулярная автогенерация появится позже.</p>
+        </div>:<>
         <select className={inputStyle} value={slotPlaylist} onChange={e=>setSlotPlaylist(e.target.value)}>
           <option value="">Без плейлиста · планирование</option>
           {playlists.filter(p=>p.status==='APPROVED').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -472,19 +503,20 @@ export default function Radio() {
           <label className="block text-sm">Название передачи<input required maxLength={120} className={inputStyle} value={slotTitle} onChange={e=>setSlotTitle(e.target.value)} placeholder="Например, Новости Политеха"/></label>
           <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={slotDuration} onChange={e=>setSlotDuration(Number(e.target.value))}/></label>
         </div>}
+        </>}
         <input required className={inputStyle} type="datetime-local" aria-label="Дата и время эфира" value={slotTime} onChange={e=>setSlotTime(e.target.value)}/>
-        <label className="text-sm block">Повторять в течение недель (1 — без повтора)
+        {slotMode==='playlist'&&<label className="text-sm block">Повторять в течение недель (1 — без повтора)
           <input className={inputStyle} type="number" min="1" max="12" value={repeatWeeks} onChange={e=>setRepeatWeeks(Number(e.target.value))}/>
-        </label>
-        {!slotPlaylist&&repeatWeeks>1&&<p className="text-xs text-amber-700 dark:text-amber-300">Пустые слоты пока создаются по одному. Для повтора выберите плейлист.</p>}
-        {repeatWeeks > 1 && <fieldset className="space-y-2">
+        </label>}
+        {slotMode==='playlist'&&!slotPlaylist&&repeatWeeks>1&&<p className="text-xs text-amber-700 dark:text-amber-300">Пустые слоты пока создаются по одному. Для повтора выберите плейлист.</p>}
+        {slotMode==='playlist'&&repeatWeeks > 1 && <fieldset className="space-y-2">
           <legend className="text-sm font-semibold">Дни недели (московское время)</legend>
           <div className="flex gap-3 flex-wrap">{[['Вс',0],['Пн',1],['Вт',2],['Ср',3],['Чт',4],['Пт',5],['Сб',6]].map(([label,number])=>
             <label key={number} className="text-sm"><input type="checkbox" checked={repeatDays.includes(number)} onChange={e=>setRepeatDays(days=>e.target.checked?[...days,number]:days.filter(d=>d!==number))}/> {label}</label>)}
           </div>
           <p className="text-xs opacity-60">Время и дни недели привязаны к часовому поясу радиостанции — Москва (UTC+3), независимо от устройства администратора.</p>
         </fieldset>}
-        <div className="flex gap-2"><button disabled={repeatWeeks>1&&(!slotPlaylist||!repeatDays.length)} className={btn}>Запланировать</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setCreateScheduleOpen(false)}>Отмена</button></div>
+        <div className="flex gap-2"><button disabled={slotMode==='auto'?!slotAutoPlaylist:(repeatWeeks>1&&(!slotPlaylist||!repeatDays.length))} className={btn}>Запланировать</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setCreateScheduleOpen(false)}>Отмена</button></div>
       </form>
       </div></div>}
       {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
