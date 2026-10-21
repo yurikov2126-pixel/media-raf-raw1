@@ -635,6 +635,7 @@ async function run() {
     // This prepares the first scheduled decoder ahead of time without routing it
     // to the encoder until the authoritative schedule cursor selects it.
     let scheduledPrewarmRequested=false;
+    const gridCrossfadeEnabled=process.env.RADIO_GRID_TO_GRID_CROSSFADE_ENABLED==='true';
     let sourceClockPlanned=false;
     let reverseClockPlanned=false;
     let crossfadeAuthorityRequested=false;
@@ -742,7 +743,17 @@ async function run() {
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
-          const eligible=forwardEligible||reverseEligible;
+          const gridEligible=gridCrossfadeEnabled&&LIVE_SOURCE_CROSSFADE_ENABLED&&
+            cursor.status==='SCHEDULED'&&isLastScheduledTrack&&!usableBlend&&!publicLive.onAir&&
+            Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
+            preparedSlot?.scheduledSlotStartMs===boundary&&!!preparedSlot.scheduledSlotId&&
+            !preparedSlot.child.killed&&!liveMixDisabled&&
+            (liveMixSession?.direction==='FORWARD'||!preparedSlot.iterator)&&
+            (liveMixSession?.direction==='FORWARD'||!!preparedSlot.sourceAuthorityConfirmedAt)&&
+            (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
+            (liveMixSession||Math.abs((boundary-Date.now())-
+              (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
+          const eligible=forwardEligible||reverseEligible||gridEligible;
           if(LIVE_SOURCE_CROSSFADE_ENABLED&&!liveMixSession&&!liveMixDisabled&&
              ['AUTO_DJ','SCHEDULED'].includes(cursor.status)&&
              Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
@@ -951,6 +962,24 @@ async function run() {
             musicCount:cursor.isJingle?0:musicSinceJingle+1,scheduled:cursor.status==='SCHEDULED',
             currentTrackId:asset.id,expectedRemainingMs:remaining-emittedBytes/(48000*4)*1000});
         }
+        if(LIVE_SOURCE_CROSSFADE_ENABLED&&gridCrossfadeEnabled&&!crossfadeAuthorityRequested&&
+          cursor.status==='SCHEDULED'&&isLastScheduledTrack&&Number.isFinite(boundary)&&
+          boundary-Date.now()<=4500&&boundary-Date.now()>1700&&
+          prewarmed?.scheduledSlotStartMs===boundary){
+          crossfadeAuthorityRequested=true;
+          const candidate=prewarmed;
+          void (async()=>{
+            try{
+              const slot=await prisma.radioScheduleSlot.findUnique({
+                where:{id:candidate.scheduledSlotId},
+                select:{startAt:true,endAt:true,playlist:{select:{status:true}}}
+              });
+              if(slot?.playlist?.status==='APPROVED'&&Date.parse(slot.startAt)===boundary&&
+                Date.parse(slot.endAt)>boundary&&prewarmed===candidate)
+                candidate.sourceAuthorityConfirmedAt=Date.now();
+            }catch(error){state.lastError='Grid-to-grid authority: '+error.message;}
+          })();
+        }
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&!crossfadeAuthorityRequested&&
           cursor.status==='AUTO_DJ'&&!cursor.isJingle&&Number.isFinite(boundary)&&
           boundary-Date.now()<=4500&&boundary-Date.now()>1700&&
@@ -988,6 +1017,7 @@ async function run() {
         // Reserve the actual next AutoDJ asset before the scheduled final
         // track exits. Freeze the candidate only for this slot and playlist.
         if(LIVE_SOURCE_CROSSFADE_ENABLED&&cursor.status==='SCHEDULED'&&
+          !(gridCrossfadeEnabled&&prewarmed?.scheduledSlotStartMs===boundary)&&
           isLastScheduledTrack&&!reverseReservedTarget&&!reverseReserveInFlight&&
           boundary-Date.now()<12000&&boundary-Date.now()>2000){
           reverseReserveInFlight=true;
@@ -1153,6 +1183,28 @@ async function run() {
           if(plan.allowed)state.reverseHandover.eligible++;
           else state.reverseHandover.blocked++;
           state.reverseHandover.last={...plan,at:new Date().toISOString(),mixed:false};
+        }
+        if(!scheduledPrewarmRequested&&gridCrossfadeEnabled&&LIVE_SOURCE_CROSSFADE_ENABLED&&
+          cursor.status==='SCHEDULED'&&isLastScheduledTrack&&!usableBlend&&!publicLive.onAir&&
+          Number.isFinite(boundary)&&boundary-Date.now()<12000&&boundary-Date.now()>2500){
+          scheduledPrewarmRequested=true;
+          void (async()=>{
+            try{
+              const next=await prisma.radioScheduleSlot.findFirst({
+                where:{startAt:{gte:new Date(boundary-500),lte:new Date(boundary+500)},
+                  playlist:{status:'APPROVED'}},
+                include:{playlist:{include:{items:{orderBy:{position:'asc'},take:1,include:{asset:true}}}}},
+                orderBy:{startAt:'asc'}
+              });
+              const first=next?.playlist?.items?.[0]?.asset;
+              if(first?.id&&Date.parse(next.startAt)===boundary&&!prewarmed&&!prewarming){
+                console.info('RADIO_GRID_PREWARM',JSON.stringify({status:'REQUESTED',
+                  fromSlotId:cursor.slot.id,toSlotId:next.id,assetId:first.id}));
+                void warmSuccessor({nextTrackId:first.id,musicCount:0,currentTrackId:asset.id,
+                  scheduled:true,scheduledSlotId:next.id,scheduledSlotStartMs:boundary});
+              }else scheduledPrewarmRequested=false;
+            }catch(error){scheduledPrewarmRequested=false;state.lastError='Grid prewarm: '+error.message;}
+          })();
         }
         if(!scheduledPrewarmRequested&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&
           !pendingScheduledHandover&&!publicLive.onAir&&Number.isFinite(boundary)&&
