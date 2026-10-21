@@ -4,6 +4,7 @@ const items=[
  {id:'studio',icon:'◉',label:'Студия',hint:'Микрофон · прослушивание'},
  {id:'schedule',icon:'▦',label:'Сетка вещания',hint:'Календарь программ'},
  {id:'playlists',icon:'☷',label:'Плейлисты',hint:'Подготовка программ'},
+ {id:'auto-playlists',icon:'♫',label:'Автоплейлисты',hint:'Генерация музыки · джинглы'},
  {id:'assets',icon:'♫',label:'Аудиотека',hint:'Записи · загрузки'},
  {id:'automation',icon:'⟳',label:'Автоматизация',hint:'Auto-DJ · ротация · джинглы'},
  {id:'processing',icon:'≋',label:'Звук',hint:'Обработка · метки · переходы'},
