@@ -1372,6 +1372,7 @@ model RadioAutoPlaylist {
   targetMinutes   Int      @default(60)
   trackOrder      String   @default("SMART")
   minTrackGap     Int      @default(20)
+  minArtistGap    Int      @default(3)
   jingleAssetIds  Json     @default("[]")
   jingleEvery     Int      @default(3)
   fadeMs          Int      @default(2000)
