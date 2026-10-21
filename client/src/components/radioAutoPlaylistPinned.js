@@ -18,7 +18,18 @@ export function mergePinnedAutoPlaylist(previous,generated){
  const length=Math.max(previous.length,generated.length,pins.at(-1).index+1);
  const result=Array(length).fill(null);
  for(const {item,index} of pins)result[index]={...item,pinned:true};
+ // A short regeneration must not collapse empty slots ahead of pins.
+ // Reuse prior unlocked tracks as fillers, without consuming a pinned instance.
+ const previousUnlocked=previous.filter(item=>item&&!item.pinned);
+ const availableCounts=new Map();
+ for(const item of pool){const key=item.kind+':'+item.assetId;availableCounts.set(key,(availableCounts.get(key)||0)+1);}
+ const fallback=previousUnlocked.filter(item=>{
+  const key=item.kind+':'+item.assetId;
+  if((availableCounts.get(key)||0)>0){availableCounts.set(key,availableCounts.get(key)-1);return false;}
+  return true;
+ }).map(item=>({...item,pinned:false}));
+ const supply=[...pool,...fallback];
  let cursor=0;
- for(let index=0;index<result.length;index++)if(!result[index]&&cursor<pool.length)result[index]=pool[cursor++];
- return result.filter(Boolean).concat(pool.slice(cursor));
+ for(let index=0;index<result.length;index++)if(!result[index]&&cursor<supply.length)result[index]=supply[cursor++];
+ return result.filter(Boolean).concat(supply.slice(cursor));
 }
