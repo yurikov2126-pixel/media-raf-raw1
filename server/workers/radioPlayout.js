@@ -22,6 +22,7 @@ import {RadioStationDualDeck} from '../src/lib/radioStationDualDeck.js';
 import {readPcmFrames} from '../src/lib/radioLivePcmHandover.js';
 import {resumeScheduledCursor,continuePcmIterator} from '../src/lib/radioPcmHandoverResume.js';
 import {scheduledSuccessor} from '../src/lib/radioScheduledPrewarm.js';
+import {scheduledBoundaryFadePolicy} from '../src/lib/radioScheduledBoundaryFade.js';
 import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import { isPcmBoundaryAligned, reverseAuthorityFresh } from '../src/lib/radioPcmBoundaryClock.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
@@ -685,6 +686,7 @@ async function run() {
     let stationClockLogged=false;
     const fadeIn=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||cursor.status==='AUTO_DJ');
     const fadeOut=!usableBlend&&((cursor.status==='SCHEDULED'&&!SCHEDULED_CROSSFADE_ENABLED)||(cursor.status==='AUTO_DJ'&&Number.isFinite(boundary)));
+    const scheduledBoundaryFadeEnabled=process.env.RADIO_SCHEDULED_BOUNDARY_FADE_ENABLED==='true';
     const fadeTotalBytes=Math.max(0,Math.floor(remaining*PCM_BYTES_PER_MS/4)*4);
     state.playout={trackId:asset.id,startedAt:null,seekMs:Math.max(0,cursor.track.offsetMs??0),durationMs:Math.max(0,cursor.track.durationMs??asset.durationMs??0),emittedMs:0};
     const pcmStaging=PCM_STAGING_ENABLED?new PcmFrameBuffer({frameBytes:4,maxBytes:2*1024*1024}):null;
@@ -802,12 +804,19 @@ async function run() {
 
               at:new Date().toISOString()}));
           }
+          const boundaryFade=scheduledBoundaryFadePolicy({
+            enabled:scheduledBoundaryFadeEnabled,status:cursor.status,
+            isLastTrack:isLastScheduledTrack,usableBlend,
+            crossfadeEligible:eligible,remainingMs:remaining
+          });
+          const safeFadeOut=fadeOut||boundaryFade.fadeOut;
+          const safeFadeMs=boundaryFade.fadeOut?boundaryFade.fadeMs:DEFAULT_SOURCE_FADE_MS;
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
           const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
           if(plainBytes){
             const plain=fadePcmChunk(output.subarray(0,plainBytes),{
               positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
-              fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut:fadeOut&&!eligible
+              fadeMs:safeFadeMs,fadeIn,fadeOut:safeFadeOut&&!eligible
             });
             if(!encoder.stdin.write(plain))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
             emittedBytes+=plain.length;
@@ -915,7 +924,7 @@ async function run() {
               }
             }else{
               const normal=fadePcmChunk(tail,{positionBytes:emittedBytes,
-                totalBytes:fadeTotalBytes,fadeMs:DEFAULT_SOURCE_FADE_MS,fadeIn,fadeOut});
+                totalBytes:fadeTotalBytes,fadeMs:safeFadeMs,fadeIn,fadeOut:safeFadeOut});
               if(!encoder.stdin.write(normal))
                 await new Promise(resolve=>encoder.stdin.once('drain',resolve));
               emittedBytes+=normal.length;
