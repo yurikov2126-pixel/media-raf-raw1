@@ -37,6 +37,9 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [dragId,setDragId]=useState(null),[nowMs,setNowMs]=useState(Date.now());
  useEffect(()=>{const id=setInterval(()=>setNowMs(Date.now()),30000);return()=>clearInterval(id);},[]);
+ useEffect(()=>{
+  if(window.matchMedia('(max-width: 767px)').matches)setView('day');
+ },[]);
  useEffect(()=>{if(selectedDay<date||selectedDay>scheduleAddDays(date,6))setSelectedDay(date);},[date,selectedDay]);
  const days=useMemo(()=>Array.from({length:7},(_,i)=>scheduleAddDays(date,i)),[date]);
  const events=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt&&Number.isFinite(Date.parse(s.startAt))&&Number.isFinite(Date.parse(s.endAt)))
@@ -98,7 +101,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     <span className="block font-bold">{readable(day+'T12:00:00Z')}</span><span className="block opacity-65">{scheduleForDay(day).length} событий</span>
    </button>)}
   </nav>
-  {view==='week'&&<div className="radio-v3-week-scroll overflow-x-auto rounded-2xl border border-current/15">
+  {view==='week'&&<div className="radio-v3-week-scroll overflow-x-auto rounded-2xl border border-current/15" tabIndex={0} role="region" aria-label="Прокручиваемая сетка вещания за неделю">
    <div className="radio-v3-week-grid min-w-[910px]">
     <div className="radio-v3-time-column"><div className="radio-v3-day-heading">Время</div>
      <div className="relative" style={{height:HOURS*HOUR}}>

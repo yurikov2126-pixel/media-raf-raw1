@@ -33,6 +33,12 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
  const [expanded,setExpanded]=useState({});
  useEffect(()=>{setMobileOpen(false);},[tab]);
  useEffect(()=>{
+  if(!mobileOpen)return;
+  const key=e=>{if(e.key==='Escape')setMobileOpen(false);};
+  window.addEventListener('keydown',key);
+  return()=>window.removeEventListener('keydown',key);
+ },[mobileOpen]);
+ useEffect(()=>{
   const shortcut=event=>{
    if(!event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!/^([1-9])$/.test(event.key))return;
    if(event.target instanceof HTMLElement&&
