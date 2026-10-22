@@ -284,3 +284,15 @@
 .radio-workspace .rcs-diagnostics-amp{margin-top:14px;padding-top:14px;border-top:1px solid var(--rc-border);min-width:0}
 .radio-workspace .rcs-diagnostics-amp h3{font-size:13px;font-weight:750;color:var(--rc-ink);margin:0 0 12px}
 @media(max-width:850px){.radio-workspace .rcs-os-widget .rcs-meter-gauge{height:130px}}
+
+
+/* True independent-height dashboard columns: standard CSS grid aligns rows to
+   the tallest neighbour, producing the blank gaps shown by operators.
+   Multi-column flow lets each tile occupy only its own content height. */
+.radio-workspace .rcs-grid.rcs-os-grid{display:block!important;columns:2;column-gap:14px;align-items:initial;grid-template-areas:none!important}
+.radio-workspace .rcs-os-grid>.rcs-os-widget{display:inline-block;width:100%;vertical-align:top;break-inside:avoid;page-break-inside:avoid;margin:0 0 14px;grid-column:auto!important;align-self:auto;box-sizing:border-box}
+.radio-workspace .rcs-os-grid>.rcs-os-widget.rcs-os-wide{display:block;column-span:all;width:100%}
+.radio-workspace .rcs-os-grid .rcs-os-widget>.rcs-panel,
+.radio-workspace .rcs-os-grid .rcs-os-widget>.rcs-onair,
+.radio-workspace .rcs-os-grid .rcs-os-widget>.rcs-meter-panel{height:auto!important;align-self:flex-start;min-height:0;max-height:none}
+@media(max-width:850px){.radio-workspace .rcs-grid.rcs-os-grid{columns:1}.radio-workspace .rcs-os-grid>.rcs-os-widget.rcs-os-wide{column-span:none}}
