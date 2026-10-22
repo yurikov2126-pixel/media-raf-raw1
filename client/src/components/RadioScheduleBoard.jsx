@@ -37,7 +37,7 @@ const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-othe
 export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
- const [autoFit,setAutoFit]=useState(()=>{try{return localStorage.getItem('radio-schedule-auto-fit')==='true';}catch{return false;}});
+ const [autoFit,setAutoFit]=useState(()=>{try{return localStorage.getItem('radio-schedule-auto-fit')!=='false';}catch{return true;}});
  const [expandedCard,setExpandedCard]=useState(null);
  useEffect(()=>{try{localStorage.setItem('radio-schedule-auto-fit',String(autoFit));}catch{/* unavailable */}},[autoFit]);
  const [hourHeight,setHourHeight]=useState(()=>{try{const saved=Number(localStorage.getItem('radio-schedule-hour-height'));return ZOOM_STEPS.includes(saved)?saved:58;}catch{return 58;}});
@@ -53,7 +53,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const events=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt&&Number.isFinite(Date.parse(s.startAt))&&Number.isFinite(Date.parse(s.endAt)))
   .filter(s=>filter==='all'||(filter==='assigned'?Boolean(s.playlistId):!s.playlistId))
   .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)),[slots,filter]);
- const shortestDuration=useMemo(()=>Math.min(...events.map(s=>(Date.parse(s.endAt)-Date.parse(s.startAt))/60000).filter(n=>n>0),Infinity),[events]);
+ const shortestDuration=useMemo(()=>Math.min(...events.filter(s=>Date.parse(s.endAt)>nowMs).map(s=>(Date.parse(s.endAt)-Date.parse(s.startAt))/60000).filter(n=>n>0),Infinity),[events,nowMs]);
  const fitHourHeight=Number.isFinite(shortestDuration)?Math.min(480,Math.max(58,Math.ceil(82*60/shortestDuration))):58;
  const HOUR=autoFit?Math.max(hourHeight,fitHourHeight):hourHeight;
  const today=scheduleDayKey(new Date(nowMs));
@@ -110,7 +110,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
    className={'radio-v3-event group rounded-xl border text-left '+(expandedCard===event.id?'radio-v3-event-details ':'overflow-hidden ')+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
    >
    <span className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums">{active&&<span className="radio-v3-live-dot"/>}{clock(event.startAt)}–{clock(event.endAt)}</span>
-   <span className="block truncate text-xs font-semibold sm:text-sm">{title}</span>
+   <span className={"block text-xs font-semibold sm:text-sm "+(compact&&expandedCard!==event.id?"truncate":"whitespace-normal break-words")}>{title}</span>
    {(!positioned||!compact||expandedCard===event.id)&&<span className="block truncate text-[10px] opacity-75">{event.playlistId?'Музыкальный блок / передача':'План без плейлиста'}</span>}
    {conflict&&<span className="block text-[10px] font-bold text-rose-600 dark:text-rose-300">⚠ Конфликт времени</span>}
   </button>
