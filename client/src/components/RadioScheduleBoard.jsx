@@ -1,6 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import './radio-schedule-v3.css';
-const zone='Europe/Moscow',HOUR=58,DAY_START=0,HOURS=24;
+const zone='Europe/Moscow',HOURS=24;
+const ZOOM_STEPS=[36,48,58,72,90,120];
 export const scheduleDayKey=date=>new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 export const scheduleAddDays=(key,days)=>{const d=new Date(key+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);};
 const clock=value=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
@@ -36,6 +37,9 @@ const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-othe
 export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
+ const [hourHeight,setHourHeight]=useState(()=>{try{const saved=Number(localStorage.getItem('radio-schedule-hour-height'));return ZOOM_STEPS.includes(saved)?saved:58;}catch{return 58;}});
+ const HOUR=hourHeight;
+ useEffect(()=>{try{localStorage.setItem('radio-schedule-hour-height',String(hourHeight));}catch{/* private browsing */}},[hourHeight]);
  const [quickSlot,setQuickSlot]=useState(null);
  const [dragId,setDragId]=useState(null),[dragOffset,setDragOffset]=useState(0),[dropPreview,setDropPreview]=useState(null),[nowMs,setNowMs]=useState(Date.now());
  useEffect(()=>{const id=setInterval(()=>setNowMs(Date.now()),30000);return()=>clearInterval(id);},[]);
@@ -85,12 +89,15 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   // Preserve the grabbed position within the event instead of jumping the top to the pointer.
   setDragOffset(Math.max(0,Math.min((Date.parse(target.endAt)-Date.parse(target.startAt))/60000,(event.clientY-rect.top)/HOUR*60)));
   event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',id);
+  // Hide the browser's frozen drag snapshot: the live destination card carries the time.
+  const transparent=document.createElement('canvas');transparent.width=1;transparent.height=1;
+  event.dataTransfer.setDragImage(transparent,0,0);
  };
  const card=(event,index,positioned=false)=> {
   const active=Date.parse(event.startAt)<=nowMs&&Date.parse(event.endAt)>nowMs;
   const future=Date.parse(event.startAt)>nowMs, conflict=scheduleConflict(events,event);
   const title=event.playlist?.name||event.title||'Передача';
-  return <div key={event.id} className={positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell'} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
+  return <div key={event.id} className={(positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell')+(dragId===event.id?' radio-v3-event-dragging':'')} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
    onDragEnd={()=>{setDragId(null);setDropPreview(null);}} onClick={e=>{e.stopPropagation();onSelectSlot?.(event);}}
    onContextMenu={e=>{e.preventDefault();onSelectSlot?.(event);}}
    title={title+' · '+clock(event.startAt)+'–'+clock(event.endAt)}
@@ -122,7 +129,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
    {Array.from({length:HOURS},(_,i)=><div key={i} className="radio-v3-hour-line" style={{top:i*HOUR}}/>)}
    {nowMinute!==null&&<div className="radio-v3-now-line" style={{top:nowMinute/60*HOUR}}><span>Сейчас</span></div>}
    {items.map((e,i)=>card(e,i,true))}
-   {dropPreview?.day===day&&<div className={'radio-v3-drag-preview '+(dropPreview.conflict?'radio-v3-drag-invalid':'radio-v3-drag-valid')} style={{top:dropPreview.minute/60*HOUR,height:Math.max(25,dropPreview.duration/60*HOUR)}} aria-hidden="true"><strong>{dropPreview.startLocal.slice(11)} · {dropPreview.title}</strong><span>{dropPreview.conflict?'Занято или прошедшее время':'Отпустите для переноса · шаг 5 мин'}</span></div>}
+   {dropPreview?.day===day&&<div className={'radio-v3-drag-preview '+(dropPreview.conflict?'radio-v3-drag-invalid':'radio-v3-drag-valid')} style={{top:dropPreview.minute/60*HOUR,height:Math.max(25,dropPreview.duration/60*HOUR)}} aria-hidden="true"><strong>{dropPreview.startLocal.slice(11)}–{clock(Date.parse(dropPreview.startLocal+':00+03:00')+dropPreview.duration*60000)} · {dropPreview.title}</strong><span>{dropPreview.conflict?'Занято или прошедшее время':'Отпустите для переноса · шаг 5 мин'}</span></div>}
   </div>;
  };
  return <section className="space-y-3" aria-label="Эфирная сетка Radio 3.0">
@@ -134,6 +141,12 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     <button type="button" className="radio-v3-schedule-btn" onClick={()=>onDateChange(scheduleAddDays(date,-7))} aria-label="Предыдущая неделя">←</button>
     <button type="button" className="radio-v3-schedule-btn" onClick={()=>onDateChange(today)}>Сегодня</button>
     <button type="button" className="radio-v3-schedule-btn" onClick={()=>onDateChange(scheduleAddDays(date,7))} aria-label="Следующая неделя">→</button>
+    <div className="radio-v3-zoom-controls" role="group" aria-label="Масштаб временной шкалы">
+     <button type="button" disabled={hourHeight===ZOOM_STEPS[0]} onClick={()=>setHourHeight(h=>ZOOM_STEPS[Math.max(0,ZOOM_STEPS.indexOf(h)-1)])} aria-label="Уменьшить масштаб сетки" title="Мельче">−</button>
+     <span aria-live="polite" title="Высота одного часа">{Math.round(hourHeight/58*100)}%</span>
+     <button type="button" disabled={hourHeight===ZOOM_STEPS[ZOOM_STEPS.length-1]} onClick={()=>setHourHeight(h=>ZOOM_STEPS[Math.min(ZOOM_STEPS.length-1,ZOOM_STEPS.indexOf(h)+1)])} aria-label="Увеличить масштаб сетки" title="Крупнее">+</button>
+     <button type="button" onClick={()=>setHourHeight(58)} aria-label="Сбросить масштаб сетки">100%</button>
+    </div>
     <select className="radio-v3-schedule-btn" value={view} onChange={e=>setView(e.target.value)} aria-label="Вид календаря">
      <option value="week">Неделя</option><option value="day">День</option><option value="list">Список</option>
     </select>
