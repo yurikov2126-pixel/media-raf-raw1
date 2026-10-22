@@ -206,7 +206,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>)}
     </div>}
     {results.health&&((health?.agents?.offline||0)>0||health?.amplifier?.connection==='OFFLINE')&&<p className="rcs-health-warning" role="alert">Внимание: {health.agents.offline||0} радиокомпьютеров без связи{health.amplifier.connection==='OFFLINE'?', усилитель ESP32 недоступен':''}. Проверить оборудование ↗</p>}
-    <button type="button" className="rcs-details-toggle" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>{details?'Скрыть сведения':'Подробности подключения и усилителя'}</button>
+    <button type="button" className="rcs-details-toggle" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>{details?'Скрыть сведения':'Подробности подключения'}</button>
     {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p></div>}
     <div className="rcs-diagnostics-amp"><h3>Управление усилителем</h3><RadioAmplifierControl token={token}/></div>
    </Panel>
