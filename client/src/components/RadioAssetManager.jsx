@@ -12,6 +12,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const [activeId,setActiveId]=useState(null),[playState,setPlayState]=useState('idle'),[elapsed,setElapsed]=useState(0),[audioDuration,setAudioDuration]=useState(0);
  const [folders,setFolders]=useState([]),[folder,setFolder]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('name');
  const [collapsed,setCollapsed]=useState([]);
+ const [advancedOpen,setAdvancedOpen]=useState(false),[artistFilter,setArtistFilter]=useState(''),[albumFilter,setAlbumFilter]=useState(''),[genreFilter,setGenreFilter]=useState(''),[durationFilter,setDurationFilter]=useState(''),[metadataFilter,setMetadataFilter]=useState('all');
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
  const [checked,setChecked]=useState([]),[menu,setMenu]=useState(null),[dragOver,setDragOver]=useState(null);
  const [playlistName,setPlaylistName]=useState(''),[showPlaylist,setShowPlaylist]=useState(false);
@@ -54,16 +55,16 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const request=(url,options)=>api('/radio'+url,{token,...options});
  const reload=async()=>{try{setFolders((await request('/asset-folders')).folders||[]);setError('');}catch(e){setError(e.message);}};
  useEffect(()=>{void reload();},[token]);
- useEffect(()=>{setPage(1);setChecked([]);},[folder,query,sort,pageSize]);
+ useEffect(()=>{setPage(1);setChecked([]);},[folder,query,sort,pageSize,artistFilter,albumFilter,genreFilter,durationFilter,metadataFilter]);
  useEffect(()=>{let alive=true;const controller=new AbortController();const timer=setTimeout(async()=>{
   setLoading(true);
-  try{const p=new URLSearchParams({page:String(page),limit:String(pageSize),sort,query});if(folder)p.set('folderId',folder);
+  try{const p=new URLSearchParams({page:String(page),limit:String(pageSize),sort,query,artist:artistFilter,album:albumFilter,genre:genreFilter,duration:durationFilter,metadata:metadataFilter});if(folder)p.set('folderId',folder);
    const data=await request('/assets/browse?'+p.toString(),{signal:controller.signal});
    if(alive){setResults(data);setError('');}
   }catch(e){if(alive)setError(e.message||'Не удалось загрузить записи');}finally{if(alive)setLoading(false);}
  },250);
  return()=>{alive=false;clearTimeout(timer);controller.abort();};
- },[token,page,pageSize,folder,query,sort,assets]);
+ },[token,page,pageSize,folder,query,sort,artistFilter,albumFilter,genreFilter,durationFilter,metadataFilter,assets]);
  const tree=useMemo(()=>radioFolderTree(folders),[folders]);
  const ancestors=useMemo(()=>radioFolderPath(folders,folder),[folders,folder]);
  const visibleTree=tree.filter(entry=>!ancestorsHidden(entry));
@@ -139,9 +140,23 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
      <div className="flex flex-wrap items-center gap-2 text-xs">{[null,...ancestors].map((f,i)=><button key={f?.id||'root'} onClick={()=>chooseFolder(f?.id||null)} className="rounded-md px-2 py-1 hover:bg-indigo-500/10">{i?'› ':''}{f?.name||'Корень'}</button>)}</div>
      <div className="rl-searchbar mt-3 flex flex-wrap gap-2">
       <input className="min-w-32 flex-1 rounded-xl border border-current/15 bg-transparent px-3 py-2 text-sm" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по названию, исполнителю, альбому, жанру"/>
-      <select aria-label="Сортировка" value={sort} onChange={e=>setSort(e.target.value)} className="rounded-xl border border-current/15 bg-transparent px-2 text-sm"><option value="name">Название</option><option value="artist">Исполнитель</option><option value="duration">Длительность</option><option value="recent">Недавние</option></select>
+      <select aria-label="Сортировка" value={sort} onChange={e=>setSort(e.target.value)} className="rounded-xl border border-current/15 bg-transparent px-2 text-sm"><option value="name">Название А–Я</option><option value="recent">Новые сначала</option><option value="oldest">Старые сначала</option><option value="duration">Длинные сначала</option><option value="shortest">Короткие сначала</option><option value="largest">Крупные файлы</option></select>
       <button type="button" onClick={()=>setView(view==='list'?'tiles':'list')} className="rounded-xl border border-current/15 px-3 py-2 text-sm">{view==='list'?'Значки':'Список'}</button>
      </div>
+     <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button type="button" aria-expanded={advancedOpen} className="rl-filter-toggle" onClick={()=>setAdvancedOpen(v=>!v)}>⚙ Фильтры {advancedOpen?'▲':'▼'}</button>
+      <button type="button" className="rl-filter-toggle" onClick={()=>{setSort('recent');setMetadataFilter('all');setDurationFilter('');setArtistFilter('');setAlbumFilter('');setGenreFilter('');}}>Недавно добавленные</button>
+      <button type="button" className="rl-filter-toggle" onClick={()=>{setMetadataFilter('no-artist');setAdvancedOpen(true);}}>Без исполнителя</button>
+      <button type="button" className="rl-filter-toggle" onClick={()=>{setMetadataFilter('no-title');setAdvancedOpen(true);}}>Без названия</button>
+      {(artistFilter||albumFilter||genreFilter||durationFilter||metadataFilter!=='all')&&<button type="button" className="rl-filter-clear" onClick={()=>{setArtistFilter('');setAlbumFilter('');setGenreFilter('');setDurationFilter('');setMetadataFilter('all');}}>Сбросить фильтры ✕</button>}
+     </div>
+     {advancedOpen&&<div className="rl-filter-panel mt-3 grid gap-2 rounded-xl p-3 sm:grid-cols-2 xl:grid-cols-3">
+      <label className="text-xs font-semibold">Исполнитель<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2.5 text-sm" value={artistFilter} onChange={e=>setArtistFilter(e.target.value)} placeholder="Имя исполнителя"/></label>
+      <label className="text-xs font-semibold">Альбом<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2.5 text-sm" value={albumFilter} onChange={e=>setAlbumFilter(e.target.value)} placeholder="Название альбома"/></label>
+      <label className="text-xs font-semibold">Жанр<input className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2.5 text-sm" value={genreFilter} onChange={e=>setGenreFilter(e.target.value)} placeholder="Жанр"/></label>
+      <label className="text-xs font-semibold">Продолжительность<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2.5 text-sm" value={durationFilter} onChange={e=>setDurationFilter(e.target.value)}><option value="">Любая</option><option value="short">До 3 минут</option><option value="medium">От 3 до 15 минут</option><option value="long">От 15 минут</option></select></label>
+      <label className="text-xs font-semibold">Заполненность тегов<select className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2.5 text-sm" value={metadataFilter} onChange={e=>setMetadataFilter(e.target.value)}><option value="all">Любые записи</option><option value="no-artist">Без исполнителя</option><option value="no-title">Без названия</option></select></label>
+     </div>}
      <div className="rl-selection mt-3 flex flex-wrap items-center gap-2 rounded-xl border p-2">
        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(list.length)&&selectedIds.length===list.length} onChange={e=>setChecked(e.target.checked?list.map(a=>a.id):[])}/> Выбрать страницу</label>
        <span className="text-xs opacity-65">Выбрано: {selectedIds.length}</span>
