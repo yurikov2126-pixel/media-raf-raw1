@@ -255,9 +255,22 @@ export default function Radio() {
       requestAnimationFrame(() => playerRef.current?.play().catch(() => {}));
     } catch (e) { toast.error(e.message); }
   };
-  const dropSchedule = (slot,day) => {
-    if(new Date(slot.startAt)<=new Date())return toast.error('Прошедшую или начавшуюся передачу переносить нельзя');
-    proposeMove(slot,day);
+  const [dragSavingId,setDragSavingId]=useState(null);
+  const dropSchedule = async (slot,startLocal,previewConflict) => {
+    if(dragSavingId||!slot?.id)return;
+    if(Date.parse(slot.startAt)<=Date.now())return toast.error('Прошедшую или начавшуюся передачу переносить нельзя');
+    const duration=Math.round((Date.parse(slot.endAt)-Date.parse(slot.startAt))/60000);
+    const check=previewScheduleChange(slots,slot,startLocal,duration);
+    if(!check.valid||check.start<=Date.now())return toast.error('Выберите будущее время');
+    if(previewConflict||check.conflicts.length)return toast.error('Это время занято другой передачей');
+    if(check.start===Date.parse(slot.startAt))return;
+    setDragSavingId(slot.id);
+    try{
+      await call('/schedule/'+encodeURIComponent(slot.id),{method:'PATCH',body:{startLocal}});
+      await refresh();
+      toast.success('Передача перенесена на '+startLocal.slice(11));
+    }catch(error){toast.error(error.message||'Не удалось перенести передачу');}
+    finally{setDragSavingId(null);}
   };
   const deleteScheduleSlot = slot => {
     if (!slot?.id) return;

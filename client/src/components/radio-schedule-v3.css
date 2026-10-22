@@ -47,3 +47,12 @@
 .radio-v3-quick-actions{position:absolute;top:calc(100% + 3px);right:0;z-index:30;min-width:160px;padding:6px;display:grid;gap:4px;background:var(--rc-panel,#fff);color:var(--rc-ink,#172033);border:1px solid var(--rc-border,#cbd5e1);box-shadow:0 12px 32px #0003;border-radius:12px}
 .radio-v3-quick-actions button{padding:9px 12px;text-align:left;font-size:12px;border-radius:7px;color:inherit}
 .radio-v3-quick-actions button:hover{background:rgba(139,92,246,.12)}
+
+
+/* Precision drag destination: the preview follows the pointer in 5-minute steps. */
+.radio-v3-drag-preview{position:absolute;left:3px;right:3px;z-index:40;pointer-events:none;border:2px dashed;border-radius:10px;padding:7px 9px;overflow:hidden;box-shadow:0 6px 18px #0002;display:flex;flex-direction:column;gap:3px;font-size:11px}
+.radio-v3-drag-preview strong{font-size:12px;font-weight:800;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.radio-v3-drag-valid{border-color:#059669;background:rgba(16,185,129,.23);color:#065f46}
+.radio-v3-drag-invalid{border-color:#e11d48;background:rgba(244,63,94,.23);color:#9f1239}
+.dark .radio-v3-drag-valid,[data-theme="dark"] .radio-v3-drag-valid{color:#a7f3d0;background:rgba(6,95,70,.72)}
+.dark .radio-v3-drag-invalid,[data-theme="dark"] .radio-v3-drag-invalid{color:#fecdd3;background:rgba(136,19,55,.74)}

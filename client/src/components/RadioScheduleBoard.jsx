@@ -37,7 +37,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
  const [quickSlot,setQuickSlot]=useState(null);
- const [dragId,setDragId]=useState(null),[nowMs,setNowMs]=useState(Date.now());
+ const [dragId,setDragId]=useState(null),[dragOffset,setDragOffset]=useState(0),[dropPreview,setDropPreview]=useState(null),[nowMs,setNowMs]=useState(Date.now());
  useEffect(()=>{const id=setInterval(()=>setNowMs(Date.now()),30000);return()=>clearInterval(id);},[]);
  useEffect(()=>{
   if(window.matchMedia('(max-width: 767px)').matches)setView('day');
@@ -58,15 +58,40 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   setQuickSlot(null);
   onQuickEdit?.(event,key+'T'+stamp);
  };
- const moveToDay=(event,day)=>{if(Date.parse(event.startAt)>Date.now())onDropSlot?.(event,day);};
- const drop=(e,day)=>{e.preventDefault();const target=events.find(s=>s.id===dragId);setDragId(null);if(target)moveToDay(target,day);};
- const startDrag=(e,id)=>{setDragId(id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);};
+ const getDropPreview=(event,day)=>{
+  const rect=event.currentTarget.getBoundingClientRect();
+  const target=events.find(item=>item.id===dragId);
+  if(!target)return null;
+  const duration=(Date.parse(target.endAt)-Date.parse(target.startAt))/60000;
+  const raw=((event.clientY-rect.top)/HOUR*60)-dragOffset;
+  const minute=Math.min(Math.max(0,Math.round(raw/5)*5),Math.max(0,Math.floor((1440-duration)/5)*5));
+  const startLocal=day+'T'+String(Math.floor(minute/60)).padStart(2,'0')+':'+String(minute%60).padStart(2,'0');
+  const from=Date.parse(startLocal+':00+03:00'),until=from+duration*60000;
+  const conflict=from<=Date.now()||events.some(other=>other.id!==target.id&&Date.parse(other.startAt)<until&&Date.parse(other.endAt)>from);
+  return {day,startLocal,minute,duration,conflict,title:target.playlist?.name||target.title||'Передача'};
+ };
+ const drop=(event,day)=>{
+  event.preventDefault();
+  const preview=getDropPreview(event,day);
+  const target=events.find(item=>item.id===dragId);
+  setDragId(null);setDropPreview(null);
+  if(target&&preview)onDropSlot?.(target,preview.startLocal,preview.conflict);
+ };
+ const startDrag=(event,id)=>{
+  const target=events.find(item=>item.id===id);
+  if(!target||Date.parse(target.startAt)<=Date.now())return;
+  setDragId(id);setDropPreview(null);
+  const rect=event.currentTarget.getBoundingClientRect();
+  // Preserve the grabbed position within the event instead of jumping the top to the pointer.
+  setDragOffset(Math.max(0,Math.min((Date.parse(target.endAt)-Date.parse(target.startAt))/60000,(event.clientY-rect.top)/HOUR*60)));
+  event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',id);
+ };
  const card=(event,index,positioned=false)=> {
   const active=Date.parse(event.startAt)<=nowMs&&Date.parse(event.endAt)>nowMs;
   const future=Date.parse(event.startAt)>nowMs, conflict=scheduleConflict(events,event);
   const title=event.playlist?.name||event.title||'Передача';
   return <div key={event.id} className={positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell'} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
-   onDragEnd={()=>setDragId(null)} onClick={e=>{e.stopPropagation();onSelectSlot?.(event);}}
+   onDragEnd={()=>{setDragId(null);setDropPreview(null);}} onClick={e=>{e.stopPropagation();onSelectSlot?.(event);}}
    onContextMenu={e=>{e.preventDefault();onSelectSlot?.(event);}}
    title={title+' · '+clock(event.startAt)+'–'+clock(event.endAt)}
    className={'radio-v3-event group overflow-hidden rounded-xl border text-left '+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
@@ -86,7 +111,8 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  };
  const timeline=(day,items)=>{
   const nowMinute=day===today?minutes(nowMs):null;
-  return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR}} onDragOver={e=>{if(dragId)e.preventDefault();}}
+  return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR}} onDragOver={e=>{if(!dragId)return;e.preventDefault();e.dataTransfer.dropEffect='move';setDropPreview(getDropPreview(e,day));}}
+   onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropPreview(null);}}
    onDrop={e=>drop(e,day)} onClick={e=>{
     if(!onCreateAt||e.target!==e.currentTarget)return;
     const rect=e.currentTarget.getBoundingClientRect();
@@ -96,6 +122,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
    {Array.from({length:HOURS},(_,i)=><div key={i} className="radio-v3-hour-line" style={{top:i*HOUR}}/>)}
    {nowMinute!==null&&<div className="radio-v3-now-line" style={{top:nowMinute/60*HOUR}}><span>Сейчас</span></div>}
    {items.map((e,i)=>card(e,i,true))}
+   {dropPreview?.day===day&&<div className={'radio-v3-drag-preview '+(dropPreview.conflict?'radio-v3-drag-invalid':'radio-v3-drag-valid')} style={{top:dropPreview.minute/60*HOUR,height:Math.max(25,dropPreview.duration/60*HOUR)}} aria-hidden="true"><strong>{dropPreview.startLocal.slice(11)} · {dropPreview.title}</strong><span>{dropPreview.conflict?'Занято или прошедшее время':'Отпустите для переноса · шаг 5 мин'}</span></div>}
   </div>;
  };
  return <section className="space-y-3" aria-label="Эфирная сетка Radio 3.0">
