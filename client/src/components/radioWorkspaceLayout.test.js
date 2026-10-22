@@ -3,7 +3,7 @@ import {normalizeRadioLayout,moveRadioWidget,RADIO_PRESETS} from './radioWorkspa
 describe('radio OS workspace',()=>{
  it('normalizes stale or malformed persisted settings',()=>{
   const result=normalizeRadioLayout({order:['queue','ghost','queue'],hidden:['onair','actions','missing'],wide:['diagnostics','other']});
-  expect(result.order[0]).toBe('queue');expect(new Set(result.order).size).toBe(5);
+  expect(result.order[0]).toBe('queue');expect(new Set(result.order).size).toBe(6);
   expect(result.hidden).toEqual(['actions']);expect(result.wide).toEqual(['diagnostics']);
  });
  it('moves the dragged widget before the target',()=>{
