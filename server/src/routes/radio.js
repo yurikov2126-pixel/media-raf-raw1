@@ -471,6 +471,38 @@ router.patch('/assets/:id', safe(async (req, res) => {
     if (!updated.count) return res.status(404).json({ error: 'Запись не найдена' });
     res.json({ asset: await prisma.radioAsset.findUnique({ where: { id: req.params.id } }) });
 }));
+// File manager: inspect dependencies before any destructive batch action.
+router.post('/assets/bulk-delete-preview',requireRole('ADMIN'),safe(async(req,res)=>{
+ const assetIds=req.body?.assetIds;
+ if(!Array.isArray(assetIds)||!assetIds.length||assetIds.length>200||new Set(assetIds).size!==assetIds.length||
+  assetIds.some(id=>typeof id!=='string'||!id||id.length>128))return res.status(400).json({error:'Выберите 1–200 уникальных записей'});
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:assetIds}},select:{id:true,name:true,byteSize:true}});
+ if(assets.length!==assetIds.length)return res.status(409).json({error:'Некоторые записи отсутствуют. Обновите список'});
+ const relations=await prisma.radioPlaylistItem.groupBy({by:['assetId'],where:{assetId:{in:assetIds}},_count:{assetId:true}});
+ const usage=new Map(relations.map(x=>[x.assetId,x._count.assetId]));
+ res.json({total:assets.length,blocked:assets.filter(a=>usage.has(a.id)).map(a=>({id:a.id,name:a.name,playlists:usage.get(a.id)})),
+  deletable:assets.filter(a=>!usage.has(a.id)).map(a=>({id:a.id,name:a.name,byteSize:a.byteSize})),
+  reclaimBytes:assets.reduce((total,a)=>total+(usage.has(a.id)?0:a.byteSize||0),0)});
+}));
+router.post('/assets/bulk-delete',requireRole('ADMIN'),safe(async(req,res)=>{
+ const assetIds=req.body?.assetIds;
+ if(!Array.isArray(assetIds)||!assetIds.length||assetIds.length>200||new Set(assetIds).size!==assetIds.length||
+  assetIds.some(id=>typeof id!=='string'||!id||id.length>128))return res.status(400).json({error:'Выберите 1–200 уникальных записей'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729004)`;
+  const assets=await tx.radioAsset.findMany({where:{id:{in:assetIds}},select:{id:true,storageKey:true}});
+  if(assets.length!==assetIds.length)return {status:409,error:'Некоторые записи отсутствуют'};
+  const refs=await tx.radioPlaylistItem.count({where:{assetId:{in:assetIds}}});
+  if(refs)return {status:409,error:'Некоторые записи задействованы в плейлистах. Снимите использование и повторите проверку.'};
+  await tx.radioAsset.deleteMany({where:{id:{in:assetIds}}});
+  return {assets};
+ });
+ if(result.error)return res.status(result.status).json({error:result.error});
+ const cleanup=await Promise.allSettled(result.assets.map(asset=>fs.unlink(path.join(root,path.basename(asset.storageKey)))));
+ const failures=cleanup.filter(x=>x.status==='rejected'&&x.reason?.code!=='ENOENT').length;
+ if(failures)console.error('[radio] bulk asset cleanup failures:',failures);
+ res.json({deleted:result.assets.length,cleanupFailures:failures});
+}));
 router.delete('/assets/:id', safe(async (req, res) => {
     const asset = await prisma.radioAsset.findUnique({ where: { id: req.params.id } });
     if (!asset) return res.status(404).json({ error: 'Запись не найдена' });
