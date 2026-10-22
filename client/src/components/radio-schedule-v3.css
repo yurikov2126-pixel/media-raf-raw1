@@ -36,3 +36,14 @@
 .radio-v3-delete-slot:focus-visible{outline:2px solid #e11d48;outline-offset:2px}
 .dark .radio-v3-delete-slot,[data-theme="dark"] .radio-v3-delete-slot{background:#4c1824;border-color:#9f4258;color:#fecdd3}
 @media(max-width:520px){.radio-v3-list-entry{gap:6px}.radio-v3-delete-slot{padding:8px 10px;min-width:64px}}
+
+
+/* Small in-place timeline edit actions; server validates the requested shift. */
+.radio-v3-event-shell{position:relative;min-width:0}
+.radio-v3-event-shell.absolute{position:absolute}
+.radio-v3-event-shell>.radio-v3-event{display:block;min-width:0}
+.radio-v3-quick-edit{position:absolute;top:3px;right:3px;z-index:2;min-width:24px;min-height:24px;border-radius:8px;background:rgba(17,24,39,.82);color:white;font-weight:700;font-size:13px;line-height:1}
+.radio-v3-quick-edit:focus-visible{outline:2px solid #a78bfa;outline-offset:2px}
+.radio-v3-quick-actions{position:absolute;top:calc(100% + 3px);right:0;z-index:30;min-width:160px;padding:6px;display:grid;gap:4px;background:var(--rc-panel,#fff);color:var(--rc-ink,#172033);border:1px solid var(--rc-border,#cbd5e1);box-shadow:0 12px 32px #0003;border-radius:12px}
+.radio-v3-quick-actions button{padding:9px 12px;text-align:left;font-size:12px;border-radius:7px;color:inherit}
+.radio-v3-quick-actions button:hover{background:rgba(139,92,246,.12)}
