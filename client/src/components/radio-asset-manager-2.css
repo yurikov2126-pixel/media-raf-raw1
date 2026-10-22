@@ -31,3 +31,19 @@
 @media(max-width:1023px){.radio-library-v2 .rl-sidebar{position:static;max-height:310px}.radio-library-v2 .rl-workspace{gap:12px}}
 @media(max-width:640px){.radio-library-v2 .rl-hero{padding:16px}.radio-library-v2 .rl-searchbar input{flex-basis:100%}.radio-library-v2 .rl-selection{gap:8px}.radio-library-v2 .rl-file-grid{grid-template-columns:minmax(0,1fr)}.radio-library-v2 .rl-file-row{min-width:0;flex-wrap:wrap;gap:10px}.radio-library-v2 .rl-file-row>div:nth-of-type(2){flex:1 1 calc(100% - 110px)}.radio-library-v2 .rl-file-row .rl-row-actions{margin-left:auto}.radio-library-v2 .rl-sidebar{max-height:240px}}
 @media(prefers-reduced-motion:reduce){.radio-library-v2 .rl-file-card,.radio-library-v2 .rl-file-row,.radio-library-v2 .rl-sidebar button{transition:none}}
+
+
+/* Inline per-track playback: transport belongs to the recording, not a global panel. */
+.radio-library-v2 .rl-file-row{flex-wrap:wrap}
+.radio-library-v2 .rl-inline-player{display:flex;align-items:center;gap:10px;flex:1 1 250px;min-width:170px;padding:6px 9px;border:1px solid var(--rl-border);border-radius:13px;background:var(--rl-soft)}
+.radio-library-v2 .rl-play-toggle{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:var(--rl-accent);color:white;font-size:15px;font-weight:800}
+.dark .radio-library-v2 .rl-play-toggle{color:#172033}
+.radio-library-v2 .rl-seek-group{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.radio-library-v2 .rl-seek-group input[type="range"]{width:100%;min-width:0;height:18px;cursor:pointer;accent-color:var(--rl-accent)}
+.radio-library-v2 .rl-time-readout{font-size:10px;line-height:1.2;letter-spacing:.02em;font-weight:650;font-variant-numeric:tabular-nums;color:var(--rl-muted)}
+.radio-library-v2 .rl-time-readout span{opacity:.55}
+.radio-library-v2 .rl-file-grid .rl-inline-player{width:100%;flex:1 0 100%;order:3;margin-top:auto}
+.radio-library-v2 .rl-file-grid .rl-row-actions{order:4;margin-top:0}
+.radio-library-v2 .rl-row-play-secondary{display:none}
+.radio-library-v2 .rl-seek-group input[type="range"]:focus-visible{outline:2px solid var(--rl-accent);outline-offset:3px;border-radius:8px}
+@media(max-width:680px){.radio-library-v2 .rl-file-row .rl-inline-player{order:3;flex-basis:100%}.radio-library-v2 .rl-file-row .rl-row-actions{margin-left:auto}}
