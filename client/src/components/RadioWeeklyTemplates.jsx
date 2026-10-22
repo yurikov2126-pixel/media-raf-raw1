@@ -13,7 +13,7 @@ const mondayOf=day=>{const time=Date.parse(day+'T12:00:00+03:00');const weekday=
 export default function RadioWeeklyTemplates({slots=[],date,playlists=[],call,refresh,toast}){
  const [open,setOpen]=useState(false),[templates,setTemplates]=useState([]),[selected,setSelected]=useState(''),[name,setName]=useState(''),[items,setItems]=useState([]),[target,setTarget]=useState(()=>scheduleAddDays(mondayOf(scheduleDayKey(new Date())),7)),[busy,setBusy]=useState(false);
  const weekStart=mondayOf(date);
- const available=useMemo(()=>slots.filter(slot=>scheduleDayKey(slot.startAt)>=weekStart&&scheduleDayKey(slot.startAt)<scheduleAddDays(weekStart,7)).map(scheduleTemplateEntry).sort((a,b)=>a.weekday-b.weekday||a.minute-b.minute),[slots,weekStart]);
+ const available=useMemo(()=>slots.filter(slot=>slot?.startAt&&slot?.endAt&&Number.isFinite(Date.parse(slot.startAt))&&Number.isFinite(Date.parse(slot.endAt))&&scheduleDayKey(slot.startAt)>=weekStart&&scheduleDayKey(slot.startAt)<scheduleAddDays(weekStart,7)).map(scheduleTemplateEntry).sort((a,b)=>a.weekday-b.weekday||a.minute-b.minute),[slots,weekStart]);
  const load=async()=>{const data=await call('/schedule/templates');setTemplates(data.templates||[]);};
  useEffect(()=>{if(open)load().catch(e=>toast.error(e.message));},[open]);
  const selectTemplate=id=>{setSelected(id);const template=templates.find(t=>t.id===id);setName(template?.name||'');setItems(template?.items||[]);};
