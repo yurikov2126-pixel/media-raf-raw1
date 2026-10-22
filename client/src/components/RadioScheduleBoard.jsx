@@ -33,9 +33,10 @@ export function scheduleLayout(events,day){
  });
 }
 const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-other'];
-export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onCreate,onCreateAt}){
+export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
+ const [quickSlot,setQuickSlot]=useState(null);
  const [dragId,setDragId]=useState(null),[nowMs,setNowMs]=useState(Date.now());
  useEffect(()=>{const id=setInterval(()=>setNowMs(Date.now()),30000);return()=>clearInterval(id);},[]);
  useEffect(()=>{
@@ -49,6 +50,14 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const today=scheduleDayKey(new Date(nowMs));
  const dayEvents=useMemo(()=>scheduleLayout(events,selectedDay),[events,selectedDay]);
  const scheduleForDay=day=>scheduleLayout(events,day);
+ const quickEdit=(event,offsetMinutes)=>{
+  if(Date.parse(event.startAt)<=Date.now())return;
+  const timestamp=Date.parse(event.startAt)+offsetMinutes*60000;
+  const key=scheduleDayKey(new Date(timestamp));
+  const stamp=clock(new Date(timestamp));
+  setQuickSlot(null);
+  onQuickEdit?.(event,key+'T'+stamp);
+ };
  const moveToDay=(event,day)=>{if(Date.parse(event.startAt)>Date.now())onDropSlot?.(event,day);};
  const drop=(e,day)=>{e.preventDefault();const target=events.find(s=>s.id===dragId);setDragId(null);if(target)moveToDay(target,day);};
  const startDrag=(e,id)=>{setDragId(id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);};
@@ -56,17 +65,24 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   const active=Date.parse(event.startAt)<=nowMs&&Date.parse(event.endAt)>nowMs;
   const future=Date.parse(event.startAt)>nowMs, conflict=scheduleConflict(events,event);
   const title=event.playlist?.name||event.title||'Передача';
-  return <button key={event.id} type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
+  return <div key={event.id} className={positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell'} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
    onDragEnd={()=>setDragId(null)} onClick={e=>{e.stopPropagation();onSelectSlot?.(event);}}
    onContextMenu={e=>{e.preventDefault();onSelectSlot?.(event);}}
    title={title+' · '+clock(event.startAt)+'–'+clock(event.endAt)}
-   className={'radio-v3-event group overflow-hidden rounded-xl border text-left '+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' absolute px-2 py-1.5':' w-full p-3')}
-   style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}>
+   className={'radio-v3-event group overflow-hidden rounded-xl border text-left '+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
+   >
    <span className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums">{active&&<span className="radio-v3-live-dot"/>}{clock(event.startAt)}–{clock(event.endAt)}</span>
    <span className="block truncate text-xs font-semibold sm:text-sm">{title}</span>
    {(!positioned||event.duration>=45)&&<span className="block truncate text-[10px] opacity-75">{event.playlistId?'Музыкальный блок / передача':'План без плейлиста'}</span>}
    {conflict&&<span className="block text-[10px] font-bold text-rose-600 dark:text-rose-300">⚠ Конфликт времени</span>}
-  </button>;
+  </button>
+  {future&&onQuickEdit&&<button type="button" className="radio-v3-quick-edit" title="Сдвинуть начало передачи" aria-label={'Быстро изменить время: '+title} onClick={e=>{e.stopPropagation();setQuickSlot(quickSlot===event.id?null:event.id);}}>✎</button>}
+  {quickSlot===event.id&&future&&<div className="radio-v3-quick-actions">
+   <button type="button" onClick={()=>quickEdit(event,-15)}>−15 мин</button>
+   <button type="button" onClick={()=>quickEdit(event,15)}>+15 мин</button>
+   <button type="button" onClick={()=>{setQuickSlot(null);onSelectSlot?.(event);}}>Изменить…</button>
+  </div>}
+  </div>;
  };
  const timeline=(day,items)=>{
   const nowMinute=day===today?minutes(nowMs):null;
