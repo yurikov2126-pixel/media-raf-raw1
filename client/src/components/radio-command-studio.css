@@ -296,3 +296,18 @@
 .radio-workspace .rcs-os-grid .rcs-os-widget>.rcs-onair,
 .radio-workspace .rcs-os-grid .rcs-os-widget>.rcs-meter-panel{height:auto!important;align-self:flex-start;min-height:0;max-height:none}
 @media(max-width:850px){.radio-workspace .rcs-grid.rcs-os-grid{columns:1}.radio-workspace .rcs-os-grid>.rcs-os-widget.rcs-os-wide{column-span:none}}
+
+
+/* Compact Radio OS density: panel heights remain independent and responsive. */
+.radio-workspace .rcs-os-toolbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.radio-workspace .rcs-os-toolbar-actions [aria-pressed="true"]{background:var(--rc-glow);border-color:var(--rc-accent)}
+.radio-workspace .rcs-os-compact .rcs-os-widget{margin-bottom:8px}
+.radio-workspace .rcs-os-compact .rcs-panel{padding:11px}
+.radio-workspace .rcs-os-compact .rcs-panel-head{margin-bottom:9px}
+.radio-workspace .rcs-os-compact .rcs-status-grid{gap:6px}
+.radio-workspace .rcs-os-compact .rcs-status{padding:8px}
+.radio-workspace .rcs-os-compact .rcs-action-grid{gap:6px}
+.radio-workspace .rcs-os-compact .rcs-action-grid button{min-height:44px}
+.radio-workspace .rcs-os-compact .rcs-meter-gauge{height:105px}
+.radio-workspace .rcs-os-compact .rcs-diagnostics-amp{margin-top:9px;padding-top:9px}
+@media(max-width:850px){.radio-workspace .rcs-os-toolbar-actions{width:100%;justify-content:flex-end}.radio-workspace .rcs-os-compact .rcs-meter-gauge{height:100px}}
