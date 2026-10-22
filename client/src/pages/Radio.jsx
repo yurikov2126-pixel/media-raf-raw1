@@ -8,6 +8,7 @@ import RadioCommandStudio from '../components/RadioCommandStudio.jsx';
 
 import RadioAssetManager from '../components/RadioAssetManager.jsx';
 import RadioScheduleBoard from '../components/RadioScheduleBoard.jsx';
+import RadioWeeklyTemplates from '../components/RadioWeeklyTemplates.jsx';
 import {previewScheduleChange} from '../components/radioSchedulePreview.js';
 import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
@@ -505,6 +506,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
+      <RadioWeeklyTemplates slots={slots} date={date} playlists={playlists} call={call} refresh={refresh} toast={toast}/>
       <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={(slot,startLocal)=>{if(Date.parse(slot.startAt)<=Date.now())return;setMovingSlot(slot);setMoveTime(startLocal);}} onDeleteSlot={deleteScheduleSlot} onBulkCopy={bulkCopySchedule} onBulkDelete={bulkDeleteSchedule} bulkBusy={bulkBusy} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
       {createScheduleOpen && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setCreateScheduleOpen(false);}}>
         <div role="dialog" aria-modal="true" aria-label="Добавить передачу в расписание" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white">

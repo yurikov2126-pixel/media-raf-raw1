@@ -1003,6 +1003,76 @@ router.post('/schedule/weekly', safe(async (req, res) => {
 }));
 
 // Bulk operations are atomic and serialized with single-slot edits.
+// Reusable named weekly templates; all times stored as weekday + minute in Moscow UTC+3.
+const validTemplateItems=items=>Array.isArray(items)&&items.length>0&&items.length<=100&&items.every(x=>
+ Number.isInteger(x.weekday)&&x.weekday>=0&&x.weekday<=6&&Number.isInteger(x.minute)&&x.minute>=0&&x.minute<1440&&
+ Number.isInteger(x.durationMinutes)&&x.durationMinutes>=1&&x.durationMinutes<=720&&
+ (x.playlistId===null||(typeof x.playlistId==='string'&&x.playlistId.length>0))&&
+ typeof x.title==='string'&&x.title.length<=120);
+router.get('/schedule/templates',safe(async(req,res)=>{
+ const templates=await prisma.radioWeeklyTemplate.findMany({orderBy:{updatedAt:'desc'}});
+ res.json({templates});
+}));
+router.post('/schedule/templates',safe(async(req,res)=>{
+ const {name,items}=req.body||{};
+ if(typeof name!=='string'||!name.trim()||name.trim().length>80||!validTemplateItems(items))
+  return res.status(400).json({error:'Укажите название до 80 символов и 1–100 корректных заданий'});
+ const cleaned=items.map(({weekday,minute,durationMinutes,playlistId,title})=>({weekday,minute,durationMinutes,playlistId,title}));
+ const template=await prisma.radioWeeklyTemplate.create({data:{name:name.trim(),items:cleaned}}).catch(error=>{if(error.code==='P2002')return null;throw error;});
+ if(!template)return res.status(409).json({error:'Шаблон с таким названием уже существует'});
+ res.status(201).json({template});
+}));
+router.put('/schedule/templates/:id',safe(async(req,res)=>{
+ const {name,items}=req.body||{};
+ if(typeof name!=='string'||!name.trim()||name.trim().length>80||!validTemplateItems(items))
+  return res.status(400).json({error:'Некорректное название или задания шаблона'});
+ const cleaned=items.map(({weekday,minute,durationMinutes,playlistId,title})=>({weekday,minute,durationMinutes,playlistId,title}));
+ try{
+  const template=await prisma.radioWeeklyTemplate.update({where:{id:req.params.id},data:{name:name.trim(),items:cleaned}});
+  res.json({template});
+ }catch(error){if(error.code==='P2025')return res.status(404).json({error:'Шаблон не найден'});if(error.code==='P2002')return res.status(409).json({error:'Имя шаблона занято'});throw error;}
+}));
+router.delete('/schedule/templates/:id',safe(async(req,res)=>{
+ const result=await prisma.radioWeeklyTemplate.deleteMany({where:{id:req.params.id}});
+ if(!result.count)return res.status(404).json({error:'Шаблон не найден'});
+ res.json({ok:true});
+}));
+router.post('/schedule/templates/:id/apply',safe(async(req,res)=>{
+ const {weekStart}=req.body||{};
+ if(typeof weekStart!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(weekStart))
+  return res.status(400).json({error:'Укажите начало недели YYYY-MM-DD (Москва)'});
+ const monday=Date.parse(weekStart+'T00:00:00+03:00');
+ if(!Number.isFinite(monday)||new Date(monday+3*3600000).getUTCDay()!==1)
+  return res.status(400).json({error:'Дата начала недели должна приходиться на понедельник'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const template=await tx.radioWeeklyTemplate.findUnique({where:{id:req.params.id}});
+  if(!template)return {status:404,error:'Шаблон не найден'};
+  if(!validTemplateItems(template.items))return {status:409,error:'Шаблон содержит некорректные задания'};
+  const items=template.items;
+  const playlistIds=[...new Set(items.map(x=>x.playlistId).filter(Boolean))];
+  const playlists=await tx.radioPlaylist.findMany({where:{id:{in:playlistIds}},include:playlistInclude});
+  if(playlists.length!==playlistIds.length||playlists.some(p=>p.status!=='APPROVED'||!p.items.length))
+   return {status:409,error:'В шаблоне есть неутверждённые или удалённые плейлисты'};
+  const byId=new Map(playlists.map(p=>[p.id,p]));
+  const proposed=items.map(x=>{
+   const startAt=new Date(monday+x.weekday*86400000+x.minute*60000);
+   const duration=x.playlistId?playlistMs(byId.get(x.playlistId)):x.durationMinutes*60000;
+   return {startAt,endAt:new Date(startAt.getTime()+duration),playlistId:x.playlistId,title:x.playlistId?'':x.title,createdBy:req.user.id};
+  });
+  if(proposed.some(x=>x.startAt<=new Date()||!(x.endAt>x.startAt)||x.endAt-x.startAt>12*3600000))
+   return {status:409,error:'Неделя уже началась или у передачи некорректная продолжительность'};
+  const sorted=[...proposed].sort((a,b)=>a.startAt-b.startAt);
+  if(sorted.some((x,i)=>i>0&&sorted[i-1].endAt>x.startAt))
+   return {status:409,error:'Передачи шаблона пересекаются друг с другом'};
+  const clash=await tx.radioScheduleSlot.findFirst({where:{OR:proposed.map(x=>({startAt:{lt:x.endAt},endAt:{gt:x.startAt}}))}});
+  if(clash)return {status:409,error:'В выбранной неделе уже есть передачи. Шаблон не применён'};
+  const created=await tx.radioScheduleSlot.createMany({data:proposed});
+  return {created:created.count};
+ });
+ if(result.error)return res.status(result.status).json({error:result.error});
+ res.status(201).json(result);
+}));
 router.post('/schedule/bulk-copy', safe(async(req,res)=>{
  const {ids,weekOffset}=req.body||{};
  if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!id||id.length>128)||new Set(ids).size!==ids.length
