@@ -266,4 +266,4 @@
 .radio-workspace .rcs-os-move-buttons button{min-width:34px;min-height:34px;font-size:17px;line-height:1;padding:5px}
 .radio-workspace .rcs-os-widget-tools button:disabled{opacity:.36;cursor:not-allowed}
 .radio-workspace .rcs-os-widget-tools button:focus-visible,.radio-workspace .rcs-os-presets button:focus-visible{outline:2px solid var(--rc-accent);outline-offset:2px}
-@media(max-width:850px){.radio-workspace .rcs-os-widget-tools button:first-child{display:inline-flex}.radio-workspace .rcs-os-widget-tools>button:first-child{display:none}.radio-workspace .rcs-os-widget-tools{gap:7px}.radio-workspace .rcs-os-widget-tools strong{min-width:100%;order:-1}.radio-workspace .rcs-os-move-buttons{flex:1}.radio-workspace .rcs-os-move-buttons button{min-width:44px;min-height:44px}}
+@media(max-width:850px){.radio-workspace .rcs-os-widget-tools>button:first-child{display:none}.radio-workspace .rcs-os-widget-tools{gap:7px}.radio-workspace .rcs-os-widget-tools strong{min-width:100%;order:-1}.radio-workspace .rcs-os-move-buttons{flex:1}.radio-workspace .rcs-os-move-buttons button{min-width:44px;min-height:44px}}
