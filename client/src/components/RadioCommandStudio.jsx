@@ -123,7 +123,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
   {layoutEditing&&<p className="rcs-os-hint">Перетаскивайте панели за значок ⠿ на компьютере или используйте стрелки ↑ ↓. Изменения сохраняются автоматически.</p>}
   {layoutEditing&&<div className="rcs-os-restore"><span>Скрытые панели:</span>{RADIO_WIDGETS.filter(entry=>layout.hidden.includes(entry.id)).map(entry=><button key={entry.id} type="button" onClick={()=>patchLayout(previous=>({...previous,hidden:previous.hidden.filter(id=>id!==entry.id)}))}>+ {entry.name}</button>)}{!layout.hidden.length&&<span>Нет</span>}<button type="button" onClick={()=>applyPreset('air')}>Сбросить расположение</button></div>}
   <div className="rcs-grid rcs-os-grid">
-   {widget('onair',<>
+   {[
+   widget('onair',<>
    <section className="rcs-onair">
     <div className="rcs-onair-top"><span className="rcs-eyebrow">● СЕЙЧАС В ЭФИРЕ</span><span className="rcs-source">{results.metadata?sourceName[source]||source:'Источник неизвестен'}</span><span className="rcs-onair-indicator">{running?'ON AIR':'НЕ ПОДТВЕРЖДЕНО'}</span></div>
     <div className="rcs-track">
@@ -146,15 +147,15 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     <div className="rcs-cover-player-status" role="status">{reconnecting?'Переподключаем поток…':playing?'● Контрольное прослушивание активно':playbackError?'Ошибка прослушивания: '+playbackError:'Нажмите Play на обложке для прослушивания'}</div>
     <div className="rcs-onair-footer"><span>Следующее по плану: {fmt(upcoming[0]?.startAt||planned[0]?.startAt)}</span><div><button type="button" onClick={()=>onOpen('schedule')}>Сетка ↗</button><button type="button" onClick={()=>onOpen('history')}>Техмониторинг ↗</button></div></div>
    </section>
-   </>)}
-   {widget('queue',<>
+   </>),
+   widget('queue',<>
    <Panel title="Далее в эфире" extraClass="rcs-queue" action={<button type="button" onClick={()=>setQueueOpen(x=>!x)} aria-expanded={queueOpen}>{queueOpen?'Свернуть':'Развернуть'}</button>}>
     <div className="rcs-tabs" role="tablist" aria-label="Тип очереди"><button type="button" role="tab" aria-selected={tab==='tracks'} className={tab==='tracks'?'selected':''} onClick={()=>setTab('tracks')}>Ближайшие передачи</button><button type="button" role="tab" aria-selected={tab==='grid'} className={tab==='grid'?'selected':''} onClick={()=>setTab('grid')}>Сетка</button></div>
     {queueOpen&&(tab==='tracks'?<RadioUpcomingQueue entries={upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>:<div className="rcs-schedule-items">{planned.map(s=><button type="button" key={s.id} onClick={()=>onOpen('schedule')}><span>{fmt(s.startAt)}</span><strong>{s.title||s.name||s.playlist?.name||'Передача'}</strong><span>↗</span></button>)}{!planned.length&&<p>Нет предстоящих событий в загруженной сетке.</p>}</div>)}
     <p className="rcs-disclaimer">Очередь отображает утверждённый план, а не ручное управление текущим PCM.</p>
    </Panel>
-   </>)}
-   {widget('lufs',<>
+   </>),
+   widget('lufs',<>
        <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical rcs-meter-panel" aria-label="Серверный измеритель громкости">
      <div className="rcs-lufs-title"><strong>Уровень эфира · EBU R128</strong><span>Серверный MP3</span></div>
      <div className="rcs-meter-row">
@@ -178,8 +179,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <p className="rcs-meter-state" role="status">{!results.worker?'Нет связи с PCM Worker':!loudness?'Сервер не передал loudness. Проверьте перезапуск Worker после обновления.':loudness.status==='DISABLED'?'Измеритель отключён (RADIO_LUFS_ENABLED=false).':loudness.status==='OVERLOADED'?'Анализатор перегружен: '+(loudness.lastError||'нет подробностей'):loudness.status==='UNAVAILABLE'?'FFmpeg-анализатор недоступен: '+(loudness.lastError||'неизвестная ошибка'):loudness.stale?'Показания устарели. Последний замер: '+(loudness.updatedAt||'нет'):loudness.status==='STARTING'?'Анализатор запускается; получено MP3-частей: '+(loudness.receivedChunks??0):'Серверный замер активен; данные MP3 после кодирования.'}</p>
     </aside>
-   </>)}
-   {widget('sources',<>
+   </>),
+   widget('sources',<>
    <Panel title="Источники и управление" extraClass="rcs-sources" action={<button type="button" onClick={()=>onOpen('automation')}>Автоматизация ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Основной источник" state={results.metadata?running:null} detail={results.metadata?sourceName[source]||source:'Нет телеметрии'} onClick={()=>onOpen('automation')}/>
@@ -188,8 +189,8 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      <Status title="Поток" state={results.report?Boolean(report?.stream):null} detail={report?.stream?.status||'Нет отчёта сервера'} onClick={()=>onOpen('history')}/>
     </div>
    </Panel>
-   </>)}
-   {widget('diagnostics',<>
+   </>),
+   widget('diagnostics',<>
    <Panel title="Диагностика и мониторинг" extraClass="rcs-diagnostics" action={<button type="button" onClick={()=>onOpen('history')}>Открыть мониторинг ↗</button>}>
     <div className="rcs-status-grid">
      <Status title="Playout Worker" state={results.worker?true:null} detail={results.worker?'Телеметрия отвечает':'Данные недоступны'}/>
@@ -210,12 +211,13 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
     {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p></div>}
     <div className="rcs-diagnostics-amp"><h3>Управление усилителем</h3><RadioAmplifierControl token={token}/></div>
    </Panel>
-   </>)}
-   {widget('actions',<>
+   </>),
+   widget('actions',<>
    <Panel title="Быстрые действия" extraClass="rcs-actions">
     <div className="rcs-action-grid">{[['▦','Открыть сетку','schedule'],['☷','Плейлисты','playlists'],['♫','Медиатека','assets'],['⚙','Автоматизация','automation'],['▥','Мониторинг','history'],['▣','Оборудование','equipment']].map(([icon,label,id])=><button key={id} type="button" onClick={()=>onOpen(id)}><span>{icon}</span><strong>{label}</strong><span>↗</span></button>)}</div>
    </Panel>
-   </>)}
+   </>)
+   ].filter(Boolean).sort((a,b)=>a.props.style.order-b.props.style.order)}
   </div>
  </div>;
 }
