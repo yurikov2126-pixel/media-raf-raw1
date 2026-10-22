@@ -26,3 +26,13 @@
 .radio-v3-event-conflict{border-color:#f43f5e;border-style:dashed}
 @media(max-width:640px){.radio-v3-day-grid{grid-template-columns:53px minmax(0,1fr)}.radio-v3-day-strip button{min-width:68px}.radio-v3-schedule-toolbar{padding:.85rem}.radio-v3-event{border-radius:.55rem}}
 @media(prefers-reduced-motion:reduce){.radio-v3-event{transition:none}}
+
+
+/* Schedule 2.0: independent deletion action for each list assignment. */
+.radio-v3-list-entry{display:flex;align-items:stretch;gap:10px;min-width:0}
+.radio-v3-list-entry .radio-v3-event{height:100%;min-height:62px}
+.radio-v3-delete-slot{flex:0 0 auto;align-self:stretch;padding:10px 16px;border:1px solid #fca5a5;border-radius:12px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:700}
+.radio-v3-delete-slot:hover{background:#ffe4e6}
+.radio-v3-delete-slot:focus-visible{outline:2px solid #e11d48;outline-offset:2px}
+.dark .radio-v3-delete-slot,[data-theme="dark"] .radio-v3-delete-slot{background:#4c1824;border-color:#9f4258;color:#fecdd3}
+@media(max-width:520px){.radio-v3-list-entry{gap:6px}.radio-v3-delete-slot{padding:8px 10px;min-width:64px}}
