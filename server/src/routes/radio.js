@@ -413,6 +413,29 @@ router.patch('/assets/:id/organize',requireRole('ADMIN'),safe(async (req,res)=>{
  if(!updated.count)return res.status(404).json({error:'Файл не найден'});
  res.json({asset:await prisma.radioAsset.findUnique({where:{id:req.params.id}})});
 }));
+router.patch('/assets/bulk-tags',requireRole('ADMIN'),safe(async(req,res)=>{
+ const {assetIds,changes}=req.body||{};
+ const allowed=['title','artist','album','genre','year','track','composer','comment'];
+ if(!Array.isArray(assetIds)||!assetIds.length||assetIds.length>200||new Set(assetIds).size!==assetIds.length||
+  assetIds.some(id=>typeof id!=='string'||!id||id.length>128)||
+  !changes||typeof changes!=='object'||Array.isArray(changes)||
+  !Object.keys(changes).length||Object.keys(changes).some(key=>!allowed.includes(key)||typeof changes[key]!=='string'))
+  return res.status(400).json({error:'Укажите 1–200 файлов и поля метаданных для изменения'});
+ const sanitized=safeRadioTags(changes);
+ const result=await prisma.$transaction(async tx=>{
+  const records=await tx.radioAsset.findMany({where:{id:{in:assetIds}},select:{id:true,tags:true}});
+  if(records.length!==assetIds.length)return {error:'Некоторые записи не найдены',status:404};
+  for(const record of records){
+   const previous=safeRadioTags(record.tags||{});
+   const merged={...previous};
+   for(const key of Object.keys(changes))merged[key]=sanitized[key];
+   await tx.radioAsset.update({where:{id:record.id},data:{tags:merged}});
+  }
+  return {updated:records.length};
+ });
+ if(result.error)return res.status(result.status).json({error:result.error});
+ res.json(result);
+}));
 router.patch('/assets/:id/tags',requireRole('ADMIN'),safe(async (req,res)=>{
  const tags=safeRadioTags(req.body?.tags);
  if(!tags)return res.status(400).json({error:'Неверные теги'});
