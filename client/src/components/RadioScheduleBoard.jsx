@@ -33,7 +33,7 @@ export function scheduleLayout(events,day){
  });
 }
 const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-other'];
-export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onCreate,onCreateAt}){
+export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,quickShiftBusy,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
  const [quickSlot,setQuickSlot]=useState(null);
@@ -78,8 +78,8 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   </button>
   {future&&onQuickEdit&&<button type="button" className="radio-v3-quick-edit" title="Сдвинуть начало передачи" aria-label={'Быстро изменить время: '+title} onClick={e=>{e.stopPropagation();setQuickSlot(quickSlot===event.id?null:event.id);}}>✎</button>}
   {quickSlot===event.id&&future&&<div className="radio-v3-quick-actions">
-   <button type="button" onClick={()=>quickEdit(event,-15)}>−15 мин</button>
-   <button type="button" onClick={()=>quickEdit(event,15)}>+15 мин</button>
+   <button type="button" disabled={!!quickShiftBusy} onClick={()=>quickEdit(event,-15)}>−15 мин</button>
+   <button type="button" disabled={!!quickShiftBusy} onClick={()=>quickEdit(event,15)}>+15 мин</button>
    <button type="button" onClick={()=>{setQuickSlot(null);onSelectSlot?.(event);}}>Изменить…</button>
   </div>}
   </div>;
