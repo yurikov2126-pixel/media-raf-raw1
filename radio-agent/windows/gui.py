@@ -28,7 +28,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.2'
+AGENT_VERSION = '0.5.3'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -326,7 +326,7 @@ class RadioAgentApp(tk.Tk):
                 sys.stdout = LogSink(self.messages)
                 run(args, token)
             except Exception as exc:
-                self.messages.put(("log", "Агент остановлен: " + type(exc).__name__))
+                self.messages.put(("log", "Агент остановлен: " + type(exc).__name__ + (" · проверьте доступность сервера mediarafraw.ru и токен устройства" if isinstance(exc,(TimeoutError,OSError)) else "")))
             finally:
                 sys.stdout = saved
                 self.messages.put(("stopped", ""))
