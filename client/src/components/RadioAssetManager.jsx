@@ -8,8 +8,8 @@ const name=a=>a.tags?.title?[a.tags.artist,a.tags.title].filter(Boolean).join(' 
 const keys=['title','artist','album','genre','year','track','composer','comment'];
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
 export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player}){
- const audioRef=useRef(null),urlRef=useRef(''),loadSeq=useRef(0);
- const [activeId,setActiveId]=useState(null),[playState,setPlayState]=useState('idle'),[elapsed,setElapsed]=useState(0),[audioDuration,setAudioDuration]=useState(0),[seekIntent,setSeekIntent]=useState(null);
+ const audioRef=useRef(null),urlRef=useRef(''),loadSeq=useRef(0),pendingSeek=useRef(null);
+ const [activeId,setActiveId]=useState(null),[playState,setPlayState]=useState('idle'),[elapsed,setElapsed]=useState(0),[audioDuration,setAudioDuration]=useState(0);
  const [folders,setFolders]=useState([]),[folder,setFolder]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('name');
  const [collapsed,setCollapsed]=useState([]);
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
@@ -20,7 +20,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
   const seq=++loadSeq.current;
   const audio=audioRef.current;
   if(audio)audio.pause();
-  setActiveId(asset.id);setPlayState('loading');setElapsed(0);setAudioDuration((asset.durationMs||0)/1000);setSeekIntent(seekSeconds);
+  setActiveId(asset.id);setPlayState('loading');setElapsed(0);setAudioDuration((asset.durationMs||0)/1000);pendingSeek.current=seekSeconds;
   try{
    const response=await fetch((import.meta.env.VITE_API||'http://localhost:4000/api')+'/radio/assets/'+encodeURIComponent(asset.id)+'/audio',{headers:{Authorization:'Bearer '+token}});
    if(!response.ok)throw Error('Не удалось загрузить аудиозапись');
@@ -31,7 +31,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
    urlRef.current=url;
    audio.src=url;
    audio.load();
-   const seek=()=>{if(seq!==loadSeq.current)return;if(Number.isFinite(seekSeconds)&&seekSeconds>=0)audio.currentTime=Math.min(seekSeconds,Math.max(0,audio.duration||seekSeconds));audio.play().then(()=>{if(seq===loadSeq.current)setPlayState('playing');}).catch(()=>{if(seq===loadSeq.current)setPlayState('paused');});};
+   const seek=()=>{if(seq!==loadSeq.current)return;const desired=pendingSeek.current;if(Number.isFinite(desired)&&desired>=0)audio.currentTime=Math.min(desired,Math.max(0,audio.duration||desired));pendingSeek.current=null;audio.play().then(()=>{if(seq===loadSeq.current)setPlayState('playing');}).catch(()=>{if(seq===loadSeq.current)setPlayState('paused');});};
    if(audio.readyState>=1)seek();else audio.addEventListener('loadedmetadata',seek,{once:true});
   }catch(e){if(seq===loadSeq.current){setPlayState('error');setActiveId(null);setError(e.message||'Ошибка воспроизведения');}}
  };
@@ -46,7 +46,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
   if(activeId!==asset.id){void loadTrack(asset,seconds);return;}
   const audio=audioRef.current;
   if(audio?.src&&audio.readyState>=1){audio.currentTime=Math.max(0,Math.min(seconds,audio.duration||seconds));setElapsed(audio.currentTime);}
-  else setSeekIntent(seconds);
+  else {pendingSeek.current=seconds;}
  };
  useEffect(()=>()=>{loadSeq.current++;audioRef.current?.pause();if(urlRef.current)URL.revokeObjectURL(urlRef.current);},[]);
  useEffect(()=>{if(activeId&&!list.some(a=>a.id===activeId)){audioRef.current?.pause();setPlayState('paused');}},[page,folder,query]);
