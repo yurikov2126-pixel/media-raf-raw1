@@ -73,6 +73,10 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
    {layoutEditing&&<div className="rcs-os-widget-tools">
     <button type="button" draggable onDragStart={event=>{setDragging(id);event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',id);}} onDragEnd={()=>setDragging(null)} aria-label={'Перетащить '+title}>⠿ Переместить</button>
     <strong>{title}</strong>
+    <div className="rcs-os-move-buttons" aria-label={'Изменить порядок: '+title}>
+     <button type="button" disabled={layout.order.indexOf(id)===0} aria-label={'Переместить '+title+' вверх'} onClick={()=>patchLayout(previous=>{const at=previous.order.indexOf(id);if(at<=0)return previous;const order=[...previous.order];[order[at-1],order[at]]=[order[at],order[at-1]];return {...previous,order};})}>↑</button>
+     <button type="button" disabled={layout.order.indexOf(id)===layout.order.length-1} aria-label={'Переместить '+title+' вниз'} onClick={()=>patchLayout(previous=>{const at=previous.order.indexOf(id);if(at<0||at>=previous.order.length-1)return previous;const order=[...previous.order];[order[at+1],order[at]]=[order[at],order[at+1]];return {...previous,order};})}>↓</button>
+    </div>
     <button type="button" onClick={()=>patchLayout(previous=>({...previous,wide:previous.wide.includes(id)?previous.wide.filter(x=>x!==id):[...previous.wide,id]}))}>{layout.wide.includes(id)?'Обычная ширина':'На всю ширину'}</button>
     {id!=='onair'&&<button type="button" onClick={()=>patchLayout(previous=>({...previous,hidden:[...previous.hidden,id]}))}>Скрыть</button>}
    </div>}
@@ -116,6 +120,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
    <div className="rcs-os-presets"><span>Рабочее пространство</span>{[['air','Эфир'],['editor','Редактор'],['monitoring','Мониторинг']].map(([id,label])=><button key={id} type="button" onClick={()=>applyPreset(id)}>{label}</button>)}</div>
    <button type="button" className={layoutEditing?'rcs-os-edit-active':''} onClick={()=>setLayoutEditing(v=>!v)} aria-pressed={layoutEditing}>{layoutEditing?'Готово':'Настроить панели'}</button>
   </div>
+  {layoutEditing&&<p className="rcs-os-hint">Перетаскивайте панели за значок ⠿ на компьютере или используйте стрелки ↑ ↓. Изменения сохраняются автоматически.</p>}
   {layoutEditing&&<div className="rcs-os-restore"><span>Скрытые панели:</span>{RADIO_WIDGETS.filter(entry=>layout.hidden.includes(entry.id)).map(entry=><button key={entry.id} type="button" onClick={()=>patchLayout(previous=>({...previous,hidden:previous.hidden.filter(id=>id!==entry.id)}))}>+ {entry.name}</button>)}{!layout.hidden.length&&<span>Нет</span>}<button type="button" onClick={()=>applyPreset('air')}>Сбросить расположение</button></div>}
   <div className="rcs-grid rcs-os-grid">
    {widget('onair',<>
