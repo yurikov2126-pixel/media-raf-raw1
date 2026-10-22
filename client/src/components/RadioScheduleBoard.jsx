@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import './radio-schedule-v3.css';
 const zone='Europe/Moscow',HOURS=24;
-const ZOOM_STEPS=[36,48,58,72,90,120];
+const ZOOM_STEPS=[36,48,58,72,90,120,180,240,360,480];
 export const scheduleDayKey=date=>new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 export const scheduleAddDays=(key,days)=>{const d=new Date(key+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);};
 const clock=value=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
@@ -37,8 +37,10 @@ const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-othe
 export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
+ const [autoFit,setAutoFit]=useState(()=>{try{return localStorage.getItem('radio-schedule-auto-fit')==='true';}catch{return false;}});
+ const [expandedCard,setExpandedCard]=useState(null);
+ useEffect(()=>{try{localStorage.setItem('radio-schedule-auto-fit',String(autoFit));}catch{/* unavailable */}},[autoFit]);
  const [hourHeight,setHourHeight]=useState(()=>{try{const saved=Number(localStorage.getItem('radio-schedule-hour-height'));return ZOOM_STEPS.includes(saved)?saved:58;}catch{return 58;}});
- const HOUR=hourHeight;
  useEffect(()=>{try{localStorage.setItem('radio-schedule-hour-height',String(hourHeight));}catch{/* private browsing */}},[hourHeight]);
  const [quickSlot,setQuickSlot]=useState(null);
  const [dragId,setDragId]=useState(null),[dragOffset,setDragOffset]=useState(0),[dropPreview,setDropPreview]=useState(null),[nowMs,setNowMs]=useState(Date.now());
@@ -51,6 +53,9 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const events=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt&&Number.isFinite(Date.parse(s.startAt))&&Number.isFinite(Date.parse(s.endAt)))
   .filter(s=>filter==='all'||(filter==='assigned'?Boolean(s.playlistId):!s.playlistId))
   .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)),[slots,filter]);
+ const shortestDuration=useMemo(()=>Math.min(...events.map(s=>(Date.parse(s.endAt)-Date.parse(s.startAt))/60000).filter(n=>n>0),Infinity),[events]);
+ const fitHourHeight=Number.isFinite(shortestDuration)?Math.min(480,Math.max(58,Math.ceil(82*60/shortestDuration))):58;
+ const HOUR=autoFit?Math.max(hourHeight,fitHourHeight):hourHeight;
  const today=scheduleDayKey(new Date(nowMs));
  const dayEvents=useMemo(()=>scheduleLayout(events,selectedDay),[events,selectedDay]);
  const scheduleForDay=day=>scheduleLayout(events,day);
@@ -97,17 +102,19 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   const active=Date.parse(event.startAt)<=nowMs&&Date.parse(event.endAt)>nowMs;
   const future=Date.parse(event.startAt)>nowMs, conflict=scheduleConflict(events,event);
   const title=event.playlist?.name||event.title||'Передача';
-  return <div key={event.id} className={(positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell')+(dragId===event.id?' radio-v3-event-dragging':'')} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
+  const compact=positioned&&event.duration/60*HOUR<82;
+  return <div key={event.id} className={(positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell')+(dragId===event.id?' radio-v3-event-dragging':'')+(expandedCard===event.id?' radio-v3-event-expanded':'')} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
    onDragEnd={()=>{setDragId(null);setDropPreview(null);}} onClick={e=>{e.stopPropagation();onSelectSlot?.(event);}}
    onContextMenu={e=>{e.preventDefault();onSelectSlot?.(event);}}
    title={title+' · '+clock(event.startAt)+'–'+clock(event.endAt)}
-   className={'radio-v3-event group overflow-hidden rounded-xl border text-left '+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
+   className={'radio-v3-event group rounded-xl border text-left '+(expandedCard===event.id?'radio-v3-event-details ':'overflow-hidden ')+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
    >
    <span className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums">{active&&<span className="radio-v3-live-dot"/>}{clock(event.startAt)}–{clock(event.endAt)}</span>
    <span className="block truncate text-xs font-semibold sm:text-sm">{title}</span>
-   {(!positioned||event.duration>=45)&&<span className="block truncate text-[10px] opacity-75">{event.playlistId?'Музыкальный блок / передача':'План без плейлиста'}</span>}
+   {(!positioned||!compact||expandedCard===event.id)&&<span className="block truncate text-[10px] opacity-75">{event.playlistId?'Музыкальный блок / передача':'План без плейлиста'}</span>}
    {conflict&&<span className="block text-[10px] font-bold text-rose-600 dark:text-rose-300">⚠ Конфликт времени</span>}
   </button>
+  {compact&&<button type="button" className="radio-v3-expand-card" aria-expanded={expandedCard===event.id} aria-label={'Показать полную информацию: '+title} onClick={e=>{e.stopPropagation();setExpandedCard(expandedCard===event.id?null:event.id);}}>{expandedCard===event.id?'−':'↗'}</button>}
   {future&&onQuickEdit&&<button type="button" className="radio-v3-quick-edit" title="Сдвинуть начало передачи" aria-label={'Быстро изменить время: '+title} onClick={e=>{e.stopPropagation();setQuickSlot(quickSlot===event.id?null:event.id);}}>✎</button>}
   {quickSlot===event.id&&future&&<div className="radio-v3-quick-actions">
    <button type="button" onClick={()=>quickEdit(event,-15)}>−15 мин</button>
@@ -143,10 +150,11 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     <button type="button" className="radio-v3-schedule-btn" onClick={()=>onDateChange(scheduleAddDays(date,7))} aria-label="Следующая неделя">→</button>
     <div className="radio-v3-zoom-controls" role="group" aria-label="Масштаб временной шкалы">
      <button type="button" disabled={hourHeight===ZOOM_STEPS[0]} onClick={()=>setHourHeight(h=>ZOOM_STEPS[Math.max(0,ZOOM_STEPS.indexOf(h)-1)])} aria-label="Уменьшить масштаб сетки" title="Мельче">−</button>
-     <span aria-live="polite" title="Высота одного часа">{Math.round(hourHeight/58*100)}%</span>
+     <span aria-live="polite" title="Фактический масштаб с учётом автомасштаба">{Math.round(HOUR/58*100)}%</span>
      <button type="button" disabled={hourHeight===ZOOM_STEPS[ZOOM_STEPS.length-1]} onClick={()=>setHourHeight(h=>ZOOM_STEPS[Math.min(ZOOM_STEPS.length-1,ZOOM_STEPS.indexOf(h)+1)])} aria-label="Увеличить масштаб сетки" title="Крупнее">+</button>
      <button type="button" onClick={()=>setHourHeight(58)} aria-label="Сбросить масштаб сетки">100%</button>
     </div>
+    <button type="button" className={'radio-v3-schedule-btn '+(autoFit?'radio-v3-auto-fit-active':'')} aria-pressed={autoFit} title="Автоматически увеличить масштаб для коротких передач" onClick={()=>setAutoFit(v=>!v)}>Автомасштаб {autoFit?'✓':''}</button>
     <select className="radio-v3-schedule-btn" value={view} onChange={e=>setView(e.target.value)} aria-label="Вид календаря">
      <option value="week">Неделя</option><option value="day">День</option><option value="list">Список</option>
     </select>
@@ -190,6 +198,6 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     {onDeleteSlot&&Date.parse(e.endAt)>nowMs&&<button type="button" className="radio-v3-delete-slot" onClick={()=>onDeleteSlot(e)} aria-label={'Удалить из сетки: '+(e.playlist?.name||e.title||'Передача')} title="Удалить задание из сетки">Удалить</button>}
    </div>):<p className="p-5 text-center text-sm opacity-65">В выбранном периоде нет передач.</p>}
   </div>}
-  <p className="text-xs opacity-65">Нажмите на событие, чтобы открыть действия, включая удаление. В виде «Список» есть отдельная кнопка удаления. Будущие события можно переносить; сервер проверяет конфликты. На мобильном используйте режим «День» и меню события. Пустое место в расписании не подтверждает фактический запуск AutoDJ.</p>
+  <p className="text-xs opacity-65">Автомасштаб подбирает высоту часа под самую короткую передачу (максимум 480 пикселей/час). Для очень коротких передач доступно раскрытие карточки ↗. Нажмите на событие, чтобы открыть действия, включая удаление. В виде «Список» есть отдельная кнопка удаления. Будущие события можно переносить; сервер проверяет конфликты. На мобильном используйте режим «День» и меню события. Пустое место в расписании не подтверждает фактический запуск AutoDJ.</p>
  </section>;
 }
