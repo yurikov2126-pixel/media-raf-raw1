@@ -15,6 +15,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const [advancedOpen,setAdvancedOpen]=useState(false),[artistFilter,setArtistFilter]=useState(''),[albumFilter,setAlbumFilter]=useState(''),[genreFilter,setGenreFilter]=useState(''),[durationFilter,setDurationFilter]=useState(''),[metadataFilter,setMetadataFilter]=useState('all');
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
  const [checked,setChecked]=useState([]),[menu,setMenu]=useState(null),[dragOver,setDragOver]=useState(null);
+ const [deleteReview,setDeleteReview]=useState(null),[reviewLoading,setReviewLoading]=useState(false);
  const [playlistName,setPlaylistName]=useState(''),[showPlaylist,setShowPlaylist]=useState(false);
  const [showBulkTags,setShowBulkTags]=useState(false),[bulkFields,setBulkFields]=useState({}),[bulkValues,setBulkValues]=useState({});
  const [view,setView]=useState('list'),[selected,setSelected]=useState(null),[moveItem,setMoveItem]=useState(null),[moveTarget,setMoveTarget]=useState(''),[tags,setTags]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -83,6 +84,23 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const toggle=id=>setChecked(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);
  const operation=async(fn)=>{setBusy(true);setError('');try{await fn();await refresh();await reload();}catch(e){setError(e.message||'Не удалось выполнить действие');}finally{setBusy(false);}};
  const addFolder=()=>{const title=window.prompt('Название папки');if(title?.trim())void operation(()=>request('/asset-folders',{method:'POST',body:{name:title.trim(),parentId:folder}}));};
+ const reviewBulkDelete=async()=>{
+  if(!selectedIds.length)return;
+  setReviewLoading(true);setError('');
+  try{const review=await request('/assets/bulk-delete-preview',{method:'POST',body:{assetIds:selectedIds}});setDeleteReview(review);}
+  catch(e){setError(e.message||'Не удалось проверить использование файлов');}
+  finally{setReviewLoading(false);}
+ };
+ const confirmBulkDelete=async()=>{
+  if(!deleteReview?.deletable?.length||busy)return;
+  const ids=deleteReview.deletable.map(a=>a.id);
+  await operation(async()=>{
+   const result=await request('/assets/bulk-delete',{method:'POST',body:{assetIds:ids}});
+   setDeleteReview(null);setChecked([]);
+   setResults(prev=>({...prev,assets:prev.assets.filter(a=>!ids.includes(a.id)),total:Math.max(0,prev.total-ids.length)}));
+   if(result.cleanupFailures)setError('Записи удалены из каталога, но часть файлов требует очистки на сервере: '+result.cleanupFailures);
+  });
+ };
  const moveAsset=a=>{setMoveItem(a);setMoveTarget(a.folderId||'');setMenu(null);};
  const moveMany=(ids,target)=>operation(async()=>{
   await request('/assets/bulk-move',{method:'POST',body:{assetIds:ids,folderId:target||null}});
@@ -163,6 +181,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
        <button type="button" disabled={!selectedIds.length||busy} className="rl-bulk-tags-button" onClick={()=>{setBulkFields({});setBulkValues({});setShowBulkTags(true);}}>✎ Изменить теги</button>
        <button type="button" disabled={!selectedIds.length} onClick={()=>setShowPlaylist(true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">＋ Плейлист из выбранных</button>
        <button type="button" disabled={!selectedIds.length} onClick={()=>{setMoveItem({id:null,name:selectedIds.length+' записей'});setMoveTarget(folder||'');}} className="rounded-lg border border-current/15 px-3 py-2 text-xs disabled:opacity-40">Переместить</button>
+       <button type="button" disabled={!selectedIds.length||busy||reviewLoading} onClick={reviewBulkDelete} className="rl-bulk-delete-btn">Проверить удаление</button>
        <span className="ml-auto text-xs opacity-60">{results.total} записей в папке</span>
      </div>
     </div>
@@ -211,6 +230,17 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     {[[ 'Прослушать',()=>preview(a) ],['Изменить теги',()=>openTags(a)],['Считать ID3',()=>rescan(a)],['Переместить',()=>moveAsset(a)],['Переименовать',()=>rename(a)],['Удалить',()=>remove(a)]].map(([label,fn])=><button key={label} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-indigo-500/10" onClick={()=>{setMenu(null);fn();}}>{label}</button>)}
    </>;})()}
    </div></>}
+  {deleteReview&&<div className="fixed inset-0 z-[110] grid place-items-center bg-black/65 p-4" onClick={()=>setDeleteReview(null)}>
+    <section role="dialog" aria-modal="true" aria-label="Проверка удаления аудиофайлов" className="rl-bulk-modal max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl p-5 shadow-2xl" onClick={e=>e.stopPropagation()}>
+     <div className="flex items-start justify-between gap-3"><div><p className="rl-eyebrow">ФАЙЛОВЫЙ МЕНЕДЖЕР · ПРОВЕРКА</p><h3 className="mt-1 text-xl font-bold">Безопасное удаление</h3></div><button type="button" aria-label="Закрыть" onClick={()=>setDeleteReview(null)} className="rounded-lg border border-current/20 px-3 py-2">✕</button></div>
+     <p className="mt-3 text-sm">Проверено записей: <strong>{deleteReview.total}</strong>. Можно удалить: <strong>{deleteReview.deletable.length}</strong>. Используются в плейлистах: <strong>{deleteReview.blocked.length}</strong>.</p>
+     <p className="mt-2 text-sm">Возможное освобождение: <strong>{size(deleteReview.reclaimBytes)}</strong>.</p>
+     {deleteReview.blocked.length>0&&<div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3"><strong className="text-sm">Защищённые записи не будут удалены</strong><ul className="mt-2 max-h-28 list-disc space-y-1 overflow-auto pl-5 text-xs">{deleteReview.blocked.map(a=><li key={a.id}>{a.name} · связей с плейлистами: {a.playlists}</li>)}</ul></div>}
+     {deleteReview.deletable.length>0&&<div className="mt-3 rounded-xl border border-current/15 p-3"><strong className="text-sm">Будут удалены файлы и записи каталога</strong><ul className="mt-2 max-h-32 list-disc space-y-1 overflow-auto pl-5 text-xs">{deleteReview.deletable.map(a=><li key={a.id}>{a.name}</li>)}</ul></div>}
+     <p className="mt-3 text-xs opacity-70">Перед удалением сервер ещё раз проверит связи. Восстановление файлов из этого окна не предусмотрено.</p>
+     <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={()=>setDeleteReview(null)} className="rounded-xl border border-current/20 px-4 py-2.5 text-sm">Отмена</button><button type="button" disabled={busy||!deleteReview.deletable.length} onClick={confirmBulkDelete} className="rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">Удалить {deleteReview.deletable.length} файлов</button></div>
+    </section>
+   </div>}
   {showBulkTags&&<div className="fixed inset-0 z-[110] grid place-items-center bg-black/65 p-4" onClick={()=>setShowBulkTags(false)}>
    <div role="dialog" aria-modal="true" aria-label="Массовое изменение метаданных" onClick={e=>e.stopPropagation()} className="rl-bulk-modal w-full max-w-xl rounded-2xl p-5 shadow-2xl">
     <div className="flex items-start justify-between gap-3"><div><p className="rl-eyebrow">АУДИОТЕКА · МАССОВЫЕ ДЕЙСТВИЯ</p><h3 className="mt-1 text-lg font-bold">Изменить метаданные</h3><p className="mt-1 text-xs opacity-70">Выбрано записей: {selectedIds.length}</p></div><button type="button" onClick={()=>setShowBulkTags(false)} aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-2">✕</button></div>

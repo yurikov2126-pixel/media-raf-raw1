@@ -64,3 +64,8 @@
 .dark .radio-library-v2 .rl-filter-clear{color:#fbbf24}
 .radio-library-v2 .rl-filter-panel{border:1px solid var(--rl-border);background:var(--rl-soft);color:var(--rl-ink)}
 .radio-library-v2 .rl-filter-panel input,.radio-library-v2 .rl-filter-panel select{color:var(--rl-ink);background:var(--rl-surface)}
+
+.radio-library-v2 .rl-bulk-delete-btn{border:1px solid rgba(225,29,72,.45);border-radius:10px;padding:9px 12px;font-size:12px;font-weight:750;color:#be123c;background:rgba(244,63,94,.08)}
+.dark .radio-library-v2 .rl-bulk-delete-btn{color:#fecdd3;background:rgba(244,63,94,.12)}
+.radio-library-v2 .rl-bulk-delete-btn:hover:not(:disabled){background:rgba(244,63,94,.18)}
+.radio-library-v2 .rl-bulk-delete-btn:disabled{opacity:.38;cursor:not-allowed}
