@@ -148,12 +148,13 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
    </section>
    </>)}
    {widget('queue',<>
-   <div className="rcs-right-rail">
    <Panel title="Далее в эфире" extraClass="rcs-queue" action={<button type="button" onClick={()=>setQueueOpen(x=>!x)} aria-expanded={queueOpen}>{queueOpen?'Свернуть':'Развернуть'}</button>}>
     <div className="rcs-tabs" role="tablist" aria-label="Тип очереди"><button type="button" role="tab" aria-selected={tab==='tracks'} className={tab==='tracks'?'selected':''} onClick={()=>setTab('tracks')}>Ближайшие передачи</button><button type="button" role="tab" aria-selected={tab==='grid'} className={tab==='grid'?'selected':''} onClick={()=>setTab('grid')}>Сетка</button></div>
     {queueOpen&&(tab==='tracks'?<RadioUpcomingQueue entries={upcoming} token={token} onSchedule={()=>onOpen('schedule')} onPlaylists={()=>onOpen('playlists')}/>:<div className="rcs-schedule-items">{planned.map(s=><button type="button" key={s.id} onClick={()=>onOpen('schedule')}><span>{fmt(s.startAt)}</span><strong>{s.title||s.name||s.playlist?.name||'Передача'}</strong><span>↗</span></button>)}{!planned.length&&<p>Нет предстоящих событий в загруженной сетке.</p>}</div>)}
     <p className="rcs-disclaimer">Очередь отображает утверждённый план, а не ручное управление текущим PCM.</p>
    </Panel>
+   </>)}
+   {widget('lufs',<>
        <aside className="rcs-lufs rcs-server-lufs rcs-lufs-vertical rcs-meter-panel" aria-label="Серверный измеритель громкости">
      <div className="rcs-lufs-title"><strong>Уровень эфира · EBU R128</strong><span>Серверный MP3</span></div>
      <div className="rcs-meter-row">
@@ -177,7 +178,6 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <p className="rcs-meter-state" role="status">{!results.worker?'Нет связи с PCM Worker':!loudness?'Сервер не передал loudness. Проверьте перезапуск Worker после обновления.':loudness.status==='DISABLED'?'Измеритель отключён (RADIO_LUFS_ENABLED=false).':loudness.status==='OVERLOADED'?'Анализатор перегружен: '+(loudness.lastError||'нет подробностей'):loudness.status==='UNAVAILABLE'?'FFmpeg-анализатор недоступен: '+(loudness.lastError||'неизвестная ошибка'):loudness.stale?'Показания устарели. Последний замер: '+(loudness.updatedAt||'нет'):loudness.status==='STARTING'?'Анализатор запускается; получено MP3-частей: '+(loudness.receivedChunks??0):'Серверный замер активен; данные MP3 после кодирования.'}</p>
     </aside>
-   </div>
    </>)}
    {widget('sources',<>
    <Panel title="Источники и управление" extraClass="rcs-sources" action={<button type="button" onClick={()=>onOpen('automation')}>Автоматизация ↗</button>}>
@@ -205,18 +205,10 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
       <small>{agent.ageMs===null?'Нет heartbeat':'Последний запрос '+Math.floor(agent.ageMs/1000)+' с назад'}</small>
      </div>)}
     </div>}
-    {results.health&&health?.agents?.agents?.some(a=>a.status!=='REVOKED')&&<div className="rcs-agent-audio-list" aria-label="Диагностика аудиовыхода Windows Agent">
-      <p className="rcs-audio-caption">Аудиовыход Windows Agent</p>
-      {health.agents.agents.filter(a=>a.status!=='REVOKED').map(agent=><div className="rcs-agent-audio-row" key={agent.id}>
-       <strong>{agent.name||'Радиокомпьютер'}</strong>
-       <span>{agent.audio?.status==='PLAYING'?'VLC работает (звук на выходе не подтверждён)':agent.audio?.status==='BUFFERING'?'Буферизация':agent.audio?.status==='STOPPED'?'Воспроизведение остановлено':agent.audio?.status==='ERROR'?'Ошибка аудиоустройства':agent.audio?.status==='DEGRADED'?'Пакеты давно не поступали':agent.audio?.status==='STALE'?'Аудиотелеметрия устарела':'Аудиотелеметрия ещё не поступала'}</span>
-       <small>Звуковые устройства Windows: {agent.audio?.outputEndpoint?.state==='AVAILABLE'?'Найдено '+(agent.audio.outputEndpoint.count??'—')+' активных · '+(agent.audio.outputEndpoint.name||'имя неизвестно'):agent.audio?.outputEndpoint?.state==='UNAVAILABLE'?'Доступных устройств не найдено':agent.audio?.outputEndpoint?.state==='UNSUPPORTED'?'Проверка поддерживается только в Windows':'Нет данных от операционной системы'}. Это не подтверждение выбранного VLC устройства или слышимого звука.</small>
-       <small>{agent.audio?.source==='CENTRAL'?'Источник: центральный MP3':agent.audio?.source==='LOCAL_RESERVE'?'Источник: локальный резерв':agent.audio?.source==='NONE'?'Источник не воспроизводится':'Источник не подтверждён'} · {Number.isFinite(agent.audio?.lastPacketAgeMs)?'Последний MP3-пакет '+Math.round(agent.audio.lastPacketAgeMs/1000)+' с назад':'Давность MP3-пакета неизвестна'}{agent.audio?.reason&&agent.audio.status!=='UNKNOWN'?' · '+agent.audio.reason:''}</small>
-      </div>)}
-     </div>}
     {results.health&&((health?.agents?.offline||0)>0||health?.amplifier?.connection==='OFFLINE')&&<p className="rcs-health-warning" role="alert">Внимание: {health.agents.offline||0} радиокомпьютеров без связи{health.amplifier.connection==='OFFLINE'?', усилитель ESP32 недоступен':''}. Проверить оборудование ↗</p>}
     <button type="button" className="rcs-details-toggle" aria-expanded={details} onClick={()=>setDetails(v=>!v)}>{details?'Скрыть сведения':'Подробности подключения и усилителя'}</button>
-    {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p><RadioAmplifierControl token={token}/></div>}
+    {details&&<div className="rcs-expanded"><p>Последняя проверка: {loadedAt?clock(loadedAt):'—'} · Интервал: 10 с</p><p>Источники: Worker {stateText(results.worker)} · Радио {stateText(results.metadata)} · ESP32 {stateText(results.amp)}</p></div>}
+    <div className="rcs-diagnostics-amp"><h3>Управление усилителем</h3><RadioAmplifierControl token={token}/></div>
    </Panel>
    </>)}
    {widget('actions',<>
