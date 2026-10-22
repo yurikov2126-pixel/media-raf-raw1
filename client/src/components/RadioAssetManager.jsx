@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {api} from '../api/client.js';
 import {radioFolderTree,radioFolderPath} from './radioFolderTree.js';
 import './radio-asset-manager-2.css';
@@ -8,12 +8,48 @@ const name=a=>a.tags?.title?[a.tags.artist,a.tags.title].filter(Boolean).join(' 
 const keys=['title','artist','album','genre','year','track','composer','comment'];
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
 export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player}){
+ const audioRef=useRef(null),urlRef=useRef(''),loadSeq=useRef(0),pendingSeek=useRef(null);
+ const [activeId,setActiveId]=useState(null),[playState,setPlayState]=useState('idle'),[elapsed,setElapsed]=useState(0),[audioDuration,setAudioDuration]=useState(0);
  const [folders,setFolders]=useState([]),[folder,setFolder]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('name');
  const [collapsed,setCollapsed]=useState([]);
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
  const [checked,setChecked]=useState([]),[menu,setMenu]=useState(null),[dragOver,setDragOver]=useState(null);
  const [playlistName,setPlaylistName]=useState(''),[showPlaylist,setShowPlaylist]=useState(false);
  const [view,setView]=useState('list'),[selected,setSelected]=useState(null),[moveItem,setMoveItem]=useState(null),[moveTarget,setMoveTarget]=useState(''),[tags,setTags]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const loadTrack=async(asset,seekSeconds=null)=>{
+  const seq=++loadSeq.current;
+  const audio=audioRef.current;
+  if(audio)audio.pause();
+  setActiveId(asset.id);setPlayState('loading');setElapsed(0);setAudioDuration((asset.durationMs||0)/1000);pendingSeek.current=seekSeconds;
+  try{
+   const response=await fetch((import.meta.env.VITE_API||'http://localhost:4000/api')+'/radio/assets/'+encodeURIComponent(asset.id)+'/audio',{headers:{Authorization:'Bearer '+token}});
+   if(!response.ok)throw Error('Не удалось загрузить аудиозапись');
+   const blob=await response.blob();
+   if(seq!==loadSeq.current)return;
+   const url=URL.createObjectURL(blob);
+   if(urlRef.current)URL.revokeObjectURL(urlRef.current);
+   urlRef.current=url;
+   audio.src=url;
+   audio.load();
+   const seek=()=>{if(seq!==loadSeq.current)return;const desired=pendingSeek.current;if(Number.isFinite(desired)&&desired>=0)audio.currentTime=Math.min(desired,Math.max(0,audio.duration||desired));pendingSeek.current=null;audio.play().then(()=>{if(seq===loadSeq.current)setPlayState('playing');}).catch(()=>{if(seq===loadSeq.current)setPlayState('paused');});};
+   if(audio.readyState>=1)seek();else audio.addEventListener('loadedmetadata',seek,{once:true});
+  }catch(e){if(seq===loadSeq.current){setPlayState('error');setActiveId(null);setError(e.message||'Ошибка воспроизведения');}}
+ };
+ const toggleAudio=asset=>{
+  if(activeId!==asset.id){void loadTrack(asset);return;}
+  const audio=audioRef.current;if(!audio)return;
+  if(!audio.src){void loadTrack(asset);return;}
+  if(!audio.paused){audio.pause();setPlayState('paused');}
+  else audio.play().then(()=>setPlayState('playing')).catch(()=>setPlayState('paused'));
+ };
+ const seekAudio=(asset,seconds)=>{
+  if(activeId!==asset.id){void loadTrack(asset,seconds);return;}
+  const audio=audioRef.current;
+  if(audio?.src&&audio.readyState>=1){audio.currentTime=Math.max(0,Math.min(seconds,audio.duration||seconds));setElapsed(audio.currentTime);}
+  else {pendingSeek.current=seconds;}
+ };
+ useEffect(()=>()=>{loadSeq.current++;audioRef.current?.pause();if(urlRef.current)URL.revokeObjectURL(urlRef.current);},[]);
+ useEffect(()=>{if(activeId&&!list.some(a=>a.id===activeId)){audioRef.current?.pause();setPlayState('paused');}},[page,folder,query]);
  const request=(url,options)=>api('/radio'+url,{token,...options});
  const reload=async()=>{try{setFolders((await request('/asset-folders')).folders||[]);setError('');}catch(e){setError(e.message);}};
  useEffect(()=>{void reload();},[token]);
@@ -72,6 +108,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const saveTags=()=>{if(!selected)return;void operation(async()=>{await request('/assets/'+selected.id+'/tags',{method:'PATCH',body:{tags}});setSelected(null);});};
  const rescan=a=>void operation(()=>request('/assets/'+a.id+'/rescan-tags',{method:'POST'}));
  return <section className="radio-library-v2 space-y-4">
+  <audio ref={audioRef} className="hidden" preload="metadata" onTimeUpdate={e=>setElapsed(e.currentTarget.currentTime)} onDurationChange={e=>setAudioDuration(Number.isFinite(e.currentTarget.duration)?e.currentTarget.duration:0)} onEnded={()=>setPlayState('paused')} onError={()=>setPlayState('error')} aria-hidden="true"/>
   <div className="rl-hero flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 sm:p-6">
    <div><p className="rl-eyebrow">ПОЛИТЕХ-FM · МЕДИАТЕКА</p><h2 className="mt-1 text-2xl font-bold tracking-tight">Аудиотека</h2>
     <p className="text-xs opacity-60">{assets.length} записей · {folders.length} папок · {size(assets.reduce((n,a)=>n+(a.byteSize||0),0))}</p></div>
@@ -118,8 +155,18 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
       <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold" title={name(a)}>{name(a)}</p>
        <p className="mt-1 truncate text-xs opacity-60">{[a.tags?.album,a.tags?.genre].filter(Boolean).join(' · ')||a.name}</p>
        <p className="rl-file-meta mt-2 text-xs tabular-nums opacity-70"><span>{fmt(a.durationMs)}</span><span>{size(a.byteSize)}</span></p></div>
+      <div className="rl-inline-player" onClick={e=>e.stopPropagation()}>
+       <button type="button" onClick={()=>toggleAudio(a)} aria-label={(activeId===a.id&&playState==='playing'?'Пауза: ':'Прослушать: ')+name(a)} title={activeId===a.id&&playState==='playing'?'Пауза':'Прослушать'} className="rl-play-toggle">{activeId===a.id&&playState==='loading'?'◌':activeId===a.id&&playState==='playing'?'Ⅱ':'▶'}</button>
+       <div className="rl-seek-group">
+        <input type="range" min={0} max={Math.max(1,activeId===a.id?audioDuration||a.durationMs/1000||1:a.durationMs/1000||1)} step={0.1}
+         value={activeId===a.id?Math.min(elapsed,audioDuration||a.durationMs/1000||1):0}
+         onChange={e=>seekAudio(a,Number(e.target.value))}
+         aria-label={'Перемотка: '+name(a)} title="Нажмите на шкалу, чтобы перейти к нужному времени"/>
+        <span className="rl-time-readout">{fmt((activeId===a.id?elapsed:0)*1000)} <span>/</span> {fmt((activeId===a.id&&audioDuration?audioDuration*1000:a.durationMs)||0)}</span>
+       </div>
+      </div>
       <div className="rl-row-actions flex gap-2">
-       <button onClick={()=>preview(a)} title="Прослушать" className="rounded-lg border border-current/15 px-2 py-1.5 text-xs">▶</button>
+       <button onClick={()=>toggleAudio(a)} title="Прослушать или поставить на паузу" className="rounded-lg border border-current/15 px-2 py-1.5 text-xs rl-row-play-secondary">{activeId===a.id&&playState==='playing'?'Ⅱ':'▶'}</button>
        <button onClick={()=>setMenu({id:a.id,x:Math.max(8,window.innerWidth-230),y:Math.min(window.innerHeight-300,220)})} title="Действия" aria-label={'Меню '+name(a)} className="rounded-lg border border-current/15 px-3 py-1.5 text-xs">⋯</button>
       </div>
      </article>)}
@@ -133,7 +180,6 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
        <button type="button" disabled={page>=results.pages||loading} onClick={()=>setPage(v=>v+1)} className="rounded-lg border border-current/15 px-3 py-2 disabled:opacity-30">→</button>
       </div>
     </div>
-    {player}
    </div>
   </div>
   {menu&&<><button type="button" aria-label="Закрыть контекстное меню" className="fixed inset-0 z-40" onClick={()=>setMenu(null)}/><div className="fixed z-50 w-48 space-y-1 rounded-xl border border-current/10 bg-white p-2 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-white" style={{left:menu.x,top:menu.y}}>
