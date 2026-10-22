@@ -33,8 +33,9 @@ export function scheduleLayout(events,day){
  });
 }
 const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-other'];
-export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onCreate,onCreateAt}){
+export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
+ const [filter,setFilter]=useState('all');
  const [dragId,setDragId]=useState(null),[nowMs,setNowMs]=useState(Date.now());
  useEffect(()=>{const id=setInterval(()=>setNowMs(Date.now()),30000);return()=>clearInterval(id);},[]);
  useEffect(()=>{
@@ -43,7 +44,8 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  useEffect(()=>{if(selectedDay<date||selectedDay>scheduleAddDays(date,6))setSelectedDay(date);},[date,selectedDay]);
  const days=useMemo(()=>Array.from({length:7},(_,i)=>scheduleAddDays(date,i)),[date]);
  const events=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt&&Number.isFinite(Date.parse(s.startAt))&&Number.isFinite(Date.parse(s.endAt)))
-  .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)),[slots]);
+  .filter(s=>filter==='all'||(filter==='assigned'?Boolean(s.playlistId):!s.playlistId))
+  .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)),[slots,filter]);
  const today=scheduleDayKey(new Date(nowMs));
  const dayEvents=useMemo(()=>scheduleLayout(events,selectedDay),[events,selectedDay]);
  const scheduleForDay=day=>scheduleLayout(events,day);
@@ -92,6 +94,9 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     <select className="radio-v3-schedule-btn" value={view} onChange={e=>setView(e.target.value)} aria-label="Вид календаря">
      <option value="week">Неделя</option><option value="day">День</option><option value="list">Список</option>
     </select>
+    <select className="radio-v3-schedule-btn" value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Фильтр заданий сетки">
+     <option value="all">Все задания</option><option value="assigned">С плейлистом</option><option value="planning">Планирование</option>
+    </select>
     <button type="button" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={onCreate}>＋ Передача</button>
    </div>
   </header>
@@ -124,8 +129,11 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
    </div>
   </div>}
   {view==='list'&&<div className="space-y-2 rounded-2xl border border-current/15 p-3">
-   {events.length?events.map((e,i)=>card(e,i)):<p className="p-5 text-center text-sm opacity-65">В выбранном периоде нет передач.</p>}
+   {events.length?events.map((e,i)=><div key={e.id} className="radio-v3-list-entry">
+    <div className="min-w-0 flex-1">{card(e,i)}</div>
+    {onDeleteSlot&&Date.parse(e.endAt)>nowMs&&<button type="button" className="radio-v3-delete-slot" onClick={()=>onDeleteSlot(e)} aria-label={'Удалить из сетки: '+(e.playlist?.name||e.title||'Передача')} title="Удалить задание из сетки">Удалить</button>}
+   </div>):<p className="p-5 text-center text-sm opacity-65">В выбранном периоде нет передач.</p>}
   </div>}
-  <p className="text-xs opacity-65">Нажмите на событие, чтобы открыть действия. Будущие события можно переносить; сервер проверяет конфликты. На мобильном используйте режим «День» и меню события. Пустое место в расписании не подтверждает фактический запуск AutoDJ.</p>
+  <p className="text-xs opacity-65">Нажмите на событие, чтобы открыть действия, включая удаление. В виде «Список» есть отдельная кнопка удаления. Будущие события можно переносить; сервер проверяет конфликты. На мобильном используйте режим «День» и меню события. Пустое место в расписании не подтверждает фактический запуск AutoDJ.</p>
  </section>;
 }
