@@ -187,14 +187,26 @@ router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
  const limit=[25,50,100].includes(Number(req.query.limit))?Number(req.query.limit):50;
  const folderId=typeof req.query.folderId==='string'&&req.query.folderId.length<100?req.query.folderId:null;
  const query=String(req.query.query||'').trim().slice(0,120);
- const order=req.query.sort==='duration'?{durationMs:'desc'}:
-   req.query.sort==='recent'?{createdAt:'desc'}:{name:'asc'};
- const where={folderId,...(query?{OR:[
-   {name:{contains:query,mode:'insensitive'}},
-   {tags:{path:['title'],string_contains:query}},
-   {tags:{path:['artist'],string_contains:query}},
-   {tags:{path:['album'],string_contains:query}},
- ]}:{})};
+ const sort=String(req.query.sort||'name');
+ const order=sort==='duration'?{durationMs:'desc'}:sort==='shortest'?{durationMs:'asc'}:
+  sort==='recent'?{createdAt:'desc'}:sort==='oldest'?{createdAt:'asc'}:
+  sort==='largest'?{byteSize:'desc'}:{name:'asc'};
+ const artist=String(req.query.artist||'').trim().slice(0,100);
+ const album=String(req.query.album||'').trim().slice(0,100);
+ const genre=String(req.query.genre||'').trim().slice(0,100);
+ const duration=String(req.query.duration||'');
+ const metadata=String(req.query.metadata||'all');
+ const durationLimits={short:{lt:180000},medium:{gte:180000,lt:900000},long:{gte:900000}};
+ const conditions=[
+  ...(query?[{OR:[{name:{contains:query,mode:'insensitive'}},{tags:{path:['title'],string_contains:query}},{tags:{path:['artist'],string_contains:query}},{tags:{path:['album'],string_contains:query}}]}]:[]),
+  ...(artist?[{tags:{path:['artist'],string_contains:artist}}]:[]),
+  ...(album?[{tags:{path:['album'],string_contains:album}}]:[]),
+  ...(genre?[{tags:{path:['genre'],string_contains:genre}}]:[]),
+  ...(durationLimits[duration]?[{durationMs:durationLimits[duration]}]:[]),
+  ...(metadata==='no-artist'?[{OR:[{tags:{path:['artist'],equals:''}},{tags:{path:['artist'],equals:null}}]}]:[]),
+  ...(metadata==='no-title'?[{OR:[{tags:{path:['title'],equals:''}},{tags:{path:['title'],equals:null}}]}]:[]),
+ ];
+ const where={folderId,...(conditions.length?{AND:conditions}:{})};
  const [total,assets]=await prisma.$transaction([
    prisma.radioAsset.count({where}),
    prisma.radioAsset.findMany({where,orderBy:[order,{id:'asc'}],skip:(page-1)*limit,take:limit}),
