@@ -8,6 +8,7 @@ import RadioCommandStudio from '../components/RadioCommandStudio.jsx';
 
 import RadioAssetManager from '../components/RadioAssetManager.jsx';
 import RadioScheduleBoard from '../components/RadioScheduleBoard.jsx';
+import {previewScheduleChange} from '../components/radioSchedulePreview.js';
 import RadioSectionIntro from '../components/RadioSectionIntro.jsx';
 import {RadioWorkspaceShell,RADIO_WORKSPACE_TABS} from '../components/RadioWorkspaceShell.jsx';
 import '../styles/radio-workspace.css';
@@ -284,6 +285,18 @@ export default function Radio() {
   };
   const cancelSlotTouch = () => {window.clearTimeout(touchTimer.current);touchTimer.current=null;touchPoint.current=null;};
   useEffect(()=>()=>window.clearTimeout(touchTimer.current),[]);
+  const previewFor=(slot,minutes)=>previewScheduleChange(slots,slot,moveTime,minutes);
+  const durationOf=slot=>Math.round((Date.parse(slot.endAt)-Date.parse(slot.startAt))/60000);
+  const renderPreview=(slot,minutes)=>{
+    const info=previewFor(slot,minutes);
+    return <div role="status" aria-live="polite" className={'rounded-xl border p-3 text-sm '+(info.conflicts.length?'border-rose-400/50 bg-rose-500/10 text-rose-700 dark:text-rose-200':'border-emerald-500/30 bg-emerald-500/5')}>
+      <strong>{info.valid&&info.start>Date.now()?'Предварительная проверка интервала':'Проверка даты и времени'}</strong>
+      <p className="mt-1">{info.reason}</p>
+      {info.valid&&<p className="mt-1 text-xs opacity-75">Окончание: {new Date(info.end).toLocaleString('ru-RU',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})}</p>}
+      {info.conflicts.slice(0,3).map(other=><p key={other.id} className="mt-1 text-xs">⚠ {other.playlist?.name||other.title||'Передача'}</p>)}
+      <p className="mt-1 text-xs opacity-65">Предпросмотр по загруженным заданиям. Окончательная проверка — на сервере.</p>
+    </div>;
+  };
   const proposeCopy = slot => {
     setContextSlot(null);setCopyingSlot(slot);setMovingSlot(null);
     const time=new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
@@ -292,6 +305,8 @@ export default function Radio() {
   const saveCopy = async e => {
     e.preventDefault();
     if(!copyingSlot||!moveTime)return;
+    const check=previewFor(null,durationOf(copyingSlot));
+    if(!check.valid||check.start<=Date.now()||check.conflicts.length){toast.error(check.reason||'Выберите будущее время');return;}
     try {
       await call('/schedule',{method:'POST',body:copyingSlot.playlistId?{playlistId:copyingSlot.playlistId,startLocal:moveTime}:{playlistId:null,title:copyingSlot.title,durationMinutes:Math.round((new Date(copyingSlot.endAt)-new Date(copyingSlot.startAt))/60000),startLocal:moveTime}});
       setCopyingSlot(null);await refresh();toast.success('Копия передачи добавлена в сетку');
@@ -311,6 +326,8 @@ export default function Radio() {
   const saveSlotEdit = async e => {
     e.preventDefault();
     if (!editingSlot) return;
+    const check=previewFor(editingSlot,editingSlotPlaylist?durationOf(editingSlot):editSlotDuration);
+    if(!check.valid||check.start<=Date.now()||(!editingSlotPlaylist&&check.conflicts.length)){toast.error(check.reason||'Выберите будущее время');return;}
     try {
       await call('/schedule/'+editingSlot.id, {method:'PATCH',
         body:editingSlotPlaylist?{startLocal:moveTime,playlistId:editingSlotPlaylist}:{startLocal:moveTime,playlistId:null,title:editSlotTitle,durationMinutes:editSlotDuration}});
@@ -544,6 +561,7 @@ export default function Radio() {
             <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={editSlotDuration} onChange={e=>setEditSlotDuration(Number(e.target.value))}/></label>
             <p className="text-xs opacity-65">До прикрепления утверждённого плейлиста AutoDJ продолжит вещание.</p>
           </div>}
+          {renderPreview(editingSlot,editingSlotPlaylist?durationOf(editingSlot):editSlotDuration)}
           <p className="text-xs opacity-70">При замене плейлиста время окончания пересчитывается по длительности новой программы. Занятые интервалы сохраняются под защитой проверки пересечений.</p>
           <div className="flex gap-2"><button className={btn}>Сохранить изменения</button><button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setEditingSlot(null)}>Отмена</button></div>
         </form>
@@ -553,6 +571,7 @@ export default function Radio() {
           <h3 className="text-lg font-semibold">Копирование передачи</h3>
           <p className="text-sm opacity-70">{copyingSlot.playlist?.name||copyingSlot.title}</p>
           <label className="block space-y-1 text-sm">Дата и время копии · Москва UTC+3<input required type="datetime-local" className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/></label>
+          {renderPreview(null,durationOf(copyingSlot))}
           <p className="text-xs opacity-60">Оригинальная передача сохранится. Занятые интервалы копировать нельзя.</p>
           <div className="flex gap-2"><button className={btn}>Создать копию</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2" onClick={()=>setCopyingSlot(null)}>Отмена</button></div>
         </form>
@@ -568,6 +587,7 @@ export default function Radio() {
           <label className="block space-y-1 text-sm">Новое начало · Москва UTC+3
             <input type="datetime-local" required className={inputStyle} value={moveTime} onChange={e=>setMoveTime(e.target.value)}/>
           </label>
+          {renderPreview(movingSlot,durationOf(movingSlot))}
           <p className="text-xs opacity-65">Продолжительность сохраняется. Пересечения с другими эфирами запрещены.</p>
           <div className="flex gap-2"><button type="submit" className={btn}>Сохранить перенос</button>
             <button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setMovingSlot(null)}>Отмена</button></div>
