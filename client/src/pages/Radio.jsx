@@ -272,6 +272,27 @@ export default function Radio() {
     }catch(error){toast.error(error.message||'Не удалось перенести передачу');}
     finally{setDragSavingId(null);}
   };
+  const [bulkBusy,setBulkBusy]=useState(false);
+  const bulkCopySchedule=async(ids,weekOffset,onSuccess)=>{
+    if(bulkBusy||!ids.length)return;
+    if(!window.confirm('Скопировать '+ids.length+' заданий на '+weekOffset+' нед. вперёд? При конфликте не будет создано ни одного задания.'))return;
+    setBulkBusy(true);
+    try{
+      const response=await call('/schedule/bulk-copy',{method:'POST',body:{ids,weekOffset}});
+      await refresh();onSuccess?.();toast.success('Создано заданий: '+response.created);
+    }catch(error){toast.error(error.message||'Не удалось применить шаблон недели');}
+    finally{setBulkBusy(false);}
+  };
+  const bulkDeleteSchedule=async(ids,onSuccess)=>{
+    if(bulkBusy||!ids.length)return;
+    if(!window.confirm('Удалить '+ids.length+' выбранных будущих заданий из сетки? Плейлисты и файлы сохранятся.'))return;
+    setBulkBusy(true);
+    try{
+      const response=await call('/schedule/bulk-delete',{method:'POST',body:{ids}});
+      await refresh();onSuccess?.();toast.success('Удалено заданий: '+response.deleted);
+    }catch(error){toast.error(error.message||'Не удалось удалить задания');}
+    finally{setBulkBusy(false);}
+  };
   const deleteScheduleSlot = slot => {
     if (!slot?.id) return;
     const now = Date.now();
@@ -484,7 +505,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
-      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={(slot,startLocal)=>{if(Date.parse(slot.startAt)<=Date.now())return;setMovingSlot(slot);setMoveTime(startLocal);}} onDeleteSlot={deleteScheduleSlot} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
+      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={(slot,startLocal)=>{if(Date.parse(slot.startAt)<=Date.now())return;setMovingSlot(slot);setMoveTime(startLocal);}} onDeleteSlot={deleteScheduleSlot} onBulkCopy={bulkCopySchedule} onBulkDelete={bulkDeleteSchedule} bulkBusy={bulkBusy} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
       {createScheduleOpen && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setCreateScheduleOpen(false);}}>
         <div role="dialog" aria-modal="true" aria-label="Добавить передачу в расписание" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white">
         <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-lg">Добавить передачу в расписание</h3><button type="button" aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-1" onClick={()=>setCreateScheduleOpen(false)}>✕</button></div>

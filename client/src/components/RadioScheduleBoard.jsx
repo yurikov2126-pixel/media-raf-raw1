@@ -34,9 +34,10 @@ export function scheduleLayout(events,day){
  });
 }
 const palette=['radio-v3-event-music','radio-v3-event-show','radio-v3-event-other'];
-export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onCreate,onCreateAt}){
+export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectSlot,onDropSlot,onDeleteSlot,onQuickEdit,onBulkCopy,onBulkDelete,bulkBusy,onCreate,onCreateAt}){
  const [view,setView]=useState('week'),[selectedDay,setSelectedDay]=useState(date);
  const [filter,setFilter]=useState('all');
+ const [bulkMode,setBulkMode]=useState(false),[selectedIds,setSelectedIds]=useState([]),[copyWeeks,setCopyWeeks]=useState(1);
  const [autoFit,setAutoFit]=useState(()=>{try{return localStorage.getItem('radio-schedule-auto-fit')!=='false';}catch{return true;}});
  const [expandedCard,setExpandedCard]=useState(null);
  useEffect(()=>{try{localStorage.setItem('radio-schedule-auto-fit',String(autoFit));}catch{/* unavailable */}},[autoFit]);
@@ -56,6 +57,10 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const shortestDuration=useMemo(()=>Math.min(...events.filter(s=>Date.parse(s.endAt)>nowMs).map(s=>(Date.parse(s.endAt)-Date.parse(s.startAt))/60000).filter(n=>n>0),Infinity),[events,nowMs]);
  const fitHourHeight=Number.isFinite(shortestDuration)?Math.min(480,Math.max(58,Math.ceil(82*60/shortestDuration))):58;
  const HOUR=autoFit?Math.max(hourHeight,fitHourHeight):hourHeight;
+ const eligible=useMemo(()=>events.filter(e=>Date.parse(e.startAt)>nowMs),[events,nowMs]);
+ const chosen=eligible.filter(e=>selectedIds.includes(e.id));
+ const toggleSelection=id=>setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+ useEffect(()=>{setSelectedIds(ids=>ids.filter(id=>eligible.some(e=>e.id===id)));},[eligible]);
  const today=scheduleDayKey(new Date(nowMs));
  const dayEvents=useMemo(()=>scheduleLayout(events,selectedDay),[events,selectedDay]);
  const scheduleForDay=day=>scheduleLayout(events,day);
@@ -103,19 +108,20 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   const future=Date.parse(event.startAt)>nowMs, conflict=scheduleConflict(events,event);
   const title=event.playlist?.name||event.title||'Передача';
   const compact=positioned&&event.duration/60*HOUR<82;
-  return <div key={event.id} className={(positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell')+(dragId===event.id?' radio-v3-event-dragging':'')+(expandedCard===event.id?' radio-v3-event-expanded':'')} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future} onDragStart={e=>startDrag(e,event.id)}
-   onDragEnd={()=>{setDragId(null);setDropPreview(null);}} onClick={e=>{e.stopPropagation();onSelectSlot?.(event);}}
+  return <div key={event.id} className={(positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell')+(dragId===event.id?' radio-v3-event-dragging':'')+(selectedIds.includes(event.id)?' radio-v3-event-selected':'')+(expandedCard===event.id?' radio-v3-event-expanded':'')} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future&&!bulkMode} onDragStart={e=>startDrag(e,event.id)}
+   onDragEnd={()=>{setDragId(null);setDropPreview(null);}} onClick={e=>{e.stopPropagation();if(bulkMode&&future)toggleSelection(event.id);else onSelectSlot?.(event);}}
    onContextMenu={e=>{e.preventDefault();onSelectSlot?.(event);}}
    title={title+' · '+clock(event.startAt)+'–'+clock(event.endAt)}
    className={'radio-v3-event group rounded-xl border text-left '+(expandedCard===event.id?'radio-v3-event-details ':'overflow-hidden ')+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
    >
+   {bulkMode&&future&&<span className="radio-v3-selection-indicator" aria-hidden="true">{selectedIds.includes(event.id)?'☑':'□'}</span>}
    <span className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums">{active&&<span className="radio-v3-live-dot"/>}{clock(event.startAt)}–{clock(event.endAt)}</span>
    <span className={"block text-xs font-semibold sm:text-sm "+(compact&&expandedCard!==event.id?"truncate":"whitespace-normal break-words")}>{title}</span>
    {(!positioned||!compact||expandedCard===event.id)&&<span className="block truncate text-[10px] opacity-75">{event.playlistId?'Музыкальный блок / передача':'План без плейлиста'}</span>}
    {conflict&&<span className="block text-[10px] font-bold text-rose-600 dark:text-rose-300">⚠ Конфликт времени</span>}
   </button>
   {compact&&<button type="button" className="radio-v3-expand-card" aria-expanded={expandedCard===event.id} aria-label={'Показать полную информацию: '+title} onClick={e=>{e.stopPropagation();setExpandedCard(expandedCard===event.id?null:event.id);}}>{expandedCard===event.id?'−':'↗'}</button>}
-  {future&&onQuickEdit&&<button type="button" className="radio-v3-quick-edit" title="Сдвинуть начало передачи" aria-label={'Быстро изменить время: '+title} onClick={e=>{e.stopPropagation();setQuickSlot(quickSlot===event.id?null:event.id);}}>✎</button>}
+  {future&&!bulkMode&&onQuickEdit&&<button type="button" className="radio-v3-quick-edit" title="Сдвинуть начало передачи" aria-label={'Быстро изменить время: '+title} onClick={e=>{e.stopPropagation();setQuickSlot(quickSlot===event.id?null:event.id);}}>✎</button>}
   {quickSlot===event.id&&future&&<div className="radio-v3-quick-actions">
    <button type="button" onClick={()=>quickEdit(event,-15)}>−15 мин</button>
    <button type="button" onClick={()=>quickEdit(event,15)}>+15 мин</button>
@@ -164,6 +170,17 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     <button type="button" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white" onClick={onCreate}>＋ Передача</button>
    </div>
   </header>
+  <div className="radio-v3-bulk-bar">
+   <button type="button" className="radio-v3-schedule-btn" aria-pressed={bulkMode} onClick={()=>{setBulkMode(v=>!v);setSelectedIds([]);}}>{bulkMode?'Завершить выбор':'☑ Массовые действия'}</button>
+   {bulkMode&&<>
+    <span className="text-xs font-semibold">{chosen.length} выбрано</span>
+    <button type="button" className="radio-v3-schedule-btn" onClick={()=>setSelectedIds(eligible.filter(e=>Date.parse(e.startAt)<Date.parse(scheduleAddDays(date,7)+'T00:00:00+03:00')&&Date.parse(e.startAt)>=Date.parse(date+'T00:00:00+03:00')).map(e=>e.id))}>Выбрать будущие за неделю</button>
+    <button type="button" className="radio-v3-schedule-btn" onClick={()=>setSelectedIds([])}>Снять выбор</button>
+    <label className="text-xs">Через <select aria-label="Через сколько недель копировать" className="radio-v3-schedule-btn" value={copyWeeks} onChange={e=>setCopyWeeks(Number(e.target.value))}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{i+1} нед.</option>)}</select></label>
+    <button type="button" disabled={!chosen.length||bulkBusy} className="radio-v3-schedule-btn" onClick={()=>onBulkCopy?.(chosen.map(e=>e.id),copyWeeks,()=>setSelectedIds([]))}>Копировать в неделю →</button>
+    <button type="button" disabled={!chosen.length||bulkBusy} className="radio-v3-schedule-btn radio-v3-bulk-delete" onClick={()=>onBulkDelete?.(chosen.map(e=>e.id),()=>setSelectedIds([]))}>Удалить выбранные</button>
+   </>}
+  </div>
   <nav className="radio-v3-day-strip flex gap-1 overflow-x-auto rounded-xl p-1" aria-label="Выбор дня">
    {days.map(day=><button type="button" key={day} onClick={()=>{setSelectedDay(day);setView('day');}}
     aria-current={selectedDay===day?'date':undefined} className={'min-w-[84px] flex-1 rounded-xl px-2 py-2 text-center text-xs '+(selectedDay===day?'radio-v3-day-active':'hover:bg-violet-500/10')}>
