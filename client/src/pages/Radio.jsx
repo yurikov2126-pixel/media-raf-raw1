@@ -341,6 +341,23 @@ export default function Radio() {
     const clock = new Date(slot.startAt).toLocaleTimeString('sv-SE',{timeZone:STATION_ZONE,hour:'2-digit',minute:'2-digit'});
     setMovingSlot(slot);setMoveTime(day+'T'+clock);
   };
+  const [quickShiftBusy,setQuickShiftBusy]=useState(null);
+  const quickShiftSlot=async(slot,startLocal)=>{
+    if(quickShiftBusy||!slot?.id)return;
+    const duration=Math.round((Date.parse(slot.endAt)-Date.parse(slot.startAt))/60000);
+    const check=previewScheduleChange(slots,slot,startLocal,duration);
+    if(Date.parse(slot.startAt)<=Date.now()||!check.valid||check.start<=Date.now()){
+      toast.error('Переносить можно только будущие передачи');return;
+    }
+    if(check.conflicts.length){toast.error('Новое время занято другой передачей');return;}
+    setQuickShiftBusy(slot.id);
+    try{
+      await call('/schedule/'+encodeURIComponent(slot.id),{method:'PATCH',body:{startLocal}});
+      await refresh();
+      toast.success('Время передачи изменено');
+    }catch(error){toast.error(error.message||'Не удалось изменить время');}
+    finally{setQuickShiftBusy(null);}
+  };
   const saveMove = async e => {
     e.preventDefault();
     if(!movingSlot || !moveTime)return;
@@ -471,7 +488,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
-      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={(slot,startLocal)=>{if(Date.parse(slot.startAt)<=Date.now())return;setMovingSlot(slot);setMoveTime(startLocal);}} onDeleteSlot={deleteScheduleSlot} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
+      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={quickShiftSlot} quickShiftBusy={quickShiftBusy} onDeleteSlot={deleteScheduleSlot} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
       {createScheduleOpen && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setCreateScheduleOpen(false);}}>
         <div role="dialog" aria-modal="true" aria-label="Добавить передачу в расписание" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white">
         <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-lg">Добавить передачу в расписание</h3><button type="button" aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-1" onClick={()=>setCreateScheduleOpen(false)}>✕</button></div>
