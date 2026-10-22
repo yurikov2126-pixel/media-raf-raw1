@@ -1002,6 +1002,44 @@ router.post('/schedule/weekly', safe(async (req, res) => {
     res.status(201).json({ created: result.count, timezone: RADIO_TIMEZONE });
 }));
 
+// Bulk operations are atomic and serialized with single-slot edits.
+router.post('/schedule/bulk-copy', safe(async(req,res)=>{
+ const {ids,weekOffset}=req.body||{};
+ if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!id||id.length>128)||new Set(ids).size!==ids.length
+   ||!Number.isInteger(weekOffset)||weekOffset<1||weekOffset>12)return res.status(400).json({error:'Выберите 1–100 заданий и сдвиг от 1 до 12 недель'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const source=await tx.radioScheduleSlot.findMany({where:{id:{in:ids}}});
+  if(source.length!==ids.length)return {error:'Некоторые задания не найдены',status:404};
+  const delta=weekOffset*7*86400000;
+  const proposed=source.map(slot=>({playlistId:slot.playlistId,title:slot.title,startAt:new Date(slot.startAt.getTime()+delta),endAt:new Date(slot.endAt.getTime()+delta),createdBy:req.user.id}));
+  if(proposed.some(slot=>slot.startAt<=new Date()))return {error:'Копировать можно только на будущие даты',status:409};
+  const sorted=[...proposed].sort((a,b)=>a.startAt-b.startAt);
+  if(sorted.some((slot,i)=>i>0&&sorted[i-1].endAt>slot.startAt))return {error:'Копируемые задания пересекаются',status:409};
+  const clash=await tx.radioScheduleSlot.findFirst({where:{OR:proposed.map(slot=>({startAt:{lt:slot.endAt},endAt:{gt:slot.startAt}}))}});
+  if(clash)return {error:'На выбранной неделе есть пересечения. Ничего не создано.',status:409};
+  const created=await tx.radioScheduleSlot.createMany({data:proposed});
+  return {created:created.count};
+ });
+ if(result.error)return res.status(result.status).json({error:result.error});
+ res.status(201).json(result);
+}));
+router.post('/schedule/bulk-delete',safe(async(req,res)=>{
+ const {ids}=req.body||{};
+ if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some(id=>typeof id!=='string'||!id||id.length>128)||new Set(ids).size!==ids.length)
+   return res.status(400).json({error:'Выберите от 1 до 100 уникальных заданий'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const matches=await tx.radioScheduleSlot.findMany({where:{id:{in:ids}},select:{id:true,startAt:true}});
+  if(matches.length!==ids.length)return {error:'Некоторые задания не найдены',status:404};
+  if(matches.some(slot=>slot.startAt<=new Date()))return {error:'Начавшиеся передачи нельзя удалять массово',status:409};
+  const removed=await tx.radioScheduleSlot.deleteMany({where:{id:{in:ids},startAt:{gt:new Date()}}});
+  if(removed.count!==ids.length)throw Error('Bulk deletion count changed');
+  return {deleted:removed.count};
+ });
+ if(result.error)return res.status(result.status).json({error:result.error});
+ res.json(result);
+}));
 router.patch('/schedule/:id', safe(async (req, res) => {
     // Move the slot and/or replace its approved playlist atomically.
     const payload = req.body || {};
