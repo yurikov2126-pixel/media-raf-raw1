@@ -30,8 +30,9 @@ class StartupNetworkRetryTests(unittest.TestCase):
             args=SimpleNamespace(server='https://example.test',data_dir=directory,
                 vlc='vlc.exe',offline_grace=900)
             STOP.clear()
-            with self.assertRaises(PermissionError):
-                run(args,'rr_test')
+            with patch.object(STOP,'wait',side_effect=AssertionError('Denial must not retry')):
+                with self.assertRaises(PermissionError):
+                    run(args,'rr_test')
 
 if __name__=='__main__':
     unittest.main()
