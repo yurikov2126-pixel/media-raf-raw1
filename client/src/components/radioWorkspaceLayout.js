@@ -1,14 +1,15 @@
 export const RADIO_WIDGETS=[
  {id:'onair',name:'Сейчас в эфире'},
- {id:'queue',name:'Далее в эфире и LUFS'},
+ {id:'queue',name:'Далее в эфире'},
+ {id:'lufs',name:'Измеритель LUFS'},
  {id:'sources',name:'Источники'},
  {id:'diagnostics',name:'Диагностика'},
  {id:'actions',name:'Быстрые действия'},
 ];
 export const RADIO_PRESETS={
- air:{order:['onair','queue','sources','diagnostics','actions'],hidden:[],wide:['onair']},
- editor:{order:['onair','sources','actions','queue','diagnostics'],hidden:['diagnostics'],wide:['onair']},
- monitoring:{order:['diagnostics','queue','onair','sources','actions'],hidden:['actions'],wide:['diagnostics']},
+ air:{order:['onair','queue','lufs','sources','diagnostics','actions'],hidden:[],wide:['onair']},
+ editor:{order:['onair','sources','actions','queue','lufs','diagnostics'],hidden:['diagnostics'],wide:['onair']},
+ monitoring:{order:['diagnostics','lufs','queue','onair','sources','actions'],hidden:['actions'],wide:['diagnostics']},
 };
 const ids=RADIO_WIDGETS.map(w=>w.id);
 export function normalizeRadioLayout(value){
