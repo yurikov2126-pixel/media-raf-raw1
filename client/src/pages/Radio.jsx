@@ -258,6 +258,23 @@ export default function Radio() {
     if(new Date(slot.startAt)<=new Date())return toast.error('Прошедшую или начавшуюся передачу переносить нельзя');
     proposeMove(slot,day);
   };
+  const deleteScheduleSlot = slot => {
+    if (!slot?.id) return;
+    const now = Date.now();
+    if (Date.parse(slot.endAt) <= now) {
+      toast.error('Завершённую передачу нельзя удалить из сетки');
+      return;
+    }
+    const active = Date.parse(slot.startAt) <= now;
+    const label = slot.playlist?.name || slot.title || 'Передача';
+    const warning = active
+      ? 'Передача «' + label + '» сейчас в эфире. Удалить её и немедленно остановить воспроизведение?'
+      : 'Удалить передачу «' + label + '» из сетки вещания? Плейлист и аудиозаписи сохранятся.';
+    if (!window.confirm(warning)) return;
+    setContextSlot(null);
+    action(() => call('/schedule/' + encodeURIComponent(slot.id), {method:'DELETE'}),
+      active ? 'Передача удалена. Переключение источника выполняется.' : 'Передача удалена из сетки');
+  };
   const openSlotMenu = (slot) => { setContextSlot(slot); setMovingSlot(null); setCopyingSlot(null); };
   const startSlotTouch = (slot,e) => {
     if(e.touches.length!==1)return;
@@ -437,7 +454,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
-      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
+      <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onDeleteSlot={deleteScheduleSlot} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
       {createScheduleOpen && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setCreateScheduleOpen(false);}}>
         <div role="dialog" aria-modal="true" aria-label="Добавить передачу в расписание" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white">
         <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-lg">Добавить передачу в расписание</h3><button type="button" aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-1" onClick={()=>setCreateScheduleOpen(false)}>✕</button></div>
@@ -506,7 +523,7 @@ export default function Radio() {
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>openSlotEditor(contextSlot)}>✎ Редактировать слот</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
-          {new Date(contextSlot.endAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-rose-500/40 px-4 py-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>{const slot=contextSlot;const live=new Date(slot.startAt)<=new Date();setContextSlot(null);if(window.confirm(live?'Передача сейчас в эфире. Удалить и немедленно остановить её воспроизведение?':'Удалить передачу из сетки?')) action(()=>call('/schedule/'+slot.id,{method:'DELETE'}),live?'Передача удалена. Переключение источника выполняется.':'Передача удалена из сетки');}}>{new Date(contextSlot.startAt)<=new Date()?'Остановить эфир и удалить передачу':'Удалить передачу'}</button>}
+          {new Date(contextSlot.endAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-rose-500/40 px-4 py-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>deleteScheduleSlot(contextSlot)}>{new Date(contextSlot.startAt)<=new Date()?'Остановить эфир и удалить передачу':'Удалить передачу'}</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>setContextSlot(null)}>Закрыть</button>
         </div>
       </div>}
