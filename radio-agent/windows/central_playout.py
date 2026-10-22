@@ -131,6 +131,9 @@ def run(args, token):
                 raise PermissionError('Device token rejected or playback forbidden') from None
             attempt+=1
             print('SERVER_CONNECT_RETRY',type(error).__name__,flush=True)
+        except PermissionError:
+            # PermissionError inherits OSError; never treat explicit server denial as transient.
+            raise
         except (TimeoutError,OSError,URLError) as error:
             attempt+=1
             print('SERVER_CONNECT_RETRY',type(error).__name__,flush=True)
