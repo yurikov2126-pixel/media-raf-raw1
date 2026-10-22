@@ -414,6 +414,7 @@ export default function Radio() {
       <p className="text-sm opacity-70">Обработка звука и точки воспроизведения находятся в разделе «Автоматизация и звук». Старую ссылку сохранили для совместимости.</p>
       <button type="button" className="self-start rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white" onClick={()=>openWorkspace('automation')}>Открыть центр автоматизации →</button>
     </section>}
+    <audio ref={playerRef} src={audioUrl||undefined} className="hidden" onEnded={()=>setPlayingId(null)}/>
     {tab === 'assets' && <RadioAssetManager assets={assets} token={token} refresh={refresh} preview={preview} rename={renameAsset} remove={deleteAsset} uploadPanel={<><details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
         <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
         <div className="mt-4 space-y-3">
@@ -440,11 +441,7 @@ export default function Radio() {
           <progress className="block w-full" max={uploadProgress.total} value={uploadProgress.completed}/>
         </div>}
         </div>
-      </details></>} player={<><div className="rounded-2xl border border-current/10 p-4 space-y-2">
-        <p className="font-semibold">Общий плеер</p>
-        <p className="text-sm opacity-70">{assets.find(a=>a.id===playingId)?.name || 'Выберите запись ниже'}</p>
-        <audio ref={playerRef} controls src={audioUrl || undefined} className="w-full" onEnded={() => setPlayingId(null)} />
-      </div></>} />}
+      </details></>} />}
     {tab === 'playlists' && <section className="space-y-4">
       <RadioPlaylistReview token={token} onChanged={refresh} />
       <RadioSectionIntro eyebrow="ПОДГОТОВКА" title="Конструктор радиопрограмм" description="Создавайте программы из записей, формируйте порядок воспроизведения, согласовывайте и размещайте в сетке." metrics={[{label:'Плейлистов',value:playlists.length},{label:'Утверждено',value:playlists.filter(p=>p.status==='APPROVED').length},{label:'Папок',value:folders.length}]}/>
