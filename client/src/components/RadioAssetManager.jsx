@@ -7,13 +7,14 @@ const size=b=>b>1048576?(b/1048576).toFixed(1)+' МБ':(b/1024).toFixed(0)+' К�
 const name=a=>a.tags?.title?[a.tags.artist,a.tags.title].filter(Boolean).join(' — '):a.name;
 const keys=['title','artist','album','genre','year','track','composer','comment'];
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
-export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player}){
+export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player,onFolderChange}){
  const audioRef=useRef(null),urlRef=useRef(''),loadSeq=useRef(0),pendingSeek=useRef(null);
  const [activeId,setActiveId]=useState(null),[playState,setPlayState]=useState('idle'),[elapsed,setElapsed]=useState(0),[audioDuration,setAudioDuration]=useState(0);
  const [folders,setFolders]=useState([]),[folder,setFolder]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('name');
  const [collapsed,setCollapsed]=useState([]);
  const [advancedOpen,setAdvancedOpen]=useState(false),[artistFilter,setArtistFilter]=useState(''),[albumFilter,setAlbumFilter]=useState(''),[genreFilter,setGenreFilter]=useState(''),[durationFilter,setDurationFilter]=useState(''),[metadataFilter,setMetadataFilter]=useState('all');
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
+ const [fileDetails,setFileDetails]=useState(null);
  const [checked,setChecked]=useState([]),[menu,setMenu]=useState(null),[dragOver,setDragOver]=useState(null);
  const [deleteReview,setDeleteReview]=useState(null),[reviewLoading,setReviewLoading]=useState(false);
  const [playlistName,setPlaylistName]=useState(''),[showPlaylist,setShowPlaylist]=useState(false);
@@ -76,6 +77,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  }
  const chooseFolder=id=>{
   setFolder(id);
+  onFolderChange?.(id,folders.find(f=>f.id===id)?.name||'Корень аудиотеки');
   if(id)setCollapsed(prev=>prev.filter(x=>!radioFolderPath(folders,id).some(a=>a.id===x)));
  };
  const childFolders=folders.filter(f=>(f.parentId||null)===folder);
@@ -210,6 +212,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
       </div>
       <div className="rl-row-actions flex gap-2">
        <button onClick={()=>toggleAudio(a)} title="Прослушать или поставить на паузу" className="rounded-lg border border-current/15 px-2 py-1.5 text-xs rl-row-play-secondary">{activeId===a.id&&playState==='playing'?'Ⅱ':'▶'}</button>
+       <button type="button" onClick={()=>setFileDetails(a)} title="Свойства файла" className="rounded-lg border border-current/15 px-2 py-1.5 text-xs">ⓘ</button>
        <button onClick={()=>setMenu({id:a.id,x:Math.max(8,window.innerWidth-230),y:Math.min(window.innerHeight-300,220)})} title="Действия" aria-label={'Меню '+name(a)} className="rounded-lg border border-current/15 px-3 py-1.5 text-xs">⋯</button>
       </div>
      </article>)}
@@ -227,9 +230,19 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
   </div>
   {menu&&<><button type="button" aria-label="Закрыть контекстное меню" className="fixed inset-0 z-40" onClick={()=>setMenu(null)}/><div className="fixed z-50 w-48 space-y-1 rounded-xl border border-current/10 bg-white p-2 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-white" style={{left:menu.x,top:menu.y}}>
    {(()=>{const a=list.find(x=>x.id===menu.id);if(!a)return null;return <>
-    {[[ 'Прослушать',()=>preview(a) ],['Изменить теги',()=>openTags(a)],['Считать ID3',()=>rescan(a)],['Переместить',()=>moveAsset(a)],['Переименовать',()=>rename(a)],['Удалить',()=>remove(a)]].map(([label,fn])=><button key={label} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-indigo-500/10" onClick={()=>{setMenu(null);fn();}}>{label}</button>)}
+    {[[ 'Прослушать',()=>preview(a) ],['Свойства файла',()=>setFileDetails(a)],['Изменить теги',()=>openTags(a)],['Считать ID3',()=>rescan(a)],['Переместить',()=>moveAsset(a)],['Переименовать',()=>rename(a)],['Удалить',()=>remove(a)]].map(([label,fn])=><button key={label} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-indigo-500/10" onClick={()=>{setMenu(null);fn();}}>{label}</button>)}
    </>;})()}
    </div></>}
+  {fileDetails&&<div className="fixed inset-0 z-[110] grid place-items-center bg-black/60 p-4" onClick={()=>setFileDetails(null)}>
+   <section role="dialog" aria-modal="true" aria-label="Свойства аудиофайла" onClick={e=>e.stopPropagation()} className="rl-bulk-modal max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-2xl">
+    <div className="flex items-center justify-between gap-2"><div><p className="rl-eyebrow">ФАЙЛОВЫЙ МЕНЕДЖЕР</p><h3 className="mt-1 text-xl font-bold">Свойства записи</h3></div><button type="button" onClick={()=>setFileDetails(null)} className="rounded-lg border border-current/20 px-3 py-2" aria-label="Закрыть">✕</button></div>
+    <p className="mt-4 break-all text-sm font-bold">{name(fileDetails)}</p>
+    <dl className="mt-4 grid grid-cols-[minmax(110px,1fr)_minmax(0,2fr)] gap-x-4 gap-y-3 text-sm">
+     {[['Имя файла',fileDetails.name],['Продолжительность',fmt(fileDetails.durationMs)],['Размер',size(fileDetails.byteSize)],['Формат',fileDetails.mimeType||'—'],['Папка',folders.find(f=>f.id===fileDetails.folderId)?.name||'Корень аудиотеки'],['Исполнитель',fileDetails.tags?.artist||'—'],['Альбом',fileDetails.tags?.album||'—'],['Жанр',fileDetails.tags?.genre||'—'],['Дата добавления',fileDetails.createdAt?new Date(fileDetails.createdAt).toLocaleString('ru-RU'):'—']].map(([k,v])=><div className="contents" key={k}><dt className="opacity-60">{k}</dt><dd className="min-w-0 break-words font-medium">{v}</dd></div>)}
+    </dl>
+    <div className="mt-5 flex flex-wrap gap-2"><button type="button" className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white" onClick={()=>{setFileDetails(null);openTags(fileDetails);}}>Изменить метаданные</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setFileDetails(null)}>Закрыть</button></div>
+   </section>
+  </div>}
   {deleteReview&&<div className="fixed inset-0 z-[110] grid place-items-center bg-black/65 p-4" onClick={()=>setDeleteReview(null)}>
     <section role="dialog" aria-modal="true" aria-label="Проверка удаления аудиофайлов" className="rl-bulk-modal max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl p-5 shadow-2xl" onClick={e=>e.stopPropagation()}>
      <div className="flex items-start justify-between gap-3"><div><p className="rl-eyebrow">ФАЙЛОВЫЙ МЕНЕДЖЕР · ПРОВЕРКА</p><h3 className="mt-1 text-xl font-bold">Безопасное удаление</h3></div><button type="button" aria-label="Закрыть" onClick={()=>setDeleteReview(null)} className="rounded-lg border border-current/20 px-3 py-2">✕</button></div>
