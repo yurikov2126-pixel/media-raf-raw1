@@ -63,7 +63,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
  const [dragging,setDragging]=useState(null);
  useEffect(()=>saveRadioLayout('radio-os2-layout',layout),[layout]);
  const patchLayout=callback=>setLayout(previous=>normalizeRadioLayout(callback(normalizeRadioLayout(previous))));
- const applyPreset=name=>{setLayout(normalizeRadioLayout(RADIO_PRESETS[name]));setLayoutEditing(false);};
+ const applyPreset=name=>{setLayout(previous=>normalizeRadioLayout({...RADIO_PRESETS[name],density:previous.density}));setLayoutEditing(false);};
  const widget=(id,content)=>{
   if(layout.hidden.includes(id))return null;
   const title=RADIO_WIDGETS.find(entry=>entry.id===id)?.name||id;
@@ -118,11 +118,14 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
   </header>
   <div className="rcs-os-toolbar" aria-label="Рабочее пространство Radio OS">
    <div className="rcs-os-presets"><span>Рабочее пространство</span>{[['air','Эфир'],['editor','Редактор'],['monitoring','Мониторинг']].map(([id,label])=><button key={id} type="button" onClick={()=>applyPreset(id)}>{label}</button>)}</div>
-   <button type="button" className={layoutEditing?'rcs-os-edit-active':''} onClick={()=>setLayoutEditing(v=>!v)} aria-pressed={layoutEditing}>{layoutEditing?'Готово':'Настроить панели'}</button>
+   <div className="rcs-os-toolbar-actions">
+    <button type="button" aria-pressed={layout.density==='compact'} onClick={()=>patchLayout(previous=>({...previous,density:previous.density==='compact'?'comfortable':'compact'}))}>{layout.density==='compact'?'▤ Обычный вид':'▥ Компактный вид'}</button>
+    <button type="button" className={layoutEditing?'rcs-os-edit-active':''} onClick={()=>setLayoutEditing(v=>!v)} aria-pressed={layoutEditing}>{layoutEditing?'Готово':'Настроить панели'}</button>
+   </div>
   </div>
   {layoutEditing&&<p className="rcs-os-hint">Перетаскивайте панели за значок ⠿ на компьютере или используйте стрелки ↑ ↓. Изменения сохраняются автоматически.</p>}
   {layoutEditing&&<div className="rcs-os-restore"><span>Скрытые панели:</span>{RADIO_WIDGETS.filter(entry=>layout.hidden.includes(entry.id)).map(entry=><button key={entry.id} type="button" onClick={()=>patchLayout(previous=>({...previous,hidden:previous.hidden.filter(id=>id!==entry.id)}))}>+ {entry.name}</button>)}{!layout.hidden.length&&<span>Нет</span>}<button type="button" onClick={()=>applyPreset('air')}>Сбросить расположение</button></div>}
-  <div className="rcs-grid rcs-os-grid">
+  <div className={"rcs-grid rcs-os-grid "+(layout.density==='compact'?'rcs-os-compact':'')}>
    {[
    widget('onair',<>
    <section className="rcs-onair">

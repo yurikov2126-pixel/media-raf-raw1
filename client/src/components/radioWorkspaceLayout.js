@@ -18,6 +18,7 @@ export function normalizeRadioLayout(value){
  return {order:[...order,...ids.filter(id=>!order.includes(id))],
   hidden:[...new Set((Array.isArray(input.hidden)?input.hidden:[]).filter(id=>ids.includes(id)&&id!=='onair'))],
   wide:[...new Set((Array.isArray(input.wide)?input.wide:[]).filter(id=>ids.includes(id)))],
+  density:input.density==='compact'?'compact':'comfortable',
  };
 }
 export function moveRadioWidget(layout,fromId,toId){

@@ -1,6 +1,10 @@
 import {describe,it,expect} from 'vitest';
 import {normalizeRadioLayout,moveRadioWidget,RADIO_PRESETS} from './radioWorkspaceLayout.js';
 describe('radio OS workspace',()=>{
+ it('preserves compact view and rejects invalid density',()=>{
+  expect(normalizeRadioLayout({density:'compact'}).density).toBe('compact');
+  expect(normalizeRadioLayout({density:'ultra'}).density).toBe('comfortable');
+ });
  it('normalizes stale or malformed persisted settings',()=>{
   const result=normalizeRadioLayout({order:['queue','ghost','queue'],hidden:['onair','actions','missing'],wide:['diagnostics','other']});
   expect(result.order[0]).toBe('queue');expect(new Set(result.order).size).toBe(6);
