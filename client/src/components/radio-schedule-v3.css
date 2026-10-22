@@ -78,3 +78,14 @@
 .radio-v3-event-shell.radio-v3-event-expanded .radio-v3-event span{white-space:normal;overflow-wrap:anywhere}
 .radio-v3-expand-card{position:absolute;bottom:2px;right:3px;z-index:37;min-width:22px;min-height:22px;padding:2px;border-radius:6px;color:white;background:rgba(17,24,39,.85);font-size:12px;font-weight:700}
 .radio-v3-expand-card:focus-visible{outline:2px solid #8b5cf6;outline-offset:1px}
+
+
+/* Weekly templates and mass operations */
+.radio-v3-bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid rgba(139,92,246,.3);border-radius:14px;background:rgba(139,92,246,.06)}
+.radio-v3-bulk-bar [aria-pressed="true"]{border-color:#8b5cf6;background:rgba(139,92,246,.18)}
+.radio-v3-bulk-bar button:disabled{opacity:.4;cursor:not-allowed}
+.radio-v3-bulk-delete{border-color:#e11d48!important;color:#be123c!important}
+.dark .radio-v3-bulk-delete{color:#fda4af!important}
+.radio-v3-event-shell.radio-v3-event-selected>.radio-v3-event{outline:3px solid #8b5cf6;outline-offset:-2px}
+.radio-v3-selection-indicator{position:absolute;top:3px;right:5px;z-index:3;font-size:20px;line-height:1;color:#7c3aed;text-shadow:0 1px 2px #fff}
+@media(max-width:640px){.radio-v3-bulk-bar{gap:6px}.radio-v3-bulk-bar>.radio-v3-schedule-btn{flex:1 1 auto;min-height:42px}}
