@@ -43,14 +43,14 @@ export function RadioUploadProvider({ children }) {
           else{let error='HTTP '+xhr.status;try{error=JSON.parse(xhr.responseText).error||error;}catch{}patch(task.id,{status:'error',error});}
           resolve();
         };
-        const form=new FormData();form.append('file',task.file);form.append('filename',task.file.name);
+        const form=new FormData();form.append('file',task.file);form.append('filename',task.file.name);if(!task.student&&task.folderId)form.append('folderId',task.folderId);
         xhr.send(form);
       });
       xhrRef.current=null;
     }
     working.current=false;
   };
-  const addFiles = (files, student=false) => {
+  const addFiles = (files, student=false, folderId=null) => {
     if(!token)return;
     const list=Array.from(files||[]);
     if(!list.length)return;
@@ -59,7 +59,7 @@ export function RadioUploadProvider({ children }) {
     const potential=list.filter(file=>{const key=file.name.toLowerCase()+'|'+file.size;const dup=existing.has(key)||seen.has(key);seen.add(key);return dup;});
     if(potential.length)setDuplicates(potential.map(file=>file.name));
     const now=Date.now();
-    const queued=list.map((file,i)=>({id:now+'-'+i+'-'+Math.random().toString(36).slice(2),file,student,token,name:file.name,bytes:file.size,progress:0,status:'queued'}));
+    const queued=list.map((file,i)=>({id:now+'-'+i+'-'+Math.random().toString(36).slice(2),file,student,folderId:student?null:folderId,token,name:file.name,bytes:file.size,progress:0,status:'queued'}));
     queued.forEach(task=>taskFiles.current.set(task.id,task));
     setTasks(previous=>[...previous,...queued]);
     queue.current.push(...queued);
