@@ -203,8 +203,8 @@ router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
   ...(album?[{tags:{path:['album'],string_contains:album}}]:[]),
   ...(genre?[{tags:{path:['genre'],string_contains:genre}}]:[]),
   ...(durationLimits[duration]?[{durationMs:durationLimits[duration]}]:[]),
-  ...(metadata==='no-artist'?[{OR:[{tags:{path:['artist'],equals:''}},{tags:{path:['artist'],equals:null}}]}]:[]),
-  ...(metadata==='no-title'?[{OR:[{tags:{path:['title'],equals:''}},{tags:{path:['title'],equals:null}}]}]:[]),
+  ...(metadata==='no-artist'?[{tags:{path:['artist'],equals:''}}]:[]),
+  ...(metadata==='no-title'?[{tags:{path:['title'],equals:''}}]:[]),
  ];
  const where={folderId,...(conditions.length?{AND:conditions}:{})};
  const [total,assets]=await prisma.$transaction([
