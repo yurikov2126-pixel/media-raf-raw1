@@ -258,3 +258,29 @@
 .radio-workspace .rcs-os-widget-tools button:first-child{cursor:grab;touch-action:none}
 .radio-workspace .rcs-os-widget-tools button:first-child:active{cursor:grabbing}
 @media(max-width:850px){.radio-workspace .rcs-os-grid{grid-template-columns:minmax(0,1fr)}.radio-workspace .rcs-os-widget.rcs-os-wide{grid-column:auto}.radio-workspace .rcs-os-widget-tools button:first-child{display:none}.radio-workspace .rcs-os-restore>button:last-child{margin-left:0}}
+
+
+/* Radio OS: keyboard and touch ordering without relying on HTML drag-and-drop. */
+.radio-workspace .rcs-os-hint{margin:0 0 10px;padding:10px 12px;border:1px solid var(--rc-border);background:var(--rc-alt);color:var(--rc-sub);border-radius:10px;font-size:12px;line-height:1.5}
+.radio-workspace .rcs-os-move-buttons{display:flex;align-items:center;gap:4px}
+.radio-workspace .rcs-os-move-buttons button{min-width:34px;min-height:34px;font-size:17px;line-height:1;padding:5px}
+.radio-workspace .rcs-os-widget-tools button:disabled{opacity:.36;cursor:not-allowed}
+.radio-workspace .rcs-os-widget-tools button:focus-visible,.radio-workspace .rcs-os-presets button:focus-visible{outline:2px solid var(--rc-accent);outline-offset:2px}
+@media(max-width:850px){.radio-workspace .rcs-os-widget-tools>button:first-child{display:none}.radio-workspace .rcs-os-widget-tools{gap:7px}.radio-workspace .rcs-os-widget-tools strong{min-width:100%;order:-1}.radio-workspace .rcs-os-move-buttons{flex:1}.radio-workspace .rcs-os-move-buttons button{min-width:44px;min-height:44px}}
+
+
+/* Every Radio OS tile is its own grid item; queue growth never sizes the LUFS tile. */
+.radio-workspace .rcs-os-grid{grid-auto-flow:row;align-items:start}
+.radio-workspace .rcs-os-widget{align-self:start;min-width:0}
+.radio-workspace .rcs-os-widget>.rcs-meter-panel{grid-area:auto!important;align-self:start;height:auto;min-height:0;margin:0;background:var(--rc-panel);border:1px solid var(--rc-border);color:var(--rc-ink);box-shadow:0 8px 30px #0a18300a}
+.radio-workspace .rcs-os-widget .rcs-meter-panel .rcs-lufs-title strong,
+.radio-workspace .rcs-os-widget .rcs-meter-label,
+.radio-workspace .rcs-os-widget .rcs-meter-number{color:var(--rc-ink)}
+.radio-workspace .rcs-os-widget .rcs-lufs-title span,
+.radio-workspace .rcs-os-widget .rcs-meter-unit,
+.radio-workspace .rcs-os-widget .rcs-meter-state{color:var(--rc-sub)}
+.radio-workspace .rcs-os-widget .rcs-meter{background:var(--rc-alt);border:1px solid var(--rc-border);border-radius:12px;padding:10px 5px}
+.radio-workspace .rcs-os-widget .rcs-meter-gauge{height:155px}
+.radio-workspace .rcs-diagnostics-amp{margin-top:14px;padding-top:14px;border-top:1px solid var(--rc-border);min-width:0}
+.radio-workspace .rcs-diagnostics-amp h3{font-size:13px;font-weight:750;color:var(--rc-ink);margin:0 0 12px}
+@media(max-width:850px){.radio-workspace .rcs-os-widget .rcs-meter-gauge{height:130px}}
