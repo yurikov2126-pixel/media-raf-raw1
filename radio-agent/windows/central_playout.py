@@ -118,8 +118,25 @@ def run(args, token):
     cache=base/'cache'
     logfile=base/'windows-central-vlc.log'
     snapshotfile=base/'snapshot.json'
-    if not permitted(get_status(args.server,token)):
-        raise PermissionError('Server does not permit test playback')
+    # Never begin playback without confirmed authorization. Transient network
+    # timeouts must not terminate the GUI; retry until reachable or user stops.
+    attempt=0
+    while not STOP.is_set():
+        try:
+            if not permitted(get_status(args.server,token)):
+                raise PermissionError('Server does not permit playback')
+            break
+        except HTTPError as error:
+            if error.code in (401,403):
+                raise PermissionError('Device token rejected or playback forbidden') from None
+            attempt+=1
+            print('SERVER_CONNECT_RETRY',type(error).__name__,flush=True)
+        except (TimeoutError,OSError,URLError) as error:
+            attempt+=1
+            print('SERVER_CONNECT_RETRY',type(error).__name__,flush=True)
+        STOP.wait(min(15,2*attempt))
+    if STOP.is_set():
+        return
     snapshot=read_snapshot(snapshotfile)
     last_authorized=time.monotonic()
     PLAYBACK_STATE.update(mode='STOPPED',lastAuthorized=last_authorized,offlineGrace=args.offline_grace,streamLastSeen=0.0,broadcastRunning=True)
