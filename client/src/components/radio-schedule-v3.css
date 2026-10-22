@@ -69,3 +69,12 @@
 .radio-v3-drag-preview{background-clip:padding-box;backdrop-filter:blur(8px);justify-content:flex-start}
 .radio-v3-drag-preview strong{font-variant-numeric:tabular-nums;white-space:normal;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 @media(max-width:640px){.radio-v3-zoom-controls button{min-height:40px;min-width:40px}}
+
+
+/* Auto-fit raises the hour height so short scheduled programmes have legible cards. */
+.radio-v3-auto-fit-active{border-color:#8b5cf6!important;background:rgba(139,92,246,.15)!important;font-weight:750}
+.radio-v3-event-shell.radio-v3-event-expanded{z-index:35!important;overflow:visible}
+.radio-v3-event-shell.radio-v3-event-expanded>.radio-v3-event{position:relative;z-index:36;height:auto!important;min-height:96px;box-shadow:0 14px 35px #0005;white-space:normal;overflow:visible}
+.radio-v3-event-shell.radio-v3-event-expanded .radio-v3-event span{white-space:normal;overflow-wrap:anywhere}
+.radio-v3-expand-card{position:absolute;bottom:2px;right:3px;z-index:37;min-width:22px;min-height:22px;padding:2px;border-radius:6px;color:white;background:rgba(17,24,39,.85);font-size:12px;font-weight:700}
+.radio-v3-expand-card:focus-visible{outline:2px solid #8b5cf6;outline-offset:1px}
