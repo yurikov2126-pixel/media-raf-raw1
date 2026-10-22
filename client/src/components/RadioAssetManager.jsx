@@ -15,6 +15,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
  const [checked,setChecked]=useState([]),[menu,setMenu]=useState(null),[dragOver,setDragOver]=useState(null);
  const [playlistName,setPlaylistName]=useState(''),[showPlaylist,setShowPlaylist]=useState(false);
+ const [showBulkTags,setShowBulkTags]=useState(false),[bulkFields,setBulkFields]=useState({}),[bulkValues,setBulkValues]=useState({});
  const [view,setView]=useState('list'),[selected,setSelected]=useState(null),[moveItem,setMoveItem]=useState(null),[moveTarget,setMoveTarget]=useState(''),[tags,setTags]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const loadTrack=async(asset,seekSeconds=null)=>{
   const seq=++loadSeq.current;
@@ -106,6 +107,13 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const saveMove=()=>{if(!moveItem)return;void operation(async()=>{if(moveItem.id)await request('/assets/'+moveItem.id+'/organize',{method:'PATCH',body:{folderId:moveTarget||null}});else await request('/assets/bulk-move',{method:'POST',body:{assetIds:selectedIds,folderId:moveTarget||null}});setMoveItem(null);setChecked([]);});};
  const openTags=a=>{setSelected(a);setTags(Object.fromEntries(keys.map(k=>[k,a.tags?.[k]||''])));};
  const saveTags=()=>{if(!selected)return;void operation(async()=>{await request('/assets/'+selected.id+'/tags',{method:'PATCH',body:{tags}});setSelected(null);});};
+ const saveBulkTags=()=>operation(async()=>{
+  const changes=Object.fromEntries(keys.filter(k=>bulkFields[k]).map(k=>[k,bulkValues[k]||'']));
+  if(!Object.keys(changes).length)return;
+  const result=await request('/assets/bulk-tags',{method:'PATCH',body:{assetIds:selectedIds,changes}});
+  setShowBulkTags(false);setBulkFields({});setBulkValues({});setChecked([]);
+  setResults(previous=>({...previous,assets:previous.assets.map(a=>selectedIds.includes(a.id)?{...a,tags:{...a.tags,...changes}}:a)}));
+ });
  const rescan=a=>void operation(()=>request('/assets/'+a.id+'/rescan-tags',{method:'POST'}));
  return <section className="radio-library-v2 space-y-4">
   <audio ref={audioRef} className="hidden" preload="metadata" onTimeUpdate={e=>setElapsed(e.currentTarget.currentTime)} onDurationChange={e=>setAudioDuration(Number.isFinite(e.currentTarget.duration)?e.currentTarget.duration:0)} onEnded={()=>setPlayState('paused')} onError={()=>setPlayState('error')} aria-hidden="true"/>
@@ -137,6 +145,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
      <div className="rl-selection mt-3 flex flex-wrap items-center gap-2 rounded-xl border p-2">
        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(list.length)&&selectedIds.length===list.length} onChange={e=>setChecked(e.target.checked?list.map(a=>a.id):[])}/> Выбрать страницу</label>
        <span className="text-xs opacity-65">Выбрано: {selectedIds.length}</span>
+       <button type="button" disabled={!selectedIds.length||busy} className="rl-bulk-tags-button" onClick={()=>{setBulkFields({});setBulkValues({});setShowBulkTags(true);}}>✎ Изменить теги</button>
        <button type="button" disabled={!selectedIds.length} onClick={()=>setShowPlaylist(true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">＋ Плейлист из выбранных</button>
        <button type="button" disabled={!selectedIds.length} onClick={()=>{setMoveItem({id:null,name:selectedIds.length+' записей'});setMoveTarget(folder||'');}} className="rounded-lg border border-current/15 px-3 py-2 text-xs disabled:opacity-40">Переместить</button>
        <span className="ml-auto text-xs opacity-60">{results.total} записей в папке</span>
@@ -187,6 +196,17 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     {[[ 'Прослушать',()=>preview(a) ],['Изменить теги',()=>openTags(a)],['Считать ID3',()=>rescan(a)],['Переместить',()=>moveAsset(a)],['Переименовать',()=>rename(a)],['Удалить',()=>remove(a)]].map(([label,fn])=><button key={label} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-indigo-500/10" onClick={()=>{setMenu(null);fn();}}>{label}</button>)}
    </>;})()}
    </div></>}
+  {showBulkTags&&<div className="fixed inset-0 z-[110] grid place-items-center bg-black/65 p-4" onClick={()=>setShowBulkTags(false)}>
+   <div role="dialog" aria-modal="true" aria-label="Массовое изменение метаданных" onClick={e=>e.stopPropagation()} className="rl-bulk-modal w-full max-w-xl rounded-2xl p-5 shadow-2xl">
+    <div className="flex items-start justify-between gap-3"><div><p className="rl-eyebrow">АУДИОТЕКА · МАССОВЫЕ ДЕЙСТВИЯ</p><h3 className="mt-1 text-lg font-bold">Изменить метаданные</h3><p className="mt-1 text-xs opacity-70">Выбрано записей: {selectedIds.length}</p></div><button type="button" onClick={()=>setShowBulkTags(false)} aria-label="Закрыть" className="rounded-lg border border-current/20 px-3 py-2">✕</button></div>
+    <p className="mt-4 rounded-xl border border-current/15 p-3 text-xs">Отметьте только те поля, которые нужно изменить. Остальные останутся прежними. Пустое значение в отмеченном поле очистит его у всех выбранных записей. Оригинальные аудиофайлы не меняются.</p>
+    <div className="mt-4 grid max-h-[45vh] gap-3 overflow-y-auto sm:grid-cols-2">{keys.map(k=><div key={k} className="rounded-xl border border-current/15 p-3">
+     <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={!!bulkFields[k]} onChange={e=>setBulkFields(old=>({...old,[k]:e.target.checked}))}/>{labels[k]}</label>
+     <input className="mt-2 w-full rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm disabled:opacity-35" disabled={!bulkFields[k]} maxLength={k==='comment'?300:160} placeholder={bulkFields[k]?'Введите новое значение':'Без изменений'} value={bulkValues[k]||''} onChange={e=>setBulkValues(old=>({...old,[k]:e.target.value}))}/>
+    </div>)}</div>
+    <div className="mt-4 flex flex-wrap items-center justify-end gap-2"><button type="button" onClick={()=>setShowBulkTags(false)} className="rounded-xl border border-current/20 px-4 py-2.5 text-sm">Отмена</button><button type="button" disabled={busy||!selectedIds.length||!keys.some(k=>bulkFields[k])} onClick={saveBulkTags} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Применить к {selectedIds.length} записям</button></div>
+   </div>
+  </div>}
   {showPlaylist&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={()=>setShowPlaylist(false)}>
     <form onClick={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();void createPlaylist();}} className="w-full max-w-md rounded-2xl bg-white p-5 text-slate-900 dark:bg-slate-900 dark:text-white">
      <h3 className="text-lg font-bold">Плейлист из {selectedIds.length} записей</h3>
