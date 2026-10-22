@@ -1,5 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
 import {api} from '../api/client.js';
+import {radioFolderTree,radioFolderPath} from './radioFolderTree.js';
 const fmt=ms=>{const s=Math.floor((ms||0)/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 const size=b=>b>1048576?(b/1048576).toFixed(1)+' МБ':(b/1024).toFixed(0)+' КБ';
 const name=a=>a.tags?.title?[a.tags.artist,a.tags.title].filter(Boolean).join(' — '):a.name;
@@ -7,6 +8,7 @@ const keys=['title','artist','album','genre','year','track','composer','comment'
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
 export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player}){
  const [folders,setFolders]=useState([]),[folder,setFolder]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('name');
+ const [collapsed,setCollapsed]=useState([]);
  const [page,setPage]=useState(1),[pageSize,setPageSize]=useState(50),[results,setResults]=useState({assets:[],total:0,pages:1}),[loading,setLoading]=useState(false);
  const [checked,setChecked]=useState([]),[menu,setMenu]=useState(null),[dragOver,setDragOver]=useState(null);
  const [playlistName,setPlaylistName]=useState(''),[showPlaylist,setShowPlaylist]=useState(false);
@@ -24,9 +26,18 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  },250);
  return()=>{alive=false;clearTimeout(timer);controller.abort();};
  },[token,page,pageSize,folder,query,sort,assets]);
- const current=folders.find(f=>f.id===folder);
- const ancestors=[];let pointer=current;
- while(pointer&&ancestors.length<12){if(ancestors.includes(pointer))break;ancestors.unshift(pointer);pointer=folders.find(f=>f.id===pointer.parentId);}
+ const tree=useMemo(()=>radioFolderTree(folders),[folders]);
+ const ancestors=useMemo(()=>radioFolderPath(folders,folder),[folders,folder]);
+ const visibleTree=tree.filter(entry=>!ancestorsHidden(entry));
+ function ancestorsHidden(entry){
+  let cursor=entry.parentId;const seen=new Set();
+  while(cursor&&!seen.has(cursor)){if(collapsed.includes(cursor))return true;seen.add(cursor);cursor=folders.find(f=>f.id===cursor)?.parentId;}
+  return false;
+ }
+ const chooseFolder=id=>{
+  setFolder(id);
+  if(id)setCollapsed(prev=>prev.filter(x=>!radioFolderPath(folders,id).some(a=>a.id===x)));
+ };
  const childFolders=folders.filter(f=>(f.parentId||null)===folder);
  const list=results.assets||[];
  const selectedIds=checked.filter(id=>list.some(a=>a.id===id));
@@ -70,13 +81,16 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
   <div className="grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
    <aside className="rounded-2xl border border-current/10 radio-surface-soft0 p-3 dark:bg-slate-900/40">
     <p className="px-2 py-2 text-xs uppercase tracking-widest opacity-55">Папки</p>
-    <button onDragOver={e=>{e.preventDefault();setDragOver('root');}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(null,e)} className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${dragOver==='root'?'ring-2 ring-indigo-500 ':''}${!folder?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} onClick={()=>setFolder(null)}>▣ Вся библиотека / корень</button>
-    {folders.map(f=><button key={f.id} onDragOver={e=>{e.preventDefault();setDragOver(f.id);}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(f.id,e)} onClick={()=>setFolder(f.id)} className={`mt-1 block w-full truncate rounded-lg px-3 py-2 text-left text-sm ${folder===f.id?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} title={f.name}>▸ {f.name}</button>)}
+    <button onDragOver={e=>{e.preventDefault();setDragOver('root');}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(null,e)} className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${dragOver==='root'?'ring-2 ring-indigo-500 ':''}${!folder?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} onClick={()=>chooseFolder(null)}>▣ Вся библиотека / корень</button>
+    {visibleTree.map(f=><div key={f.id} className="mt-1 flex min-w-0 items-center" style={{paddingLeft:Math.min(f.depth,8)*12}}>
+     {f.hasChildren?<button type="button" className="shrink-0 rounded-md px-1.5 py-2 text-xs hover:bg-indigo-500/10" aria-label={(collapsed.includes(f.id)?'Развернуть ':'Свернуть ')+f.name} aria-expanded={!collapsed.includes(f.id)} onClick={()=>setCollapsed(v=>v.includes(f.id)?v.filter(id=>id!==f.id):[...v,f.id])}>{collapsed.includes(f.id)?'▸':'▾'}</button>:<span aria-hidden="true" className="w-6 shrink-0"/>}
+     <button type="button" onDragOver={e=>{e.preventDefault();setDragOver(f.id);}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(f.id,e)} onClick={()=>chooseFolder(f.id)} className={`min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-left text-sm ${dragOver===f.id?'ring-2 ring-indigo-500 ':''}${folder===f.id?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} title={f.name}>📁 {f.name}</button>
+    </div>)}
 
    </aside>
    <div className="min-w-0 space-y-3">
     <div className="rounded-xl border border-current/10 radio-surface-soft0 p-3 dark:bg-slate-900/40">
-     <div className="flex flex-wrap items-center gap-2 text-xs">{[null,...ancestors].map((f,i)=><button key={f?.id||'root'} onClick={()=>setFolder(f?.id||null)} className="rounded-md px-2 py-1 hover:bg-indigo-500/10">{i?'› ':''}{f?.name||'Корень'}</button>)}</div>
+     <div className="flex flex-wrap items-center gap-2 text-xs">{[null,...ancestors].map((f,i)=><button key={f?.id||'root'} onClick={()=>chooseFolder(f?.id||null)} className="rounded-md px-2 py-1 hover:bg-indigo-500/10">{i?'› ':''}{f?.name||'Корень'}</button>)}</div>
      <div className="mt-3 flex flex-wrap gap-2">
       <input className="min-w-32 flex-1 rounded-xl border border-current/15 bg-transparent px-3 py-2 text-sm" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по названию, исполнителю, альбому, жанру"/>
       <select aria-label="Сортировка" value={sort} onChange={e=>setSort(e.target.value)} className="rounded-xl border border-current/15 bg-transparent px-2 text-sm"><option value="name">Название</option><option value="artist">Исполнитель</option><option value="duration">Длительность</option><option value="recent">Недавние</option></select>
@@ -92,7 +106,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     </div>
     {error&&<p role="alert" className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-500">{error}</p>}
     {childFolders.length>0&&<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{childFolders.map(f=><div key={f.id} className="flex items-center gap-1 rounded-xl border border-current/10 radio-surface-soft0 p-2 dark:bg-slate-900/30">
-     <button className="min-w-0 flex-1 truncate p-2 text-left text-sm" onDragOver={e=>e.preventDefault()} onDrop={e=>dropTo(f.id,e)} onClick={()=>setFolder(f.id)}>📁 {f.name}</button>
+     <button className="min-w-0 flex-1 truncate p-2 text-left text-sm" onDragOver={e=>e.preventDefault()} onDrop={e=>dropTo(f.id,e)} onClick={()=>chooseFolder(f.id)}>📁 {f.name}</button>
      <button title="Переименовать" onClick={()=>{const n=window.prompt('Название папки',f.name);if(n?.trim())void operation(()=>request('/asset-folders/'+f.id,{method:'PATCH',body:{name:n.trim()}}));}}>✎</button>
      <button title="Удалить пустую папку" onClick={()=>{if(window.confirm('Удалить пустую папку?'))void operation(()=>request('/asset-folders/'+f.id,{method:'DELETE'}));}}>×</button>
     </div>)}</div>}
@@ -140,7 +154,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     <label className="mt-4 block text-sm font-semibold">Папка назначения
      <select value={moveTarget} onChange={e=>setMoveTarget(e.target.value)} className="mt-2 w-full rounded-xl border border-current/15 bg-transparent p-3">
       <option value="">Корень аудиотеки</option>
-      {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+      {tree.map(f=><option key={f.id} value={f.id}>{'　'.repeat(Math.min(f.depth,8))}{f.name}</option>)}
      </select>
     </label>
     <div className="mt-5 flex gap-2"><button disabled={busy} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm text-white" onClick={saveMove}>Переместить</button>
