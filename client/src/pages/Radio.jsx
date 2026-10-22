@@ -72,6 +72,8 @@ export default function Radio() {
   const [transitions,setTransitions]=useState({});
   const [editing, setEditing] = useState(null);
   const [files, setFiles] = useState([]);
+  const [libraryFolder,setLibraryFolder]=useState(null);
+  const [libraryFolderName,setLibraryFolderName]=useState('Корень аудиотеки');
   const [dropActive, setDropActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ completed: 0, total: 0, failed: [] });
   const [playingId, setPlayingId] = useState(null);
@@ -156,7 +158,7 @@ export default function Radio() {
       return [...previous, ...audio.filter(f => !keys.has(f.name + '/' + f.size + '/' + f.lastModified))];
     });
   };
-  const upload = () => { if (files.length) { addFiles(files, false); setFiles([]); } };
+  const upload = () => { if (files.length) { addFiles(files, false, libraryFolder); setFiles([]); } };
   const completedUploads = uploadTasks.filter(t => !t.student && t.status === 'done').length;
   useEffect(() => { if (completedUploads) refresh().catch(() => {}); }, [completedUploads]);
   const savePlaylist = () => action(async () => {
@@ -415,15 +417,15 @@ export default function Radio() {
       <button type="button" className="self-start rounded-xl bg-violet-700 px-4 py-2 text-sm font-semibold text-white" onClick={()=>openWorkspace('automation')}>Открыть центр автоматизации →</button>
     </section>}
     <audio ref={playerRef} src={audioUrl||undefined} className="hidden" onEnded={()=>setPlayingId(null)}/>
-    {tab === 'assets' && <RadioAssetManager assets={assets} token={token} refresh={refresh} preview={preview} rename={renameAsset} remove={deleteAsset} uploadPanel={<><details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
-        <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить новые аудиозаписи</summary>
+    {tab === 'assets' && <RadioAssetManager assets={assets} token={token} refresh={refresh} preview={preview} rename={renameAsset} remove={deleteAsset} onFolderChange={(id,name)=>{setLibraryFolder(id);setLibraryFolderName(name);}} uploadPanel={<><details className="rounded-2xl border border-current/15 bg-white/50 p-4 dark:bg-slate-800/50" open={files.length>0||dropActive?true:undefined}>
+        <summary className="cursor-pointer text-sm font-semibold">＋ Загрузить аудио → {libraryFolderName}</summary>
         <div className="mt-4 space-y-3">
         <div onDragEnter={e => { e.preventDefault(); setDropActive(true); }}
           onDragOver={e => { e.preventDefault(); setDropActive(true); }}
           onDragLeave={e => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget)) setDropActive(false); }}
           onDrop={e => { e.preventDefault(); setDropActive(false); queueFiles(e.dataTransfer.files); }}
           className={'border-2 border-dashed rounded-xl p-5 text-center space-y-2 ' + (dropActive ? 'border-blue-500 bg-blue-500/10' : 'border-current/20')}>
-          <p className="font-medium">Перетащите аудиофайлы сюда</p>
+          <p className="font-medium">Перетащите аудиофайлы сюда</p><p className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">Папка назначения: {libraryFolderName}</p>
           <p className="text-xs opacity-60">или выберите сразу несколько файлов · до 30 МБ каждый</p>
           <input id="radio-upload" type="file" multiple accept=".mp3,.wav,.ogg,.flac,.m4a" aria-label="Выбрать аудиофайлы"
             onChange={e => { queueFiles(e.target.files || []); e.target.value = ''; }} />

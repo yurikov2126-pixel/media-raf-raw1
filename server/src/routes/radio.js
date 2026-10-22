@@ -222,6 +222,11 @@ const uploadAsset = safe(async (req, res) => {
         return res.status(400).json({ error: 'Требуется поддерживаемый аудиофайл' });
     // Multer/busboy may decode UTF-8 multipart filenames as latin1.
     // Prefer a dedicated UTF-8 field sent by the client; validate and never use it as a disk path.
+    // Folder is a catalog relation, never part of the physical storage path.
+    // Students may upload only into their default root; admins can choose folders.
+    const folderId = req.user?.role === 'ADMIN' && req.body?.folderId ? String(req.body.folderId) : null;
+    if (folderId && !await prisma.radioAssetFolder.findUnique({where:{id:folderId},select:{id:true}}))
+        return res.status(404).json({error:'Папка назначения не найдена'});
     const supplied = req.body?.filename;
     const filename = (typeof supplied === 'string' && supplied.trim()
         ? supplied.normalize('NFC')
@@ -242,7 +247,7 @@ const uploadAsset = safe(async (req, res) => {
             return res.status(422).json({ error: 'Не удалось определить длительность' });
         const asset = await prisma.radioAsset.create({ data: {
             name: tags.title ? [tags.artist,tags.title].filter(Boolean).join(' — ').slice(0,140):filename, tags, storageKey: key, mimeType: file.mimetype || 'application/octet-stream',
-            byteSize: file.size, durationMs, sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
+            byteSize: file.size, durationMs, folderId, sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
         } });
         return res.status(201).json({ asset });
     } finally {
