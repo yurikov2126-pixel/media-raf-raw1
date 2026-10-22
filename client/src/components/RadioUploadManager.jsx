@@ -54,6 +54,10 @@ export function RadioUploadProvider({ children }) {
     if(!token)return;
     const list=Array.from(files||[]);
     if(!list.length)return;
+    const existing=new Set(Array.from(taskFiles.current.values()).map(t=>t.file.name.toLowerCase()+'|'+t.file.size));
+    const seen=new Set();
+    const potential=list.filter(file=>{const key=file.name.toLowerCase()+'|'+file.size;const dup=existing.has(key)||seen.has(key);seen.add(key);return dup;});
+    if(potential.length)setDuplicates(potential.map(file=>file.name));
     const now=Date.now();
     const queued=list.map((file,i)=>({id:now+'-'+i+'-'+Math.random().toString(36).slice(2),file,student,token,name:file.name,bytes:file.size,progress:0,status:'queued'}));
     queued.forEach(task=>taskFiles.current.set(task.id,task));
@@ -98,6 +102,7 @@ export function RadioUploadProvider({ children }) {
           <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-xs" onClick={()=>minimized?setMinimized(false):close()}>{minimized?'Развернуть':running?'Свернуть':'Закрыть'}</button></div>
         <progress className="my-2 w-full accent-blue-600" max="100" value={progress}/>
         <p className="text-xs opacity-65">Общий прогресс: {progress}% · {(doneBytes/1048576).toFixed(1)} / {(totalBytes/1048576).toFixed(1)} МБ{running?' · передача продолжается':''}</p>
+        {duplicates.length>0&&<div role="status" className="mt-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs"><strong>Возможные дубликаты ({duplicates.length})</strong><p className="mt-1 opacity-80">Совпадают имя и размер. Файлы не блокируются: содержимое может отличаться.</p><p className="mt-1 truncate" title={duplicates.join(', ')}>{duplicates.slice(0,3).join(', ')}{duplicates.length>3?'…':''}</p><button className="mt-2 underline" type="button" onClick={()=>setDuplicates([])}>Скрыть предупреждение</button></div>}
         <div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={!tasks.some(t=>t.status==='error')} onClick={retryAll} className="rounded-lg border border-current/20 px-3 py-2 text-xs disabled:opacity-40">↻ Повторить ошибки</button><button type="button" disabled={!tasks.some(t=>t.status==='done')} onClick={clearFinished} className="rounded-lg border border-current/20 px-3 py-2 text-xs disabled:opacity-40">Очистить завершённые</button></div>
         {!minimized&&<div className="mt-3 max-h-[55vh] space-y-2 overflow-auto">
           {tasks.map(t=><div key={t.id} className="rounded-xl border border-current/15 p-2 text-xs">
