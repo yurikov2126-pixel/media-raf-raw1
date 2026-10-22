@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import './radio-schedule-v3.css';
 const zone='Europe/Moscow',HOURS=24;
 const ZOOM_STEPS=[36,48,58,72,90,120,180,240,360,480];
-export const scheduleDayKey=date=>new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+export const scheduleDayKey=date=>{const parsed=new Date(date);return Number.isFinite(parsed.getTime())?new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(parsed):null;};
 export const scheduleAddDays=(key,days)=>{const d=new Date(key+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);};
 const clock=value=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:zone,hour:'2-digit',minute:'2-digit'});
 const readable=value=>new Date(value).toLocaleDateString('ru-RU',{timeZone:zone,weekday:'short',day:'numeric',month:'short'});
