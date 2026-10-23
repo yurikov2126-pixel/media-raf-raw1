@@ -8,6 +8,7 @@ const time=ms=>{const total=Math.round(ms/1000);return Math.floor(total/60)+':'+
 export default function RadioAutoPlaylistManager({token,onPublished}){
  const [list,setList]=useState([]),[folders,setFolders]=useState([]),[assets,setAssets]=useState([]);
  const [current,setCurrent]=useState({...defaults}),[editing,setEditing]=useState(null);
+ const jingleAssets=assets.filter(asset=>asset.category==='JINGLE');
  const [preview,setPreview]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [open,setOpen]=useState(false);
  const [draftId,setDraftId]=useState(null);
@@ -19,14 +20,14 @@ export default function RadioAutoPlaylistManager({token,onPublished}){
  useEffect(()=>{reload().catch(e=>setError(e.message));},[reload]);
  const update=(key,value)=>{setCurrent(v=>({...v,[key]:value}));setPreview(null);setNotice('');};
  const create=()=>{setEditing(null);setCurrent({...defaults});setPreview(null);setError('');setOpen(true);};
- const edit=p=>{setEditing(p.id);setCurrent({...defaults,...p,jingleAssetIds:Array.isArray(p.jingleAssetIds)?p.jingleAssetIds:[]});setPreview(null);setError('');setOpen(true);};
+ const edit=p=>{setEditing(p.id);setCurrent({...defaults,...p,jingleAssetIds:Array.isArray(p.jingleAssetIds)?p.jingleAssetIds.filter(id=>jingleAssets.some(asset=>asset.id===id)):[]});setPreview(null);setError('');setOpen(true);};
  const execute=async action=>{setBusy(true);setError('');setNotice('');try{await action();}catch(e){setError(e.message||'Ошибка запроса');}finally{setBusy(false);}};
  const save=e=>{e.preventDefault();execute(async()=>{
-  await call(editing?'/auto-playlists/'+editing:'/auto-playlists',{method:editing?'PUT':'POST',body:current});
+  await call(editing?'/auto-playlists/'+editing:'/auto-playlists',{method:editing?'PUT':'POST',body:{...current,jingleAssetIds:current.jingleAssetIds.filter(id=>jingleAssets.some(asset=>asset.id===id))}});
   await reload();setNotice('Настройки сохранены');setOpen(false);
  });};
  const generate=()=>execute(async()=>{
-  const r=await call('/auto-playlists/preview',{method:'POST',body:current});
+  const r=await call('/auto-playlists/preview',{method:'POST',body:{...current,jingleAssetIds:current.jingleAssetIds.filter(id=>jingleAssets.some(asset=>asset.id===id))}});
   setPreview(r.preview);
  });
  const generateAndSave=p=>execute(async()=>{
@@ -82,11 +83,12 @@ export default function RadioAutoPlaylistManager({token,onPublished}){
     {number('fadeMs','Кроссфейд, мс',0,8000,100)}
    </div>
    <fieldset className="space-y-2"><legend className="text-sm font-semibold">Джинглы из аудиотеки</legend>
+    <p className="text-xs opacity-65">Отображаются только записи категории «Джинглы». Назначить категорию можно в медиатеке.</p>
     <div className="max-h-40 space-y-1 overflow-auto rounded-xl border border-current/15 p-2">
-     {assets.map(a=><label key={a.id} className="flex items-center gap-2 rounded-lg p-1 text-sm hover:bg-current/5">
+     {jingleAssets.map(a=><label key={a.id} className="flex items-center gap-2 rounded-lg p-1 text-sm hover:bg-current/5">
       <input type="checkbox" checked={current.jingleAssetIds.includes(a.id)} onChange={e=>update('jingleAssetIds',e.target.checked?[...current.jingleAssetIds,a.id]:current.jingleAssetIds.filter(id=>id!==a.id))}/>
       <span className="min-w-0 truncate">{a.name}</span></label>)}
-     {!assets.length&&<p className="text-sm opacity-60">Файлов пока нет</p>}
+     {!jingleAssets.length&&<p className="text-sm opacity-60">В категории «Джинглы» пока нет файлов. Перейдите в медиатеку и назначьте нужным записям категорию «Джинглы».</p>}
     </div>
    </fieldset>
    <div className="flex flex-wrap gap-2">
