@@ -1315,6 +1315,7 @@ model RadioPlaylistItem {
 }
 
 model RadioScheduleSlot {
+  hosts RadioScheduleHost[]
   id         String   @id @default(cuid())
   playlistId String?
   title      String   @default("")
@@ -1422,4 +1423,25 @@ model RadioWeeklyTemplate {
   items     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model RadioHost {
+  id String @id @default(cuid())
+  name String
+  description String @default("")
+  photoUrl String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  appearances RadioScheduleHost[]
+}
+
+model RadioScheduleHost {
+  slotId String
+  hostId String
+  position Int @default(0)
+  slot RadioScheduleSlot @relation(fields:[slotId],references:[id],onDelete:Cascade)
+  host RadioHost @relation(fields:[hostId],references:[id],onDelete:Restrict)
+  @@id([slotId,hostId])
+  @@index([hostId])
 }
