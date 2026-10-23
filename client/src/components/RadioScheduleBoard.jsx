@@ -136,7 +136,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  };
  const timeline=(day,items)=>{
   const nowMinute=day===today?minutes(nowMs):null;
-  return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR}} onDragOver={e=>{if(!dragRef.current)return;e.preventDefault();e.dataTransfer.dropEffect='move';setDropPreview(getDropPreview(e,day));}}
+  return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR,'--radio-hour-height':HOUR+'px'}} onDragOver={e=>{if(!dragRef.current)return;e.preventDefault();e.dataTransfer.dropEffect='move';setDropPreview(getDropPreview(e,day));}}
    onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropPreview(null);}}
    onDrop={e=>drop(e,day)} onClick={e=>{
     if(!onCreateAt||e.target!==e.currentTarget)return;
