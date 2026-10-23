@@ -1315,6 +1315,7 @@ model RadioPlaylistItem {
 }
 
 model RadioScheduleSlot {
+  hostIds String[] @default([])
   id         String   @id @default(cuid())
   playlistId String?
   title      String   @default("")
