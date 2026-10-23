@@ -161,6 +161,8 @@ def run(args, token):
     esp32_host=getattr(args,'esp32_host',os.environ.get('RADIO_ESP32_IP','')).strip()
     esp32_secret=getattr(args,'esp32_secret',os.environ.get('RADIO_ESP32_SECRET','')).strip()
     last_esp32=0.0
+    last_esp32_error_log=0.0
+    esp32_error_kind=None
     last_audio_report=0.0
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
@@ -233,8 +235,18 @@ def run(args, token):
                 try:
                     send_heartbeat(esp32_host,esp32_secret,mode,active or reserve,
                         not denied and now-last_authorized<=args.offline_grace)
+                    if esp32_error_kind is not None:
+                        print('ESP32_HEARTBEAT_RECOVERED',flush=True)
+                    esp32_error_kind=None
                 except Exception as error:
-                    print('ESP32_HEARTBEAT_FAILED',type(error).__name__,flush=True)
+                    reason=getattr(error,'reason',None)
+                    reason_name=type(reason).__name__ if reason is not None else type(error).__name__
+                    kind=type(error).__name__+':'+reason_name
+                    if kind!=esp32_error_kind or now-last_esp32_error_log>=60:
+                        print('ESP32_HEARTBEAT_FAILED',kind,
+                              'Проверьте IP ESP32, локальную сеть и доступность HTTP /health',flush=True)
+                        last_esp32_error_log=now
+                    esp32_error_kind=kind
             with result_lock:
                 if results:
                     snapshot=results[-1]
