@@ -23,6 +23,7 @@ import { summarizePlayout, exportPlayoutCsv } from '../lib/radioStationInsights.
 import { readAudioProcessing, writeAudioProcessing } from '../lib/radioAudioProcessing.js';
 import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 import { readJingles, writeJingles, planJingleBreaks } from '../lib/radioJingles.js';
+import { readTimeSignal, writeTimeSignal } from '../lib/radioTimeSignal.js';
 import { workerRequest } from '../lib/radioLiveOpusGateway.js';
 import {readSourceControl,writeSourceControl,resolveSourcePriority} from '../lib/radioSourceControl.js';
 import {planSourceHandover} from '../lib/radioLiveHandover.js';
@@ -211,7 +212,7 @@ router.get('/assets/storage-analytics',requireRole('ADMIN'),safe(async(req,res)=
   unused:assets.filter(a=>!used.has(a.id)).slice(0,200).map(a=>({id:a.id,name:a.name,folderId:a.folderId,byteSize:a.byteSize,createdAt:a.createdAt})),
  });
 }));
-const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','SHOW','OTHER'];
+const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','SHOW','TIME_SIGNAL','OTHER'];
 const folderCategory=async(folderId,db=prisma)=>folderId?(await db.radioAssetFolder.findUnique({where:{id:folderId},select:{category:true}}))?.category||'MUSIC':'MUSIC';
 async function folderDescendantIds(rootId,db=prisma){
  const rows=await db.radioAssetFolder.findMany({select:{id:true,parentId:true}});
@@ -875,6 +876,14 @@ router.put('/source-control', safe(async(req,res)=>{
   if(error instanceof TypeError)return res.status(400).json({error:error.message});
   throw error;
  }
+}));
+router.get('/time-signal',requireRole('ADMIN'),safe(async(_req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ res.json({settings:await readTimeSignal()});
+}));
+router.put('/time-signal',requireRole('ADMIN'),safe(async(req,res)=>{
+ try{res.json({settings:await writeTimeSignal(req.body)});}
+ catch(e){if(e instanceof TypeError)return res.status(400).json({error:e.message});throw e;}
 }));
 router.get('/jingles', safe(async(_req,res)=>{
  res.setHeader('Cache-Control','no-store');
