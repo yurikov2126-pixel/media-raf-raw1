@@ -50,6 +50,8 @@ import { RadioPublicLiveGate } from '../src/lib/radioPublicLiveGate.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
+import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
+import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
@@ -175,6 +177,28 @@ state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,..
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED!=='false';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
 state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
+const hourlySignalHistory=new Set();
+state.hourlySignal={stage:'SHADOW_ONLY',connectedToEncoder:false,enabled:false,last:null,nextBoundaryAt:null};
+// Observe configuration and predict hour-boundary action without ever changing decoder,
+// source authority, or the actual MP3 output. Real PCM integration follows an on-air soak.
+const hourlySignalTimer=setInterval(async()=>{
+ try{
+  const config=await readTimeSignal();
+  const nowMs=Date.now(),boundary=hourBoundary(nowMs);
+  state.hourlySignal.enabled=config.enabled;
+  state.hourlySignal.nextBoundaryAt=new Date(nextHourlyBoundary(nowMs)).toISOString();
+  if(!config.enabled||nowMs-boundary>Math.min(config.maxDelaySeconds*1000,60000))return;
+  const current=state.playout;
+  const remainingMs=current?Math.max(0,(current.durationMs||0)-(current.seekMs||0)-(current.emittedMs||0)):null;
+  const plan=planHourlySignal({settings:config,nowMs,mode:state.mode,remainingMs,activeHourKeys:[...hourlySignalHistory]});
+  if(hourlySignalHistory.has(plan.key)||!plan.key)return;
+  hourlySignalHistory.add(plan.key);
+  state.hourlySignal.last={...plan,at:new Date(nowMs).toISOString(),audible:false};
+  console.info('RADIO_HOURLY_SIGNAL_SHADOW',JSON.stringify(state.hourlySignal.last));
+  if(hourlySignalHistory.size>72)hourlySignalHistory.delete(hourlySignalHistory.values().next().value);
+ }catch(e){state.hourlySignal.lastError=String(e.message||e).slice(0,160);}
+},5000);
+hourlySignalTimer.unref?.();
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
