@@ -63,7 +63,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  useEffect(()=>{setPage(1);setChecked([]);},[folder,query,sort,pageSize,categoryFilter,artistFilter,albumFilter,genreFilter,durationFilter,metadataFilter]);
  useEffect(()=>{let alive=true;const controller=new AbortController();const timer=setTimeout(async()=>{
   setLoading(true);
-  try{const p=new URLSearchParams({page:String(page),limit:String(pageSize),sort,query,category:categoryFilter,artist:artistFilter,album:albumFilter,genre:genreFilter,duration:durationFilter,metadata:metadataFilter});if(folder)p.set('folderId',folder);
+  try{const p=new URLSearchParams({page:String(page),limit:String(pageSize),sort,query,category:categoryFilter,artist:artistFilter,album:albumFilter,genre:genreFilter,duration:durationFilter,metadata:metadataFilter});p.set('folderId',folder||'root');
    const data=await request('/assets/browse?'+p.toString(),{signal:controller.signal});
    if(alive){setResults(data);setError('');}
   }catch(e){if(alive)setError(e.message||'Не удалось загрузить записи');}finally{if(alive)setLoading(false);}
