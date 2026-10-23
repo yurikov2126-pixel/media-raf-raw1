@@ -53,7 +53,7 @@ export default function Radio() {
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
-  const [radioHosts,setRadioHosts]=useState([]),[hostsOpen,setHostsOpen]=useState(false),[hostsForSlot,setHostsForSlot]=useState(null),[editingHosts,setEditingHosts]=useState([]);
+  const [radioHosts,setRadioHosts]=useState([]),[hostsOpen,setHostsOpen]=useState(false),[hostsForSlot,setHostsForSlot]=useState(null),[editingHosts,setEditingHosts]=useState([]),[currentRadioShow,setCurrentRadioShow]=useState(null);
   const [createScheduleOpen,setCreateScheduleOpen] = useState(false);
   const [movingSlot,setMovingSlot] = useState(null);
   const [editingSlot,setEditingSlot] = useState(null);
@@ -101,6 +101,7 @@ export default function Radio() {
   const editRequestId = useRef(0);
   const call = useCallback((path, options) => api('/radio' + path, { token, ...options }), [token]);
   useEffect(()=>{call('/hosts').then(data=>setRadioHosts(data.hosts||[])).catch(()=>{});},[call]);
+  useEffect(()=>{if(tab!=='schedule')return;let active=true;const refreshOnAir=()=>fetch('/api/radio-agent/listen/now-playing',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(active)setCurrentRadioShow(data?.currentShow||null);}).catch(()=>{if(active)setCurrentRadioShow(null);});void refreshOnAir();const timer=setInterval(refreshOnAir,10000);return()=>{active=false;clearInterval(timer);};},[tab]);
   const refresh = useCallback(async () => {
     const from = new Date(date + 'T00:00:00+03:00');
     const to = new Date(from.getTime() + 7 * 86400000);
@@ -513,6 +514,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
+      {currentRadioShow&&<section className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4"><p className="text-xs font-bold uppercase tracking-wide text-violet-700 dark:text-violet-200">● Сейчас в эфире</p><h3 className="mt-1 text-lg font-bold">{currentRadioShow.name}</h3><div className="mt-3 flex flex-wrap gap-3">{(currentRadioShow.hosts||[]).length?currentRadioShow.hosts.map(host=><div key={host.id} className="flex items-center gap-2">{host.avatar?<img className="h-10 w-10 rounded-full object-cover" src={host.avatar} alt=""/>:<span className="grid h-10 w-10 place-items-center rounded-full bg-violet-500/20">🎙</span>}<span className="text-sm font-medium">{host.fullName}</span></div>):<p className="text-xs opacity-60">Ведущие пока не назначены</p>}</div></section>}
       <section className="rounded-2xl border border-current/15 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">🎙 Ведущие радиостанции</h3><p className="text-xs opacity-65">Профили пользователей с должностью «Радиоведущий» из команды редакции</p></div><button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setHostsOpen(x=>!x)}>{hostsOpen?'Скрыть':'Показать ведущих'} ({radioHosts.length})</button></div>{hostsOpen&&<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{radioHosts.map(host=><div key={host.id} className="flex items-center gap-3 rounded-xl border border-current/10 p-2">{host.avatar?<img className="h-11 w-11 rounded-full object-cover" src={host.avatar} alt=""/>:<div className="grid h-11 w-11 place-items-center rounded-full bg-violet-500/15">🎙</div>}<div className="min-w-0"><p className="truncate text-sm font-semibold">{host.fullName||host.firstName+' '+host.lastName}</p><p className="text-xs opacity-60">@{host.username}</p></div></div>)}{!radioHosts.length&&<p className="text-sm opacity-60">Назначьте пользователям должность «Радиоведущий» в админке → Команда редакции.</p>}</div>}</section>
       <RadioWeeklyTemplates slots={slots} date={date} playlists={playlists} call={call} refresh={refresh} toast={toast}/>
       <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={(slot,startLocal)=>{if(Date.parse(slot.startAt)<=Date.now())return;setMovingSlot(slot);setMoveTime(startLocal);}} onDeleteSlot={deleteScheduleSlot} onBulkCopy={bulkCopySchedule} onBulkDelete={bulkDeleteSchedule} bulkBusy={bulkBusy} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
