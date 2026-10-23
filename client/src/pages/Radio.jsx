@@ -455,7 +455,7 @@ export default function Radio() {
         assets={assets} selected={selected} onSelected={setSelected}
         transitions={transitions} onTransitions={setTransitions}
         name={name} onName={setName} description={description} onDescription={setDescription}
-        editing={editing} onSave={savePlaylist} onCancel={reset} onPreview={preview}
+        editing={editing} onSave={savePlaylist} onCancel={reset} onPreview={preview} token={token}
       />}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">

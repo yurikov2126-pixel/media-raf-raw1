@@ -211,6 +211,21 @@ router.get('/assets/storage-analytics',requireRole('ADMIN'),safe(async(req,res)=
   unused:assets.filter(a=>!used.has(a.id)).slice(0,200).map(a=>({id:a.id,name:a.name,folderId:a.folderId,byteSize:a.byteSize,createdAt:a.createdAt})),
  });
 }));
+const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','OTHER'];
+router.post('/assets/by-ids',requireRole('ADMIN'),safe(async(req,res)=>{
+ const ids=req.body?.assetIds;
+ if(!Array.isArray(ids)||ids.length>500||ids.some(id=>typeof id!=='string'||!id))return res.status(400).json({error:'Неверный список записей'});
+ res.json({assets:await prisma.radioAsset.findMany({where:{id:{in:[...new Set(ids)]}}})});
+}));
+router.patch('/assets/categories',requireRole('ADMIN'),safe(async(req,res)=>{
+ const ids=req.body?.assetIds,category=req.body?.category;
+ if(!Array.isArray(ids)||!ids.length||ids.length>200||ids.some(id=>typeof id!=='string'||!id)||new Set(ids).size!==ids.length||!radioCategories.includes(category))
+  return res.status(400).json({error:'Укажите до 200 уникальных файлов и допустимую категорию'});
+ const count=await prisma.radioAsset.count({where:{id:{in:ids}}});
+ if(count!==ids.length)return res.status(409).json({error:'Некоторые файлы отсутствуют'});
+ const result=await prisma.radioAsset.updateMany({where:{id:{in:ids}},data:{category}});
+ res.json({updated:result.count});
+}));
 router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
  const page=Math.max(1,Math.min(100000,Number.parseInt(req.query.page,10)||1));
  const limit=[25,50,100].includes(Number(req.query.limit))?Number(req.query.limit):50;
@@ -225,8 +240,10 @@ router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
  const genre=String(req.query.genre||'').trim().slice(0,100);
  const duration=String(req.query.duration||'');
  const metadata=String(req.query.metadata||'all');
+ const category=String(req.query.category||'');
  const durationLimits={short:{lt:180000},medium:{gte:180000,lt:900000},long:{gte:900000}};
  const conditions=[
+  ...(['MUSIC','JINGLE','INTRO','PROMO','EFFECT','OTHER'].includes(category)?[{category}]:[]),
   ...(query?[{OR:[{name:{contains:query,mode:'insensitive'}},{tags:{path:['title'],string_contains:query}},{tags:{path:['artist'],string_contains:query}},{tags:{path:['album'],string_contains:query}}]}]:[]),
   ...(artist?[{tags:{path:['artist'],string_contains:artist}}]:[]),
   ...(album?[{tags:{path:['album'],string_contains:album}}]:[]),
@@ -276,7 +293,7 @@ const uploadAsset = safe(async (req, res) => {
             return res.status(422).json({ error: 'Не удалось определить длительность' });
         const asset = await prisma.radioAsset.create({ data: {
             name: tags.title ? [tags.artist,tags.title].filter(Boolean).join(' — ').slice(0,140):filename, tags, storageKey: key, mimeType: file.mimetype || 'application/octet-stream',
-            byteSize: file.size, durationMs, folderId, sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
+            byteSize: file.size, durationMs, folderId, category:'MUSIC', sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
         } });
         return res.status(201).json({ asset });
     } finally {
