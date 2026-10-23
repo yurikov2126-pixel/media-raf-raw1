@@ -43,7 +43,7 @@ export async function collectAutoPlaylistAssets(config,db=prisma){
   }
   if(frontier.length)throw new RangeError('Слишком глубокая структура папок');
  }
- const assets=await db.radioAsset.findMany({where:{folderId:{in:[...ids]}},
+ const assets=await db.radioAsset.findMany({where:{folderId:{in:[...ids]},category:'MUSIC'},
   select:{id:true,name:true,durationMs:true,tags:true},orderBy:{createdAt:'asc'}});
  const jingles=config.jingleAssetIds.length?await db.radioAsset.findMany({
   where:{id:{in:config.jingleAssetIds}},
