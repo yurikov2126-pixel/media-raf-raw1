@@ -1,0 +1,1 @@
+ALTER TABLE "RadioScheduleSlot" ADD COLUMN "hostIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
