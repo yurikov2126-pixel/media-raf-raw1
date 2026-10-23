@@ -104,6 +104,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
  const totalMs=playout?.durationMs||track?.durationMs||0;
  const progress=totalMs>0?Math.max(0,Math.min(100,playMs/totalMs*100)):0;
  const upcoming=Array.isArray(report?.upcoming)?report.upcoming:[];
+ const liveSlot=slots.find(slot=>slot.id&&(slot.id===metadata?.slot?.id||slot.id===worker?.slotId));
  const planned=useMemo(()=>slots.filter(s=>s.endAt&&Date.parse(s.endAt)>Date.now()).sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)).slice(0,8),[slots]);
  const formatTrack=track?[track.artist,track.title].filter(Boolean).join(' — ')||track.name:'Нет подтверждённых данных о композиции';
  return <div className="rcs-home">
@@ -141,6 +142,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <div className="rcs-track-main"><p className="rcs-eyebrow">ФАКТИЧЕСКИЕ МЕТАДАННЫЕ PCM</p><h2>{formatTrack}</h2>
       <p>{metadata?.slot?.name||metadata?.slot?.playlist?.name||'Политех-FM'}</p>
+      {!!liveSlot?.hosts?.length&&<div className="mt-2 flex flex-wrap items-center gap-3">{liveSlot.hosts.map(host=><div key={host.id} className="flex items-center gap-2 rounded-lg bg-violet-500/10 px-2 py-1">{host.avatar?<img src={host.avatar} alt="" className="h-8 w-8 rounded-full object-cover"/>:<span aria-hidden="true">🎙</span>}<span className="text-xs font-semibold">{host.fullName}</span></div>)}</div>}
       <div className="rcs-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-label="Позиция текущей записи"><span style={{width:progress+'%'}}/></div>
       <div className="rcs-time"><span>{totalMs?duration(playMs):'—'}</span><span>{totalMs?duration(totalMs):'—'}</span></div>
       <small>Прогресс расчётный по данным Worker; не подтверждает слышимый сигнал на удалённом устройстве.</small>
