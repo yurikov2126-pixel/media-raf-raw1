@@ -531,7 +531,7 @@ export default function Radio() {
         }
         if (!playlistId && (!slotTitle.trim() || slotDuration<1 || slotDuration>720)) { toast.error('Укажите название и длительность слота'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
-        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:playlistId||null,title:slotTitle,durationMinutes:slotDuration,startLocal:slotTime}});setCreateScheduleOpen(false);},'Передача добавлена в сетку');
+        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks,hostIds:newHostIds} : {playlistId:playlistId||null,title:slotTitle,durationMinutes:slotDuration,startLocal:slotTime,hostIds:newHostIds}});setCreateScheduleOpen(false);setNewHostIds([]);},'Передача добавлена в сетку');
       }} className="mt-4 space-y-3">
         <label className="block text-sm">Тип эфирного события
           <select className={inputStyle} value={slotMode} onChange={e=>setSlotMode(e.target.value)}>
@@ -560,6 +560,7 @@ export default function Radio() {
           <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={slotDuration} onChange={e=>setSlotDuration(Number(e.target.value))}/></label>
         </div>}
         </>}
+        {slotMode==='playlist'&&<fieldset className="rounded-xl border border-current/20 p-3"><legend className="px-1 text-sm font-semibold">Ведущие передачи</legend><div className="grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">{radioHosts.map(h=><label key={h.id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={newHostIds.includes(h.id)} onChange={e=>setNewHostIds(ids=>e.target.checked?[...ids,h.id]:ids.filter(id=>id!==h.id))}/>{h.name}</label>)}</div>{!radioHosts.length&&<p className="text-xs opacity-65">Сначала добавьте ведущих в «Контент → Ведущие».</p>}</fieldset>}
         <input required className={inputStyle} type="datetime-local" aria-label="Дата и время эфира" value={slotTime} onChange={e=>setSlotTime(e.target.value)}/>
         {slotMode==='playlist'&&<label className="text-sm block">Повторять в течение недель (1 — без повтора)
           <input className={inputStyle} type="number" min="1" max="12" value={repeatWeeks} onChange={e=>setRepeatWeeks(Number(e.target.value))}/>
