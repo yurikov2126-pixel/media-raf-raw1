@@ -324,12 +324,22 @@ router.get('/listen/now-playing',safe(async(_req,res)=>{
     orderBy:{startAt:'asc'},select:{startAt:true,playlist:{select:{name:true}}}
   }):null;
   const now=new Date();
-  const show=await prisma.radioScheduleSlot.findFirst({where:{startAt:{lte:now},endAt:{gt:now}},select:{id:true,title:true,startAt:true,endAt:true,hostIds:true,playlist:{select:{name:true}}}});
+  // Resolve by the actual Worker authority, not by the first matching schedule interval.
+  // During AutoDJ handoff or an overlapping schedule, clock-only lookup can label
+  // the wrong show (or hide the correct presenters entirely).
+  const activeSlotId=typeof worker.slotId==='string'&&worker.slotId?worker.slotId:null;
+  const show=activeSlotId&&worker.mode!=='AUTO_DJ'&&worker.mode!=='SILENCE'
+    ?await prisma.radioScheduleSlot.findFirst({
+      where:{id:activeSlotId,startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
+      select:{id:true,title:true,startAt:true,endAt:true,hostIds:true,playlist:{select:{name:true}}}
+    }):null;
   const hostIds=show?.hostIds||[];
-  const hosts=hostIds.length?await prisma.user.findMany({where:{id:{in:hostIds}},select:{id:true,username:true,fullName:true,avatar:true}}):[];
-  const hostMap=new Map(hosts.map(host=>[host.id,host]));
-  // Schedule alone is not broadcast authority: AutoDJ may be finishing a track.
-  const currentShow=show&&worker.slotId===show.id?{id:show.id,name:show.title||show.playlist?.name||'Передача',startAt:show.startAt,endAt:show.endAt,
+  const members=hostIds.length?await prisma.editorialTeamMember.findMany({
+    where:{userId:{in:hostIds},position:'RADIO_HOST'},
+    include:{user:{select:{id:true,username:true,fullName:true,firstName:true,lastName:true,avatar:true}}}
+  }):[];
+  const hostMap=new Map(members.filter(m=>m.user).map(m=>[m.userId,m.user]));
+  const currentShow=show?{id:show.id,name:show.title||show.playlist?.name||'Передача',startAt:show.startAt,endAt:show.endAt,
     hosts:hostIds.map(id=>hostMap.get(id)).filter(Boolean)}:null;
   res.json({available:true,mode:worker.mode,currentShow,
     nextShow:worker.mode==='SILENCE'&&nextSlot?{name:nextSlot.playlist.name,startAt:nextSlot.startAt.toISOString()}:null,
