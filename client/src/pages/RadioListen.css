@@ -28,3 +28,17 @@
 .rr-live{--rr-accent:var(--rr-admin-accent,#9e83ff)}
 .rr-live .rr-play,.rr-live .rr-invite-action{background:var(--rr-admin-accent,#9e83ff)}
 .rr-live .rr-progress>div{background:var(--rr-admin-accent,#9e83ff)}
+
+
+/* Live broadcast presenter profiles */
+.rr-presenters{margin:16px 0;padding:16px;border:1px solid rgba(169,158,255,.35);border-radius:18px;background:linear-gradient(120deg,rgba(127,101,242,.15),rgba(38,196,183,.07));backdrop-filter:blur(12px)}
+.rr-presenters-heading{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.rr-presenters-heading strong{font-size:17px;line-height:1.3}
+.rr-presenters-list{display:flex;flex-wrap:wrap;gap:12px}
+.rr-presenter{display:flex;align-items:center;min-width:0;gap:10px}
+.rr-presenter img,.rr-presenter-avatar{width:44px;height:44px;flex-shrink:0;border-radius:50%;object-fit:cover;border:2px solid rgba(170,157,255,.6)}
+.rr-presenter-avatar{display:grid;place-items:center;background:rgba(125,99,223,.24)}
+.rr-presenter span:not(.rr-presenter-avatar){display:flex;flex-direction:column;min-width:0;gap:2px}
+.rr-presenter strong{font-size:13px;overflow-wrap:anywhere}
+.rr-presenter small{font-size:11px;opacity:.75}
+@media(max-width:500px){.rr-presenters{padding:12px}.rr-presenters-list{flex-direction:column}}
