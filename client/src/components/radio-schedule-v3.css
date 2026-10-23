@@ -89,3 +89,8 @@
 .radio-v3-event-shell.radio-v3-event-selected>.radio-v3-event{outline:3px solid #8b5cf6;outline-offset:-2px}
 .radio-v3-selection-indicator{position:absolute;top:3px;right:5px;z-index:3;font-size:20px;line-height:1;color:#7c3aed;text-shadow:0 1px 2px #fff}
 @media(max-width:640px){.radio-v3-bulk-bar{gap:6px}.radio-v3-bulk-bar>.radio-v3-schedule-btn{flex:1 1 auto;min-height:42px}}
+
+/* Align background grid with the actual hour labels at every zoom level. */
+.radio-v3-day-timeline{background-size:100% var(--radio-hour-height,58px)}
+.radio-v3-event[draggable="true"]{cursor:grab}
+.radio-v3-event[draggable="true"]:active{cursor:grabbing}
