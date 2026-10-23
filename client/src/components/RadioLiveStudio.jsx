@@ -9,6 +9,28 @@ const ICE = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 export default function RadioLiveStudio() {
   const { token } = useAuth();
   const [status, setStatus] = useState('Подключение…');
+  const [stationNow,setStationNow]=useState(Date.now());
+  const [onAirMetadata,setOnAirMetadata]=useState(null);
+  const [onAirMetadataError,setOnAirMetadataError]=useState(false);
+  useEffect(()=>{
+    let active=true;
+    const poll=async()=>{
+      try{
+        const response=await fetch('/api/radio-agent/listen/now-playing',{cache:'no-store'});
+        if(!response.ok)throw new Error('metadata unavailable');
+        const json=await response.json();
+        if(active){setOnAirMetadata(json);setOnAirMetadataError(false);}
+      }catch{if(active){setOnAirMetadata(null);setOnAirMetadataError(true);}}
+    };
+    void poll();
+    const polling=setInterval(poll,5000);
+    const clock=setInterval(()=>setStationNow(Date.now()),1000);
+    return()=>{active=false;clearInterval(polling);clearInterval(clock);};
+  },[]);
+  const show=onAirMetadata?.currentShow;
+  const showEnd=show?.endAt?Date.parse(show.endAt):NaN;
+  const remaining=Number.isFinite(showEnd)?Math.max(0,Math.ceil((showEnd-stationNow)/1000)):null;
+  const countdown=seconds=>seconds===null?'—':String(Math.floor(seconds/3600)).padStart(2,'0')+':'+String(Math.floor(seconds%3600/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
   const [mixerTab,setMixerTab]=useState('overview');
   const [monitorVolume,setMonitorVolume]=useState(80);
   const [monitorMode,setMonitorMode]=useState('local');
@@ -278,6 +300,27 @@ export default function RadioLiveStudio() {
         <span className="rounded-lg bg-white/10 px-3 py-2">PCM Worker: {health?.workerReachable?'доступен':'нет подтверждения'}</span>
       </div>
     </div>
+    <section className="radio-panel rounded-2xl p-4 sm:p-5" aria-label="Эфирный помощник ведущего">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><p className="text-[11px] font-bold uppercase tracking-wider opacity-60">Эфирный помощник · Москва</p><h3 className="mt-1 text-lg font-bold">Передача и ведущие</h3></div>
+        <a href="/radio/live" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-current/20 px-3 py-2 text-sm font-semibold">Открыть страницу эфира ↗</a>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0 rounded-xl border border-current/10 p-4">
+          <p className="text-xs opacity-60">Подтверждено эфирным сервером</p>
+          <strong className="mt-1 block break-words text-lg">{show?.name|| (onAirMetadataError?'Нет связи с метаданными':onAirMetadata?.mode==='AUTO_DJ'?'Сейчас работает AutoDJ':'Нет подтверждённой передачи по сетке')}</strong>
+          {!!show?.hosts?.length&&<div className="mt-3 flex flex-wrap gap-2">{show.hosts.map(host=><div key={host.id} className="flex items-center gap-2 rounded-xl border border-current/10 px-2 py-1.5">{host.avatar?<img src={host.avatar} alt="" className="h-9 w-9 rounded-full object-cover"/>:<span aria-hidden="true">🎙</span>}<span className="text-sm font-semibold">{host.fullName||[host.firstName,host.lastName].filter(Boolean).join(' ')||host.username}</span></div>)}</div>}
+          {show&&!show.hosts?.length&&<p className="mt-2 text-xs opacity-60">Ведущие для этой передачи не назначены.</p>}
+          <p className="mt-3 text-xs opacity-60">Данные относятся к подтверждённому источнику станции, а не к локальному WebRTC-подключению.</p>
+        </div>
+        <div className="rounded-xl border border-current/10 p-4 md:min-w-[190px]">
+          <p className="text-xs opacity-60">До конца передачи</p>
+          <strong className="mt-2 block font-mono text-2xl tabular-nums" role="timer" aria-live="off">{countdown(remaining)}</strong>
+          <p className="mt-2 text-xs opacity-60">МСК · {new Date(stationNow).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p>
+          {onAirMetadataError&&<p className="mt-2 text-xs text-amber-600 dark:text-amber-400">Телеметрия временно недоступна.</p>}
+        </div>
+      </div>
+    </section>
     <section className="radio-panel rounded-2xl p-4">
      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-bold">LIVE-микшер</h3><p className="text-xs opacity-65">Управление, входы, мониторинг и диагностика · один рабочий стол</p></div><span className={health?.publicLiveOnAir?'rounded-full bg-rose-500/15 px-3 py-1 text-sm font-semibold text-rose-600':'rounded-full border border-current/15 px-3 py-1 text-sm'}>{health?.publicLiveOnAir?'● В ЭФИРЕ':'○ Не в эфире'}</span></div>
      <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Панели LIVE-микшера">{[['overview','Обзор'],['inputs','Входы'],['monitor','Мониторинг'],['routing','Маршрутизация'],['diagnostics','Диагностика']].map(([id,label])=><button type="button" role="tab" aria-selected={mixerTab===id} key={id} className={'rounded-xl px-3 py-2 text-sm '+(mixerTab===id?'bg-violet-700 text-white':'border border-current/15')} onClick={()=>setMixerTab(id)}>{label}</button>)}</div>
