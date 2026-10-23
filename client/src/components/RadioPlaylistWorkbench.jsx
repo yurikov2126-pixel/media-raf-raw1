@@ -1,19 +1,23 @@
-import {useMemo,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
+import {api} from '../api/client.js';
 import RadioPlaylistTransitions,{pairTransitions} from './RadioPlaylistTransitions.jsx';
 
 const duration=ms=>{const sec=Math.max(0,Math.round(ms/1000));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');};
 const input='w-full rounded-xl border border-current/20 bg-white/90 px-3 py-2 text-slate-900 dark:bg-slate-900 dark:text-slate-100';
 export default function RadioPlaylistWorkbench({
  assets=[],selected,onSelected,transitions,onTransitions,name,onName,description,onDescription,
- editing,onSave,onCancel,onPreview,busy=false
+ editing,onSave,onCancel,onPreview,busy=false,token
 }){
  const [query,setQuery]=useState(''),[onlyAvailable,setOnlyAvailable]=useState(false);
+ const [category,setCategory]=useState('MUSIC'),[page,setPage]=useState(1),[catalog,setCatalog]=useState({assets:[],total:0,pages:1}),[catalogBusy,setCatalogBusy]=useState(false),[catalogError,setCatalogError]=useState(''),[pickedAssets,setPickedAssets]=useState([]);
  const [selectedRow,setSelectedRow]=useState(null),[transitionOpen,setTransitionOpen]=useState(false);
  const drag=useRef(null),[dragOver,setDragOver]=useState(null);
- const byId=useMemo(()=>new Map(assets.map(a=>[a.id,a])),[assets]);
+ const byId=useMemo(()=>new Map([...assets,...pickedAssets,...catalog.assets].map(a=>[a.id,a])),[assets,pickedAssets,catalog]);
+ useEffect(()=>{let active=true;const controller=new AbortController();const t=setTimeout(async()=>{setCatalogBusy(true);try{const qs=new URLSearchParams({category,query,page:String(page),limit:'50',sort:'name'});const result=await api('/radio/assets/browse?'+qs,{token,signal:controller.signal});if(active){setCatalog(result);setCatalogError('');}}catch(e){if(active)setCatalogError(e.message);}finally{if(active)setCatalogBusy(false);}},220);return()=>{active=false;clearTimeout(t);controller.abort();};},[category,query,page,token]);
+ useEffect(()=>{if(!selected.length)return;let active=true;api('/radio/assets/by-ids',{token,method:'POST',body:{assetIds:[...new Set(selected)].slice(0,500)}}).then(v=>{if(active)setPickedAssets(v.assets||[]);}).catch(()=>{});return()=>{active=false;};},[selected,token]);
+ useEffect(()=>setPage(1),[category,query]);
  const chosen=new Set(selected);
- const library=useMemo(()=>assets.filter(a=>(!onlyAvailable||!chosen.has(a.id))&&
-  [a.name,a.tags?.artist].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU').includes(query.toLocaleLowerCase('ru-RU'))),[assets,query,onlyAvailable,selected]);
+ const library=useMemo(()=>(catalog.assets||[]).filter(a=>!onlyAvailable||!chosen.has(a.id)),[catalog,onlyAvailable,selected]);
  const pairList=pairTransitions(selected,transitions);
  const total=selected.reduce((sum,id)=>sum+(byId.get(id)?.durationMs||0),0)-
   pairList.reduce((sum,x)=>sum+(x.mode==='crossfade'?x.overlapMs:0),0);
@@ -89,8 +93,11 @@ export default function RadioPlaylistWorkbench({
    </section>
    <aside className="min-w-0 space-y-3 rounded-2xl border border-current/15 p-3 xl:sticky xl:top-20">
     <div><h4 className="font-semibold">Аудиотека</h4><p className="text-xs opacity-60">Добавляйте музыку прямо в конец плейлиста.</p></div>
-    <input className={input} placeholder="Найти песню или исполнителя" value={query} onChange={e=>setQuery(e.target.value)} aria-label="Поиск записей аудиотеки"/>
+    <div className="flex flex-wrap gap-1" role="group" aria-label="Категории аудиозаписей">{[['MUSIC','Музыка'],['JINGLE','Джинглы'],['INTRO','Подводки'],['PROMO','Промо'],['EFFECT','Эффекты'],['OTHER','Прочее']].map(([id,label])=><button key={id} type="button" onClick={()=>setCategory(id)} aria-pressed={category===id} className={'rounded-lg border px-2.5 py-2 text-xs font-semibold '+(category===id?'border-violet-500 bg-violet-600 text-white':'border-current/20 hover:bg-violet-500/10')}>{label}</button>)}</div>
+    <input className={input} placeholder="Найти запись во всей аудиотеке" value={query} onChange={e=>setQuery(e.target.value)} aria-label="Поиск записей аудиотеки"/>
     <label className="flex gap-2 text-xs"><input type="checkbox" checked={onlyAvailable} onChange={e=>setOnlyAvailable(e.target.checked)}/>Только не добавленные</label>
+    {catalogError&&<p role="alert" className="text-xs text-red-500">{catalogError}</p>}
+    {catalogBusy&&<p className="text-xs opacity-60">Поиск по медиатеке…</p>}
     <div className="max-h-[490px] space-y-1 overflow-y-auto pr-1">
      {library.map(asset=><div key={asset.id} className="flex items-center gap-2 rounded-xl border border-current/10 p-2">
       <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{asset.name}</p>
@@ -101,7 +108,7 @@ export default function RadioPlaylistWorkbench({
      </div>)}
      {!library.length&&<p className="p-4 text-center text-xs opacity-65">Записи не найдены.</p>}
     </div>
-    <p className="text-xs opacity-60">{library.length} аудиозаписей в выборке</p>
+    <div className="flex items-center justify-between gap-2 text-xs"><span>{catalog.total} записей в категории · страница {page}/{catalog.pages||1}</span><div className="flex gap-1"><button type="button" disabled={page<=1} onClick={()=>setPage(p=>p-1)} className="rounded-lg border border-current/20 px-3 py-2 disabled:opacity-30">←</button><button type="button" disabled={page>=catalog.pages} onClick={()=>setPage(p=>p+1)} className="rounded-lg border border-current/20 px-3 py-2 disabled:opacity-30">→</button></div></div>
    </aside>
   </div>
   <footer className="sticky bottom-0 z-10 -mx-3 flex flex-wrap items-center justify-between gap-3 border-t border-current/10 bg-white/90 px-3 py-3 backdrop-blur-xl dark:bg-slate-900/95 sm:-mx-5 sm:px-5">
