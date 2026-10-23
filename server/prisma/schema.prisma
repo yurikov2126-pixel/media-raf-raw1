@@ -1268,6 +1268,7 @@ model EditorialTaskWikiLink {
 
 // Radio 2.0: planning only. No device power or playback commands.
 model RadioAsset {
+  category String @default("MUSIC")
   folderId String?
   folder RadioAssetFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   tags Json?
