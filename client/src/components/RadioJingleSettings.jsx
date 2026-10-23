@@ -3,7 +3,7 @@ import {api} from '../api/client.js';
 const partNames={NIGHT:'Ночь',MORNING:'Утро',DAY:'День',EVENING:'Вечер'};
 export default function RadioJingleSettings({token}){
  const [settings,setSettings]=useState(null),[preview,setPreview]=useState(null);
- const [jingleAssets,setJingleAssets]=useState([]),[assetsLoading,setAssetsLoading]=useState(true);
+ const [jingleAssets,setJingleAssets]=useState([]),[assetsLoading,setAssetsLoading]=useState(true),[assetsError,setAssetsError]=useState(false);
  const [error,setError]=useState(''),[note,setNote]=useState(''),[saving,setSaving]=useState(false);
  const load=useCallback(async()=>{try{setSettings((await api('/radio/jingles',{token})).settings);}
  catch(e){setError(e.message);}},[token]);
@@ -11,7 +11,7 @@ export default function RadioJingleSettings({token}){
  useEffect(()=>{
   let active=true;
   const fetchJingles=async()=>{
-   setAssetsLoading(true);
+   setAssetsLoading(true);setAssetsError(false);
    try{
     const all=[];
     for(let page=1;;page++){
@@ -21,7 +21,7 @@ export default function RadioJingleSettings({token}){
      if(all.length>=Number(response.total)||batch.length<100)break;
     }
     if(active){setJingleAssets(all.filter(a=>a.durationMs>=1000&&a.durationMs<=60000));setError('');}
-   }catch(e){if(active)setError('Не удалось загрузить джинглы: '+e.message);}
+   }catch(e){if(active){setAssetsError(true);setError('Не удалось загрузить джинглы: '+e.message);}}
    finally{if(active)setAssetsLoading(false);}
   };
   void fetchJingles();
@@ -29,7 +29,7 @@ export default function RadioJingleSettings({token}){
  },[token]);
  const save=async e=>{
   e.preventDefault();setSaving(true);setError('');setNote('');
-  try{if(assetsLoading)throw new Error('Дождитесь загрузки джинглов');
+  try{if(assetsLoading||assetsError)throw new Error('Список джинглов не загружен; сохранение заблокировано');
    const eligible=new Set(jingleAssets.map(a=>a.id));
    const payload={...settings,assetIds:settings.assetIds.filter(id=>eligible.has(id))};
    const response=await api('/radio/jingles',{token,method:'PUT',body:payload});
@@ -67,7 +67,7 @@ export default function RadioJingleSettings({token}){
     {settings.assetIds.some(id=>!jingleAssets.some(a=>a.id===id))&&!assetsLoading&&<p className="mt-2 text-xs text-amber-600 dark:text-amber-300">В прежних настройках есть файлы вне категории «Джинглы» или неподходящей длительности. При сохранении они будут исключены.</p>}
    </details>
    <div className="flex gap-2 flex-wrap">
-    <button type="submit" disabled={saving||assetsLoading||!settings.dayparts.length} className="rounded-xl bg-blue-600 px-4 py-2 text-white text-sm disabled:opacity-40">{saving?'Сохранение…':'Сохранить правила'}</button>
+    <button type="submit" disabled={saving||assetsLoading||assetsError||!settings.dayparts.length} className="rounded-xl bg-blue-600 px-4 py-2 text-white text-sm disabled:opacity-40">{saving?'Сохранение…':'Сохранить правила'}</button>
     <button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={async()=>{
      try{setPreview((await api('/radio/jingles/preview',{token})));setError('');}catch(e){setError(e.message);}
     }}>Проверить план и эфир</button>
