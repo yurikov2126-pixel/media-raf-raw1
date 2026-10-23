@@ -328,7 +328,8 @@ router.get('/listen/now-playing',safe(async(_req,res)=>{
   const hostIds=show?.hostIds||[];
   const hosts=hostIds.length?await prisma.user.findMany({where:{id:{in:hostIds}},select:{id:true,username:true,fullName:true,avatar:true}}):[];
   const hostMap=new Map(hosts.map(host=>[host.id,host]));
-  const currentShow=show?{id:show.id,name:show.title||show.playlist?.name||'Передача',startAt:show.startAt,endAt:show.endAt,
+  // Schedule alone is not broadcast authority: AutoDJ may be finishing a track.
+  const currentShow=show&&worker.slotId===show.id?{id:show.id,name:show.title||show.playlist?.name||'Передача',startAt:show.startAt,endAt:show.endAt,
     hosts:hostIds.map(id=>hostMap.get(id)).filter(Boolean)}:null;
   res.json({available:true,mode:worker.mode,currentShow,
     nextShow:worker.mode==='SILENCE'&&nextSlot?{name:nextSlot.playlist.name,startAt:nextSlot.startAt.toISOString()}:null,
