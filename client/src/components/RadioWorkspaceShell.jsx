@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 
 export const RADIO_NAV_GROUPS=[
  {id:'broadcast',title:'Вещание',items:[{id:'home',icon:'◉',label:'Эфир',hint:'Командный центр'},{id:'studio',icon:'◈',label:'Студия',hint:'Прямой эфир'}]},
- {id:'planning',title:'Планирование',items:[{id:'schedule',icon:'▦',label:'Сетка',hint:'Эфирное расписание'}]},
+ {id:'planning',title:'Планирование',items:[{id:'schedule',icon:'▦',label:'Сетка',hint:'Эфирное расписание'},{id:'hosts',icon:'🎙',label:'Ведущие',hint:'Профили и передачи'}]},
  {id:'media',title:'Контент',items:[{id:'playlists',icon:'☷',label:'Плейлисты',hint:'Состав передач'},{id:'auto-playlists',icon:'♫',label:'Автоплейлисты',hint:'Генерация'},{id:'assets',icon:'▣',label:'Медиатека',hint:'Треки и джинглы'}]},
  {id:'automation',title:'Автоматизация',items:[{id:'automation',icon:'⚙',label:'Автоматизация',hint:'AutoDJ и правила'},{id:'processing',icon:'≋',label:'Звук',hint:'Обработка'}]},
  {id:'monitor',title:'Контроль',items:[{id:'history',icon:'▤',label:'Мониторинг',hint:'Работа станции'},{id:'equipment',icon:'▣',label:'Оборудование',hint:'Агенты и устройства'}]}
