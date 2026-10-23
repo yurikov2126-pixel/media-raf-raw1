@@ -229,7 +229,8 @@ router.patch('/assets/categories',requireRole('ADMIN'),safe(async(req,res)=>{
 router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
  const page=Math.max(1,Math.min(100000,Number.parseInt(req.query.page,10)||1));
  const limit=[25,50,100].includes(Number(req.query.limit))?Number(req.query.limit):50;
- const folderId=typeof req.query.folderId==='string'&&req.query.folderId.length<100?req.query.folderId:null;
+ // No folderId means all folders (playlist picker); 'root' limits to unfiled assets.
+ const folderId=typeof req.query.folderId==='string'&&req.query.folderId.length<100?req.query.folderId:undefined;
  const query=String(req.query.query||'').trim().slice(0,120);
  const sort=String(req.query.sort||'name');
  const order=sort==='duration'?{durationMs:'desc'}:sort==='shortest'?{durationMs:'asc'}:
@@ -252,7 +253,7 @@ router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
   ...(metadata==='no-artist'?[{tags:{path:['artist'],equals:''}}]:[]),
   ...(metadata==='no-title'?[{tags:{path:['title'],equals:''}}]:[]),
  ];
- const where={folderId,...(conditions.length?{AND:conditions}:{})};
+ const where={...(folderId!==undefined?{folderId:folderId==='root'?null:folderId}:{}),...(conditions.length?{AND:conditions}:{})};
  const [total,assets]=await prisma.$transaction([
    prisma.radioAsset.count({where}),
    prisma.radioAsset.findMany({where,orderBy:[order,{id:'asc'}],skip:(page-1)*limit,take:limit}),
