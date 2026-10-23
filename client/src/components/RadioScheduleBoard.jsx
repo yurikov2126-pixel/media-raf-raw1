@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import './radio-schedule-v3.css';
 const zone='Europe/Moscow',HOURS=24;
 const ZOOM_STEPS=[36,48,58,72,90,120,180,240,360,480];
@@ -44,7 +44,10 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const [hourHeight,setHourHeight]=useState(()=>{try{const saved=Number(localStorage.getItem('radio-schedule-hour-height'));return ZOOM_STEPS.includes(saved)?saved:58;}catch{return 58;}});
  useEffect(()=>{try{localStorage.setItem('radio-schedule-hour-height',String(hourHeight));}catch{/* private browsing */}},[hourHeight]);
  const [quickSlot,setQuickSlot]=useState(null);
- const [dragId,setDragId]=useState(null),[dragOffset,setDragOffset]=useState(0),[dropPreview,setDropPreview]=useState(null),[nowMs,setNowMs]=useState(Date.now());
+ const [dragId,setDragId]=useState(null),[dropPreview,setDropPreview]=useState(null),[nowMs,setNowMs]=useState(Date.now());
+ // Native HTML drag events can arrive before React commits state updates.
+ const dragRef=useRef(null);
+ const clearDrag=()=>{dragRef.current=null;setDragId(null);setDropPreview(null);};
  useEffect(()=>{const id=setInterval(()=>setNowMs(Date.now()),30000);return()=>clearInterval(id);},[]);
  useEffect(()=>{
   if(window.matchMedia('(max-width: 767px)').matches)setView('day');
@@ -54,7 +57,8 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const events=useMemo(()=>slots.filter(s=>s?.startAt&&s?.endAt&&Number.isFinite(Date.parse(s.startAt))&&Number.isFinite(Date.parse(s.endAt)))
   .filter(s=>filter==='all'||(filter==='assigned'?Boolean(s.playlistId):!s.playlistId))
   .sort((a,b)=>Date.parse(a.startAt)-Date.parse(b.startAt)),[slots,filter]);
- const shortestDuration=useMemo(()=>Math.min(...events.filter(s=>Date.parse(s.endAt)>nowMs).map(s=>(Date.parse(s.endAt)-Date.parse(s.startAt))/60000).filter(n=>n>0),Infinity),[events,nowMs]);
+ const visibleEvents=useMemo(()=>view==='day'?events.filter(s=>scheduleLayout([s],selectedDay).length>0):events,[events,view,selectedDay]);
+ const shortestDuration=useMemo(()=>Math.min(...visibleEvents.filter(s=>Date.parse(s.endAt)>nowMs).map(s=>(Date.parse(s.endAt)-Date.parse(s.startAt))/60000).filter(n=>n>0),Infinity),[visibleEvents,nowMs]);
  const fitHourHeight=Number.isFinite(shortestDuration)?Math.min(480,Math.max(58,Math.ceil(82*60/shortestDuration))):58;
  const HOUR=autoFit?Math.max(hourHeight,fitHourHeight):hourHeight;
  const eligible=useMemo(()=>events.filter(e=>Date.parse(e.startAt)>nowMs),[events,nowMs]);
@@ -74,10 +78,10 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  };
  const getDropPreview=(event,day)=>{
   const rect=event.currentTarget.getBoundingClientRect();
-  const target=events.find(item=>item.id===dragId);
+  const target=events.find(item=>item.id===dragRef.current?.id);
   if(!target)return null;
   const duration=(Date.parse(target.endAt)-Date.parse(target.startAt))/60000;
-  const raw=((event.clientY-rect.top)/HOUR*60)-dragOffset;
+  const raw=((event.clientY-rect.top)/HOUR*60)-(dragRef.current?.offsetMinutes||0);
   const minute=Math.min(Math.max(0,Math.round(raw/5)*5),Math.max(0,Math.floor((1440-duration)/5)*5));
   const startLocal=day+'T'+String(Math.floor(minute/60)).padStart(2,'0')+':'+String(minute%60).padStart(2,'0');
   const from=Date.parse(startLocal+':00+03:00'),until=from+duration*60000;
@@ -87,17 +91,17 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  const drop=(event,day)=>{
   event.preventDefault();
   const preview=getDropPreview(event,day);
-  const target=events.find(item=>item.id===dragId);
-  setDragId(null);setDropPreview(null);
+  const target=events.find(item=>item.id===dragRef.current?.id);
+  clearDrag();
   if(target&&preview)onDropSlot?.(target,preview.startLocal,preview.conflict);
  };
  const startDrag=(event,id)=>{
   const target=events.find(item=>item.id===id);
   if(!target||Date.parse(target.startAt)<=Date.now())return;
-  setDragId(id);setDropPreview(null);
   const rect=event.currentTarget.getBoundingClientRect();
-  // Preserve the grabbed position within the event instead of jumping the top to the pointer.
-  setDragOffset(Math.max(0,Math.min((Date.parse(target.endAt)-Date.parse(target.startAt))/60000,(event.clientY-rect.top)/HOUR*60)));
+  // Keep source and grab offset synchronous across dragstart, dragover and drop.
+  dragRef.current={id,offsetMinutes:Math.max(0,Math.min((Date.parse(target.endAt)-Date.parse(target.startAt))/60000,(event.clientY-rect.top)/HOUR*60))};
+  setDragId(id);setDropPreview(null);
   event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',id);
   // Hide the browser's frozen drag snapshot: the live destination card carries the time.
   const transparent=document.createElement('canvas');transparent.width=1;transparent.height=1;
@@ -109,7 +113,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
   const title=event.playlist?.name||event.title||'Передача';
   const compact=positioned&&event.duration/60*HOUR<82;
   return <div key={event.id} className={(positioned?'radio-v3-event-shell absolute':'radio-v3-event-shell')+(dragId===event.id?' radio-v3-event-dragging':'')+(selectedIds.includes(event.id)?' radio-v3-event-selected':'')+(expandedCard===event.id?' radio-v3-event-expanded':'')} style={positioned?{top:event.top/60*HOUR+2,height:Math.max(25,event.duration/60*HOUR-4),left:'calc('+event.lane+'/'+event.lanes+' * 100% + 3px)',width:'calc(100% / '+event.lanes+' - 6px)'}:undefined}><button type="button" draggable={future&&!bulkMode} onDragStart={e=>startDrag(e,event.id)}
-   onDragEnd={()=>{setDragId(null);setDropPreview(null);}} onClick={e=>{e.stopPropagation();if(bulkMode&&future)toggleSelection(event.id);else onSelectSlot?.(event);}}
+   onDragEnd={clearDrag} onClick={e=>{e.stopPropagation();if(bulkMode&&future)toggleSelection(event.id);else onSelectSlot?.(event);}}
    onContextMenu={e=>{e.preventDefault();onSelectSlot?.(event);}}
    title={title+' · '+clock(event.startAt)+'–'+clock(event.endAt)}
    className={'radio-v3-event group rounded-xl border text-left '+(expandedCard===event.id?'radio-v3-event-details ':'overflow-hidden ')+palette[index%palette.length]+(active?' radio-v3-event-live':'')+(conflict?' radio-v3-event-conflict':'')+(positioned?' h-full w-full px-2 py-1.5':' w-full p-3')}
@@ -132,7 +136,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
  };
  const timeline=(day,items)=>{
   const nowMinute=day===today?minutes(nowMs):null;
-  return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR}} onDragOver={e=>{if(!dragId)return;e.preventDefault();e.dataTransfer.dropEffect='move';setDropPreview(getDropPreview(e,day));}}
+  return <div className="radio-v3-day-timeline relative" style={{height:HOURS*HOUR}} onDragOver={e=>{if(!dragRef.current)return;e.preventDefault();e.dataTransfer.dropEffect='move';setDropPreview(getDropPreview(e,day));}}
    onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropPreview(null);}}
    onDrop={e=>drop(e,day)} onClick={e=>{
     if(!onCreateAt||e.target!==e.currentTarget)return;
@@ -156,10 +160,10 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     <button type="button" className="radio-v3-schedule-btn" onClick={()=>onDateChange(today)}>Сегодня</button>
     <button type="button" className="radio-v3-schedule-btn" onClick={()=>onDateChange(scheduleAddDays(date,7))} aria-label="Следующая неделя">→</button>
     <div className="radio-v3-zoom-controls" role="group" aria-label="Масштаб временной шкалы">
-     <button type="button" disabled={hourHeight===ZOOM_STEPS[0]} onClick={()=>setHourHeight(h=>ZOOM_STEPS[Math.max(0,ZOOM_STEPS.indexOf(h)-1)])} aria-label="Уменьшить масштаб сетки" title="Мельче">−</button>
+     <button type="button" disabled={!autoFit&&hourHeight===ZOOM_STEPS[0]} onClick={()=>{setAutoFit(false);setHourHeight(h=>ZOOM_STEPS[Math.max(0,ZOOM_STEPS.indexOf(h)-1)]);}} aria-label="Уменьшить масштаб сетки" title="Мельче">−</button>
      <span aria-live="polite" title="Фактический масштаб с учётом автомасштаба">{Math.round(HOUR/58*100)}%</span>
-     <button type="button" disabled={hourHeight===ZOOM_STEPS[ZOOM_STEPS.length-1]} onClick={()=>setHourHeight(h=>ZOOM_STEPS[Math.min(ZOOM_STEPS.length-1,ZOOM_STEPS.indexOf(h)+1)])} aria-label="Увеличить масштаб сетки" title="Крупнее">+</button>
-     <button type="button" onClick={()=>setHourHeight(58)} aria-label="Сбросить масштаб сетки">100%</button>
+     <button type="button" disabled={!autoFit&&hourHeight===ZOOM_STEPS[ZOOM_STEPS.length-1]} onClick={()=>{setAutoFit(false);setHourHeight(h=>ZOOM_STEPS[Math.min(ZOOM_STEPS.length-1,ZOOM_STEPS.indexOf(h)+1)]);}} aria-label="Увеличить масштаб сетки" title="Крупнее">+</button>
+     <button type="button" onClick={()=>{setAutoFit(false);setHourHeight(58);}} aria-label="Сбросить масштаб сетки">100%</button>
     </div>
     <button type="button" className={'radio-v3-schedule-btn '+(autoFit?'radio-v3-auto-fit-active':'')} aria-pressed={autoFit} title="Автоматически увеличить масштаб для коротких передач" onClick={()=>setAutoFit(v=>!v)}>Автомасштаб {autoFit?'✓':''}</button>
     <select className="radio-v3-schedule-btn" value={view} onChange={e=>setView(e.target.value)} aria-label="Вид календаря">
@@ -216,6 +220,6 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
     {onDeleteSlot&&Date.parse(e.endAt)>nowMs&&<button type="button" className="radio-v3-delete-slot" onClick={()=>onDeleteSlot(e)} aria-label={'Удалить из сетки: '+(e.playlist?.name||e.title||'Передача')} title="Удалить задание из сетки">Удалить</button>}
    </div>):<p className="p-5 text-center text-sm opacity-65">В выбранном периоде нет передач.</p>}
   </div>}
-  <p className="text-xs opacity-65">Автомасштаб подбирает высоту часа под самую короткую передачу (максимум 480 пикселей/час). Для очень коротких передач доступно раскрытие карточки ↗. Нажмите на событие, чтобы открыть действия, включая удаление. В виде «Список» есть отдельная кнопка удаления. Будущие события можно переносить; сервер проверяет конфликты. На мобильном используйте режим «День» и меню события. Пустое место в расписании не подтверждает фактический запуск AutoDJ.</p>
+  <p className="text-xs opacity-65">Автомасштаб подбирает высоту часа под самую короткую передачу (в режиме «День» — только за выбранный день) (максимум 480 пикселей/час). Для очень коротких передач доступно раскрытие карточки ↗. Нажмите на событие, чтобы открыть действия, включая удаление. В виде «Список» есть отдельная кнопка удаления. Будущие события можно переносить; сервер проверяет конфликты. На мобильном используйте режим «День» и меню события. Пустое место в расписании не подтверждает фактический запуск AutoDJ.</p>
  </section>;
 }
