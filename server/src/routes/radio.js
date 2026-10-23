@@ -1018,6 +1018,9 @@ function planningFields(payload) {
 }
 router.post('/schedule', safe(async (req, res) => {
     const { playlistId } = req.body || {};
+    const hostIds=req.body?.hostIds||[];
+    if(!Array.isArray(hostIds)||hostIds.length>10||new Set(hostIds).size!==hostIds.length||hostIds.some(x=>typeof x!=='string'||!x))return res.status(400).json({error:'Выберите до 10 разных ведущих'});
+    if(await prisma.radioHost.count({where:{id:{in:hostIds}}})!==hostIds.length)return res.status(400).json({error:'Ведущий не найден'});
     const startAt = broadcastStart(req.body);
     if (!Number.isFinite(startAt.getTime()) || startAt < new Date(Date.now() - 60000))
         return res.status(400).json({ error: 'Укажите будущее время' });
@@ -1040,7 +1043,7 @@ router.post('/schedule', safe(async (req, res) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const clash = await tx.radioScheduleSlot.findFirst({ where: { startAt: { lt: endAt }, endAt: { gt: startAt } } });
         if (clash) return null;
-        return tx.radioScheduleSlot.create({ data: { playlistId:playlistId||null, title, startAt, endAt, createdBy: req.user.id } });
+        return tx.radioScheduleSlot.create({ data: { playlistId:playlistId||null, title, startAt, endAt, createdBy: req.user.id,hosts:{create:hostIds.map((hostId,position)=>({hostId,position}))} } });
     });
     if (!slot) return res.status(409).json({ error: 'Этот интервал уже занят' });
     res.status(201).json({ slot });
@@ -1126,6 +1129,9 @@ router.post('/schedule/auto-playlist',safe(async (req,res)=>{
 }));
 router.post('/schedule/weekly', safe(async (req, res) => {
     const { playlistId, weekdays, weeks } = req.body || {};
+    const hostIds=req.body?.hostIds||[];
+    if(!Array.isArray(hostIds)||hostIds.length>10||new Set(hostIds).size!==hostIds.length||hostIds.some(x=>typeof x!=='string'||!x))return res.status(400).json({error:'Выберите до 10 разных ведущих'});
+    if(await prisma.radioHost.count({where:{id:{in:hostIds}}})!==hostIds.length)return res.status(400).json({error:'Ведущий не найден'});
     const startAt = broadcastStart(req.body || {});
     if (typeof playlistId !== 'string' || !Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now() ||
         !Array.isArray(weekdays) || !weekdays.length || weekdays.length > 7 ||
@@ -1152,9 +1158,8 @@ router.post('/schedule/weekly', safe(async (req, res) => {
             startAt: { lt: new Date(t.getTime() + durationMs) }, endAt: { gt: t },
         })) } });
         if (clash) return null;
-        return tx.radioScheduleSlot.createMany({ data: candidateTimes.map(t => ({
-            playlistId, startAt: t, endAt: new Date(t.getTime() + durationMs), createdBy: req.user.id,
-        })) });
+        for(const t of candidateTimes)await tx.radioScheduleSlot.create({data:{playlistId,startAt:t,endAt:new Date(t.getTime()+durationMs),createdBy:req.user.id,hosts:{create:hostIds.map((hostId,position)=>({hostId,position}))}}});
+        return {count:candidateTimes.length};
     });
     if (!result) return res.status(409).json({ error: 'Есть пересечение. Повторения не созданы.' });
     res.status(201).json({ created: result.count, timezone: RADIO_TIMEZONE });
