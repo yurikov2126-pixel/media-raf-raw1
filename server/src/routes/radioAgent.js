@@ -362,7 +362,7 @@ router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   res.json({available:true,source:'PUBLIC_MP3_WORKER',mode,
     track:asset?{id:asset.id,name:asset.name,durationMs:asset.durationMs,
       title:asset.tags?.title||null,artist:asset.tags?.artist||null}:null,
-    slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача'}:null,
+    slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача',hosts:slot.hosts?.map(x=>x.host)||[]}:null,
     trackId,slotId,trackResolved:!trackId||Boolean(asset),observedAt:new Date().toISOString(),
     playout:status.playout?.trackId===trackId?status.playout:null,
     nextTrack:scheduledNext||(mode==='AUTO_DJ'&&nextAsset?{id:nextAsset.id,name:nextAsset.name,title:nextAsset.tags?.title||null,artist:nextAsset.tags?.artist||null,estimated:true}:null),
