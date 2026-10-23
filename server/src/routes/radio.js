@@ -955,6 +955,21 @@ router.put('/autodj', safe(async (req,res) => {
     await writeAutoDjSettings({enabled,playlistId:playlistId||null,finishTrackBeforeSchedule});
     res.json({settings:await readAutoDjSettings()});
 }));
+const publicHostFields={id:true,username:true,fullName:true,firstName:true,lastName:true,avatar:true};
+router.get('/hosts',requireRole('ADMIN'),safe(async(req,res)=>{
+ const members=await prisma.editorialTeamMember.findMany({where:{position:'RADIO_HOST'},include:{user:{select:publicHostFields}},orderBy:{createdAt:'asc'}});
+ res.json({hosts:members.map(m=>m.user).filter(Boolean)});
+}));
+router.patch('/schedule/:id/hosts',requireRole('ADMIN'),safe(async(req,res)=>{
+ const hostIds=req.body?.hostIds;
+ if(!Array.isArray(hostIds)||hostIds.length>8||hostIds.some(id=>typeof id!=='string'||!id)||new Set(hostIds).size!==hostIds.length)
+  return res.status(400).json({error:'Выберите не более восьми разных ведущих'});
+ const count=await prisma.editorialTeamMember.count({where:{userId:{in:hostIds},position:'RADIO_HOST'}});
+ if(count!==hostIds.length)return res.status(400).json({error:'Один из пользователей не имеет должности Радиоведущий'});
+ const slot=await prisma.radioScheduleSlot.update({where:{id:req.params.id},data:{hostIds}}).catch(e=>{if(e.code==='P2025')return null;throw e;});
+ if(!slot)return res.status(404).json({error:'Передача не найдена'});
+ res.json({slot});
+}));
 router.get('/schedule', safe(async (req, res) => {
     // Retire finished one-time slots after a safety window; playout history remains separate.
     // The lock coordinates cleanup with schedule edits and playlist deletion.
@@ -965,8 +980,12 @@ router.get('/schedule', safe(async (req, res) => {
     const from = new Date(req.query.from), to = new Date(req.query.to);
     if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || to <= from || to - from > 45 * 86400000)
         return res.status(400).json({ error: 'Неверный диапазон (не более 45 дней)' });
-    res.json({ slots: await prisma.radioScheduleSlot.findMany({ where: { startAt: { lt: to }, endAt: { gt: from } },
-        include: { playlist: { include: playlistInclude } }, orderBy: { startAt: 'asc' }, take: 500 }) });
+    const slots=await prisma.radioScheduleSlot.findMany({ where: { startAt: { lt: to }, endAt: { gt: from } },
+        include: { playlist: { include: playlistInclude } }, orderBy: { startAt: 'asc' }, take: 500 });
+    const ids=[...new Set(slots.flatMap(slot=>slot.hostIds||[]))];
+    const hosts=ids.length?await prisma.user.findMany({where:{id:{in:ids}},select:publicHostFields}):[];
+    const hostMap=new Map(hosts.map(host=>[host.id,host]));
+    res.json({slots:slots.map(slot=>({...slot,hosts:(slot.hostIds||[]).map(id=>hostMap.get(id)).filter(Boolean)}))});
 }));
 // Planning slots reserve editor time only. Without an approved playlist they are
 // intentionally excluded from playout, public now-playing and offline agent sync.
@@ -977,8 +996,13 @@ function planningFields(payload) {
         durationMinutes<1 || durationMinutes>720) return null;
     return {title,durationMinutes};
 }
+const checkRadioHostIds=async ids=>{
+ if(!Array.isArray(ids)||ids.length>8||ids.some(id=>typeof id!=='string'||!id)||new Set(ids).size!==ids.length)return false;
+ return await prisma.editorialTeamMember.count({where:{userId:{in:ids},position:'RADIO_HOST'}})===ids.length;
+};
 router.post('/schedule', safe(async (req, res) => {
-    const { playlistId } = req.body || {};
+    const { playlistId, hostIds=[] } = req.body || {};
+    if(!await checkRadioHostIds(hostIds))return res.status(400).json({error:'Выберите ведущих с должностью Радиоведущий'});
     const startAt = broadcastStart(req.body);
     if (!Number.isFinite(startAt.getTime()) || startAt < new Date(Date.now() - 60000))
         return res.status(400).json({ error: 'Укажите будущее время' });
@@ -1001,7 +1025,7 @@ router.post('/schedule', safe(async (req, res) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
         const clash = await tx.radioScheduleSlot.findFirst({ where: { startAt: { lt: endAt }, endAt: { gt: startAt } } });
         if (clash) return null;
-        return tx.radioScheduleSlot.create({ data: { playlistId:playlistId||null, title, startAt, endAt, createdBy: req.user.id } });
+        return tx.radioScheduleSlot.create({ data: { playlistId:playlistId||null, title, startAt, endAt, hostIds, createdBy: req.user.id } });
     });
     if (!slot) return res.status(409).json({ error: 'Этот интервал уже занят' });
     res.status(201).json({ slot });
@@ -1086,7 +1110,8 @@ router.post('/schedule/auto-playlist',safe(async (req,res)=>{
  res.status(201).json(result);
 }));
 router.post('/schedule/weekly', safe(async (req, res) => {
-    const { playlistId, weekdays, weeks } = req.body || {};
+    const { playlistId, weekdays, weeks, hostIds=[] } = req.body || {};
+    if(!await checkRadioHostIds(hostIds))return res.status(400).json({error:'Выберите ведущих с должностью Радиоведущий'});
     const startAt = broadcastStart(req.body || {});
     if (typeof playlistId !== 'string' || !Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now() ||
         !Array.isArray(weekdays) || !weekdays.length || weekdays.length > 7 ||
@@ -1114,7 +1139,7 @@ router.post('/schedule/weekly', safe(async (req, res) => {
         })) } });
         if (clash) return null;
         return tx.radioScheduleSlot.createMany({ data: candidateTimes.map(t => ({
-            playlistId, startAt: t, endAt: new Date(t.getTime() + durationMs), createdBy: req.user.id,
+            playlistId, startAt: t, endAt: new Date(t.getTime() + durationMs), hostIds, createdBy: req.user.id,
         })) });
     });
     if (!result) return res.status(409).json({ error: 'Есть пересечение. Повторения не созданы.' });

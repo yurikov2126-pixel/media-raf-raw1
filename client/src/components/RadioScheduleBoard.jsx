@@ -118,6 +118,7 @@ export default function RadioScheduleBoard({slots=[],date,onDateChange,onSelectS
    <span className="flex items-center gap-1.5 text-[11px] font-bold tabular-nums">{active&&<span className="radio-v3-live-dot"/>}{clock(event.startAt)}–{clock(event.endAt)}</span>
    <span className={"block text-xs font-semibold sm:text-sm "+(compact&&expandedCard!==event.id?"truncate":"whitespace-normal break-words")}>{title}</span>
    {(!positioned||!compact||expandedCard===event.id)&&<span className="block truncate text-[10px] opacity-75">{event.playlistId?'Музыкальный блок / передача':'План без плейлиста'}</span>}
+   {!!event.hosts?.length&&<span className="block truncate text-[10px] font-semibold opacity-80" title={event.hosts.map(h=>h.fullName).join(', ')}>🎙 {event.hosts.map(h=>h.fullName).join(', ')}</span>}
    {conflict&&<span className="block text-[10px] font-bold text-rose-600 dark:text-rose-300">⚠ Конфликт времени</span>}
   </button>
   {compact&&<button type="button" className="radio-v3-expand-card" aria-expanded={expandedCard===event.id} aria-label={'Показать полную информацию: '+title} onClick={e=>{e.stopPropagation();setExpandedCard(expandedCard===event.id?null:event.id);}}>{expandedCard===event.id?'−':'↗'}</button>}
