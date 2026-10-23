@@ -6,7 +6,7 @@ import './radio-asset-manager-2.css';
 const fmt=ms=>{const s=Math.floor((ms||0)/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 const size=b=>b>1048576?(b/1048576).toFixed(1)+' МБ':(b/1024).toFixed(0)+' КБ';
 const name=a=>a.tags?.title?[a.tags.artist,a.tags.title].filter(Boolean).join(' — '):a.name;
-const categoryOptions=[['MUSIC','Музыка'],['JINGLE','Джинглы'],['INTRO','Подводки'],['PROMO','Промо'],['EFFECT','Эффекты'],['OTHER','Прочее']];
+const categoryOptions=[['MUSIC','Музыка'],['JINGLE','Джинглы'],['INTRO','Подводки'],['PROMO','Промо'],['EFFECT','Эффекты'],['OTHER','Прочее'],['SHOW','Передачи']];
 const keys=['title','artist','album','genre','year','track','composer','comment'];
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
 export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player,onFolderChange}){
@@ -89,6 +89,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const toggle=id=>setChecked(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);
  const operation=async(fn)=>{setBusy(true);setError('');try{await fn();await refresh();await reload();}catch(e){setError(e.message||'Не удалось выполнить действие');}finally{setBusy(false);}};
  const addFolder=()=>{const title=window.prompt('Название папки');if(title?.trim())void operation(()=>request('/asset-folders',{method:'POST',body:{name:title.trim(),parentId:folder}}));};
+ const setFolderCategory=(folder)=>{const category=window.prompt('Категория папки ('+categoryOptions.map(x=>x[0]).join(', ')+'). Пустое значение — Музыка:',folder.category||'');if(category===null)return;const chosen=category.trim().toUpperCase();if(chosen&&!categoryOptions.some(x=>x[0]===chosen)){setError('Неизвестная категория папки');return;}if(!window.confirm('Применить категорию ко всем существующим файлам папки и подпапок?'))return;void operation(()=>request('/asset-folders/'+folder.id,{method:'PATCH',body:{name:folder.name,category:chosen||null}}));};
  const reviewBulkDelete=async(ids=selectedIds)=>{
   if(!ids.length)return;
   setReviewLoading(true);setError('');
@@ -159,7 +160,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     <button onDragOver={e=>{e.preventDefault();setDragOver('root');}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(null,e)} className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${dragOver==='root'?'ring-2 ring-indigo-500 ':''}${!folder?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} onClick={()=>chooseFolder(null)}>▣ Вся библиотека / корень</button>
     {visibleTree.map(f=><div key={f.id} className="mt-1 flex min-w-0 items-center" style={{paddingLeft:Math.min(f.depth,8)*12}}>
      {f.hasChildren?<button type="button" className="shrink-0 rounded-md px-1.5 py-2 text-xs hover:bg-indigo-500/10" aria-label={(collapsed.includes(f.id)?'Развернуть ':'Свернуть ')+f.name} aria-expanded={!collapsed.includes(f.id)} onClick={()=>setCollapsed(v=>v.includes(f.id)?v.filter(id=>id!==f.id):[...v,f.id])}>{collapsed.includes(f.id)?'▸':'▾'}</button>:<span aria-hidden="true" className="w-6 shrink-0"/>}
-     <button type="button" onDragOver={e=>{e.preventDefault();setDragOver(f.id);}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(f.id,e)} onClick={()=>chooseFolder(f.id)} className={`min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-left text-sm ${dragOver===f.id?'ring-2 ring-indigo-500 ':''}${folder===f.id?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} title={f.name}>📁 {f.name}</button>
+     <button type="button" onDragOver={e=>{e.preventDefault();setDragOver(f.id);}} onDragLeave={()=>setDragOver(null)} onDrop={e=>dropTo(f.id,e)} onClick={()=>chooseFolder(f.id)} className={`min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-left text-sm ${dragOver===f.id?'ring-2 ring-indigo-500 ':''}${folder===f.id?'bg-indigo-600 text-white':'hover:bg-black/5 dark:hover:bg-white/10'}`} title={f.name}>📁 {f.name} {f.category?'· '+(categoryOptions.find(x=>x[0]===f.category)?.[1]||f.category):''}</button>
     </div>)}
 
    </aside>
@@ -200,6 +201,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
     {error&&<p role="alert" className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-500">{error}</p>}
     {childFolders.length>0&&<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{childFolders.map(f=><div key={f.id} className="flex items-center gap-1 rounded-xl border border-current/10 radio-surface-soft0 p-2 dark:bg-slate-900/30">
      <button className="min-w-0 flex-1 truncate p-2 text-left text-sm" onDragOver={e=>e.preventDefault()} onDrop={e=>dropTo(f.id,e)} onClick={()=>chooseFolder(f.id)}>📁 {f.name}</button>
+     <button title="Категория папки и подпапок" onClick={()=>setFolderCategory(f)}>🏷</button>
      <button title="Переименовать" onClick={()=>{const n=window.prompt('Название папки',f.name);if(n?.trim())void operation(()=>request('/asset-folders/'+f.id,{method:'PATCH',body:{name:n.trim()}}));}}>✎</button>
      <button title="Удалить пустую папку" onClick={()=>{if(window.confirm('Удалить пустую папку?'))void operation(()=>request('/asset-folders/'+f.id,{method:'DELETE'}));}}>×</button>
     </div>)}</div>}

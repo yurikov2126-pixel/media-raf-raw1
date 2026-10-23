@@ -1352,6 +1352,7 @@ model RadioScheduleRevision {
 }
 
 model RadioAssetFolder {
+  category String?
   id String @id @default(cuid())
   name String
   parentId String?

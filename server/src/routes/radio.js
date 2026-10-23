@@ -211,7 +211,14 @@ router.get('/assets/storage-analytics',requireRole('ADMIN'),safe(async(req,res)=
   unused:assets.filter(a=>!used.has(a.id)).slice(0,200).map(a=>({id:a.id,name:a.name,folderId:a.folderId,byteSize:a.byteSize,createdAt:a.createdAt})),
  });
 }));
-const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','OTHER'];
+const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','SHOW','OTHER'];
+const folderCategory=async(folderId,db=prisma)=>folderId?(await db.radioAssetFolder.findUnique({where:{id:folderId},select:{category:true}}))?.category||'MUSIC':'MUSIC';
+async function folderDescendantIds(rootId,db=prisma){
+ const rows=await db.radioAssetFolder.findMany({select:{id:true,parentId:true}});
+ const ids=new Set([rootId]);let frontier=[rootId];
+ while(frontier.length){const next=rows.filter(r=>r.parentId&&frontier.includes(r.parentId)&&!ids.has(r.id)).map(r=>r.id);next.forEach(id=>ids.add(id));frontier=next;}
+ return [...ids];
+}
 router.post('/assets/by-ids',requireRole('ADMIN'),safe(async(req,res)=>{
  const ids=req.body?.assetIds;
  if(!Array.isArray(ids)||ids.length>500||ids.some(id=>typeof id!=='string'||!id))return res.status(400).json({error:'Неверный список записей'});
@@ -244,7 +251,7 @@ router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
  const category=String(req.query.category||'');
  const durationLimits={short:{lt:180000},medium:{gte:180000,lt:900000},long:{gte:900000}};
  const conditions=[
-  ...(['MUSIC','JINGLE','INTRO','PROMO','EFFECT','OTHER'].includes(category)?[{category}]:[]),
+  ...(radioCategories.includes(category)?[{category}]:[]),
   ...(query?[{OR:[{name:{contains:query,mode:'insensitive'}},{tags:{path:['title'],string_contains:query}},{tags:{path:['artist'],string_contains:query}},{tags:{path:['album'],string_contains:query}}]}]:[]),
   ...(artist?[{tags:{path:['artist'],string_contains:artist}}]:[]),
   ...(album?[{tags:{path:['album'],string_contains:album}}]:[]),
@@ -294,7 +301,7 @@ const uploadAsset = safe(async (req, res) => {
             return res.status(422).json({ error: 'Не удалось определить длительность' });
         const asset = await prisma.radioAsset.create({ data: {
             name: tags.title ? [tags.artist,tags.title].filter(Boolean).join(' — ').slice(0,140):filename, tags, storageKey: key, mimeType: file.mimetype || 'application/octet-stream',
-            byteSize: file.size, durationMs, folderId, category:'MUSIC', sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
+            byteSize: file.size, durationMs, folderId, category:await folderCategory(folderId), sha256: createHash('sha256').update(file.buffer).digest('hex'), createdBy: req.user.id,
         } });
         return res.status(201).json({ asset });
     } finally {
@@ -439,15 +446,26 @@ router.post('/asset-folders',requireRole('ADMIN'),safe(async (req,res)=>{
  const parentId=req.body?.parentId||null;
  if(parentId&&!await prisma.radioAssetFolder.findUnique({where:{id:parentId}}))
    return res.status(404).json({error:'Родительская папка не найдена'});
- const folder=await prisma.radioAssetFolder.create({data:{name:req.body.name.trim(),parentId}});
+ const folder=await prisma.radioAssetFolder.create({data:{name:req.body.name.trim(),parentId,category:await folderCategory(parentId)}});
  res.status(201).json({folder});
 }));
 router.patch('/asset-folders/:id',requireRole('ADMIN'),safe(async (req,res)=>{
  const folder=await prisma.radioAssetFolder.findUnique({where:{id:req.params.id}});
  if(!folder)return res.status(404).json({error:'Папка не найдена'});
  if(!validTitle(req.body?.name))return res.status(400).json({error:'Название недопустимо'});
- const result=await prisma.radioAssetFolder.update({where:{id:folder.id},data:{name:req.body.name.trim()}});
- res.json({folder:result});
+ const wantsCategory=Object.prototype.hasOwnProperty.call(req.body||{},'category');
+ const category=req.body?.category||'MUSIC';
+ if(wantsCategory&&!radioCategories.includes(category))return res.status(400).json({error:'Недопустимая категория папки'});
+ const ids=wantsCategory?await folderDescendantIds(folder.id):[];
+ const result=await prisma.$transaction(async tx=>{
+  const updated=await tx.radioAssetFolder.update({where:{id:folder.id},data:{name:req.body.name.trim(),...(wantsCategory?{category}: {})}});
+  if(wantsCategory){
+   await tx.radioAssetFolder.updateMany({where:{id:{in:ids}},data:{category}});
+   await tx.radioAsset.updateMany({where:{folderId:{in:ids}},data:{category}});
+  }
+  return updated;
+ });
+ res.json({folder:result,updatedFolders:ids.length});
 }));
 router.delete('/asset-folders/:id',requireRole('ADMIN'),safe(async (req,res)=>{
  const folder=await prisma.radioAssetFolder.findUnique({where:{id:req.params.id}});
@@ -466,14 +484,14 @@ router.post('/assets/bulk-move',requireRole('ADMIN'),safe(async(req,res)=>{
    return res.status(404).json({error:'Папка назначения не найдена'});
  const exists=await prisma.radioAsset.count({where:{id:{in:assetIds}}});
  if(exists!==assetIds.length)return res.status(409).json({error:'Не все файлы найдены'});
- const result=await prisma.radioAsset.updateMany({where:{id:{in:assetIds}},data:{folderId}});
+ const result=await prisma.radioAsset.updateMany({where:{id:{in:assetIds}},data:{folderId,category:await folderCategory(folderId)}});
  res.json({ok:true,moved:result.count});
 }));
 router.patch('/assets/:id/organize',requireRole('ADMIN'),safe(async (req,res)=>{
  const folderId=req.body?.folderId||null;
  if(folderId&&!await prisma.radioAssetFolder.findUnique({where:{id:folderId}}))
    return res.status(404).json({error:'Папка не найдена'});
- const updated=await prisma.radioAsset.updateMany({where:{id:req.params.id},data:{folderId}});
+ const updated=await prisma.radioAsset.updateMany({where:{id:req.params.id},data:{folderId,category:await folderCategory(folderId)}});
  if(!updated.count)return res.status(404).json({error:'Файл не найден'});
  res.json({asset:await prisma.radioAsset.findUnique({where:{id:req.params.id}})});
 }));
