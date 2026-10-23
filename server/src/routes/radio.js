@@ -182,6 +182,35 @@ function broadcastStart(body) {
 router.get('/status', requireRole('ADMIN'), (_req, res) => res.json({
     enabled: true, phase: 'PLANNING', playout: 'NOT_CONFIGURED', amplifier: 'NOT_CONNECTED', timezone: RADIO_TIMEZONE,
 }));
+router.get('/assets/storage-analytics',requireRole('ADMIN'),safe(async(req,res)=>{
+ const [assets,folders,usage]=await Promise.all([
+  prisma.radioAsset.findMany({select:{id:true,name:true,folderId:true,byteSize:true,durationMs:true,mimeType:true,storageKey:true,sha256:true,createdAt:true},orderBy:{createdAt:'desc'}}),
+  prisma.radioAssetFolder.findMany({select:{id:true,name:true,parentId:true}}),
+  prisma.radioPlaylistItem.groupBy({by:['assetId'],_count:{assetId:true}}),
+ ]);
+ const used=new Set(usage.map(x=>x.assetId));
+ const bytes=assets.reduce((n,a)=>n+a.byteSize,0);
+ const byFolder=new Map(),byFormat=new Map(),byHash=new Map();
+ for(const asset of assets){
+  const folder=asset.folderId||'root';
+  const type=(asset.storageKey.split('.').pop()||asset.mimeType||'unknown').toLowerCase();
+  for(const [map,key] of [[byFolder,folder],[byFormat,type]]){const entry=map.get(key)||{count:0,bytes:0};entry.count++;entry.bytes+=asset.byteSize;map.set(key,entry);}
+  if(asset.sha256){const items=byHash.get(asset.sha256)||[];items.push(asset);byHash.set(asset.sha256,items);}
+ }
+ const duplicated=[...byHash.values()].filter(items=>items.length>1).map(items=>({
+  count:items.length,bytesReclaimable:items.slice(1).reduce((n,a)=>n+a.byteSize,0),
+  files:items.map(a=>({id:a.id,name:a.name,folderId:a.folderId,byteSize:a.byteSize,inPlaylist:used.has(a.id)}))
+ })).sort((a,b)=>b.bytesReclaimable-a.bytesReclaimable);
+ res.json({
+  summary:{count:assets.length,bytes,durationMs:assets.reduce((n,a)=>n+a.durationMs,0),
+   unusedCount:assets.filter(a=>!used.has(a.id)).length,unusedBytes:assets.filter(a=>!used.has(a.id)).reduce((n,a)=>n+a.byteSize,0),
+   duplicateGroups:duplicated.length,duplicateBytes:duplicated.reduce((n,g)=>n+g.bytesReclaimable,0)},
+  folders:[{id:'root',name:'Корень',parentId:null},...folders].map(f=>({...f,...(byFolder.get(f.id)||{count:0,bytes:0})})),
+  formats:[...byFormat.entries()].map(([format,stats])=>({format,...stats})).sort((a,b)=>b.bytes-a.bytes),
+  duplicates:duplicated.slice(0,100),
+  unused:assets.filter(a=>!used.has(a.id)).slice(0,200).map(a=>({id:a.id,name:a.name,folderId:a.folderId,byteSize:a.byteSize,createdAt:a.createdAt})),
+ });
+}));
 router.get('/assets/browse',requireRole('ADMIN'),safe(async(req,res)=>{
  const page=Math.max(1,Math.min(100000,Number.parseInt(req.query.page,10)||1));
  const limit=[25,50,100].includes(Number(req.query.limit))?Number(req.query.limit):50;
