@@ -323,7 +323,14 @@ router.get('/listen/now-playing',safe(async(_req,res)=>{
     where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
     orderBy:{startAt:'asc'},select:{startAt:true,playlist:{select:{name:true}}}
   }):null;
-  res.json({available:true,mode:worker.mode,
+  const now=new Date();
+  const show=await prisma.radioScheduleSlot.findFirst({where:{startAt:{lte:now},endAt:{gt:now}},select:{id:true,title:true,startAt:true,endAt:true,hostIds:true,playlist:{select:{name:true}}}});
+  const hostIds=show?.hostIds||[];
+  const hosts=hostIds.length?await prisma.user.findMany({where:{id:{in:hostIds}},select:{id:true,username:true,fullName:true,avatar:true}}):[];
+  const hostMap=new Map(hosts.map(host=>[host.id,host]));
+  const currentShow=show?{id:show.id,name:show.title||show.playlist?.name||'Передача',startAt:show.startAt,endAt:show.endAt,
+    hosts:hostIds.map(id=>hostMap.get(id)).filter(Boolean)}:null;
+  res.json({available:true,mode:worker.mode,currentShow,
     nextShow:worker.mode==='SILENCE'&&nextSlot?{name:nextSlot.playlist.name,startAt:nextSlot.startAt.toISOString()}:null,
     track:asset?{name:asset.name,title:asset.tags?.title||null,artist:asset.tags?.artist||null,durationMs:asset.durationMs}:null,
     playout:worker.playout?.trackId===trackId?{startedAt:worker.playout.startedAt,
