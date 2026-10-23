@@ -4,6 +4,7 @@ import RadioSourceControl from './RadioSourceControl.jsx';
 import RadioAutoDjSettings from './RadioAutoDjSettings.jsx';
 import RadioRotationSettings from './RadioRotationSettings.jsx';
 import RadioJingleSettings from './RadioJingleSettings.jsx';
+import RadioTimeSignalSettings from './RadioTimeSignalSettings.jsx';
 import RadioAutoPlaylistRecurrence from './RadioAutoPlaylistRecurrence.jsx';
 import RadioAudioProcessing from './RadioAudioProcessing.jsx';
 import RadioCueEditor from './RadioCueEditor.jsx';
@@ -13,6 +14,7 @@ const modules=[
  {id:'recurrence',name:'Расписание генерации',description:'Правила и регулярная подготовка'},
  {id:'rotation',name:'Ротация',description:'Повторы и исполнители'},
  {id:'jingles',name:'Джинглы',description:'Эфирные отбивки'},
+ {id:'time-signal',name:'Объявление времени',description:'Записи точного часа'},
  {id:'sound',name:'Звук и переходы',description:'Обработка и точки воспроизведения'},
  {id:'sources',name:'Источники',description:'Приоритеты и резервирование'}
 ];
@@ -89,6 +91,7 @@ export default function RadioAutomationConsole({token,playlists=[],assets=[],onO
     </section>}
     {section==='rotation'&&<RadioRotationSettings token={token} assets={assets}/>}
     {section==='jingles'&&<RadioJingleSettings token={token} assets={assets}/>}
+    {section==='time-signal'&&<RadioTimeSignalSettings token={token}/>}
     {section==='sound'&&<div className="space-y-4"><RadioAudioProcessing token={token}/><RadioCueEditor token={token} assets={assets}/></div>}
     {section==='sources'&&<RadioSourceControl token={token}/>}
    </div>
