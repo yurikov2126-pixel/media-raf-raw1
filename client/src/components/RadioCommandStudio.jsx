@@ -141,6 +141,7 @@ export default function RadioCommandStudio({token,slots=[],playlists=[],assets=[
      </div>
      <div className="rcs-track-main"><p className="rcs-eyebrow">ФАКТИЧЕСКИЕ МЕТАДАННЫЕ PCM</p><h2>{formatTrack}</h2>
       <p>{metadata?.slot?.name||metadata?.slot?.playlist?.name||'Политех-FM'}</p>
+      {source==='SCHEDULED'&&metadata?.slot?.hosts?.length>0&&<p className="text-sm font-semibold">Ведут: {metadata.slot.hosts.map(h=>h.name).join(' · ')}</p>}
       <div className="rcs-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-label="Позиция текущей записи"><span style={{width:progress+'%'}}/></div>
       <div className="rcs-time"><span>{totalMs?duration(playMs):'—'}</span><span>{totalMs?duration(totalMs):'—'}</span></div>
       <small>Прогресс расчётный по данным Worker; не подтверждает слышимый сигнал на удалённом устройстве.</small>

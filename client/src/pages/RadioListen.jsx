@@ -111,6 +111,7 @@ export default function RadioListen(){
       <div className="rr-track-tag"><span className="rr-tag-dot"/> {modeLabel[mode]||'Радио онлайн'}</div>
       <h1 title={title}>{title}</h1>
       <p title={artist}>{artist}</p>
+      {mode==='SCHEDULED'&&status?.show&&<div className="rr-hosts"><span className="rr-eyebrow">СЕЙЧАС В ЭФИРЕ · {status.show.name}</span>{status.show.hosts?.length>0&&<p>Ведут: {status.show.hosts.map(host=>host.name).join(' · ')}</p>}</div>}
      </div>
      {silence&&<div className="rr-next-show" role="status"><span className="rr-eyebrow">СКОРО В ЭФИРЕ</span>{showDate?<><strong>{status.nextShow.name}</strong><span>{showDate} · МСК{untilShow!==null&&untilShow>0?' · через '+(untilShow>=3600000?Math.floor(untilShow/3600000)+' ч ':'')+Math.ceil((untilShow%3600000)/60000)+' мин':''}</span></>:<span>Ближайших передач пока нет в расписании</span>}</div>}
      {waiting&&<p className="rr-meta-note">Собираем историю для компенсации задержки — первые секунды данные могут опережать звук.</p>}

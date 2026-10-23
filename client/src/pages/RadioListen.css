@@ -28,3 +28,8 @@
 .rr-live{--rr-accent:var(--rr-admin-accent,#9e83ff)}
 .rr-live .rr-play,.rr-live .rr-invite-action{background:var(--rr-admin-accent,#9e83ff)}
 .rr-live .rr-progress>div{background:var(--rr-admin-accent,#9e83ff)}
+
+/* Presenters accompany the currently playing scheduled program, not AutoDJ. */
+.rr-hosts{margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(180,165,255,.25);background:rgba(125,102,222,.09);text-align:center}
+.rr-hosts .rr-eyebrow{display:block;margin-bottom:5px;font-size:10px;letter-spacing:.09em}
+.rr-hosts p{font-size:13px;font-weight:650;line-height:1.5;margin:0;overflow-wrap:anywhere}

@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
 import RadioCommandStudio from '../components/RadioCommandStudio.jsx';
+import RadioHostsManager from '../components/RadioHostsManager.jsx';
 
 import RadioAssetManager from '../components/RadioAssetManager.jsx';
 import RadioScheduleBoard from '../components/RadioScheduleBoard.jsx';
@@ -56,6 +57,7 @@ export default function Radio() {
   const [createScheduleOpen,setCreateScheduleOpen] = useState(false);
   const [movingSlot,setMovingSlot] = useState(null);
   const [editingSlot,setEditingSlot] = useState(null);
+  const [radioHosts,setRadioHosts]=useState([]),[editingHostIds,setEditingHostIds]=useState([]),[newHostIds,setNewHostIds]=useState([]);
   const [editingSlotPlaylist,setEditingSlotPlaylist] = useState('');
   const [copyingSlot,setCopyingSlot] = useState(null);
   const [contextSlot,setContextSlot] = useState(null);
@@ -99,6 +101,8 @@ export default function Radio() {
   const [date, setDate] = useState(() => moscowDate(new Date()));
   const editRequestId = useRef(0);
   const call = useCallback((path, options) => api('/radio' + path, { token, ...options }), [token]);
+  const refreshHosts=useCallback(async()=>{try{const result=await call('/hosts');setRadioHosts(result.hosts||[]);}catch{/* host panel exposes API errors */}},[call]);
+  useEffect(()=>{void refreshHosts();},[refreshHosts]);
   const refresh = useCallback(async () => {
     const from = new Date(date + 'T00:00:00+03:00');
     const to = new Date(from.getTime() + 7 * 86400000);
@@ -352,6 +356,7 @@ export default function Radio() {
   const openSlotEditor = slot => {
     setContextSlot(null);
     setEditingSlot(slot);
+    setEditingHostIds((slot.hosts||[]).map(h=>h.hostId||h.host?.id).filter(Boolean));
     setEditingSlotPlaylist(slot.playlistId||'');
     setEditSlotTitle(slot.title||'');
     setEditSlotDuration(Math.round((new Date(slot.endAt)-new Date(slot.startAt))/60000));
@@ -368,6 +373,7 @@ export default function Radio() {
     try {
       await call('/schedule/'+editingSlot.id, {method:'PATCH',
         body:editingSlotPlaylist?{startLocal:moveTime,playlistId:editingSlotPlaylist}:{startLocal:moveTime,playlistId:null,title:editSlotTitle,durationMinutes:editSlotDuration}});
+      await call('/schedule/'+editingSlot.id+'/hosts',{method:'PUT',body:{hostIds:editingHostIds}});
       setEditingSlot(null);
       await refresh();
       toast.success('Слот обновлён');
@@ -402,6 +408,7 @@ export default function Radio() {
   const inputStyle = 'w-full rounded-xl border border-current/20 bg-transparent px-3 py-2 text-sm';
   const btn = 'rounded-xl px-4 py-2 text-sm font-semibold bg-blue-600 text-white disabled:opacity-50';
   return <RadioWorkspaceShell tab={tab} onSelect={openWorkspace} stats={{assets:assets.length,playlists:playlists.length,slots:slots.length}}>
+    {tab === 'hosts' && <RadioHostsManager token={token} onChanged={refreshHosts}/>}
     {tab === 'home' && <RadioCommandStudio token={token} slots={slots} playlists={playlists} assets={assets} onOpen={openWorkspace}/>}
     {tab === 'auto-playlists' && <section className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-current/15 p-3">
@@ -524,7 +531,7 @@ export default function Radio() {
         }
         if (!playlistId && (!slotTitle.trim() || slotDuration<1 || slotDuration>720)) { toast.error('Укажите название и длительность слота'); return; }
         if (!slotTime || new Date(slotTime + ':00+03:00').getTime() <= Date.now()) { toast.error('Укажите будущее время эфира по Москве'); return; }
-        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks} : {playlistId:playlistId||null,title:slotTitle,durationMinutes:slotDuration,startLocal:slotTime}});setCreateScheduleOpen(false);},'Передача добавлена в сетку');
+        action(async()=>{await call(repeatWeeks > 1 ? '/schedule/weekly' : '/schedule',{method:'POST',body: repeatWeeks > 1 ? {playlistId,startLocal:slotTime,weekdays:repeatDays,weeks:repeatWeeks,hostIds:newHostIds} : {playlistId:playlistId||null,title:slotTitle,durationMinutes:slotDuration,startLocal:slotTime,hostIds:newHostIds}});setCreateScheduleOpen(false);setNewHostIds([]);},'Передача добавлена в сетку');
       }} className="mt-4 space-y-3">
         <label className="block text-sm">Тип эфирного события
           <select className={inputStyle} value={slotMode} onChange={e=>setSlotMode(e.target.value)}>
@@ -553,6 +560,7 @@ export default function Radio() {
           <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={slotDuration} onChange={e=>setSlotDuration(Number(e.target.value))}/></label>
         </div>}
         </>}
+        {slotMode==='playlist'&&<fieldset className="rounded-xl border border-current/20 p-3"><legend className="px-1 text-sm font-semibold">Ведущие передачи</legend><div className="grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">{radioHosts.map(h=><label key={h.id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={newHostIds.includes(h.id)} onChange={e=>setNewHostIds(ids=>e.target.checked?[...ids,h.id]:ids.filter(id=>id!==h.id))}/>{h.name}</label>)}</div>{!radioHosts.length&&<p className="text-xs opacity-65">Сначала добавьте ведущих в «Контент → Ведущие».</p>}</fieldset>}
         <input required className={inputStyle} type="datetime-local" aria-label="Дата и время эфира" value={slotTime} onChange={e=>setSlotTime(e.target.value)}/>
         {slotMode==='playlist'&&<label className="text-sm block">Повторять в течение недель (1 — без повтора)
           <input className={inputStyle} type="number" min="1" max="12" value={repeatWeeks} onChange={e=>setRepeatWeeks(Number(e.target.value))}/>
@@ -596,6 +604,7 @@ export default function Radio() {
             <label className="block text-sm">Продолжительность, минут<input required type="number" min="1" max="720" className={inputStyle} value={editSlotDuration} onChange={e=>setEditSlotDuration(Number(e.target.value))}/></label>
             <p className="text-xs opacity-65">До прикрепления утверждённого плейлиста AutoDJ продолжит вещание.</p>
           </div>}
+          <fieldset className="space-y-2 rounded-xl border border-current/20 p-3"><legend className="px-1 text-sm font-semibold">Ведущие передачи</legend><p className="text-xs opacity-60">Можно выбрать нескольких ведущих.</p><div className="grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">{radioHosts.map(h=><label key={h.id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={editingHostIds.includes(h.id)} onChange={e=>setEditingHostIds(ids=>e.target.checked?[...ids,h.id]:ids.filter(id=>id!==h.id))}/>{h.name}</label>)}</div>{!radioHosts.length&&<p className="text-xs opacity-65">Добавьте ведущих в разделе «Контент → Ведущие».</p>}</fieldset>
           {renderPreview(editingSlot,editingSlotPlaylist?durationOf(editingSlot):editSlotDuration)}
           <p className="text-xs opacity-70">При замене плейлиста время окончания пересчитывается по длительности новой программы. Занятые интервалы сохраняются под защитой проверки пересечений.</p>
           <div className="flex gap-2"><button className={btn}>Сохранить изменения</button><button type="button" className="rounded-xl border border-current/20 px-3 py-2" onClick={()=>setEditingSlot(null)}>Отмена</button></div>

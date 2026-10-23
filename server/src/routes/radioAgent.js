@@ -319,11 +319,13 @@ router.get('/listen/now-playing',safe(async(_req,res)=>{
   catch{return res.status(503).json({available:false});}
   const trackId=typeof worker.trackId==='string'?worker.trackId:null;
   const asset=trackId?await prisma.radioAsset.findUnique({where:{id:trackId},select:{name:true,tags:true,durationMs:true}}):null;
+  const currentSlot=worker.mode==='SCHEDULED'&&worker.slotId?await prisma.radioScheduleSlot.findUnique({where:{id:worker.slotId},select:{id:true,title:true,playlist:{select:{name:true}},hosts:{orderBy:{position:'asc'},select:{host:{select:{id:true,name:true,description:true}}}}}}):null;
   const nextSlot=worker.mode==='SILENCE'?await prisma.radioScheduleSlot.findFirst({
     where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},
     orderBy:{startAt:'asc'},select:{startAt:true,playlist:{select:{name:true}}}
   }):null;
   res.json({available:true,mode:worker.mode,
+    show:currentSlot?{id:currentSlot.id,name:currentSlot.title||currentSlot.playlist?.name||'',hosts:currentSlot.hosts.map(x=>x.host)}:null,
     nextShow:worker.mode==='SILENCE'&&nextSlot?{name:nextSlot.playlist.name,startAt:nextSlot.startAt.toISOString()}:null,
     track:asset?{name:asset.name,title:asset.tags?.title||null,artist:asset.tags?.artist||null,durationMs:asset.durationMs}:null,
     playout:worker.playout?.trackId===trackId?{startedAt:worker.playout.startedAt,
@@ -344,7 +346,7 @@ router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   const nextTrackId=typeof status?.nextTrackId==='string'?status.nextTrackId:null;
   const [asset,slot,nextAsset,nextSlot]=await Promise.all([
     trackId?prisma.radioAsset.findUnique({where:{id:trackId},select:{id:true,name:true,durationMs:true,tags:true}}):null,
-    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,endAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}):null,
+    slotId?prisma.radioScheduleSlot.findUnique({where:{id:slotId},select:{id:true,endAt:true,hosts:{orderBy:{position:'asc'},select:{host:{select:{id:true,name:true}}}},playlist:{select:{name:true,items:{orderBy:{position:'asc'},include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}):null,
     nextTrackId?prisma.radioAsset.findUnique({where:{id:nextTrackId},select:{id:true,name:true,tags:true}}):null,
     prisma.radioScheduleSlot.findFirst({where:{startAt:{gt:new Date()},playlist:{status:'APPROVED'}},orderBy:{startAt:'asc'},select:{id:true,startAt:true,playlist:{select:{name:true,items:{orderBy:{position:'asc'},take:1,include:{asset:{select:{id:true,name:true,tags:true}}}}}}}}),
   ]);
@@ -360,7 +362,7 @@ router.get('/dashboard/now-playing',...admin,safe(async(_req,res)=>{
   res.json({available:true,source:'PUBLIC_MP3_WORKER',mode,
     track:asset?{id:asset.id,name:asset.name,durationMs:asset.durationMs,
       title:asset.tags?.title||null,artist:asset.tags?.artist||null}:null,
-    slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача'}:null,
+    slot:slot?{id:slot.id,name:slot.playlist?.name||'Передача',hosts:slot.hosts?.map(x=>x.host)||[]}:null,
     trackId,slotId,trackResolved:!trackId||Boolean(asset),observedAt:new Date().toISOString(),
     playout:status.playout?.trackId===trackId?status.playout:null,
     nextTrack:scheduledNext||(mode==='AUTO_DJ'&&nextAsset?{id:nextAsset.id,name:nextAsset.name,title:nextAsset.tags?.title||null,artist:nextAsset.tags?.artist||null,estimated:true}:null),
