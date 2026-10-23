@@ -34,7 +34,7 @@ router.use(auth);
 const reviewInclude = { items: { orderBy: { position: 'asc' }, include: { asset: { select: { id: true, name: true, durationMs: true } } } } };
 const studentOnly = async (req, res, next) => {
     try {
-        if (req.user.role !== 'STUDENT') return res.status(403).json({ error: 'Только для радиоведущих' });
+        if (['ADMIN', 'MENTOR'].includes(req.user.role)) return res.status(403).json({ error: 'Только для студентов-радиоведущих' });
         const member = await prisma.editorialTeamMember.findUnique({
             where: { userId: req.user.id }, select: { position: true },
         });
@@ -52,7 +52,7 @@ const validAssets = async assetIds => await prisma.radioAsset.count({ where: { i
 router.get('/access', async (req, res, next) => {
     try {
         if (req.user.role === 'ADMIN') return res.json({ allowed: true, admin: true });
-        if (req.user.role !== 'STUDENT') return res.json({ allowed: false, admin: false });
+        if (req.user.role === 'MENTOR') return res.json({ allowed: false, admin: false });
         const member = await prisma.editorialTeamMember.findUnique({
             where: { userId: req.user.id }, select: { position: true },
         });
