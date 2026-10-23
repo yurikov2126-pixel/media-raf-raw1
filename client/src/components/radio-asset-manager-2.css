@@ -69,3 +69,16 @@
 .dark .radio-library-v2 .rl-bulk-delete-btn{color:#fecdd3;background:rgba(244,63,94,.12)}
 .radio-library-v2 .rl-bulk-delete-btn:hover:not(:disabled){background:rgba(244,63,94,.18)}
 .radio-library-v2 .rl-bulk-delete-btn:disabled{opacity:.38;cursor:not-allowed}
+
+
+/* Radio library storage analysis */
+.radio-library-v2 .rl-analytics{background:var(--rl-surface);border-color:var(--rl-border);color:var(--rl-ink);backdrop-filter:blur(18px)}
+.radio-library-v2 .rl-analytics-button{padding:9px 12px;border-radius:10px;background:var(--rl-soft);border:1px solid var(--rl-border);font-size:12px;font-weight:700;color:var(--rl-ink)}
+.radio-library-v2 .rl-analytics-button:hover:not(:disabled){border-color:var(--rl-accent)}
+.radio-library-v2 .rl-analytics-button:focus-visible{outline:2px solid var(--rl-accent);outline-offset:2px}
+.radio-library-v2 .rl-analytics-button:disabled{opacity:.4}
+.radio-library-v2 .rl-analytics-stat,.radio-library-v2 .rl-analytics-entry{background:var(--rl-soft);border:1px solid var(--rl-border)}
+.radio-library-v2 .rl-analytics-entry{padding:10px 12px;border-radius:10px}
+.radio-library-v2 button.rl-analytics-entry:hover{border-color:var(--rl-accent)}
+.radio-library-v2 .rl-analytics-track{height:5px;border-radius:10px;overflow:hidden;margin-top:7px;background:rgba(125,135,160,.2)}
+.radio-library-v2 .rl-analytics-track>div{height:100%;background:var(--rl-accent);border-radius:inherit}
