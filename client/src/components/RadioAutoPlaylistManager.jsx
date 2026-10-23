@@ -6,17 +6,30 @@ const defaults={name:'',sourceFolderId:'',includeChildren:true,targetMinutes:60,
 const field='w-full rounded-xl border border-current/20 bg-white/75 p-2.5 text-slate-900 dark:bg-slate-900/80 dark:text-slate-100';
 const time=ms=>{const total=Math.round(ms/1000);return Math.floor(total/60)+':'+String(total%60).padStart(2,'0');};
 export default function RadioAutoPlaylistManager({token,onPublished}){
- const [list,setList]=useState([]),[folders,setFolders]=useState([]),[assets,setAssets]=useState([]);
+ const [list,setList]=useState([]),[folders,setFolders]=useState([]),[assets,setAssets]=useState([]),[jingleAssets,setJingleAssets]=useState([]);
  const [current,setCurrent]=useState({...defaults}),[editing,setEditing]=useState(null);
- const jingleAssets=assets.filter(asset=>asset.category==='JINGLE');
  const [preview,setPreview]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [open,setOpen]=useState(false);
  const [draftId,setDraftId]=useState(null);
  const call=useCallback((path,options)=>api('/radio'+path,{token,...options}),[token]);
- const reload=useCallback(async()=>{
-  const [a,f,l]=await Promise.all([call('/assets'),call('/asset-folders'),call('/auto-playlists')]);
-  setAssets(a.assets||[]);setFolders(f.folders||[]);setList(l.autoPlaylists||[]);
+ const loadJingles=useCallback(async()=>{
+  // The legacy /assets endpoint only returns the newest 300 uploads.
+  // Fetch the entire JINGLE category, across all folders and pages.
+  const perPage=100;
+  const result=[];
+  for(let page=1;;page++){
+   const response=await call('/assets/browse?category=JINGLE&limit='+perPage+'&page='+page);
+   const batch=Array.isArray(response.assets)?response.assets:[];
+   result.push(...batch);
+   if(result.length>=Number(response.total)||batch.length<perPage)break;
+  }
+  return result;
  },[call]);
+ const reload=useCallback(async()=>{
+  const [a,f,l,jingles]=await Promise.all([call('/assets'),call('/asset-folders'),call('/auto-playlists'),loadJingles()]);
+  setAssets(a.assets||[]);setFolders(f.folders||[]);setList(l.autoPlaylists||[]);
+  setJingleAssets(jingles);
+ },[call,loadJingles]);
  useEffect(()=>{reload().catch(e=>setError(e.message));},[reload]);
  const update=(key,value)=>{setCurrent(v=>({...v,[key]:value}));setPreview(null);setNotice('');};
  const create=()=>{setEditing(null);setCurrent({...defaults});setPreview(null);setError('');setOpen(true);};
