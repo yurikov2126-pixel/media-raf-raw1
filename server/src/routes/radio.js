@@ -212,6 +212,11 @@ router.get('/assets/storage-analytics',requireRole('ADMIN'),safe(async(req,res)=
  });
 }));
 const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','OTHER'];
+router.post('/assets/by-ids',requireRole('ADMIN'),safe(async(req,res)=>{
+ const ids=req.body?.assetIds;
+ if(!Array.isArray(ids)||ids.length>500||ids.some(id=>typeof id!=='string'||!id))return res.status(400).json({error:'Неверный список записей'});
+ res.json({assets:await prisma.radioAsset.findMany({where:{id:{in:[...new Set(ids)]}}})});
+}));
 router.patch('/assets/categories',requireRole('ADMIN'),safe(async(req,res)=>{
  const ids=req.body?.assetIds,category=req.body?.category;
  if(!Array.isArray(ids)||!ids.length||ids.length>200||ids.some(id=>typeof id!=='string'||!id)||new Set(ids).size!==ids.length||!radioCategories.includes(category))
