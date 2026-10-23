@@ -87,10 +87,10 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
  const toggle=id=>setChecked(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);
  const operation=async(fn)=>{setBusy(true);setError('');try{await fn();await refresh();await reload();}catch(e){setError(e.message||'Не удалось выполнить действие');}finally{setBusy(false);}};
  const addFolder=()=>{const title=window.prompt('Название папки');if(title?.trim())void operation(()=>request('/asset-folders',{method:'POST',body:{name:title.trim(),parentId:folder}}));};
- const reviewBulkDelete=async()=>{
-  if(!selectedIds.length)return;
+ const reviewBulkDelete=async(ids=selectedIds)=>{
+  if(!ids.length)return;
   setReviewLoading(true);setError('');
-  try{const review=await request('/assets/bulk-delete-preview',{method:'POST',body:{assetIds:selectedIds}});setDeleteReview(review);}
+  try{const review=await request('/assets/bulk-delete-preview',{method:'POST',body:{assetIds:ids}});setDeleteReview(review);}
   catch(e){setError(e.message||'Не удалось проверить использование файлов');}
   finally{setReviewLoading(false);}
  };
@@ -145,7 +145,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
    <div className="flex gap-2"><button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={addFolder} disabled={busy}>＋ Папка</button>
     <button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={reload}>↻</button></div>
   </div>
-  <RadioStorageAnalytics token={token} revision={assets} onFolderOpen={chooseFolder}/>
+  <RadioStorageAnalytics token={token} revision={assets} onFolderOpen={chooseFolder} onReviewDelete={reviewBulkDelete}/>
   <div className="rl-upload">{uploadPanel}</div>
   <div className="rl-workspace grid gap-4 lg:grid-cols-[256px_minmax(0,1fr)]">
    <aside className="rl-sidebar rounded-2xl border p-3">
@@ -185,7 +185,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
        <button type="button" disabled={!selectedIds.length||busy} className="rl-bulk-tags-button" onClick={()=>{setBulkFields({});setBulkValues({});setShowBulkTags(true);}}>✎ Изменить теги</button>
        <button type="button" disabled={!selectedIds.length} onClick={()=>setShowPlaylist(true)} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">＋ Плейлист из выбранных</button>
        <button type="button" disabled={!selectedIds.length} onClick={()=>{setMoveItem({id:null,name:selectedIds.length+' записей'});setMoveTarget(folder||'');}} className="rounded-lg border border-current/15 px-3 py-2 text-xs disabled:opacity-40">Переместить</button>
-       <button type="button" disabled={!selectedIds.length||busy||reviewLoading} onClick={reviewBulkDelete} className="rl-bulk-delete-btn">Проверить удаление</button>
+       <button type="button" disabled={!selectedIds.length||busy||reviewLoading} onClick={()=>reviewBulkDelete()} className="rl-bulk-delete-btn">Проверить удаление</button>
        <span className="ml-auto text-xs opacity-60">{results.total} записей в папке</span>
      </div>
     </div>

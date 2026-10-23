@@ -82,3 +82,10 @@
 .radio-library-v2 button.rl-analytics-entry:hover{border-color:var(--rl-accent)}
 .radio-library-v2 .rl-analytics-track{height:5px;border-radius:10px;overflow:hidden;margin-top:7px;background:rgba(125,135,160,.2)}
 .radio-library-v2 .rl-analytics-track>div{height:100%;background:var(--rl-accent);border-radius:inherit}
+
+
+.radio-library-v2 .rl-cleanup{border-color:var(--rl-border);background:var(--rl-soft)}
+.radio-library-v2 .rl-cleanup-item{border:1px solid transparent;cursor:pointer}
+.radio-library-v2 .rl-cleanup-item:hover,.radio-library-v2 .rl-cleanup-item:has(input:checked){border-color:var(--rl-border);background:var(--rl-surface)}
+.radio-library-v2 .rl-cleanup .rl-analytics-button[aria-pressed="true"]{border-color:var(--rl-accent);background:var(--rl-surface)}
+.radio-library-v2 .rl-cleanup input[type="checkbox"]{accent-color:var(--rl-accent)}
