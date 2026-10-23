@@ -1,6 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {api} from '../api/client.js';
 import {radioFolderTree,radioFolderPath} from './radioFolderTree.js';
+import RadioStorageAnalytics from './RadioStorageAnalytics.jsx';
 import './radio-asset-manager-2.css';
 const fmt=ms=>{const s=Math.floor((ms||0)/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 const size=b=>b>1048576?(b/1048576).toFixed(1)+' МБ':(b/1024).toFixed(0)+' КБ';
@@ -144,6 +145,7 @@ export default function RadioAssetManager({assets,token,refresh,preview,rename,r
    <div className="flex gap-2"><button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={addFolder} disabled={busy}>＋ Папка</button>
     <button className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={reload}>↻</button></div>
   </div>
+  <RadioStorageAnalytics token={token} revision={assets} onFolderOpen={chooseFolder}/>
   <div className="rl-upload">{uploadPanel}</div>
   <div className="rl-workspace grid gap-4 lg:grid-cols-[256px_minmax(0,1fr)]">
    <aside className="rl-sidebar rounded-2xl border p-3">
