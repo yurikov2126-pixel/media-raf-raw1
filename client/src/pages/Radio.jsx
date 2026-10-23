@@ -53,6 +53,7 @@ export default function Radio() {
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [radioHosts,setRadioHosts]=useState([]),[hostsOpen,setHostsOpen]=useState(false),[hostsForSlot,setHostsForSlot]=useState(null),[editingHosts,setEditingHosts]=useState([]);
   const [createScheduleOpen,setCreateScheduleOpen] = useState(false);
   const [movingSlot,setMovingSlot] = useState(null);
   const [editingSlot,setEditingSlot] = useState(null);
@@ -99,6 +100,7 @@ export default function Radio() {
   const [date, setDate] = useState(() => moscowDate(new Date()));
   const editRequestId = useRef(0);
   const call = useCallback((path, options) => api('/radio' + path, { token, ...options }), [token]);
+  useEffect(()=>{call('/hosts').then(data=>setRadioHosts(data.hosts||[])).catch(()=>{});},[call]);
   const refresh = useCallback(async () => {
     const from = new Date(date + 'T00:00:00+03:00');
     const to = new Date(from.getTime() + 7 * 86400000);
@@ -313,6 +315,12 @@ export default function Radio() {
     action(() => call('/schedule/' + encodeURIComponent(slot.id), {method:'DELETE'}),
       active ? 'Передача удалена. Переключение источника выполняется.' : 'Передача удалена из сетки');
   };
+  const saveSlotHosts=async()=>{
+    if(!hostsForSlot)return;
+    try{await call('/schedule/'+encodeURIComponent(hostsForSlot.id)+'/hosts',{method:'PATCH',body:{hostIds:editingHosts}});
+     await refresh();setHostsForSlot(null);toast.success('Ведущие передачи сохранены');}
+    catch(e){toast.error(e.message||'Не удалось сохранить ведущих');}
+  };
   const openSlotMenu = (slot) => { setContextSlot(slot); setMovingSlot(null); setCopyingSlot(null); };
   const startSlotTouch = (slot,e) => {
     if(e.touches.length!==1)return;
@@ -505,6 +513,7 @@ export default function Radio() {
       </div>
     </section>}
     {tab==='schedule' && <section className="space-y-4">
+      <section className="rounded-2xl border border-current/15 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">🎙 Ведущие радиостанции</h3><p className="text-xs opacity-65">Профили пользователей с должностью «Радиоведущий» из команды редакции</p></div><button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setHostsOpen(x=>!x)}>{hostsOpen?'Скрыть':'Показать ведущих'} ({radioHosts.length})</button></div>{hostsOpen&&<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{radioHosts.map(host=><div key={host.id} className="flex items-center gap-3 rounded-xl border border-current/10 p-2">{host.avatar?<img className="h-11 w-11 rounded-full object-cover" src={host.avatar} alt=""/>:<div className="grid h-11 w-11 place-items-center rounded-full bg-violet-500/15">🎙</div>}<div className="min-w-0"><p className="truncate text-sm font-semibold">{host.fullName||host.firstName+' '+host.lastName}</p><p className="text-xs opacity-60">@{host.username}</p></div></div>)}{!radioHosts.length&&<p className="text-sm opacity-60">Назначьте пользователям должность «Радиоведущий» в админке → Команда редакции.</p>}</div>}</section>
       <RadioWeeklyTemplates slots={slots} date={date} playlists={playlists} call={call} refresh={refresh} toast={toast}/>
       <RadioScheduleBoard slots={slots} date={date} onDateChange={setDate} onSelectSlot={openSlotMenu} onDropSlot={dropSchedule} onQuickEdit={(slot,startLocal)=>{if(Date.parse(slot.startAt)<=Date.now())return;setMovingSlot(slot);setMoveTime(startLocal);}} onDeleteSlot={deleteScheduleSlot} onBulkCopy={bulkCopySchedule} onBulkDelete={bulkDeleteSchedule} bulkBusy={bulkBusy} onCreate={()=>setCreateScheduleOpen(true)} onCreateAt={local=>{setSlotTime(local);setCreateScheduleOpen(true);}}/>
       {createScheduleOpen && <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)setCreateScheduleOpen(false);}}>
@@ -568,10 +577,13 @@ export default function Radio() {
         <div className="flex gap-2"><button disabled={slotMode==='auto'?!slotAutoPlaylist:(repeatWeeks>1&&(!slotPlaylist||!repeatDays.length))} className={btn}>Запланировать</button><button type="button" className="rounded-xl border border-current/20 px-4 py-2 text-sm" onClick={()=>setCreateScheduleOpen(false)}>Отмена</button></div>
       </form>
       </div></div>}
+      {hostsForSlot&&<div className="fixed inset-0 z-[230] grid place-items-center bg-black/65 p-4" onClick={()=>setHostsForSlot(null)}><section role="dialog" aria-modal="true" aria-label="Назначение ведущих" onClick={e=>e.stopPropagation()} className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-current/20 bg-slate-100 p-5 text-slate-950 shadow-2xl dark:bg-slate-900 dark:text-white"><h3 className="text-lg font-bold">Ведущие передачи</h3><p className="mt-1 text-sm opacity-70">{hostsForSlot.playlist?.name||hostsForSlot.title}</p><div className="mt-4 space-y-2">{radioHosts.map(host=><label key={host.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-current/15 p-3"><input type="checkbox" checked={editingHosts.includes(host.id)} onChange={e=>setEditingHosts(ids=>e.target.checked?[...ids,host.id]:ids.filter(id=>id!==host.id))}/>{host.avatar&&<img src={host.avatar} alt="" className="h-9 w-9 rounded-full object-cover"/>}<span className="text-sm">{host.fullName}</span></label>)}{!radioHosts.length&&<p className="text-sm opacity-60">Пока нет пользователей с должностью Радиоведущий.</p>}</div><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setHostsForSlot(null)} className="rounded-xl border border-current/20 px-4 py-2">Отмена</button><button type="button" disabled={editingHosts.length>8} onClick={saveSlotHosts} className="rounded-xl bg-violet-600 px-4 py-2 font-bold text-white disabled:opacity-40">Сохранить</button></div></section></div>}
       {contextSlot && <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 p-3" onClick={()=>setContextSlot(null)}>
         <div role="dialog" aria-label="Действия с передачей" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/20 bg-slate-100 p-4 text-slate-950 dark:bg-slate-900 dark:text-white" onClick={e=>e.stopPropagation()}>
           <h3 className="font-semibold">{contextSlot.playlist?.name||contextSlot.title||'Запланированная передача'}</h3>
           <p className="text-sm opacity-60">{dateLocal(contextSlot.startAt)}</p>
+          <p className="text-xs opacity-70">Ведущие: {contextSlot.hosts?.length?contextSlot.hosts.map(h=>h.fullName).join(', '):'Не назначены'}</p>
+          <button type="button" className="w-full rounded-xl border border-violet-500/30 px-4 py-3 text-left text-sm font-semibold" onClick={()=>{setEditingHosts(contextSlot.hostIds||[]);setHostsForSlot(contextSlot);setContextSlot(null);}}>🎙 Назначить ведущих</button>
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>openSlotEditor(contextSlot)}>✎ Редактировать слот</button>}
           <button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>proposeCopy(contextSlot)}>⧉ Копировать передачу</button>
           {new Date(contextSlot.startAt)>new Date()&&<button type="button" className="w-full rounded-xl border border-current/20 px-4 py-3 text-left" onClick={()=>{const slot=contextSlot;setContextSlot(null);proposeMove(slot,moscowDate(new Date(slot.startAt)));}}>↗ Перенести</button>}
