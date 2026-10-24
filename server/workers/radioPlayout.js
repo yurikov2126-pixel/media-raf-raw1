@@ -209,6 +209,16 @@ const hourlySignalTimer=setInterval(async()=>{
   state.hourlySignal.last={...plan,at:new Date(nowMs).toISOString(),audible:false};
   const ready=state.hourlySignal.preflight;
   const signalReady=ready?.ok===true&&ready.assetId===plan.assetId&&ready.key?.startsWith(plan.key+':');
+  // A unique hour key is used, not the selected asset ID: reusing a time
+  // announcement for multiple hours remains valid. Log the exact decision
+  // when the hour arrives, even if no PCM can be emitted.
+  state.hourlySignal.hourCheck={
+    key:plan.key,assetId:plan.assetId||null,source:state.mode,
+    remainingMs,preflight:signalReady?'READY':ready?.reason||'NOT_READY',
+    configEnabled:config.enabled,pcmEnabled:HOURLY_SIGNAL_PCM_ENABLED,
+    at:new Date(nowMs).toISOString()
+  };
+  console.info('RADIO_HOURLY_HOUR_CHECK',JSON.stringify(state.hourlySignal.hourCheck));
   const handover=planHourlyTrackHandover({
    enabled:HOURLY_SIGNAL_PCM_ENABLED&&config.enabled,
    source:state.mode,atMs:nowMs,boundaryMs:boundary,
@@ -284,11 +294,12 @@ const hourlyPreflightTimer=setInterval(async()=>{
   if(!assetId)return;
   const key=new Date(next).toISOString()+':'+assetId;
   if(hourlyPreflightKey===key)return;
-  hourlyPreflightKey=key;
   const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
    select:{id:true,category:true,durationMs:true,storageKey:true}});
   const check=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
   state.hourlySignal.preflight={key,assetId,at:new Date().toISOString(),...check};
+  // A transient decoder/storage failure must be retried before the hour.
+  if(check.ok)hourlyPreflightKey=key;
   console.info('RADIO_HOURLY_SIGNAL_PREFLIGHT',JSON.stringify(state.hourlySignal.preflight));
  }catch(error){state.hourlySignal.preflight={ok:false,reason:'PREFLIGHT_ERROR',at:new Date().toISOString()};
   state.hourlySignal.lastError=String(error.message||error).slice(0,160);
@@ -688,7 +699,7 @@ async function emitHourlySignalAtSafeBoundary(){
      startAt:{gt:new Date(now)},playlist:{status:'APPROVED'}},
      select:{startAt:true},orderBy:{startAt:'asc'}});
    const candidate=reserveScheduledHourlySuccessor({
-     slot:timeline.slot,items:slot.playlist.items,
+     slot:{id:slot.id,playlistId:slot.playlistId,endAt:slot.endAt},items:slot.playlist.items,
      interruptedIndex:finished.index,
      nowMs:now,announcementMs:0
    });
