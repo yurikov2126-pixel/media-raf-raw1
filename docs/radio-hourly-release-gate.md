@@ -1,34 +1,48 @@
-# Radio hourly release gate
+# Политех-FM — поэтапный тест часовых объявлений в реальном эфире
 
-Hourly announcements must not be enabled on the production playout service solely because a PR was merged.
+Реальный эфир является выбранным испытательным окружением. **Включение прерывает текущую станцию при перезапуске службы**, поэтому выбирайте спокойный интервал и заранее сохраните журнал. CI подтверждает только синтаксис и модульные тесты — не качество реального звучания.
 
-## 1. Automated gate
+## 1. Перед включением
 
-GitHub Actions workflow `Radio hourly playout safety` must be **green** for the merged commit. It validates the continuous PCM Worker syntax and runs the hourly handover, preflight, schedule, cursor, fade and PCM simulation tests. These are not a substitute for real FFmpeg/audio tests.
+- Объединить PR и задеплоить новую версию. Проверить `git log -1 --format='%h %s'`.
+- Убедиться, что выбранный час имеет прикреплённый корректный файл категории `TIME_SIGNAL`, а настройка объявления включена в админке.
+- Сохранить текущий systemd override и узнать его источник: `sudo systemctl cat mediaraf-radio-playout.service`.
+- Подготовить команду возврата обоих флагов в `false` ниже.
 
-## 2. Isolated audio gate
+## 2. Первый час — только AutoDJ
 
-On an independent playout process that **cannot publish to production**, exercise all ten scenarios documented in `docs/radio-hourly-pcm-test-plan.md`.
+```bash
+sudo mkdir -p /etc/systemd/system/mediaraf-radio-playout.service.d
+printf '[Service]\nEnvironment="RADIO_HOURLY_SIGNAL_PCM_ENABLED=true"\nEnvironment="RADIO_HOURLY_SCHEDULED_PCM_ENABLED=false"\n' \
+  | sudo tee /etc/systemd/system/mediaraf-radio-playout.service.d/hourly-signal.conf
+sudo systemctl daemon-reload
+sudo systemctl restart mediaraf-radio-playout.service
+sudo systemctl show mediaraf-radio-playout.service -p Environment
+```
 
-The operator must verify for each scenario:
-- Accurate playback of the configured hour asset exactly once.
-- No stale PCM packet, leaked second deck, click, or unplanned silence.
-- Correct next-track selection and zero offset after a forced handover.
-- LIVE priority and hard scheduled programme boundaries.
-- Same audible output on web and Windows Agent.
+Наблюдать одну часовую границу в AutoDJ. Прослушать через сайт и Windows Radio Agent. Не продолжать этап при повторном треке, паузе, клике, срыве LIVE или дублировании объявления.
 
-Attach a short PCM/MP3 capture (or an unambiguous listening report), plus journal markers `RADIO_HOURLY_INTERRUPT_ARMED`, `RADIO_HOURLY_PCM_BOUNDARY`, `RADIO_HOURLY_CROSSFADE_PREEMPT`, `RADIO_HOURLY_SIGNAL_PCM`, and `RADIO_HOURLY_SCHEDULED_INTERRUPT_COMMITTED` when applicable.
+## 3. Второй этап — передачи по эфирной сетке
 
-## 3. Controlled live rollout (requires explicit approval)
+Только если первый час чистый, заменить `RADIO_HOURLY_SCHEDULED_PCM_ENABLED=false` на `true` в файле `hourly-signal.conf`; выполнить `daemon-reload` и `restart`. Проверить следующий час, когда играет передача по сетке. Тестировать переход с длинной песней, с короткой и во время Crossfade, не нарушая начало следующей программы.
 
-Only after both gates are met:
+## 4. Журнал наблюдений
 
-1. Verify all 24 TIME_SIGNAL files and saved configuration.
-2. Enable `RADIO_HOURLY_SIGNAL_PCM_ENABLED` on the dedicated test worker. Keep `RADIO_HOURLY_SCHEDULED_PCM_ENABLED` false until AutoDJ scenarios pass.
-3. Enable scheduled route separately and repeat tests including transitions.
-4. Have immediate rollback to `false` for both environment flags and restart of the relevant isolated unit.
-5. Collect before/after audio and logs. Do not interpret the presence of `EMITTED` log alone as proof of an audible signal.
+```bash
+sudo journalctl -u mediaraf-radio-playout.service --since "20 minutes ago" --no-pager \
+  | grep -E 'RADIO_HOURLY_|RADIO_CROSSFADE|RADIO_SOURCE_BOUNDARY|RADIO_SLOT_END_MISMATCH|RADIO_REVERSE_AUTHORITY|ERROR' \
+  | tee /tmp/politech-hourly-live-check.log
+```
 
-### Rollback principle
+Прислать время (Москва), название и индекс песен до/после, слышимую проблему (если была) и журнал. Состояние `EMITTED` в журнале не доказывает корректное звучание — нужна прослушка.
 
-If unexpected gaps, replayed snippets, duplicate hour, unapproved boundary or Worker crash occurs, stop the experiment, disable both gates and preserve logs. Do not promote an untested flag to production.
+## 5. Немедленный откат
+
+```bash
+sudo sed -i 's/RADIO_HOURLY_SIGNAL_PCM_ENABLED=true/RADIO_HOURLY_SIGNAL_PCM_ENABLED=false/; s/RADIO_HOURLY_SCHEDULED_PCM_ENABLED=true/RADIO_HOURLY_SCHEDULED_PCM_ENABLED=false/' \
+  /etc/systemd/system/mediaraf-radio-playout.service.d/hourly-signal.conf
+sudo systemctl daemon-reload
+sudo systemctl restart mediaraf-radio-playout.service
+```
+
+После отката проверить фактическое окружение и отсутствие новых `RADIO_HOURLY_INTERRUPT_ARMED`. Если в службе есть другие `EnvironmentFile` или override с теми же именами, проверить их приоритет до начала испытаний.
