@@ -55,6 +55,7 @@ import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radio
 import {planHourlyTrackHandover} from '../src/lib/radioHourlyHandover.js';
 import {scheduledHourlyAdmission} from '../src/lib/radioScheduledHourlyAdmission.js';
 import {reserveScheduledHourlySuccessor} from '../src/lib/radioScheduledHourlyCursor.js';
+import {resolveHourlyScheduledResume} from '../src/lib/radioScheduledHourlyResume.js';
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -109,6 +110,8 @@ let recentlyAiredArtists=[];
 let resumeAutoDjAfterShow=false;
 // Track natural EOF of the final scheduled item so wall-clock drift cannot replay it.
 let finishedScheduledSlot=null;
+// Populated only after a future verified audible hour marker; never by shadow decisions.
+let confirmedScheduledHourlyReservation=null;
 const finishedScheduledTrackKeys=new Map();
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
@@ -362,6 +365,35 @@ async function current() {
   let cursor=resolveRadioCursor(slots,nowMs,{scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS});
   if(LIVE_SOURCE_CROSSFADE_ENABLED&&scheduledEntryOverlap&&cursor.slot?.id===scheduledEntryOverlap.slotId){
     cursor=resumeScheduledCursor(cursor,scheduledEntryOverlap);
+  }
+  // Only a *confirmed* audible marker may replace the deterministic wall clock.
+  // Shadow candidate reservations must never change the actual on-air cursor.
+  if(confirmedScheduledHourlyReservation){
+    const snapshot=confirmedScheduledHourlyReservation;
+    if(!slots[0]||slots[0].id!==snapshot.slotId||
+       Date.parse(slots[0].endAt)!==snapshot.slotEndMs){
+      confirmedScheduledHourlyReservation=null;
+    }else{
+      const resumed=resolveHourlyScheduledResume(snapshot,{
+        slot:slots[0],items:slots[0].playlist.items,nowMs,live:publicLive.onAir
+      });
+      if(resumed.ok){
+        const candidate=slots[0].playlist.items[resumed.index]?.asset;
+        const revised={...cursor,status:'SCHEDULED',slot:{
+          id:slots[0].id,playlistId:slots[0].playlistId,
+          name:slots[0].playlist.name,
+          startAt:new Date(slots[0].startAt).toISOString(),
+          endAt:new Date(slots[0].endAt).toISOString()
+        },track:{id:resumed.assetId,name:candidate.name,index:resumed.index,
+          offsetMs:resumed.seekMs,seekMs:resumed.seekMs,
+          durationMs:resumed.durationMs,remainingMs:resumed.remainingMs}};
+        return {cursor:revised,asset:candidate,
+          isLastScheduledTrack:resumed.index===slots[0].playlist.items.length-1,
+          nextTrackId:scheduledSuccessor(slots[0].playlist.items,revised)};
+      }
+      if(resumed.reason==='PLAYLIST_CHANGED'||resumed.reason==='SLOT_CHANGED'||
+         resumed.reason==='PLAYLIST_FINISHED')confirmedScheduledHourlyReservation=null;
+    }
   }
   const scheduled=cursor.track?slots[0].playlist.items[cursor.track.index].asset:null;
   const alreadyFinished=!!cursor.slot && !!finishedScheduledSlot &&
