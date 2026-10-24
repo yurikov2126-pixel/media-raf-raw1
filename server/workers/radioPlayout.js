@@ -112,6 +112,7 @@ let resumeAutoDjAfterShow=false;
 let finishedScheduledSlot=null;
 // Populated only after a future verified audible hour marker; never by shadow decisions.
 let confirmedScheduledHourlyReservation=null;
+let lastCompletedScheduledTrack=null;
 const finishedScheduledTrackKeys=new Map();
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
@@ -651,7 +652,9 @@ liveScheduleTimer?.unref?.();
 // Real scheduled route is independently gated until end-to-end PCM tests pass.
 const HOURLY_SCHEDULED_PCM_ENABLED=process.env.RADIO_HOURLY_SCHEDULED_PCM_ENABLED==='true';
 async function emitHourlySignalAtSafeBoundary(){
- if(!HOURLY_SIGNAL_PCM_ENABLED||stopping||publicLive.onAir||state.mode!=='AUTO_DJ')return;
+ if(!HOURLY_SIGNAL_PCM_ENABLED||stopping||publicLive.onAir||!['AUTO_DJ','SCHEDULED'].includes(state.mode))return;
+ const scheduledSource=state.mode==='SCHEDULED';
+ if(scheduledSource&&!HOURLY_SCHEDULED_PCM_ENABLED)return;
  const now=Date.now(),boundary=hourBoundary(now),lateness=now-boundary;
  let config;
  try{config=await readTimeSignal();}catch{return;}
@@ -663,7 +666,34 @@ async function emitHourlySignalAtSafeBoundary(){
  // Preserve scheduled authority: never inject a signal while a grid slot owns the PCM.
  const scheduled=await prisma.radioScheduleSlot.findFirst({where:{
    startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
- if(scheduled)return;
+ if(scheduled&&!scheduledSource)return;
+ if(!scheduled&&scheduledSource)return;
+ let hourlyScheduledReservation=null;
+ if(scheduledSource){
+   const slot=await prisma.radioScheduleSlot.findUnique({
+     where:{id:scheduled.id},include:{playlist:{include:{
+       items:{orderBy:{position:'asc'},include:{asset:true}}
+     }}}
+   });
+   if(slot?.playlist?.status!=='APPROVED'||slot.id!==state.slotId)return;
+   // A natural EOF has already moved the wall clock into the next song.
+   // Use the actually completed track, not the new wall-clock selection.
+   const finished=lastCompletedScheduledTrack;
+   if(!finished||finished.slotId!==slot.id||
+     finished.playlistId!==slot.playlistId||
+     Date.now()-finished.at>config.maxDelaySeconds*1000||
+     slot.playlist.items[finished.index]?.asset?.id!==finished.assetId)return;
+   const next=await prisma.radioScheduleSlot.findFirst({where:{
+     startAt:{gt:new Date(now)},playlist:{status:'APPROVED'}},
+     select:{startAt:true},orderBy:{startAt:'asc'}});
+   const candidate=reserveScheduledHourlySuccessor({
+     slot:timeline.slot,items:slot.playlist.items,
+     interruptedIndex:finished.index,
+     nowMs:now,announcementMs:0
+   });
+   if(!candidate.ok)return;
+   hourlyScheduledReservation={candidate,slot};
+ }
  const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
    select:{id:true,category:true,durationMs:true,storageKey:true}});
  const ready=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
@@ -673,7 +703,15 @@ async function emitHourlySignalAtSafeBoundary(){
  // have been approved while this file was being checked.
  const newSlot=await prisma.radioScheduleSlot.findFirst({where:{
    startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
- if(newSlot)return;
+ if(scheduledSource){
+   if(!newSlot||newSlot.id!==hourlyScheduledReservation.slot.id)return;
+   const check=scheduledHourlyAdmission({
+     enabled:true,slot:hourlyScheduledReservation.slot,
+     nowMs:Date.now(),signalDurationMs:asset.durationMs,
+     fadeMs:0,trackRemainingMs:0,maxDelaySeconds:config.maxDelaySeconds
+   });
+   if(!check.allowed)return;
+ }else if(newSlot)return;
  // DB unique Setting.key is a durable at-most-once fence across worker restarts.
  // Claim *before* first PCM byte; any failure is a skip, never a repeated signal.
  try{
@@ -697,13 +735,14 @@ async function emitHourlySignalAtSafeBoundary(){
    '-i',file,'-t',String(asset.durationMs/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
    {stdio:['ignore','pipe','pipe']});
  let bytes=0,broken=false,slotCheckBusy=false;
+ const authorizedScheduledSlotId=hourlyScheduledReservation?.slot.id||null;
  const slotGuard=setInterval(async()=>{
    if(slotCheckBusy||broken||stopping||publicLive.onAir)return;
    slotCheckBusy=true;
    try{
      const active=await prisma.radioScheduleSlot.findFirst({where:{
        startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
-     if(active){broken=true;child.kill('SIGTERM');}
+     if(authorizedScheduledSlotId?active?.id!==authorizedScheduledSlotId:!!active){broken=true;child.kill('SIGTERM');}
    }catch{broken=true;child.kill('SIGTERM');}
    finally{slotCheckBusy=false;}
  },500);
@@ -722,13 +761,24 @@ async function emitHourlySignalAtSafeBoundary(){
  if(!publicLive.onAir){
    const nextSlot=await prisma.radioScheduleSlot.findFirst({where:{
      startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
-   if(nextSlot)broken=true;
+   if(authorizedScheduledSlotId?nextSlot?.id!==authorizedScheduledSlotId:!!nextSlot)broken=true;
  }
  // The next run() cycle must select a fresh source. No stale TIME_SIGNAL
  // identity is retained as the current music track.
  state.playout=null;
  state.trackId=null;
  state.slotId=null;
+ if(hourlyScheduledReservation&&!broken&&bytes>=PCM_BYTES_PER_MS*1000){
+   const fresh=await prisma.radioScheduleSlot.findUnique({where:{id:hourlyScheduledReservation.slot.id},
+     include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:true}}}}}});
+   const nextTrack=hourlyScheduledReservation.candidate;
+   const candidate={...nextTrack,resumeAfterMs:Date.now(),slotEndMs:Date.parse(fresh?.endAt)};
+   const verified=resolveScheduledHourlySuccessor(candidate,{
+     slot:fresh?.playlist?.status==='APPROVED'?fresh:null,
+     items:fresh?.playlist?.items,nowMs:Date.now(),live:publicLive.onAir
+   });
+   if(verified.ok){confirmedScheduledHourlyReservation=candidate;lastCompletedScheduledTrack=null;}
+ }
  state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
 }
@@ -1606,6 +1656,12 @@ async function run() {
       else state.transitions.crossfadeFailed++;
     }
     if(cursor.status==='SCHEDULED'){
+      if(!hourlyInterrupt&&exitCode===0&&!truncatedAtBoundary){
+        lastCompletedScheduledTrack={
+          slotId:cursor.slot.id,playlistId:cursor.slot.playlistId,
+          index:cursor.track?.index??-1,assetId:asset.id,at:Date.now()
+        };
+      }
       const key=cursor.slot.id+':'+asset.id+':'+(cursor.track?.index??0);
       for(const [old,expiry] of finishedScheduledTrackKeys)if(expiry<Date.now())finishedScheduledTrackKeys.delete(old);
       if(!finishedScheduledTrackKeys.has(key)){
