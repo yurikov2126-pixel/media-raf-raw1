@@ -829,6 +829,45 @@ async function run() {
           }
         }catch(error){state.lastError='Schedule revocation check: '+error.message;}
       },1000):null;
+    let hourlyInterrupt=false;
+    let hourlyFadeAtBytes=null;
+    let hourlyCutAtBytes=null;
+    let hourlyPollBusy=false;
+    // Only the currently authorized AutoDJ music deck may be interrupted.
+    // Scheduled playlists and crossfade decks retain their original authority.
+    const hourlyTrackTimer=HOURLY_SIGNAL_PCM_ENABLED&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&!usableBlend
+      ?setInterval(async()=>{
+        if(hourlyPollBusy||stopping||publicLive.onAir||decoder!==child||hourlyInterrupt||hourlyFadeAtBytes!==null)return;
+        hourlyPollBusy=true;
+        try{
+          const config=await readTimeSignal();
+          const now=Date.now(),hour=hourBoundary(now);
+          if(!config.enabled||now-hour>Math.min(config.maxDelaySeconds*1000,5000))return;
+          const key=new Date(hour).toISOString();
+          if(state.hourlySignal.playedKey===key)return;
+          const itemId=config.hourAssetIds[(new Date(hour).getUTCHours()+3)%24];
+          if(!itemId||state.hourlySignal.preflight?.key!==key+':'+itemId||state.hourlySignal.preflight?.ok!==true)return;
+          const remainingPcm=Math.max(0,remaining-emittedBytes/PCM_BYTES_PER_MS);
+          const plan=planHourlyTrackHandover({
+            enabled:true,source:'AUTO_DJ',atMs:now,boundaryMs:hour,remainingMs:remainingPcm,
+            thresholdSeconds:config.thresholdSeconds,maxDelaySeconds:config.maxDelaySeconds,
+            mode:config.mode,hasSignal:true,live:publicLive.onAir
+          });
+          if(plan.action!=='FADE_AND_ADVANCE')return;
+          const slot=await prisma.radioScheduleSlot.findFirst({where:{
+            startAt:{lte:new Date(now+config.fadeMs+3000)},endAt:{gt:new Date(now)},
+            playlist:{status:'APPROVED'}},select:{id:true}});
+          if(slot||publicLive.onAir||decoder!==child)return;
+          // Fade out PCM already in the outgoing decoder; let the normal
+          // per-track cleanup advance the queue before emitting the time signal.
+          const fadeBytes=Math.max(4,Math.floor(config.fadeMs*PCM_BYTES_PER_MS/4)*4);
+          hourlyFadeAtBytes=emittedBytes;
+          hourlyCutAtBytes=emittedBytes+fadeBytes;
+          state.hourlySignal.pendingInterrupt={key,assetId:asset.id,nextTrackId:nextTrackId||null};
+          console.info('RADIO_HOURLY_INTERRUPT_ARMED',JSON.stringify({key,trackId:asset.id,nextTrackId:nextTrackId||null,remainingPcm,fadeMs:config.fadeMs}));
+        }catch(error){state.hourlySignal.lastError='Hour interrupt: '+error.message;}
+        finally{hourlyPollBusy=false;}
+      },250):null;
     let ended=false, exitCode=null;
     let truncatedAtBoundary=false;
     child.stderr.on('data',buf=>{const msg=buf.toString().slice(-500);if(!isIgnorableMediaNotice(msg))state.lastError=msg;});
@@ -983,14 +1022,24 @@ async function run() {
           const safeFadeOut=fadeOut||boundaryFade.fadeOut;
           const safeFadeMs=boundaryFade.fadeOut?boundaryFade.fadeMs:DEFAULT_SOURCE_FADE_MS;
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
-          const plainBytes=eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length;
+          const hourBytesLeft=hourlyCutAtBytes===null?output.length:Math.max(0,hourlyCutAtBytes-emittedBytes);
+          const plainBytes=Math.min(eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length,hourBytesLeft);
           if(plainBytes){
             const plain=fadePcmChunk(output.subarray(0,plainBytes),{
               positionBytes:emittedBytes,totalBytes:fadeTotalBytes,
               fadeMs:safeFadeMs,fadeIn,fadeOut:safeFadeOut&&!eligible
             });
-            if(!encoder.stdin.write(plain))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+            const hourFaded=hourlyFadeAtBytes===null?plain:fadePcmChunk(plain,{
+              positionBytes:Math.max(0,emittedBytes-hourlyFadeAtBytes),
+              totalBytes:Math.max(4,hourlyCutAtBytes-hourlyFadeAtBytes),
+              fadeMs:Math.max(1,(hourlyCutAtBytes-hourlyFadeAtBytes)/PCM_BYTES_PER_MS),
+              fadeIn:false,fadeOut:true
+            });
+            if(!encoder.stdin.write(hourFaded))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
             emittedBytes+=plain.length;
+          }
+          if(hourlyCutAtBytes!==null&&emittedBytes>=hourlyCutAtBytes){
+            hourlyInterrupt=true;child.kill('SIGTERM');break;
           }
           const tail=output.subarray(plainBytes);
           // Once all 72,000 frames have been mixed, later FFmpeg packets
@@ -1448,6 +1497,7 @@ async function run() {
       state.pcmStaging.processedBytes+=pcmStaging.totalBytes;
       state.pcmStaging.droppedTailBytes+=pcmStaging.droppedTailBytes;
     }
+    if(hourlyTrackTimer)clearInterval(hourlyTrackTimer);
     if(watchdog)clearInterval(watchdog);
     if(activeSlotWatchdog)clearInterval(activeSlotWatchdog);
     // Flush natural ffmpeg exit before counting a completed track. Stream EOF
@@ -1471,6 +1521,16 @@ async function run() {
     }
     if(generatedMs>=250&&['AUTO_DJ','SCHEDULED'].includes(cursor.status))
       lastDecodedSource={id:asset.id,mode:cursor.status,emittedMs:generatedMs,at:Date.now()};
+    if(hourlyInterrupt){
+      console.info('RADIO_HOURLY_INTERRUPT_COMMITTED',JSON.stringify({
+        assetId:asset.id,nextTrackId:nextTrackId||null,emittedMs:Math.round(generatedMs),
+        key:state.hourlySignal.pendingInterrupt?.key||null
+      }));
+      // Mark the outgoing song as consumed; never replay its tail after the announcement.
+      if(nextTrackId)musicQueueNextId=nextTrackId;
+      musicSinceJingle=0;
+      discardPrewarm();
+    }
     if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){
       lastAutoDjTrackId=asset.id;
       recentlyAiredArtists.push(id3Artist(asset));
@@ -1484,7 +1544,7 @@ async function run() {
     if(cursor.isJingle){
       jinglePending=false;
       if(generatedMs>=1000&&exitCode===0){jinglesPlayed++;musicSinceJingle=0;}
-    } else if(cursor.status==='AUTO_DJ'&&generatedMs>=1000&&exitCode===0){
+    } else if(cursor.status==='AUTO_DJ'&&!hourlyInterrupt&&generatedMs>=1000&&exitCode===0){
       musicSinceJingle++;
       // Commit the next queue position only for completed songs, never for jingles.
       if(nextTrackId)musicQueueNextId=nextTrackId;
