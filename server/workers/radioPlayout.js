@@ -53,6 +53,7 @@ import { readJingles } from '../src/lib/radioJingles.js';
 import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
 import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
 import {planHourlyTrackHandover} from '../src/lib/radioHourlyHandover.js';
+import {scheduledHourlyAdmission} from '../src/lib/radioScheduledHourlyAdmission.js';
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -213,6 +214,29 @@ const hourlySignalTimer=setInterval(async()=>{
   });
   state.hourlySignal.handover={...handover,key:plan.key,audible:false,at:new Date(nowMs).toISOString()};
   console.info('RADIO_HOURLY_HANDOVER_SHADOW',JSON.stringify(state.hourlySignal.handover));
+  if(state.mode==='SCHEDULED'&&state.slotId&&signalReady){
+   const slot=await prisma.radioScheduleSlot.findUnique({where:{id:state.slotId},
+     select:{id:true,endAt:true,playlist:{select:{status:true}}}});
+   const signal=await prisma.radioAsset.findUnique({where:{id:plan.assetId},
+     select:{durationMs:true,category:true}});
+   const upcoming=await prisma.radioScheduleSlot.findFirst({where:{
+     startAt:{gt:new Date(nowMs)},playlist:{status:'APPROVED'}},
+     select:{startAt:true},orderBy:{startAt:'asc'}});
+   const admission=scheduledHourlyAdmission({
+     enabled:config.enabled&&HOURLY_SIGNAL_PCM_ENABLED,
+     live:publicLive.onAir,
+     slot:slot?.playlist?.status==='APPROVED'?slot:null,
+     nowMs,signalDurationMs:signal?.durationMs,
+     fadeMs:config.fadeMs,trackRemainingMs:remainingMs,
+     maxDelaySeconds:config.maxDelaySeconds,
+     nextSlotStartMs:upcoming?.startAt?.getTime()??null,
+     alreadyHandled:state.hourlySignal.playedKey===plan.key
+   });
+   state.hourlySignal.scheduledAdmission={...admission,key:plan.key,at:new Date().toISOString(),
+     connectedToEncoder:false};
+   console.info('RADIO_HOURLY_SCHEDULED_AUTHORITY_SHADOW',
+     JSON.stringify(state.hourlySignal.scheduledAdmission));
+  }
   console.info('RADIO_HOURLY_SIGNAL_SHADOW',JSON.stringify(state.hourlySignal.last));
   if(hourlySignalHistory.size>72)hourlySignalHistory.delete(hourlySignalHistory.values().next().value);
  }catch(e){state.hourlySignal.lastError=String(e.message||e).slice(0,160);}
