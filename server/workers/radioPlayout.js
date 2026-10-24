@@ -52,6 +52,7 @@ import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
 import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
+import {planHourlyTrackHandover} from '../src/lib/radioHourlyHandover.js';
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -183,6 +184,7 @@ let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
 state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
 const hourlySignalHistory=new Set();
 state.hourlySignal={stage:'SHADOW_ONLY',connectedToEncoder:false,enabled:false,last:null,nextBoundaryAt:null};
+state.hourlySignal.handover=null;
 // Observe configuration and predict hour-boundary action without ever changing decoder,
 // source authority, or the actual MP3 output. Real PCM integration follows an on-air soak.
 const hourlySignalTimer=setInterval(async()=>{
@@ -198,6 +200,19 @@ const hourlySignalTimer=setInterval(async()=>{
   if(hourlySignalHistory.has(plan.key)||!plan.key)return;
   hourlySignalHistory.add(plan.key);
   state.hourlySignal.last={...plan,at:new Date(nowMs).toISOString(),audible:false};
+  const ready=state.hourlySignal.preflight;
+  const signalReady=ready?.ok===true&&ready.assetId===plan.assetId&&ready.key?.startsWith(plan.key+':');
+  const handover=planHourlyTrackHandover({
+   enabled:HOURLY_SIGNAL_PCM_ENABLED&&config.enabled,
+   source:state.mode,atMs:nowMs,boundaryMs:boundary,
+   remainingMs,thresholdSeconds:config.thresholdSeconds,
+   maxDelaySeconds:config.maxDelaySeconds,mode:config.mode,
+   hasSignal:signalReady,live:publicLive.onAir,
+   scheduledSlotActive:!!state.slotId,
+   alreadyHandled:!!state.hourlySignal.playedKey&&state.hourlySignal.playedKey===plan.key
+  });
+  state.hourlySignal.handover={...handover,key:plan.key,audible:false,at:new Date(nowMs).toISOString()};
+  console.info('RADIO_HOURLY_HANDOVER_SHADOW',JSON.stringify(state.hourlySignal.handover));
   console.info('RADIO_HOURLY_SIGNAL_SHADOW',JSON.stringify(state.hourlySignal.last));
   if(hourlySignalHistory.size>72)hourlySignalHistory.delete(hourlySignalHistory.values().next().value);
  }catch(e){state.hourlySignal.lastError=String(e.message||e).slice(0,160);}
