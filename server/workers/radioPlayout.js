@@ -1009,7 +1009,7 @@ async function run() {
     // Separate opt-in for scheduled music; do not interfere with overlap or jingles.
     const scheduledHourlySource=HOURLY_SCHEDULED_PCM_ENABLED&&cursor.status==='SCHEDULED';
     const hourlyTrackTimer=HOURLY_SIGNAL_PCM_ENABLED&&
-      (cursor.status==='AUTO_DJ'&&!cursor.isJingle||scheduledHourlySource)&&!usableBlend
+      (cursor.status==='AUTO_DJ'&&!cursor.isJingle||scheduledHourlySource)
       ?setInterval(async()=>{
         if(hourlyPollBusy||stopping||publicLive.onAir||decoder!==child||hourlyInterrupt||hourlyFadeAtBytes!==null)return;
         hourlyPollBusy=true;
@@ -1059,6 +1059,10 @@ async function run() {
           // Fade out PCM already in the outgoing decoder; let the normal
           // per-track cleanup advance the queue before emitting the time signal.
           const fadeBytes=Math.max(4,Math.floor(config.fadeMs*PCM_BYTES_PER_MS/4)*4);
+          // Abort any outstanding musical overlap and its reserved decoder:
+          // the hour announcement must not be mixed with stale second-deck PCM.
+          liveMixDisabled=true;
+          if(prewarmed)discardPrewarm();
           hourlyFadeAtBytes=emittedBytes;
           hourlyCutAtBytes=emittedBytes+fadeBytes;
           state.hourlySignal.pendingInterrupt={key,assetId:asset.id,nextTrackId:nextTrackId||null};
@@ -1150,7 +1154,9 @@ async function run() {
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
-          const eligible=forwardEligible||reverseEligible||gridEligible;
+          // Hourly speech has higher priority than music-to-music overlap.
+          // Suppress dual-deck mixing once hourly fade is armed.
+          const eligible=hourlyFadeAtBytes===null&&(forwardEligible||reverseEligible||gridEligible);
           if(LIVE_SOURCE_CROSSFADE_ENABLED&&!liveMixSession&&!liveMixDisabled&&
              ['AUTO_DJ','SCHEDULED'].includes(cursor.status)&&
              Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
@@ -1239,7 +1245,7 @@ async function run() {
           if(hourlyCutAtBytes!==null&&emittedBytes>=hourlyCutAtBytes){
             hourlyInterrupt=true;child.kill('SIGTERM');break;
           }
-          const tail=output.subarray(plainBytes);
+          const tail=hourlyFadeAtBytes===null?output.subarray(plainBytes):Buffer.alloc(0);
           // Once all 72,000 frames have been mixed, later FFmpeg packets
           // must not be submitted to the closed overlap engine or routed as
           // a fallback from the already faded-out source.
