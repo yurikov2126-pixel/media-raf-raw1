@@ -209,6 +209,16 @@ const hourlySignalTimer=setInterval(async()=>{
   state.hourlySignal.last={...plan,at:new Date(nowMs).toISOString(),audible:false};
   const ready=state.hourlySignal.preflight;
   const signalReady=ready?.ok===true&&ready.assetId===plan.assetId&&ready.key?.startsWith(plan.key+':');
+  // A unique hour key is used, not the selected asset ID: reusing a time
+  // announcement for multiple hours remains valid. Log the exact decision
+  // when the hour arrives, even if no PCM can be emitted.
+  state.hourlySignal.hourCheck={
+    key:plan.key,assetId:plan.assetId||null,source:state.mode,
+    remainingMs,preflight:signalReady?'READY':ready?.reason||'NOT_READY',
+    configEnabled:config.enabled,pcmEnabled:HOURLY_SIGNAL_PCM_ENABLED,
+    at:new Date(nowMs).toISOString()
+  };
+  console.info('RADIO_HOURLY_HOUR_CHECK',JSON.stringify(state.hourlySignal.hourCheck));
   const handover=planHourlyTrackHandover({
    enabled:HOURLY_SIGNAL_PCM_ENABLED&&config.enabled,
    source:state.mode,atMs:nowMs,boundaryMs:boundary,
@@ -284,11 +294,12 @@ const hourlyPreflightTimer=setInterval(async()=>{
   if(!assetId)return;
   const key=new Date(next).toISOString()+':'+assetId;
   if(hourlyPreflightKey===key)return;
-  hourlyPreflightKey=key;
   const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
    select:{id:true,category:true,durationMs:true,storageKey:true}});
   const check=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
   state.hourlySignal.preflight={key,assetId,at:new Date().toISOString(),...check};
+  // A transient decoder/storage failure must be retried before the hour.
+  if(check.ok)hourlyPreflightKey=key;
   console.info('RADIO_HOURLY_SIGNAL_PREFLIGHT',JSON.stringify(state.hourlySignal.preflight));
  }catch(error){state.hourlySignal.preflight={ok:false,reason:'PREFLIGHT_ERROR',at:new Date().toISOString()};
   state.hourlySignal.lastError=String(error.message||error).slice(0,160);
@@ -688,7 +699,7 @@ async function emitHourlySignalAtSafeBoundary(){
      startAt:{gt:new Date(now)},playlist:{status:'APPROVED'}},
      select:{startAt:true},orderBy:{startAt:'asc'}});
    const candidate=reserveScheduledHourlySuccessor({
-     slot:timeline.slot,items:slot.playlist.items,
+     slot:{id:slot.id,playlistId:slot.playlistId,endAt:slot.endAt},items:slot.playlist.items,
      interruptedIndex:finished.index,
      nowMs:now,announcementMs:0
    });
@@ -1007,6 +1018,14 @@ async function run() {
     let hourlyFadeAtBytes=null;
     let hourlyCutAtBytes=null;
     let hourlyPollBusy=false;
+    const hourlyDecisionLogged=new Set();
+    const hourlyDecision=(key,reason,extra={})=>{
+      const dedupe=key+':'+reason;
+      if(hourlyDecisionLogged.has(dedupe))return;
+      hourlyDecisionLogged.add(dedupe);
+      if(hourlyDecisionLogged.size>24)hourlyDecisionLogged.delete(hourlyDecisionLogged.values().next().value);
+      console.info('RADIO_HOURLY_TRACK_GATE',JSON.stringify({key,reason,source:cursor.status,trackId:asset.id,...extra,at:new Date().toISOString()}));
+    };
     // Separate opt-in for scheduled music; do not interfere with overlap or jingles.
     const scheduledHourlySource=HOURLY_SCHEDULED_PCM_ENABLED&&cursor.status==='SCHEDULED';
     const hourlyTrackTimer=HOURLY_SIGNAL_PCM_ENABLED&&
@@ -1017,22 +1036,26 @@ async function run() {
         try{
           const config=await readTimeSignal();
           const now=Date.now(),hour=hourBoundary(now);
-          if(!config.enabled||now-hour>Math.min(config.maxDelaySeconds*1000,5000))return;
+          if(!config.enabled||now-hour>config.maxDelaySeconds*1000)return;
           const key=new Date(hour).toISOString();
           if(state.hourlySignal.playedKey===key)return;
           const itemId=config.hourAssetIds[(new Date(hour).getUTCHours()+3)%24];
-          if(!itemId||state.hourlySignal.preflight?.key!==key+':'+itemId||state.hourlySignal.preflight?.ok!==true)return;
+          if(!itemId){hourlyDecision(key,'NO_CONFIGURED_AUDIO');return;}
+          if(state.hourlySignal.preflight?.key!==key+':'+itemId||state.hourlySignal.preflight?.ok!==true){hourlyDecision(key,'PREFLIGHT_NOT_READY',{assetId:itemId});return;}
           const remainingPcm=Math.max(0,remaining-emittedBytes/PCM_BYTES_PER_MS);
           const plan=planHourlyTrackHandover({
             enabled:true,source:cursor.status,atMs:now,boundaryMs:hour,remainingMs:remainingPcm,
             thresholdSeconds:config.thresholdSeconds,maxDelaySeconds:config.maxDelaySeconds,
             mode:config.mode,hasSignal:true,live:publicLive.onAir
           });
-          if(plan.action!=='FADE_AND_ADVANCE')return;
+          if(plan.action!=='FADE_AND_ADVANCE'){
+            hourlyDecision(key,plan.reason||plan.action,{action:plan.action,remainingPcm});
+            return;
+          }
           const slot=await prisma.radioScheduleSlot.findFirst({where:{
             startAt:{lte:new Date(now+config.fadeMs+3000)},endAt:{gt:new Date(now)},
             playlist:{status:'APPROVED'}},select:{id:true}});
-          if(cursor.status==='AUTO_DJ'&&slot)return;
+          if(cursor.status==='AUTO_DJ'&&slot){hourlyDecision(key,'SCHEDULED_SLOT_PRIORITY',{slotId:slot.id});return;}
           if(scheduledHourlySource){
             if(!slot||slot.id!==cursor.slot.id||!nextTrackId)return;
             const [fullSlot,signal,nextSlot]=await Promise.all([
@@ -1056,7 +1079,7 @@ async function run() {
             });
             if(!authority.allowed)return;
           }
-          if(publicLive.onAir||decoder!==child)return;
+          if(publicLive.onAir||decoder!==child){hourlyDecision(key,publicLive.onAir?'LIVE_PRIORITY':'DECODER_CHANGED');return;}
           // Fade out PCM already in the outgoing decoder; let the normal
           // per-track cleanup advance the queue before emitting the time signal.
           const fadeBytes=Math.max(4,Math.floor(config.fadeMs*PCM_BYTES_PER_MS/4)*4);
@@ -1086,7 +1109,9 @@ async function run() {
           hourlyCutAtBytes=emittedBytes+fadeBytes;
           state.hourlySignal.pendingInterrupt={key,assetId:asset.id,nextTrackId:nextTrackId||null};
           console.info('RADIO_HOURLY_INTERRUPT_ARMED',JSON.stringify({key,trackId:asset.id,nextTrackId:nextTrackId||null,remainingPcm,fadeMs:config.fadeMs}));
-        }catch(error){state.hourlySignal.lastError='Hour interrupt: '+error.message;}
+        }catch(error){state.hourlySignal.lastError='Hour interrupt: '+error.message;
+          hourlyDecision(new Date(hourBoundary(Date.now())).toISOString(),'INTERRUPT_ERROR',{message:String(error.message||error).slice(0,160)});
+        }
         finally{hourlyPollBusy=false;}
       },250):null;
     let ended=false, exitCode=null;
