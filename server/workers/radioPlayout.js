@@ -54,6 +54,7 @@ import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
 import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
 import {planHourlyTrackHandover} from '../src/lib/radioHourlyHandover.js';
 import {scheduledHourlyAdmission} from '../src/lib/radioScheduledHourlyAdmission.js';
+import {reserveScheduledHourlySuccessor} from '../src/lib/radioScheduledHourlyCursor.js';
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
@@ -234,6 +235,26 @@ const hourlySignalTimer=setInterval(async()=>{
    });
    state.hourlySignal.scheduledAdmission={...admission,key:plan.key,at:new Date().toISOString(),
      connectedToEncoder:false};
+   if(admission.allowed){
+     const scheduled=await prisma.radioScheduleSlot.findUnique({
+       where:{id:slot.id},include:{playlist:{include:{
+         items:{orderBy:{position:'asc'},include:{asset:true}}
+       }}}
+     });
+     const active=resolveRadioCursor(scheduled?[scheduled]:[],nowMs,{
+       scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,
+       defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS
+     });
+     const snapshot=reserveScheduledHourlySuccessor({
+       slot:active.slot,items:scheduled?.playlist?.items||[],
+       interruptedIndex:active.track?.index??-1,
+       nowMs,announcementMs:signal?.durationMs||0
+     });
+     state.hourlySignal.scheduledSuccessor={...snapshot,connectedToEncoder:false,
+       key:plan.key,at:new Date().toISOString()};
+     console.info('RADIO_HOURLY_SCHEDULED_CURSOR_SHADOW',
+       JSON.stringify(state.hourlySignal.scheduledSuccessor));
+   }
    console.info('RADIO_HOURLY_SCHEDULED_AUTHORITY_SHADOW',
      JSON.stringify(state.hourlySignal.scheduledAdmission));
   }
