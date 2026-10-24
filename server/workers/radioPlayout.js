@@ -1062,7 +1062,21 @@ async function run() {
           // Abort any outstanding musical overlap and its reserved decoder:
           // the hour announcement must not be mixed with stale second-deck PCM.
           liveMixDisabled=true;
+          // A two-deck overlap can already own a decoder/iterator when the
+          // hourly marker is armed. Shut down its target before the next PCM
+          // packet; otherwise its tail might leak after the time signal.
+          if(liveMixSession){
+            try{liveMixSession.iterator?.return?.();}catch{}
+            liveMixSession=null;
+          }
+          if(preparedSlot?.child&&!preparedSlot.child.killed){
+            try{preparedSlot.child.kill('SIGTERM');}catch{}
+          }
           if(prewarmed)discardPrewarm();
+          console.info('RADIO_HOURLY_CROSSFADE_PREEMPT',JSON.stringify({
+            key,trackId:asset.id,source:cursor.status,
+            at:new Date().toISOString()
+          }));
           hourlyFadeAtBytes=emittedBytes;
           hourlyCutAtBytes=emittedBytes+fadeBytes;
           state.hourlySignal.pendingInterrupt={key,assetId:asset.id,nextTrackId:nextTrackId||null};
