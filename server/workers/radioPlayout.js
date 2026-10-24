@@ -1097,8 +1097,12 @@ async function run() {
             );}catch(e){state.lastError='Hourly overlap close: '+String(e.message||e).slice(0,120);}
             liveMixSession=null;
           }
-          if(preparedSlot?.child&&!preparedSlot.child.killed){
-            try{preparedSlot.child.kill('SIGTERM');}catch{}
+          // preparedSlot is block-scoped inside the PCM packet loop.
+          // The timer runs outside that scope; prewarmed is the canonical
+          // second-deck handle visible here.
+          const hourlyPreparedSlot=prewarmed;
+          if(hourlyPreparedSlot?.child&&!hourlyPreparedSlot.child.killed){
+            try{hourlyPreparedSlot.child.kill('SIGTERM');}catch{}
           }
           if(prewarmed)discardPrewarm();
           console.info('RADIO_HOURLY_CROSSFADE_PREEMPT',JSON.stringify({
