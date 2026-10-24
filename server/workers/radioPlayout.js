@@ -648,6 +648,8 @@ const liveScheduleTimer=PUBLIC_LIVE_ENABLED?setInterval(async()=>{
 },1000):null;
 liveScheduleTimer?.unref?.();
 
+// Real scheduled route is independently gated until end-to-end PCM tests pass.
+const HOURLY_SCHEDULED_PCM_ENABLED=process.env.RADIO_HOURLY_SCHEDULED_PCM_ENABLED==='true';
 async function emitHourlySignalAtSafeBoundary(){
  if(!HOURLY_SIGNAL_PCM_ENABLED||stopping||publicLive.onAir||state.mode!=='AUTO_DJ')return;
  const now=Date.now(),boundary=hourBoundary(now),lateness=now-boundary;
@@ -743,6 +745,16 @@ async function run() {
       const frame=publicLive.take(Date.now());
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
       continue;
+    }
+    // Scheduled playout must never be redirected without a verified reservation.
+    // A separate opt-in gate protects the production schedule during rollout.
+    if(HOURLY_SCHEDULED_PCM_ENABLED&&HOURLY_SIGNAL_PCM_ENABLED&&
+       state.mode==='SCHEDULED'&&state.hourlySignal?.scheduledSuccessor?.ok){
+      state.hourlySignal.scheduledPcmGate={
+        enabled:true,connectedToEncoder:false,reason:'AWAIT_VERIFIED_HANDOVER',
+        reservation:state.hourlySignal.scheduledSuccessor,
+        at:new Date().toISOString()
+      };
     }
     // First opt-in PCM stage: insert only after natural AutoDJ song completion.
     // Never preempt a song or an approved scheduled slot in this rollout.
