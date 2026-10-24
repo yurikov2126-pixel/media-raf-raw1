@@ -1006,9 +1006,10 @@ async function run() {
     let hourlyFadeAtBytes=null;
     let hourlyCutAtBytes=null;
     let hourlyPollBusy=false;
-    // Only the currently authorized AutoDJ music deck may be interrupted.
-    // Scheduled playlists and crossfade decks retain their original authority.
-    const hourlyTrackTimer=HOURLY_SIGNAL_PCM_ENABLED&&cursor.status==='AUTO_DJ'&&!cursor.isJingle&&!usableBlend
+    // Separate opt-in for scheduled music; do not interfere with overlap or jingles.
+    const scheduledHourlySource=HOURLY_SCHEDULED_PCM_ENABLED&&cursor.status==='SCHEDULED';
+    const hourlyTrackTimer=HOURLY_SIGNAL_PCM_ENABLED&&
+      (cursor.status==='AUTO_DJ'&&!cursor.isJingle||scheduledHourlySource)
       ?setInterval(async()=>{
         if(hourlyPollBusy||stopping||publicLive.onAir||decoder!==child||hourlyInterrupt||hourlyFadeAtBytes!==null)return;
         hourlyPollBusy=true;
@@ -1022,7 +1023,7 @@ async function run() {
           if(!itemId||state.hourlySignal.preflight?.key!==key+':'+itemId||state.hourlySignal.preflight?.ok!==true)return;
           const remainingPcm=Math.max(0,remaining-emittedBytes/PCM_BYTES_PER_MS);
           const plan=planHourlyTrackHandover({
-            enabled:true,source:'AUTO_DJ',atMs:now,boundaryMs:hour,remainingMs:remainingPcm,
+            enabled:true,source:cursor.status,atMs:now,boundaryMs:hour,remainingMs:remainingPcm,
             thresholdSeconds:config.thresholdSeconds,maxDelaySeconds:config.maxDelaySeconds,
             mode:config.mode,hasSignal:true,live:publicLive.onAir
           });
@@ -1030,10 +1031,38 @@ async function run() {
           const slot=await prisma.radioScheduleSlot.findFirst({where:{
             startAt:{lte:new Date(now+config.fadeMs+3000)},endAt:{gt:new Date(now)},
             playlist:{status:'APPROVED'}},select:{id:true}});
-          if(slot||publicLive.onAir||decoder!==child)return;
+          if(cursor.status==='AUTO_DJ'&&slot)return;
+          if(scheduledHourlySource){
+            if(!slot||slot.id!==cursor.slot.id||!nextTrackId)return;
+            const [fullSlot,signal,nextSlot]=await Promise.all([
+              prisma.radioScheduleSlot.findUnique({where:{id:slot.id},
+                include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:true}}}}}}),
+              prisma.radioAsset.findUnique({where:{id:itemId},
+                select:{id:true,durationMs:true,category:true}}),
+              prisma.radioScheduleSlot.findFirst({where:{
+                startAt:{gt:new Date(now)},playlist:{status:'APPROVED'}},
+                select:{startAt:true},orderBy:{startAt:'asc'}})
+            ]);
+            if(fullSlot?.playlist?.status!=='APPROVED'||signal?.category!=='TIME_SIGNAL'||
+               fullSlot.playlist.items[cursor.track.index]?.asset?.id!==asset.id||
+               fullSlot.playlist.items[cursor.track.index+1]?.asset?.id!==nextTrackId)return;
+            const authority=scheduledHourlyAdmission({
+              enabled:true,live:publicLive.onAir,slot:fullSlot,nowMs:now,
+              signalDurationMs:signal.durationMs,fadeMs:config.fadeMs,
+              trackRemainingMs:remainingPcm,trackCategory:asset.category,
+              maxDelaySeconds:config.maxDelaySeconds,
+              nextSlotStartMs:nextSlot?.startAt?.getTime()??null
+            });
+            if(!authority.allowed)return;
+          }
+          if(publicLive.onAir||decoder!==child)return;
           // Fade out PCM already in the outgoing decoder; let the normal
           // per-track cleanup advance the queue before emitting the time signal.
           const fadeBytes=Math.max(4,Math.floor(config.fadeMs*PCM_BYTES_PER_MS/4)*4);
+          // Abort any outstanding musical overlap and its reserved decoder:
+          // the hour announcement must not be mixed with stale second-deck PCM.
+          liveMixDisabled=true;
+          if(prewarmed)discardPrewarm();
           hourlyFadeAtBytes=emittedBytes;
           hourlyCutAtBytes=emittedBytes+fadeBytes;
           state.hourlySignal.pendingInterrupt={key,assetId:asset.id,nextTrackId:nextTrackId||null};
@@ -1125,7 +1154,9 @@ async function run() {
             (liveMixSession||emittedBytes<=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES))&&
             (liveMixSession||Math.abs((boundary-Date.now())-
               (fadeTotalBytes-emittedBytes)/PCM_BYTES_PER_MS)<900);
-          const eligible=forwardEligible||reverseEligible||gridEligible;
+          // Hourly speech has higher priority than music-to-music overlap.
+          // Suppress dual-deck mixing once hourly fade is armed.
+          const eligible=hourlyFadeAtBytes===null&&(forwardEligible||reverseEligible||gridEligible);
           if(LIVE_SOURCE_CROSSFADE_ENABLED&&!liveMixSession&&!liveMixDisabled&&
              ['AUTO_DJ','SCHEDULED'].includes(cursor.status)&&
              Number.isFinite(boundary)&&remaining>=LIVE_SOURCE_OVERLAP_MS&&
@@ -1214,7 +1245,7 @@ async function run() {
           if(hourlyCutAtBytes!==null&&emittedBytes>=hourlyCutAtBytes){
             hourlyInterrupt=true;child.kill('SIGTERM');break;
           }
-          const tail=output.subarray(plainBytes);
+          const tail=hourlyFadeAtBytes===null?output.subarray(plainBytes):Buffer.alloc(0);
           // Once all 72,000 frames have been mixed, later FFmpeg packets
           // must not be submitted to the closed overlap engine or routed as
           // a fallback from the already faded-out source.
@@ -1700,6 +1731,17 @@ async function run() {
     }
     if(generatedMs>=250&&['AUTO_DJ','SCHEDULED'].includes(cursor.status))
       lastDecodedSource={id:asset.id,mode:cursor.status,emittedMs:generatedMs,at:Date.now()};
+    if(hourlyInterrupt&&cursor.status==='SCHEDULED'){
+      lastCompletedScheduledTrack={
+        slotId:cursor.slot.id,playlistId:cursor.slot.playlistId,
+        index:cursor.track.index,assetId:asset.id,at:Date.now()
+      };
+      state.mode='SCHEDULED';
+      console.info('RADIO_HOURLY_SCHEDULED_INTERRUPT_COMMITTED',JSON.stringify({
+        slotId:cursor.slot.id,trackId:asset.id,index:cursor.track.index,
+        nextTrackId,at:new Date().toISOString()
+      }));
+    }
     if(hourlyInterrupt){
       console.info('RADIO_HOURLY_INTERRUPT_COMMITTED',JSON.stringify({
         assetId:asset.id,nextTrackId:nextTrackId||null,emittedMs:Math.round(generatedMs),
