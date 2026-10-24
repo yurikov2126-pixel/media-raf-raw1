@@ -52,6 +52,7 @@ import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
 import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
 import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
+import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
@@ -199,6 +200,33 @@ const hourlySignalTimer=setInterval(async()=>{
  }catch(e){state.hourlySignal.lastError=String(e.message||e).slice(0,160);}
 },5000);
 hourlySignalTimer.unref?.();
+let hourlyPreflightRunning=false;
+let hourlyPreflightKey=null;
+const hourlyPreflightTimer=setInterval(async()=>{
+ if(hourlyPreflightRunning||stopping||publicLive.onAir)return;
+ const now=Date.now(),next=nextHourlyBoundary(now);
+ // One safe, isolated decode check per upcoming hour; no route to station PCM.
+ if(next-now>90000)return;
+ const hour=(new Date(next).getUTCHours()+3)%24;
+ hourlyPreflightRunning=true;
+ try{
+  const config=await readTimeSignal();
+  if(!config.enabled)return;
+  const assetId=config.hourAssetIds[hour];
+  if(!assetId)return;
+  const key=new Date(next).toISOString()+':'+assetId;
+  if(hourlyPreflightKey===key)return;
+  hourlyPreflightKey=key;
+  const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
+   select:{id:true,category:true,durationMs:true,storageKey:true}});
+  const check=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
+  state.hourlySignal.preflight={key,assetId,at:new Date().toISOString(),...check};
+  console.info('RADIO_HOURLY_SIGNAL_PREFLIGHT',JSON.stringify(state.hourlySignal.preflight));
+ }catch(error){state.hourlySignal.preflight={ok:false,reason:'PREFLIGHT_ERROR',at:new Date().toISOString()};
+  state.hourlySignal.lastError=String(error.message||error).slice(0,160);
+ }finally{hourlyPreflightRunning=false;}
+},10000);
+hourlyPreflightTimer.unref?.();
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
