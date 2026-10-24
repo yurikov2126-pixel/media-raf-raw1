@@ -112,6 +112,7 @@ let resumeAutoDjAfterShow=false;
 let finishedScheduledSlot=null;
 // Populated only after a future verified audible hour marker; never by shadow decisions.
 let confirmedScheduledHourlyReservation=null;
+let lastCompletedScheduledTrack=null;
 const finishedScheduledTrackKeys=new Map();
 state.lastBoundary=null;
 state.sourceHandover={last:null,eligible:0,blocked:0,mixed:0,clockPlanned:0,clockRejected:0,lastClockPlan:null};
@@ -675,16 +676,19 @@ async function emitHourlySignalAtSafeBoundary(){
      }}}
    });
    if(slot?.playlist?.status!=='APPROVED'||slot.id!==state.slotId)return;
-   const timeline=resolveRadioCursor([slot],now,{
-     scheduledCrossfade:SCHEDULED_CROSSFADE_ENABLED,
-     defaultScheduledOverlapMs:SCHEDULED_DEFAULT_OVERLAP_MS
-   });
+   // A natural EOF has already moved the wall clock into the next song.
+   // Use the actually completed track, not the new wall-clock selection.
+   const finished=lastCompletedScheduledTrack;
+   if(!finished||finished.slotId!==slot.id||
+     finished.playlistId!==slot.playlistId||
+     Date.now()-finished.at>config.maxDelaySeconds*1000||
+     slot.playlist.items[finished.index]?.asset?.id!==finished.assetId)return;
    const next=await prisma.radioScheduleSlot.findFirst({where:{
      startAt:{gt:new Date(now)},playlist:{status:'APPROVED'}},
      select:{startAt:true},orderBy:{startAt:'asc'}});
    const candidate=reserveScheduledHourlySuccessor({
      slot:timeline.slot,items:slot.playlist.items,
-     interruptedIndex:timeline.track?.index??-1,
+     interruptedIndex:finished.index,
      nowMs:now,announcementMs:0
    });
    if(!candidate.ok)return;
@@ -773,7 +777,7 @@ async function emitHourlySignalAtSafeBoundary(){
      slot:fresh?.playlist?.status==='APPROVED'?fresh:null,
      items:fresh?.playlist?.items,nowMs:Date.now(),live:publicLive.onAir
    });
-   if(verified.ok)confirmedScheduledHourlyReservation=candidate;
+   if(verified.ok){confirmedScheduledHourlyReservation=candidate;lastCompletedScheduledTrack=null;}
  }
  state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
@@ -1652,6 +1656,12 @@ async function run() {
       else state.transitions.crossfadeFailed++;
     }
     if(cursor.status==='SCHEDULED'){
+      if(!hourlyInterrupt&&exitCode===0&&!truncatedAtBoundary){
+        lastCompletedScheduledTrack={
+          slotId:cursor.slot.id,playlistId:cursor.slot.playlistId,
+          index:cursor.track?.index??-1,assetId:asset.id,at:Date.now()
+        };
+      }
       const key=cursor.slot.id+':'+asset.id+':'+(cursor.track?.index??0);
       for(const [old,expiry] of finishedScheduledTrackKeys)if(expiry<Date.now())finishedScheduledTrackKeys.delete(old);
       if(!finishedScheduledTrackKeys.has(key)){
