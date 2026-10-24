@@ -50,6 +50,9 @@ import { RadioPublicLiveGate } from '../src/lib/radioPublicLiveGate.js';
 import { RadioWorkerSwitchShadow } from '../src/lib/radioWorkerSwitchShadow.js';
 import { PcmGatewayClock } from '../src/lib/radioPcmGatewayClock.js';
 import { readJingles } from '../src/lib/radioJingles.js';
+import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
+import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
+import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
@@ -175,6 +178,55 @@ state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,..
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED!=='false';
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
 state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
+const hourlySignalHistory=new Set();
+state.hourlySignal={stage:'SHADOW_ONLY',connectedToEncoder:false,enabled:false,last:null,nextBoundaryAt:null};
+// Observe configuration and predict hour-boundary action without ever changing decoder,
+// source authority, or the actual MP3 output. Real PCM integration follows an on-air soak.
+const hourlySignalTimer=setInterval(async()=>{
+ try{
+  const config=await readTimeSignal();
+  const nowMs=Date.now(),boundary=hourBoundary(nowMs);
+  state.hourlySignal.enabled=config.enabled;
+  state.hourlySignal.nextBoundaryAt=new Date(nextHourlyBoundary(nowMs)).toISOString();
+  if(!config.enabled||nowMs-boundary>Math.min(config.maxDelaySeconds*1000,60000))return;
+  const current=state.playout;
+  const remainingMs=current?Math.max(0,(current.durationMs||0)-(current.seekMs||0)-(current.emittedMs||0)):null;
+  const plan=planHourlySignal({settings:config,nowMs,mode:state.mode,remainingMs,activeHourKeys:[...hourlySignalHistory]});
+  if(hourlySignalHistory.has(plan.key)||!plan.key)return;
+  hourlySignalHistory.add(plan.key);
+  state.hourlySignal.last={...plan,at:new Date(nowMs).toISOString(),audible:false};
+  console.info('RADIO_HOURLY_SIGNAL_SHADOW',JSON.stringify(state.hourlySignal.last));
+  if(hourlySignalHistory.size>72)hourlySignalHistory.delete(hourlySignalHistory.values().next().value);
+ }catch(e){state.hourlySignal.lastError=String(e.message||e).slice(0,160);}
+},5000);
+hourlySignalTimer.unref?.();
+let hourlyPreflightRunning=false;
+let hourlyPreflightKey=null;
+const hourlyPreflightTimer=setInterval(async()=>{
+ if(hourlyPreflightRunning||stopping||publicLive.onAir)return;
+ const now=Date.now(),next=nextHourlyBoundary(now);
+ // One safe, isolated decode check per upcoming hour; no route to station PCM.
+ if(next-now>90000)return;
+ const hour=(new Date(next).getUTCHours()+3)%24;
+ hourlyPreflightRunning=true;
+ try{
+  const config=await readTimeSignal();
+  if(!config.enabled)return;
+  const assetId=config.hourAssetIds[hour];
+  if(!assetId)return;
+  const key=new Date(next).toISOString()+':'+assetId;
+  if(hourlyPreflightKey===key)return;
+  hourlyPreflightKey=key;
+  const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
+   select:{id:true,category:true,durationMs:true,storageKey:true}});
+  const check=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
+  state.hourlySignal.preflight={key,assetId,at:new Date().toISOString(),...check};
+  console.info('RADIO_HOURLY_SIGNAL_PREFLIGHT',JSON.stringify(state.hourlySignal.preflight));
+ }catch(error){state.hourlySignal.preflight={ok:false,reason:'PREFLIGHT_ERROR',at:new Date().toISOString()};
+  state.hourlySignal.lastError=String(error.message||error).slice(0,160);
+ }finally{hourlyPreflightRunning=false;}
+},10000);
+hourlyPreflightTimer.unref?.();
 
 function authorized(req) {
   const provided=req.headers['x-radio-worker-secret'];
