@@ -601,7 +601,18 @@ async function emitHourlySignalAtSafeBoundary(){
    await prisma.setting.create({data:{key:'radio_hourly_played_'+key,value:JSON.stringify({assetId,claimedAt:new Date().toISOString()})}});
  }catch(e){if(e.code==='P2002')return;throw e;}
  state.hourlySignal.playedKey=key;
+ // The hour marker is a new source, not a continuation of an earlier
+ // AutoDJ/scheduled PCM overlap. Drop every stale source reservation.
  discardPrewarm();
+ lastDecodedSource=null;
+ previousSourcePcmTail=null;
+ shadowOverlap=null;
+ reverseReservedTarget=null;
+ reverseMixAuthorityAt=null;
+ reverseMixAuthorityReservation=null;
+ scheduledEntryOverlap=null;
+ musicSinceJingle=0;
+ jinglePending=false;
  const file=path.join(assetsRoot,path.basename(asset.storageKey));
  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
    '-i',file,'-t',String(asset.durationMs/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
@@ -634,6 +645,11 @@ async function emitHourlySignalAtSafeBoundary(){
      startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
    if(nextSlot)broken=true;
  }
+ // The next run() cycle must select a fresh source. No stale TIME_SIGNAL
+ // identity is retained as the current music track.
+ state.playout=null;
+ state.trackId=null;
+ state.slotId=null;
  state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
 }
