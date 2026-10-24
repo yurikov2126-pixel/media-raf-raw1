@@ -825,7 +825,8 @@ async function run() {
     // Revalidate the scheduled candidate against the authoritative slot and
     // playlist before considering it for promotion to audible PCM.
     if(HOURLY_SCHEDULED_PCM_ENABLED&&HOURLY_SIGNAL_PCM_ENABLED&&
-       state.mode==='SCHEDULED'&&state.hourlySignal?.scheduledSuccessor?.ok){
+       state.mode==='SCHEDULED'&&state.hourlySignal?.scheduledSuccessor?.ok&&
+       state.hourlySignal.scheduledPcmGate?.key!==state.hourlySignal.scheduledSuccessor.key){
       const candidate=state.hourlySignal.scheduledSuccessor;
       try{
         const slot=await prisma.radioScheduleSlot.findUnique({
@@ -847,6 +848,7 @@ async function run() {
           JSON.stringify(state.hourlySignal.scheduledPcmGate));
       }catch(e){state.hourlySignal.scheduledPcmGate={
         enabled:true,connectedToEncoder:false,reason:'AUTHORITY_CHECK_FAILED',
+        key:state.hourlySignal.scheduledSuccessor?.key,
         at:new Date().toISOString()};
       }
     }
