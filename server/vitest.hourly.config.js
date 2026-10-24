@@ -13,6 +13,7 @@ export default defineConfig({
       'tests/radioHourlyHandover.test.js',
       'tests/radioHourlyPcmBounds.test.js',
       'tests/radioHourlyPcmIntegration.test.js',
+      'tests/radioHourlyScheduledOnAir.test.js',
       'tests/radioScheduledHourlyAdmission.test.js',
       'tests/radioScheduledHourlyCursor.test.js',
       'tests/radioScheduledHourlyResume.test.js',
