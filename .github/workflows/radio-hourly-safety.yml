@@ -11,7 +11,6 @@ on:
       - 'server/vitest.hourly.config.js'
       - 'server/package.json'
       - 'server/package-lock.json'
-      - 'server/vitest.hourly.config.js'
       - '.github/workflows/radio-hourly-safety.yml'
   push:
     branches: [main]
@@ -21,6 +20,7 @@ on:
       - 'server/src/lib/radioScheduledHourly*.js'
       - 'server/tests/radioHourly*.test.js'
       - 'server/tests/radioScheduledHourly*.test.js'
+      - 'server/vitest.hourly.config.js'
       - '.github/workflows/radio-hourly-safety.yml'
 jobs:
   hourly-safety:
