@@ -575,6 +575,11 @@ async function emitHourlySignalAtSafeBoundary(){
  const ready=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
  if(!ready.ok){state.hourlySignal.last={key,status:'SKIPPED',reason:ready.reason};return;}
  if(publicLive.onAir||stopping||Date.now()-boundary>config.maxDelaySeconds*1000)return;
+ // Revalidate scheduling after the asynchronous FFmpeg preflight: a slot may
+ // have been approved while this file was being checked.
+ const newSlot=await prisma.radioScheduleSlot.findFirst({where:{
+   startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
+ if(newSlot)return;
  // DB unique Setting.key is a durable at-most-once fence across worker restarts.
  // Claim *before* first PCM byte; any failure is a skip, never a repeated signal.
  try{
@@ -593,10 +598,18 @@ async function emitHourlySignalAtSafeBoundary(){
    state.mode='TIME_SIGNAL';state.trackId=asset.id;state.playout=null;
    for await(const pcm of child.stdout){
      if(stopping||publicLive.onAir){child.kill('SIGTERM');broken=true;break;}
+     // A newly starting approved broadcast has priority over the hour marker.
+     // Keep this check cheap: no database query inside the PCM chunk loop.
+     if(state.slotId){child.kill('SIGTERM');broken=true;break;}
      if(!encoder.stdin.write(pcm))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
      bytes+=pcm.length;
    }
  }catch{broken=true;child.kill('SIGTERM');}
+ if(!publicLive.onAir){
+   const nextSlot=await prisma.radioScheduleSlot.findFirst({where:{
+     startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
+   if(nextSlot)broken=true;
+ }
  state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
 }
