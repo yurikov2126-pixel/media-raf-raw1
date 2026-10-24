@@ -1,0 +1,44 @@
+name: Radio hourly playout safety
+on:
+  pull_request:
+    paths:
+      - 'server/workers/radioPlayout.js'
+      - 'server/src/lib/radioHourly*.js'
+      - 'server/src/lib/radioScheduledHourly*.js'
+      - 'server/src/lib/radioPcmSourceFades.js'
+      - 'server/tests/radioHourly*.test.js'
+      - 'server/tests/radioScheduledHourly*.test.js'
+      - 'server/vitest.hourly.config.js'
+      - 'server/package.json'
+      - 'server/package-lock.json'
+      - '.github/workflows/radio-hourly-safety.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/workers/radioPlayout.js'
+      - 'server/src/lib/radioHourly*.js'
+      - 'server/src/lib/radioScheduledHourly*.js'
+      - 'server/tests/radioHourly*.test.js'
+      - 'server/tests/radioScheduledHourly*.test.js'
+      - 'server/vitest.hourly.config.js'
+      - '.github/workflows/radio-hourly-safety.yml'
+jobs:
+  hourly-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+      - name: Validate continuous PCM worker syntax
+        run: node --check workers/radioPlayout.js
+      - name: Execute hourly, scheduled, PCM and fade regressions
+        run: npx vitest run --config vitest.hourly.config.js
