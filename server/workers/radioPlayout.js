@@ -176,6 +176,9 @@ const shadowStatus=()=>({enabled:TIMED_PCM_SHADOW_ENABLED,connectedToEncoder:fal
 state.livePcmIntake={enabled:LIVE_PCM_INTAKE_ENABLED,connectedToEncoder:false,...liveIntake.snapshot()};
 // Saved radio jingle settings are the activation switch; ops can explicitly disable at Worker level.
 const JINGLE_PLAYOUT_ENABLED=process.env.RADIO_JINGLE_PLAYOUT_ENABLED!=='false';
+// An additional deployment gate is required even when the saved UI switch is enabled.
+const HOURLY_SIGNAL_PCM_ENABLED=process.env.RADIO_HOURLY_SIGNAL_PCM_ENABLED==='true';
+
 let musicSinceJingle=0,jinglesPlayed=0,jinglePending=false;
 state.jingles={enabled:JINGLE_PLAYOUT_ENABLED,played:0,musicSinceJingle:0};
 const hourlySignalHistory=new Set();
@@ -553,6 +556,50 @@ const liveScheduleTimer=PUBLIC_LIVE_ENABLED?setInterval(async()=>{
 },1000):null;
 liveScheduleTimer?.unref?.();
 
+async function emitHourlySignalAtSafeBoundary(){
+ if(!HOURLY_SIGNAL_PCM_ENABLED||stopping||publicLive.onAir||state.mode!=='AUTO_DJ')return;
+ const now=Date.now(),boundary=hourBoundary(now),lateness=now-boundary;
+ let config;
+ try{config=await readTimeSignal();}catch{return;}
+ if(!config.enabled||lateness>config.maxDelaySeconds*1000)return;
+ const hour=(new Date(boundary).getUTCHours()+3)%24,assetId=config.hourAssetIds[hour];
+ if(!assetId)return;
+ const key=new Date(boundary).toISOString();
+ if(state.hourlySignal?.playedKey===key)return;
+ // Preserve scheduled authority: never inject a signal while a grid slot owns the PCM.
+ const scheduled=await prisma.radioScheduleSlot.findFirst({where:{
+   startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
+ if(scheduled)return;
+ const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
+   select:{id:true,category:true,durationMs:true,storageKey:true}});
+ const ready=await preflightTimeSignal({asset,assetsRoot,ffmpeg});
+ if(!ready.ok){state.hourlySignal.last={key,status:'SKIPPED',reason:ready.reason};return;}
+ if(publicLive.onAir||stopping||Date.now()-boundary>config.maxDelaySeconds*1000)return;
+ // DB unique Setting.key is a durable at-most-once fence across worker restarts.
+ // Claim *before* first PCM byte; any failure is a skip, never a repeated signal.
+ try{
+   await prisma.setting.create({data:{key:'radio_hourly_played_'+key,value:JSON.stringify({assetId,claimedAt:new Date().toISOString()})}});
+ }catch(e){if(e.code==='P2002')return;throw e;}
+ state.hourlySignal.playedKey=key;
+ discardPrewarm();
+ const file=path.join(assetsRoot,path.basename(asset.storageKey));
+ const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
+   '-i',file,'-t',String(asset.durationMs/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
+   {stdio:['ignore','pipe','pipe']});
+ let bytes=0,broken=false;
+ child.on('error',()=>{broken=true;});
+ child.stderr.on('data',buf=>{state.lastError='Hour signal decoder: '+buf.toString().slice(-160);});
+ try{
+   state.mode='TIME_SIGNAL';state.trackId=asset.id;state.playout=null;
+   for await(const pcm of child.stdout){
+     if(stopping||publicLive.onAir){child.kill('SIGTERM');broken=true;break;}
+     if(!encoder.stdin.write(pcm))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+     bytes+=pcm.length;
+   }
+ }catch{broken=true;child.kill('SIGTERM');}
+ state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
+ console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
+}
 async function run() {
   startEncoder();
   while(!stopping) {
@@ -567,6 +614,9 @@ async function run() {
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
       continue;
     }
+    // First opt-in PCM stage: insert only after natural AutoDJ song completion.
+    // Never preempt a song or an approved scheduled slot in this rollout.
+    try{await emitHourlySignalAtSafeBoundary();}catch(e){state.hourlySignal.lastError=String(e.message||e).slice(0,160);}
     let cursor,asset,nextTrackId,isLastScheduledTrack,delayedShiftProof;
     try { ({cursor,asset,nextTrackId,isLastScheduledTrack,delayedShiftProof}=await current()); }
     catch(e) { state.lastError=e.message; state.mode='ERROR'; await new Promise(r=>setTimeout(r,1000));continue; }
