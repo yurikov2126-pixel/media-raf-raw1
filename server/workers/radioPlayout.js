@@ -28,6 +28,7 @@ import { boundScheduledPcm } from '../src/lib/radioSchedulePcmGate.js';
 import { isPcmBoundaryAligned, reverseAuthorityFresh } from '../src/lib/radioPcmBoundaryClock.js';
 import {createCrossfadeQualityState,observePcmBoundary} from '../src/lib/radioCrossfadeHealth.js';
 import { fadePcmChunk,DEFAULT_SOURCE_FADE_MS,PCM_BYTES_PER_MS } from '../src/lib/radioPcmSourceFades.js';
+import {boundHourlyPcmChunk,hourlySlotStillAuthorized} from '../src/lib/radioHourlyPcmBounds.js';
 import { readAutoDjSettings, selectAutoDjAssets, autoDjCursor } from '../src/lib/radioAutoDj.js';
 import { readAudioProcessing, audioProcessingFilter } from '../src/lib/radioAudioProcessing.js';
 import { readCues, cueAssets, cueCursor } from '../src/lib/radioAudioCue.js';
@@ -742,7 +743,7 @@ async function emitHourlySignalAtSafeBoundary(){
    try{
      const active=await prisma.radioScheduleSlot.findFirst({where:{
        startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
-     if(authorizedScheduledSlotId?active?.id!==authorizedScheduledSlotId:!!active){broken=true;child.kill('SIGTERM');}
+     if(!hourlySlotStillAuthorized({expectedSlotId:authorizedScheduledSlotId,activeSlotId:active?.id||null})){broken=true;child.kill('SIGTERM');}
    }catch{broken=true;child.kill('SIGTERM');}
    finally{slotCheckBusy=false;}
  },500);
@@ -761,7 +762,7 @@ async function emitHourlySignalAtSafeBoundary(){
  if(!publicLive.onAir){
    const nextSlot=await prisma.radioScheduleSlot.findFirst({where:{
      startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
-   if(authorizedScheduledSlotId?nextSlot?.id!==authorizedScheduledSlotId:!!nextSlot)broken=true;
+   if(!hourlySlotStillAuthorized({expectedSlotId:authorizedScheduledSlotId,activeSlotId:nextSlot?.id||null}))broken=true;
  }
  // The next run() cycle must select a fresh source. No stale TIME_SIGNAL
  // identity is retained as the current music track.
@@ -1066,7 +1067,11 @@ async function run() {
           // hourly marker is armed. Shut down its target before the next PCM
           // packet; otherwise its tail might leak after the time signal.
           if(liveMixSession){
-            try{liveMixSession.iterator?.return?.();}catch{}
+            // AsyncIterator.return() returns a promise. Handle rejection to
+            // avoid an unhandled rejection crashing the worker mid-hour.
+            try{Promise.resolve(liveMixSession.iterator?.return?.()).catch(
+              e=>{state.lastError='Hourly overlap close: '+String(e.message||e).slice(0,120);}
+            );}catch(e){state.lastError='Hourly overlap close: '+String(e.message||e).slice(0,120);}
             liveMixSession=null;
           }
           if(preparedSlot?.child&&!preparedSlot.child.killed){
@@ -1240,7 +1245,11 @@ async function run() {
           const safeFadeOut=fadeOut||boundaryFade.fadeOut;
           const safeFadeMs=boundaryFade.fadeOut?boundaryFade.fadeMs:DEFAULT_SOURCE_FADE_MS;
           const windowStart=Math.max(0,fadeTotalBytes-LIVE_SOURCE_OVERLAP_BYTES);
-          const hourBytesLeft=hourlyCutAtBytes===null?output.length:Math.max(0,hourlyCutAtBytes-emittedBytes);
+          const hourBound=boundHourlyPcmChunk({
+            chunkBytes:output.length,emittedBytes,
+            cutAtBytes:hourlyCutAtBytes,fadeAtBytes:hourlyFadeAtBytes
+          });
+          const hourBytesLeft=hourBound.takeBytes;
           const plainBytes=Math.min(eligible?Math.min(output.length,Math.max(0,windowStart-emittedBytes)):output.length,hourBytesLeft);
           if(plainBytes){
             const plain=fadePcmChunk(output.subarray(0,plainBytes),{
@@ -1257,6 +1266,10 @@ async function run() {
             emittedBytes+=plain.length;
           }
           if(hourlyCutAtBytes!==null&&emittedBytes>=hourlyCutAtBytes){
+            state.hourlySignal.lastFade={key:state.hourlySignal.pendingInterrupt?.key||null,
+              source:cursor.status,trackId:asset.id,fadeBytes:hourlyCutAtBytes-hourlyFadeAtBytes,
+              droppedDecoderBytes:hourBound.dropBytes,at:new Date().toISOString()};
+            console.info('RADIO_HOURLY_PCM_BOUNDARY',JSON.stringify(state.hourlySignal.lastFade));
             hourlyInterrupt=true;child.kill('SIGTERM');break;
           }
           const tail=hourlyFadeAtBytes===null?output.subarray(plainBytes):Buffer.alloc(0);
