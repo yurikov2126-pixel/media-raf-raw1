@@ -54,7 +54,7 @@ import { readTimeSignal } from '../src/lib/radioTimeSignal.js';
 import {planHourlySignal,nextHourlyBoundary,hourBoundary} from '../src/lib/radioHourlySignalPlanner.js';
 import {planHourlyTrackHandover} from '../src/lib/radioHourlyHandover.js';
 import {scheduledHourlyAdmission} from '../src/lib/radioScheduledHourlyAdmission.js';
-import {reserveScheduledHourlySuccessor} from '../src/lib/radioScheduledHourlyCursor.js';
+import {reserveScheduledHourlySuccessor,resolveScheduledHourlySuccessor} from '../src/lib/radioScheduledHourlyCursor.js';
 import {resolveHourlyScheduledResume} from '../src/lib/radioScheduledHourlyResume.js';
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
@@ -648,6 +648,8 @@ const liveScheduleTimer=PUBLIC_LIVE_ENABLED?setInterval(async()=>{
 },1000):null;
 liveScheduleTimer?.unref?.();
 
+// Real scheduled route is independently gated until end-to-end PCM tests pass.
+const HOURLY_SCHEDULED_PCM_ENABLED=process.env.RADIO_HOURLY_SCHEDULED_PCM_ENABLED==='true';
 async function emitHourlySignalAtSafeBoundary(){
  if(!HOURLY_SIGNAL_PCM_ENABLED||stopping||publicLive.onAir||state.mode!=='AUTO_DJ')return;
  const now=Date.now(),boundary=hourBoundary(now),lateness=now-boundary;
@@ -743,6 +745,34 @@ async function run() {
       const frame=publicLive.take(Date.now());
       if(frame){if(!encoder.stdin.write(frame))await new Promise(resolve=>encoder.stdin.once('drain',resolve));await new Promise(resolve=>setTimeout(resolve,20));}
       continue;
+    }
+    // Revalidate the scheduled candidate against the authoritative slot and
+    // playlist before considering it for promotion to audible PCM.
+    if(HOURLY_SCHEDULED_PCM_ENABLED&&HOURLY_SIGNAL_PCM_ENABLED&&
+       state.mode==='SCHEDULED'&&state.hourlySignal?.scheduledSuccessor?.ok){
+      const candidate=state.hourlySignal.scheduledSuccessor;
+      try{
+        const slot=await prisma.radioScheduleSlot.findUnique({
+          where:{id:candidate.slotId},include:{playlist:{include:{
+            items:{orderBy:{position:'asc'},include:{asset:true}}
+          }}}
+        });
+        const validation=resolveScheduledHourlySuccessor(candidate,{
+          slot:slot?.playlist?.status==='APPROVED'?slot:null,
+          items:slot?.playlist?.items,nowMs:Date.now(),live:publicLive.onAir
+        });
+        state.hourlySignal.scheduledPcmGate={
+          enabled:true,connectedToEncoder:false,
+          reason:validation.ok?'PCM_COMMIT_NOT_ARMED':validation.reason,
+          validAt:new Date().toISOString(),key:candidate.key,
+          assetId:validation.ok?validation.assetId:null
+        };
+        console.info('RADIO_HOURLY_SCHEDULED_PCM_GATE',
+          JSON.stringify(state.hourlySignal.scheduledPcmGate));
+      }catch(e){state.hourlySignal.scheduledPcmGate={
+        enabled:true,connectedToEncoder:false,reason:'AUTHORITY_CHECK_FAILED',
+        at:new Date().toISOString()};
+      }
     }
     // First opt-in PCM stage: insert only after natural AutoDJ song completion.
     // Never preempt a song or an approved scheduled slot in this rollout.
