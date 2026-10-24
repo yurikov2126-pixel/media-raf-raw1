@@ -695,7 +695,7 @@ async function emitHourlySignalAtSafeBoundary(){
      finished.playlistId!==slot.playlistId||
      Date.now()-finished.at>config.maxDelaySeconds*1000||
      slot.playlist.items[finished.index]?.asset?.id!==finished.assetId)return;
-   const next=await prisma.radioScheduleSlot.findFirst({where:{
+   const upcoming=await prisma.radioScheduleSlot.findFirst({where:{
      startAt:{gt:new Date(now)},playlist:{status:'APPROVED'}},
      select:{startAt:true},orderBy:{startAt:'asc'}});
    const candidate=reserveScheduledHourlySuccessor({
@@ -704,7 +704,7 @@ async function emitHourlySignalAtSafeBoundary(){
      nowMs:now,announcementMs:0
    });
    if(!candidate.ok)return;
-   hourlyScheduledReservation={candidate,slot};
+   hourlyScheduledReservation={candidate,slot,nextSlotStartMs:upcoming?.startAt?.getTime()??null};
  }
  const asset=await prisma.radioAsset.findUnique({where:{id:assetId},
    select:{id:true,category:true,durationMs:true,storageKey:true}});
@@ -720,9 +720,14 @@ async function emitHourlySignalAtSafeBoundary(){
    const check=scheduledHourlyAdmission({
      enabled:true,slot:hourlyScheduledReservation.slot,
      nowMs:Date.now(),signalDurationMs:asset.durationMs,
-     fadeMs:0,trackRemainingMs:0,maxDelaySeconds:config.maxDelaySeconds
+     fadeMs:0,trackRemainingMs:0,maxDelaySeconds:config.maxDelaySeconds,
+     nextSlotStartMs:hourlyScheduledReservation.nextSlotStartMs,
+     live:publicLive.onAir
    });
-   if(!check.allowed)return;
+   if(!check.allowed){
+     console.info('RADIO_HOURLY_SCHEDULED_PCM_VETO',JSON.stringify({key,reason:check.reason,slotId:newSlot.id}));
+     return;
+   }
  }else if(newSlot)return;
  // DB unique Setting.key is a durable at-most-once fence across worker restarts.
  // Claim *before* first PCM byte; any failure is a skip, never a repeated signal.
@@ -789,7 +794,16 @@ async function emitHourlySignalAtSafeBoundary(){
      slot:fresh?.playlist?.status==='APPROVED'?fresh:null,
      items:fresh?.playlist?.items,nowMs:Date.now(),live:publicLive.onAir
    });
-   if(verified.ok){confirmedScheduledHourlyReservation=candidate;lastCompletedScheduledTrack=null;}
+   if(verified.ok){
+     confirmedScheduledHourlyReservation=candidate;
+     lastCompletedScheduledTrack=null;
+     console.info('RADIO_HOURLY_SCHEDULED_RESUME_COMMITTED',JSON.stringify({
+       key,slotId:candidate.slotId,assetId:candidate.targetAssetId,
+       index:candidate.targetIndex,resumeAfterMs:candidate.resumeAfterMs
+     }));
+   }else{
+     console.warn('RADIO_HOURLY_SCHEDULED_RESUME_VETO',JSON.stringify({key,reason:verified.reason}));
+   }
  }
  state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
