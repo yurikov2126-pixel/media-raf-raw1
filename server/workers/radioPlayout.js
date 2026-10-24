@@ -591,20 +591,29 @@ async function emitHourlySignalAtSafeBoundary(){
  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
    '-i',file,'-t',String(asset.durationMs/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
    {stdio:['ignore','pipe','pipe']});
- let bytes=0,broken=false;
+ let bytes=0,broken=false,slotCheckBusy=false;
+ const slotGuard=setInterval(async()=>{
+   if(slotCheckBusy||broken||stopping||publicLive.onAir)return;
+   slotCheckBusy=true;
+   try{
+     const active=await prisma.radioScheduleSlot.findFirst({where:{
+       startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
+     if(active){broken=true;child.kill('SIGTERM');}
+   }catch{broken=true;child.kill('SIGTERM');}
+   finally{slotCheckBusy=false;}
+ },500);
  child.on('error',()=>{broken=true;});
  child.stderr.on('data',buf=>{state.lastError='Hour signal decoder: '+buf.toString().slice(-160);});
  try{
    state.mode='TIME_SIGNAL';state.trackId=asset.id;state.playout=null;
    for await(const pcm of child.stdout){
      if(stopping||publicLive.onAir){child.kill('SIGTERM');broken=true;break;}
-     // A newly starting approved broadcast has priority over the hour marker.
-     // Keep this check cheap: no database query inside the PCM chunk loop.
-     if(state.slotId){child.kill('SIGTERM');broken=true;break;}
+
      if(!encoder.stdin.write(pcm))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
      bytes+=pcm.length;
    }
  }catch{broken=true;child.kill('SIGTERM');}
+ clearInterval(slotGuard);
  if(!publicLive.onAir){
    const nextSlot=await prisma.radioScheduleSlot.findFirst({where:{
      startAt:{lte:new Date()},endAt:{gt:new Date()},playlist:{status:'APPROVED'}},select:{id:true}});
