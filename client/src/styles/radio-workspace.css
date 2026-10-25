@@ -350,3 +350,46 @@
 .radio-workspace.radio-v4 .radio-v42-queue-details button{background:var(--r-card);color:var(--r-accent);border-color:var(--r-line)}
 .radio-workspace.radio-v4 .radio-v42-queue-details button:hover{background:var(--r-hover)}
 .radio-workspace.radio-v4 .radio-v42-queue :is(.opacity-55,.opacity-65,.opacity-70,.opacity-80){color:var(--r-muted);opacity:1}
+
+
+/* Radio navigation 4.3: every destination is always visible, including when
+   a different group is active. Scroll the navigation, not the radio content. */
+.radio-workspace.radio-v4 .radio-v3-sidebar{
+  max-height:calc(100dvh - 1rem);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:var(--r-line) transparent;
+}
+.radio-workspace.radio-v4 .radio-nav-list{display:flex;flex-direction:column;gap:.55rem}
+.radio-workspace.radio-v4 .radio-nav-section{display:flex;flex-direction:column;gap:.15rem}
+.radio-workspace.radio-v4 .radio-nav-section + .radio-nav-section{
+  border-top:1px solid var(--r-line);
+  padding-top:.45rem;
+}
+.radio-workspace.radio-v4 .radio-v3-sidebar .radio-nav-group{
+  color:var(--r-muted);
+  opacity:1;
+  cursor:default;
+}
+.radio-workspace.radio-v4 .radio-nav-items{display:flex;flex-direction:column;gap:2px}
+.radio-workspace.radio-v4 .radio-v3-sidebar .radio-nav-item{min-height:44px}
+.radio-workspace.radio-v4 .radio-v3-sidebar .radio-nav-item[aria-current="page"]{
+  font-weight:700;
+}
+@media (max-width:1023px){
+ .radio-workspace.radio-v4 .radio-v3-sidebar{
+   top:0;
+   bottom:0;
+   height:100dvh;
+   max-height:100dvh;
+   position:fixed;
+   left:0;
+   border-radius:0 18px 18px 0;
+ }
+ .radio-workspace.radio-v4 .radio-nav-mobile-heading{
+   position:sticky;top:0;z-index:1;
+   background:var(--r-card);
+ }
+}
