@@ -1285,6 +1285,7 @@ model RadioAsset {
 }
 
 model RadioPlaylist {
+  archivedAt DateTime?
   id          String   @id @default(cuid())
   name        String
   description String   @default("")
