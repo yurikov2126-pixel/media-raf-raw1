@@ -49,6 +49,8 @@ export default function Radio() {
   }, [location.search]);
   const [assets, setAssets] = useState([]);
   const [playlists, setPlaylists] = useState([]);
+  const [archivedPlaylists,setArchivedPlaylists]=useState([]);
+  const [showPlaylistArchive,setShowPlaylistArchive]=useState(false);
   const [folders, setFolders] = useState([]);
   const [openFolders, setOpenFolders] = useState({});
   const [dragPlaylistId, setDragPlaylistId] = useState(null);
@@ -203,6 +205,17 @@ export default function Radio() {
     } catch (e) {
       toast.error(e.message || 'Не удалось утвердить плейлист');
     } finally { setApprovingId(null); }
+  };
+  const loadArchivedPlaylists=async()=> {
+    try {const response=await call('/playlists?archived=true');setArchivedPlaylists(response.playlists||[]);}
+    catch(e){toast.error(e.message||'Не удалось открыть архив плейлистов');}
+  };
+  const archivePlaylist=playlist=>{
+    if(window.confirm('Переместить «'+playlist.name+'» в архив? Прошедшая сетка сохранится, аудиофайлы не удаляются. Текущие и будущие передачи архивировать нельзя.'))
+      action(async()=>{await call('/playlists/'+playlist.id+'/archive',{method:'POST'});if(showPlaylistArchive)await loadArchivedPlaylists();},'Плейлист перемещён в архив');
+  };
+  const restorePlaylist=playlist=>{
+    action(async()=>{await call('/playlists/'+playlist.id+'/restore',{method:'POST'});await loadArchivedPlaylists();},'Плейлист восстановлен из архива');
   };
   const deletePlaylist = playlist => {
     if (window.confirm('Удалить плейлист «' + playlist.name + '»? Аудиофайлы останутся в библиотеке. Плейлист, назначенный в сетку или Auto-DJ, удалить нельзя.'))
@@ -457,6 +470,19 @@ export default function Radio() {
     {tab === 'playlists' && <section className="space-y-4">
       <RadioPlaylistReview token={token} onChanged={refresh} />
       <RadioSectionIntro eyebrow="ПОДГОТОВКА" title="Конструктор радиопрограмм" description="Создавайте программы из записей, формируйте порядок воспроизведения, согласовывайте и размещайте в сетке." metrics={[{label:'Плейлистов',value:playlists.length},{label:'Утверждено',value:playlists.filter(p=>p.status==='APPROVED').length},{label:'Папок',value:folders.length}]}/>
+      <div className="rounded-xl border border-current/15 p-3">
+        <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm font-semibold"
+         aria-expanded={showPlaylistArchive} onClick={()=>{if(!showPlaylistArchive)void loadArchivedPlaylists();setShowPlaylistArchive(v=>!v);}}>
+         {showPlaylistArchive?'Скрыть архив':'Архив отработавших плейлистов'}
+        </button>
+        {showPlaylistArchive&&<div className="mt-3 space-y-2">
+          {archivedPlaylists.length===0?<p className="text-sm opacity-60">В архиве пока нет плейлистов.</p>:archivedPlaylists.map(p=>
+            <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-current/10 p-2">
+              <span className="min-w-0 truncate text-sm font-medium">{p.name}</span>
+              <button type="button" className="shrink-0 rounded-lg border border-current/20 px-3 py-2 text-xs" onClick={()=>restorePlaylist(p)}>Восстановить</button>
+            </div>)}
+        </div>}
+      </div>
       {wizard===0?<div className="flex flex-wrap items-center gap-2">
         <button className={btn} onClick={()=>{reset();setWizard(3);}}>＋ Создать плейлист</button>
         <button type="button" onClick={()=>openWorkspace('auto-playlists')}
@@ -506,6 +532,7 @@ export default function Radio() {
                   </select>
                   <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" onClick={()=>startEdit(p)}>Изменить</button>
                   {p.status==='SUBMITTED' && <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2 disabled:opacity-50" disabled={!!approvingId} onClick={()=>approvePlaylist(p)}>{approvingId===p.id ? 'Утверждение…' : 'Утвердить'}</button>}
+                  <button type="button" className="text-xs rounded-lg border border-current/20 px-2 py-2" onClick={()=>archivePlaylist(p)} title="Сохранить историю эфира, но убрать из рабочих плейлистов">В архив</button>
                   <button type="button" className="text-xs rounded-lg border border-red-500/30 text-red-500 px-2 py-2" onClick={()=>deletePlaylist(p)}>Удалить</button>
                 </div>
               </div>)}
