@@ -652,8 +652,42 @@ router.delete('/playlists/:id', safe(async (req, res) => {
     res.json({ ok: true });
 }));
 
-router.get('/playlists', safe(async (_req, res) => {
-    res.json({ playlists: await prisma.radioPlaylist.findMany({ include: playlistInclude, orderBy: { updatedAt: 'desc' }, take: 250 }) });
+// Archiving preserves historical schedule references while removing obsolete
+// playlists from working selectors. Never archive an active/future show or AutoDJ.
+router.post('/playlists/:id/archive', safe(async (req, res) => {
+    const result = await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+        const playlist = await tx.radioPlaylist.findUnique({ where: { id: req.params.id } });
+        if (!playlist) return 'missing';
+        if (playlist.archivedAt) return 'archived';
+        const activeOrFuture = await tx.radioScheduleSlot.count({
+            where: { playlistId: playlist.id, endAt: { gt: new Date() } },
+        });
+        if (activeOrFuture) return 'in-use';
+        const auto = await readAutoDjSettings();
+        if (auto.playlistId === playlist.id) return 'autodj';
+        await tx.radioPlaylist.update({ where: { id: playlist.id }, data: { archivedAt: new Date() } });
+        return 'archived';
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Плейлист не найден' });
+    if (result === 'in-use') return res.status(409).json({ error: 'Плейлист назначен в текущую или будущую эфирную сетку. Архивирование недоступно' });
+    if (result === 'autodj') return res.status(409).json({ error: 'Плейлист используется в AutoDJ. Сначала выберите другой' });
+    res.json({ ok: true, archived: true });
+}));
+router.post('/playlists/:id/restore', safe(async (req, res) => {
+    const result = await prisma.radioPlaylist.updateMany({
+        where: { id: req.params.id, archivedAt: { not: null } },
+        data: { archivedAt: null },
+    });
+    if (!result.count) return res.status(404).json({ error: 'Архивный плейлист не найден' });
+    res.json({ ok: true, restored: true });
+}));
+router.get('/playlists', safe(async (req, res) => {
+    const archived = req.query.archived === 'true';
+    res.json({ playlists: await prisma.radioPlaylist.findMany({
+        where: archived ? { archivedAt: { not: null } } : { archivedAt: null },
+        include: playlistInclude, orderBy: { updatedAt: 'desc' }, take: 250,
+    }) });
 }));
 // Always resolve editor state from a unique playlist ID, not a cached list or name.
 router.get('/playlists/:id', safe(async (req, res) => {
