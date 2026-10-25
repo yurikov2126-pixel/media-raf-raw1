@@ -18,9 +18,7 @@ const quick=[
 ];
 
 export function RadioWorkspaceShell({tab,onSelect,children,stats}){
- const [compact,setCompact]=useState(false);
  const [mobileOpen,setMobileOpen]=useState(false);
- const [expanded,setExpanded]=useState({});
  useEffect(()=>{setMobileOpen(false);},[tab]);
  useEffect(()=>{
   if(!mobileOpen)return;
@@ -41,27 +39,25 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
  },[onSelect]);
  const current=items.find(x=>x.id===tab)||items[0];
  const activeGroup=RADIO_NAV_GROUPS.find(g=>g.items.some(i=>i.id===tab));
- const nav=<nav aria-label="Разделы радиостанции" className="space-y-4 p-3">
-  {RADIO_NAV_GROUPS.map(group=><section key={group.id} aria-label={group.title} className="space-y-1">
-   <button type="button" onClick={()=>setExpanded(v=>({...v,[group.id]:!(v[group.id]??group.id===activeGroup?.id)}))}
-    aria-expanded={expanded[group.id]??group.id===activeGroup?.id}
-    className={'radio-nav-group w-full rounded-lg px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider opacity-65 hover:opacity-100 '+(compact?'lg:text-center':'')}>
-    <span className={compact?'lg:hidden':''}>{group.title}</span><span className={compact?'hidden lg:inline':'hidden'}>•••</span>
-   </button>
-   {(expanded[group.id]??group.id===activeGroup?.id)&&group.items.map(item=>
-    <button key={item.id} type="button" onClick={()=>onSelect(item.id)}
-     title={item.hint} aria-current={tab===item.id?'page':undefined}
-     className={'radio-nav-item flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors '+(tab===item.id?'radio-nav-item-active':'hover:bg-black/5 dark:hover:bg-white/10')}>
-     <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-current/15">{item.icon}</span>
-     <span className={'min-w-0 '+(compact?'lg:hidden':'')}><span className="block text-sm font-semibold">{item.label}</span>
-      <span className="block text-[11px] opacity-65">{item.hint}</span></span>
-    </button>)}
+ const nav=<nav aria-label="Разделы радиостанции" className="radio-nav-list p-2.5 sm:p-3">
+  {RADIO_NAV_GROUPS.map(group=><section key={group.id} aria-label={group.title} className="radio-nav-section">
+   <h2 className="radio-nav-group px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider">
+    {group.title}
+   </h2>
+   <div className="radio-nav-items">
+    {group.items.map(item=>
+     <button key={item.id} type="button" onClick={()=>onSelect(item.id)}
+      title={item.hint} aria-current={tab===item.id?'page':undefined}
+      className={'radio-nav-item flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors '+(tab===item.id?'radio-nav-item-active':'hover:bg-black/5 dark:hover:bg-white/10')}>
+      <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-current/15">{item.icon}</span>
+      <span className="min-w-0 flex-1"><span className="block text-[13px] leading-snug font-semibold">{item.label}</span>
+       <span className="block text-[11px] leading-snug opacity-65">{item.hint}</span></span>
+     </button>)}
+   </div>
   </section>)}
-  <button type="button" className="hidden lg:block w-full rounded-xl border border-current/15 p-2 text-xs"
-   onClick={()=>setCompact(v=>!v)}>{compact?'→':'← Свернуть меню'}</button>
  </nav>;
  return <div className="radio-workspace radio-v4 min-h-[calc(100vh-6rem)] text-slate-950 dark:text-slate-100">
-  <div className="radio-shell relative overflow-hidden rounded-3xl shadow-sm">
+  <div className="radio-shell relative rounded-3xl shadow-sm">
    <header className="radio-shell-header radio-v3-header sticky top-0 z-30 flex items-center gap-3 border-b p-3 backdrop-blur-xl sm:px-5">
     <button type="button" onClick={()=>setMobileOpen(v=>!v)} aria-label="Разделы радио"
      aria-expanded={mobileOpen} className="lg:hidden grid h-10 w-10 place-items-center rounded-xl border border-current/15">☰</button>
@@ -80,7 +76,8 @@ export function RadioWorkspaceShell({tab,onSelect,children,stats}){
    </header>
    <div className="flex min-w-0">
     {mobileOpen&&<button type="button" aria-label="Закрыть меню" className="absolute inset-0 z-30 bg-black/50 lg:hidden" onClick={()=>setMobileOpen(false)}/>}
-    <aside className={'radio-sidebar radio-v3-sidebar absolute z-40 shrink-0 border-r lg:static lg:block '+(mobileOpen?'block':'hidden')+' w-[min(85vw,310px)] '+(compact?'lg:w-[84px]':'lg:w-[250px]')}>
+    <aside className={'radio-sidebar radio-v3-sidebar absolute z-40 shrink-0 border-r lg:sticky lg:top-0 lg:self-start lg:block '+(mobileOpen?'block':'hidden')+' w-[min(85vw,310px)] lg:w-[250px]'}>
+     <div className="radio-nav-mobile-heading flex items-center justify-between gap-2 px-4 pt-4 pb-1 lg:hidden"><span className="font-semibold text-sm">Разделы радио</span><button type="button" onClick={()=>setMobileOpen(false)} aria-label="Закрыть меню радио" className="rounded-lg border border-current/15 px-3 py-1.5 text-sm">Закрыть</button></div>
      {nav}
     </aside>
     <main className="min-w-0 flex-1 space-y-5 p-3 pb-24 sm:p-5 sm:pb-6 lg:p-6">
