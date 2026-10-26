@@ -1426,3 +1426,30 @@ model RadioWeeklyTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+ 
+// Только входящие наблюдения. Не используются как команда запуска эфира.
+model SafetyMchsEvent {
+  id          String   @id @default(cuid())
+  source      String   @default("MCHS_ANDROID")
+  sourceEventId String
+  receivedAt  DateTime @default(now())
+  occurredAt  DateTime?
+  title       String
+  body        String
+  channelId   String?
+  region      String?
+  eventType   String   @default("UNCLASSIFIED")
+  verified    Boolean  @default(false)
+  raw         Json?
+  @@unique([source, sourceEventId])
+  @@index([receivedAt])
+}
+
+model SafetyMchsHealth {
+  id           String   @id
+  lastSeenAt   DateTime?
+  listener     String   @default("UNKNOWN")
+  push         String   @default("UNKNOWN")
+  updatedAt    DateTime @updatedAt
+}
