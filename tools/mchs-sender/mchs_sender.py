@@ -43,10 +43,8 @@ def initialize():
     return connection
 
 def parse(line):
-    # The bridge emits: I MCHS_BRIDGE: {"event":"posted", ...}
-    if "MCHS_BRIDGE:" not in line:
-        return None
-    raw = line.split("MCHS_BRIDGE:", 1)[1].strip()
+    # logcat -v raw with a single tag filter emits the Bridge payload only.
+    raw = line.strip()
     if not raw.startswith("{"):
         return None
     try:
@@ -80,7 +78,7 @@ def collect(connection):
     while not STOP.is_set():
         try:
             # New log stream; no replay guarantee across disconnects.
-            with subprocess.Popen([ADB, "-s", SERIAL, "logcat", "-v", "brief", "-s",
+            with subprocess.Popen([ADB, "-s", SERIAL, "logcat", "-v", "raw", "-s",
                                    "MCHS_BRIDGE:I", "*:S"], stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, text=True, bufsize=1) as process:
                 for line in process.stdout:
