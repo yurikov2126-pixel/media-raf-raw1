@@ -27,7 +27,7 @@ export default function SafetyMchs({ token }) {
     </div>
     <div role="status" className="rounded-2xl border border-amber-400/40 bg-amber-100/60 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100 p-4">
       <strong>Тестовый режим. Реальное оповещение заблокировано.</strong>
-      <p className="text-sm mt-1">Android ещё не подключён к API сайта. Отсутствие сообщений в журнале не означает отсутствия предупреждений МЧС.</p>
+      <p className="text-sm mt-1">Ручная доставка наблюдений уже проверена. Автоматическая доставка Android ещё не подтверждена; отсутствие новых записей не означает отсутствия предупреждений МЧС.</p>
     </div>
     {error && <p role="alert" className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-300 p-3">{error}</p>}
     {notice && <p role="status" className="rounded-xl bg-emerald-500/10 p-3">{notice}</p>}
@@ -55,7 +55,7 @@ export default function SafetyMchs({ token }) {
     </section>
     <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
       <h3 className="font-semibold text-lg">Журнал сообщений МЧС</h3><p className="text-sm text-amber-700 dark:text-amber-300">Наблюдения из Android не доказывают подлинность официального предупреждения и не означают действующую угрозу. Автоматический радиоэфир отключён.</p>
-      <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Событий в базе: {data?.eventCount ?? '—'}. Приём событий Android пока отключён. Пустой журнал не подтверждает отсутствия предупреждений.</p>
+      <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Событий в базе: {data?.eventCount ?? '—'}. Приёмник: {data?.integration?.receiverConfigured ? 'включён' : 'выключен'}. Ручной импорт: {data?.integration?.deliveryVerified ? 'есть подтверждённая запись' : 'не подтверждён'}. Фоновая доставка: не проверена. Пустой журнал не подтверждает отсутствия предупреждений.</p>
       <label className="mt-3 flex items-center gap-2 text-sm">Показать
         <select className="rounded-lg border border-slate-300 dark:border-white/20 bg-transparent p-2" value={eventFilter} onChange={e => setEventFilter(e.target.value)}>
           <option value="all">Все наблюдения</option>
@@ -68,7 +68,8 @@ export default function SafetyMchs({ token }) {
         const historical = !Number.isFinite(age) || age > 30 * 60 * 1000 || age < -2 * 60 * 1000;
         return eventFilter === 'all' || (eventFilter === 'historical' ? historical : !historical);
       }).map(event => <article key={event.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-4">
-        <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-white/50"><time>{new Date(event.receivedAt).toLocaleString('ru-RU')}</time><span>{event.verified ? 'Подтверждение зафиксировано' : 'Не подтверждено независимо'}</span><span>{(Date.now() - new Date(event.occurredAt || event.receivedAt).getTime() > 30 * 60 * 1000) ? 'Историческое' : 'Недавнее наблюдение (не означает активную тревогу)'}</span></div>
+        <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-white/50"><time>Получено сервером: {new Date(event.receivedAt).toLocaleString('ru-RU')}</time><span>{event.verified ? 'Подтверждение зафиксировано' : 'Не подтверждено независимо'}</span><span>{(Date.now() - new Date(event.occurredAt || event.receivedAt).getTime() > 30 * 60 * 1000) ? 'Историческое' : 'Недавнее наблюдение (не означает активную тревогу)'}</span></div>
+        <p className="mt-1 text-xs opacity-70">Время события Android: {event.occurredAt ? new Date(event.occurredAt).toLocaleString('ru-RU') : 'не указано'}</p>
         <h4 className="mt-2 font-semibold break-words">{event.title}</h4><p className="mt-1 text-sm whitespace-pre-wrap break-words">{event.body}</p>
         <p className="mt-2 text-xs opacity-60">Канал: {event.channelId || 'не указан'} · Регион: {event.region || 'не указан'}</p>
       </article>)}</div>}
