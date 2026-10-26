@@ -59,6 +59,7 @@ import {reserveScheduledHourlySuccessor,resolveScheduledHourlySuccessor} from '.
 import {resolveHourlyScheduledResume} from '../src/lib/radioScheduledHourlyResume.js';
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
+import { validateRadioAlertAsset } from '../src/lib/radioEmergencyPolicy.js';
 
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
@@ -68,6 +69,11 @@ if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
 const ffmpeg = process.env.RADIO_FFMPEG_PATH || 'ffmpeg';
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const listeners = new Set();
+// Opt-in operational announcements; never substitute this for statutory evacuation PA.
+const ALERTS_ENABLED=process.env.RADIO_OPERATOR_ALERTS_ENABLED==='true';
+let activeAlert=null;
+let alertSequence=0;
+
 // Explicit opt-in: disabled until the full PCM transition is validated on-air.
 const SCHEDULED_CROSSFADE_ENABLED=process.env.RADIO_SCHEDULED_CROSSFADE_ENABLED==='true';
 const scheduledDefaultOverlap=Number(process.env.RADIO_SCHEDULED_DEFAULT_OVERLAP_MS||0);
@@ -83,6 +89,7 @@ function isIgnorableMediaNotice(value){
  return /Incorrect BOM value|Error reading frame GEOB|skipped\s*$/i.test(value);
 }
 const state = { audioProcessing:{enabled:false}, version:'dsp-v1', mode:'STARTING',trackId:null,slotId:null,playout:null,nextTrackId:null,connected:0,startedAt:new Date().toISOString(),lastError:null,frames:0, autoDjEnabled:false };
+state.operatorAlert={enabled:ALERTS_ENABLED,active:false,last:null};
 let decoder = null;
 let prewarmed=null;
 let prewarming=false;
@@ -768,7 +775,7 @@ async function emitHourlySignalAtSafeBoundary(){
  try{
    state.mode='TIME_SIGNAL';state.trackId=asset.id;state.playout=null;
    for await(const pcm of child.stdout){
-     if(stopping||publicLive.onAir){child.kill('SIGTERM');broken=true;break;}
+     if(stopping||publicLive.onAir||activeAlert){child.kill('SIGTERM');broken=true;break;}
 
      if(!encoder.stdin.write(pcm))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
      bytes+=pcm.length;
@@ -808,9 +815,43 @@ async function emitHourlySignalAtSafeBoundary(){
  state.hourlySignal.last={key,assetId,status:broken?'INTERRUPTED':'EMITTED',emittedMs:Math.round(bytes/PCM_BYTES_PER_MS),at:new Date().toISOString()};
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
 }
+async function emitOperatorAlert(alert){
+  state.mode='OPERATOR_ALERT';state.trackId=alert.assetId;state.slotId=null;state.playout=null;
+  discardPrewarm();
+  const file=path.join(assetsRoot,path.basename(alert.storageKey));
+  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-re',
+    '-i',file,'-t',String(alert.durationMs/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'],
+    {stdio:['ignore','pipe','pipe']});
+  alert.child=child;
+  let bytes=0;
+  child.stderr.on('data',buf=>{state.lastError='Operator alert decoder: '+buf.toString().slice(-160);});
+  try{
+    for await(const pcm of child.stdout){
+      if(stopping||activeAlert!==alert||Date.now()>alert.deadline){child.kill('SIGTERM');break;}
+      if(!encoder.stdin.write(pcm))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+      bytes+=pcm.length;
+    }
+  }catch(error){state.lastError='Operator alert: '+error.message;}
+  finally{
+    if(activeAlert===alert){
+      activeAlert=null;
+      state.operatorAlert.active=false;
+      state.operatorAlert.last={id:alert.id,assetId:alert.assetId,
+        finishedAt:new Date().toISOString(),emittedMs:Math.round(bytes/PCM_BYTES_PER_MS)};
+      console.info('RADIO_OPERATOR_ALERT_END',JSON.stringify(state.operatorAlert.last));
+    }
+    // Always let the timeline recompute; never resume a stale decoder offset.
+    state.trackId=null;state.playout=null;
+  }
+}
 async function run() {
   startEncoder();
   while(!stopping) {
+    if(activeAlert){
+      if(!activeAlert.storageKey){await new Promise(r=>setTimeout(r,50));continue;}
+      await emitOperatorAlert(activeAlert);
+      continue;
+    }
     if(publicLive.onAir){
       reverseReservedTarget=null;reverseMixAuthorityAt=null;
       lastDecodedSource=null;
@@ -865,7 +906,7 @@ async function run() {
       discardPrewarm();
       state.mode='SILENCE';state.trackId=null;state.playout=null;state.nextTrackId=null;
       for(let i=0;i<5&&!stopping;i++) {
-        if(publicLive.onAir)break;
+        if(publicLive.onAir||activeAlert)break;
         if(!encoder.stdin.write(silence)) await new Promise(r=>encoder.stdin.once('drain',r));
         await new Promise(r=>setTimeout(r,200));
       }
@@ -1163,10 +1204,10 @@ async function run() {
     try {
       const pcmChunks=matches&&prepared.iterator?continuePcmIterator(prepared.iterator):child.stdout;
       for await(const chunk of pcmChunks) {
-        if(stopping||publicLive.onAir) {child.kill('SIGTERM');break;}
+        if(stopping||publicLive.onAir||activeAlert) {child.kill('SIGTERM');break;}
         const decoded=pcmStaging?pcmStaging.push(chunk):chunk;
         if(!decoded?.length)continue;
-        if(publicLive.onAir){child.kill('SIGTERM');break;}
+        if(publicLive.onAir||activeAlert){child.kill('SIGTERM');break;}
         // Stop an oversize or late FFmpeg chunk from spilling across the grid
         // boundary into the shared MP3 encoder heard by both site and agent.
         const gated=cursor.status==='SCHEDULED'
@@ -1892,6 +1933,52 @@ async function run() {
 }
 
 const server=http.createServer((req,res)=>{
+  if(req.url==='/operator-alert/status'&&req.method==='GET'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify(state.operatorAlert));return;
+  }
+  if(req.url==='/operator-alert/stop'&&req.method==='POST'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    const stopped=activeAlert;
+    if(stopped){activeAlert=null;stopped.child?.kill('SIGTERM');
+      state.operatorAlert.active=false;state.operatorAlert.last={id:stopped.id,assetId:stopped.assetId,
+        stoppedAt:new Date().toISOString(),reason:'OPERATOR_STOP'};
+      console.warn('RADIO_OPERATOR_ALERT_STOP',JSON.stringify(state.operatorAlert.last));}
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({ok:true,stopped:!!stopped}));return;
+  }
+  if(req.url==='/operator-alert/start'&&req.method==='POST'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    if(!ALERTS_ENABLED){res.writeHead(409).end(JSON.stringify({error:'ALERTS_DISABLED'}));return;}
+    if(activeAlert){res.writeHead(409).end(JSON.stringify({error:'ALERT_ALREADY_ACTIVE'}));return;}
+    const assetId=String(req.headers['x-radio-alert-asset-id']||'');
+    if(!/^[a-zA-Z0-9_-]{8,100}$/.test(assetId)){res.writeHead(400).end();return;}
+    // Reserve before awaiting database/filesystem, so two simultaneous starts cannot race.
+    const reservation={id:++alertSequence,assetId,deadline:Date.now()+200000};
+    activeAlert=reservation;
+    (async()=>{
+      try{
+        const asset=await prisma.radioAsset.findUnique({where:{id:assetId}});
+        validateRadioAlertAsset(asset);
+        await fs.access(path.join(assetsRoot,path.basename(asset.storageKey)));
+        if(activeAlert!==reservation)return;
+        Object.assign(reservation,{storageKey:asset.storageKey,durationMs:asset.durationMs,
+          deadline:Date.now()+Math.min(asset.durationMs+15000,195000)});
+        state.operatorAlert.active=true;
+        state.operatorAlert.assetId=assetId;
+        state.operatorAlert.startedAt=new Date().toISOString();
+        // Preempt music promptly, while keeping the shared encoder and listeners.
+        stopDecoder();
+        console.warn('RADIO_OPERATOR_ALERT_START',JSON.stringify({id:reservation.id,assetId}));
+      }catch(error){
+        if(activeAlert===reservation){activeAlert=null;state.operatorAlert.active=false;}
+        state.operatorAlert.last={assetId,error:String(error.message||error),at:new Date().toISOString()};
+      }
+    })();
+    res.writeHead(202,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({accepted:true,assetId,status:'VALIDATING'}));return;
+  }
   if(!authorized(req)) {res.writeHead(403).end();return;}
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
