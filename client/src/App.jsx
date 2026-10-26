@@ -54,6 +54,7 @@ const WikiArticle = lazy(() => import('./pages/WikiArticle.jsx'));
 import { useRadioAccess } from './hooks/useRadioAccess.js';
 const Radio = lazy(() => import('./pages/Radio.jsx'));
 const RadioListen = lazy(() => import('./pages/RadioListen.jsx'));
+const SafetyConsole = lazy(() => import('./pages/SafetyConsole.jsx'));
 const RadioStudentPlaylists = lazy(() => import('./pages/RadioStudentPlaylists.jsx'));
 const MentorReviews = lazy(() => import('./pages/MentorReviews.jsx'));
 
@@ -134,6 +135,7 @@ export default function App() {
                 >
                     <Route index element={<LazyPage><DashboardMode /></LazyPage>} />
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
+                    <Route path="safety" element={<LazyPage><SafetyConsole /></LazyPage>} />
                     <Route path="radio" element={<Private><RadioGate admin><LazyPage><Radio /></LazyPage></RadioGate></Private>} />
                     <Route path="radio/playlists/my" element={<Private roles={['STUDENT']}><RadioGate><LazyPage><RadioStudentPlaylists /></LazyPage></RadioGate></Private>} />
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>

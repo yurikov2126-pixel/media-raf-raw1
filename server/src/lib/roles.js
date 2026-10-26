@@ -8,6 +8,7 @@ export const BUILTIN_ROLES = Object.freeze({
 });
 export const PERMISSIONS = [
   { id: 'admin.analytics.view', group: 'Админка', label: 'Просмотр аналитики (без других разделов админки)' },
+  { id: 'safety.view', group: 'Безопасность', label: 'Просмотр пульта безопасности (без управления оповещением)' },
   { id: 'editorial.create', group: 'Редакция', label: 'Создание проектов' },
   { id: 'editorial.library', group: 'Редакция', label: 'Управление общей библиотекой' },
   { id: 'learning.practicals.review', group: 'Обучение', label: 'Проверка практик (только назначенный руководитель)' },

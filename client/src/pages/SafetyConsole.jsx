@@ -1,0 +1,31 @@
+import { useEffect, useState } from 'react';
+import { api } from '../api/client.js';
+import { useAuth } from '../store/auth.jsx';
+
+export default function SafetyConsole() {
+  const { token } = useAuth();
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let live = true;
+    api('/safety/dashboard', { token }).then(r => { if (live) setStatus(r); }).catch(e => { if (live) setError(e.status === 403 ? 'Нет прав на просмотр пульта безопасности' : e.message); });
+    return () => { live = false; };
+  }, [token]);
+  return <div className="mx-auto max-w-4xl p-4 md:p-8 space-y-5 text-slate-900 dark:text-white">
+    <h1 className="text-2xl font-bold">🛡️ Пульт безопасности</h1>
+    <p className="text-sm text-slate-500 dark:text-white/60">Панель ответственного за безопасность. Управление реальным оповещением пока не реализовано.</p>
+    {error && <p role="alert" className="rounded-xl bg-red-500/10 p-4 text-red-600 dark:text-red-300">{error}</p>}
+    {!status && !error && <p role="status">Проверка прав и состояния…</p>}
+    {status && <>
+      <div className="rounded-2xl border border-amber-400/40 bg-amber-100/60 p-5 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100">
+        <strong>ТЕСТОВЫЙ РЕЖИМ — никаких команд в эфир</strong>
+        <p className="mt-2 text-sm">Связь с Android ещё не настроена. Не используйте эту страницу для принятия оперативных решений об эвакуации.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Источник</p><p className="font-semibold mt-2">МЧС России — не подключён к сайту</p></div>
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Оповещение</p><p className="font-semibold mt-2">Выключено</p></div>
+      </div>
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><h2 className="font-semibold">Полученные предупреждения</h2><p className="text-sm opacity-60 mt-2">История пока недоступна. Подключение MCHS Bridge запланировано на следующем этапе.</p></div>
+    </>}
+  </div>;
+}
