@@ -53,7 +53,12 @@ export default function SafetyMchs({ token }) {
     </section>
     <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
       <h3 className="font-semibold text-lg">Журнал сообщений МЧС</h3>
-      <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Данных пока нет: серверный приёмник событий не подключён. Здесь появятся настоящие уведомления после защищённой интеграции.</p>
+      <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Событий в базе: {data?.eventCount ?? '—'}. Приём событий Android пока отключён. Пустой журнал не подтверждает отсутствия предупреждений.</p>
+      {data?.events?.length > 0 && <div className="mt-4 space-y-3">{data.events.map(event => <article key={event.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-4">
+        <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-white/50"><time>{new Date(event.receivedAt).toLocaleString('ru-RU')}</time><span>{event.verified ? 'Проверено' : 'Не подтверждено'}</span></div>
+        <h4 className="mt-2 font-semibold break-words">{event.title}</h4><p className="mt-1 text-sm whitespace-pre-wrap break-words">{event.body}</p>
+        <p className="mt-2 text-xs opacity-60">Канал: {event.channelId || 'не указан'} · Регион: {event.region || 'не указан'}</p>
+      </article>)}</div>}
     </section>
     <Link to="/app/safety" className="text-violet-600 dark:text-violet-300 underline">Открыть пульт ответственного за безопасность</Link>
   </div>;
