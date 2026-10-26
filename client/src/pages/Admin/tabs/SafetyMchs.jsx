@@ -61,6 +61,14 @@ export default function SafetyMchs({ token }) {
         <p className="mt-2 text-xs opacity-60">Канал: {event.channelId || 'не указан'} · Регион: {event.region || 'не указан'}</p>
       </article>)}</div>}
     </section>
+    <section className="rounded-2xl border border-sky-400/40 p-5 space-y-3">
+        <h2 className="font-semibold">Диагностические события — только TEST ONLY</h2>
+        <p className="text-sm opacity-70">Изолированный журнал. Приём: {data?.diagnosticIngestEnabled ? 'включён' : 'выключен'}. Записей: {data?.diagnosticCount ?? 0}. Эти записи не являются предупреждениями МЧС и не запускают радио.</p>
+        {data?.diagnosticEvents?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 text-sm">
+          <strong>ТЕСТ: диагностика приёмника</strong>
+          <p className="opacity-70 break-all">{item.eventId} · {new Date(item.receivedAt).toLocaleString('ru-RU')}</p>
+        </div>)}
+      </section>
     <Link to="/app/safety" className="text-violet-600 dark:text-violet-300 underline">Открыть пульт ответственного за безопасность</Link>
   </div>;
 }
