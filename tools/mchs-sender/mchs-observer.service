@@ -1,0 +1,23 @@
+[Unit]
+Description=MCHS Android VM observation-only queue and heartbeat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mchs-android
+Group=mchs-android
+WorkingDirectory=/home/mchs-android
+EnvironmentFile=/home/mchs-android/.config/mchs-bridge/ingest.env
+ExecStart=/usr/bin/python3 /home/mchs-android/vm_observer.py --connect-ip 192.168.10.33
+Restart=always
+RestartSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/mchs-android/.local/state/mchs-observer
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
