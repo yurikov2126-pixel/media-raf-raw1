@@ -25,7 +25,11 @@ export default function SafetyConsole() {
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Источник</p><p className="font-semibold mt-2">МЧС России — не подключён к сайту</p></div>
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Оповещение</p><p className="font-semibold mt-2">Выключено</p></div>
       </div>
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><h2 className="font-semibold">Полученные предупреждения</h2><p className="text-sm opacity-60 mt-2">История пока недоступна. Подключение MCHS Bridge запланировано на следующем этапе.</p></div>
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><h2 className="font-semibold">Полученные предупреждения</h2><p className="text-sm opacity-60 mt-2">В базе: {status.eventCount ?? 0} записей. Источник Android ещё не подключён.</p>
+        <div className="mt-3 space-y-2">{status.events?.map(event => <div key={event.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+          <div className="text-xs opacity-60">{new Date(event.receivedAt).toLocaleString('ru-RU')} · {event.verified ? 'Проверено' : 'Не подтверждено'}</div>
+          <p className="font-semibold mt-1 break-words">{event.title}</p><p className="text-sm mt-1 whitespace-pre-wrap break-words">{event.body}</p>
+        </div>)}</div></div>
     </>}
   </div>;
 }
