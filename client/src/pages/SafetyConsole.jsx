@@ -30,6 +30,14 @@ export default function SafetyConsole() {
           <div className="text-xs opacity-60">{new Date(event.receivedAt).toLocaleString('ru-RU')} · {event.verified ? 'Проверено' : 'Не подтверждено'}</div>
           <p className="font-semibold mt-1 break-words">{event.title}</p><p className="text-sm mt-1 whitespace-pre-wrap break-words">{event.body}</p>
         </div>)}</div></div>
+      <section className="rounded-2xl border border-sky-400/40 p-5 space-y-3">
+        <h2 className="font-semibold">Диагностические события — только TEST ONLY</h2>
+        <p className="text-sm opacity-70">Изолированный журнал. Приём: {status?.diagnosticIngestEnabled ? 'включён' : 'выключен'}. Записей: {status?.diagnosticCount ?? 0}. Эти записи не являются предупреждениями МЧС и не запускают радио.</p>
+        {status?.diagnosticEvents?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 text-sm">
+          <strong>ТЕСТ: диагностика приёмника</strong>
+          <p className="opacity-70 break-all">{item.eventId} · {new Date(item.receivedAt).toLocaleString('ru-RU')}</p>
+        </div>)}
+      </section>
     </>}
   </div>;
 }

@@ -47,13 +47,15 @@ router.get('/dashboard', canView, async (_req, res, next) => {
   try {
     const config = await load();
     res.set('Cache-Control', 'no-store');
-    const [events, count, health] = await Promise.all([
+    const [events, count, health, diagnostics, diagnosticCount] = await Promise.all([
       prisma.safetyMchsEvent.findMany({ orderBy: { receivedAt: 'desc' }, take: 50, select: {
         id: true, source: true, receivedAt: true, occurredAt: true, title: true,
         body: true, channelId: true, region: true, eventType: true, verified: true,
       } }),
       prisma.safetyMchsEvent.count(),
       prisma.safetyMchsHealth.findUnique({ where: { id: 'mchs-android' } }),
+      prisma.safetyMchsDiagnostic.findMany({ orderBy: { receivedAt: 'desc' }, take: 20, select: { id: true, eventId: true, receivedAt: true } }),
+      prisma.safetyMchsDiagnostic.count(),
     ]);
     const lastSeenMs = health?.lastSeenAt ? new Date(health.lastSeenAt).getTime() : null;
     const online = lastSeenMs !== null && Date.now() - lastSeenMs < 180000;
@@ -62,6 +64,9 @@ router.get('/dashboard', canView, async (_req, res, next) => {
       source: { name: 'МЧС России / Android', connection: online ? 'HEARTBEAT_RECENT' : health ? 'HEARTBEAT_STALE' : 'NOT_CONFIGURED', lastSeen: health?.lastSeenAt || null, listener: online ? health.listener : 'UNVERIFIED', push: online ? health.push : 'UNVERIFIED' },
       integration: { status: process.env.MCHS_INGEST_ENABLED === 'true' ? 'TEST_INGEST_ENABLED' : 'DISABLED', receiverConfigured: process.env.MCHS_INGEST_ENABLED === 'true' && (process.env.MCHS_INGEST_HMAC_KEY || '').length >= 32, deliveryVerified: false },
       events,
+      diagnosticEvents: diagnostics,
+      diagnosticCount,
+      diagnosticIngestEnabled: process.env.MCHS_DIAGNOSTIC_ENABLED === 'true' && (process.env.MCHS_DIAGNOSTIC_HMAC_KEY || '').length >= 32,
       eventCount: count,
       eventHistoryAvailable: true,
       liveActivationAvailable: false,

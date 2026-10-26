@@ -73,4 +73,49 @@ router.post('/heartbeat', signedRequest, async (req, res, next) => {
     return res.json({ received: true, lastSeenAt: health.lastSeenAt, testOnly: true });
   } catch (error) { next(error); }
 });
+
+/**
+ * Synthetic-only diagnostics. Separate key, separate storage, separate flag.
+ * Does not read real notification records and cannot trigger playout.
+ */
+router.post('/diagnostic', async (req, res, next) => {
+  try {
+    const key = process.env.MCHS_DIAGNOSTIC_HMAC_KEY || '';
+    if (process.env.MCHS_DIAGNOSTIC_ENABLED !== 'true' || key.length < 32) {
+      return fail(res, 503, 'DIAGNOSTIC_DISABLED');
+    }
+    const stamp = req.get('X-MCHS-Timestamp') || '';
+    const signature = req.get('X-MCHS-Signature') || '';
+    if (!/^\d{10}$/.test(stamp) || !/^sha256=[a-f0-9]{64}$/i.test(signature) || !Buffer.isBuffer(req.body)) {
+      return fail(res, 401, 'UNAUTHORIZED');
+    }
+    if (Math.abs(Date.now() - Number(stamp) * 1000) > 120000) return fail(res, 401, 'STALE_REQUEST');
+    const expected = crypto.createHmac('sha256', key)
+      .update(Buffer.concat([Buffer.from(stamp + '.', 'utf8'), req.body])).digest();
+    const received = Buffer.from(signature.slice(7), 'hex');
+    if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
+      return fail(res, 401, 'UNAUTHORIZED');
+    }
+    let input;
+    try { input = JSON.parse(req.body.toString('utf8')); } catch { return fail(res, 400, 'INVALID_JSON'); }
+    if (!input || Array.isArray(input) || typeof input !== 'object' ||
+      input.testOnly !== true ||
+      typeof input.eventId !== 'string' || !/^diagnostic-[a-z0-9-]{8,120}$/.test(input.eventId) ||
+      input.title !== 'ТЕСТ: диагностика приёмника' ||
+      input.body !== 'Искусственная проверка записи журнала. Не является предупреждением или оповещением.' ||
+      Object.keys(input).some(k => !['eventId', 'title', 'body', 'testOnly'].includes(k))) {
+      return fail(res, 400, 'SYNTHETIC_ONLY');
+    }
+    const row = await prisma.safetyMchsDiagnostic.upsert({
+      where: { eventId: input.eventId },
+      create: { eventId: input.eventId },
+      update: {},
+      select: { id: true, receivedAt: true },
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ accepted: true, eventId: input.eventId, id: row.id,
+      receivedAt: row.receivedAt, testOnly: true, verified: false });
+  } catch (error) { next(error); }
+});
+
 export default router;
