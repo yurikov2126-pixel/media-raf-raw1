@@ -1453,3 +1453,12 @@ model SafetyMchsHealth {
   push         String   @default("UNKNOWN")
   updatedAt    DateTime @updatedAt
 }
+
+
+ // Isolated synthetic diagnostics: never consumed by safety dispatch or radio.
+model SafetyMchsDiagnostic {
+  id         String   @id @default(cuid())
+  eventId    String   @unique
+  receivedAt DateTime @default(now())
+  @@index([receivedAt])
+}
