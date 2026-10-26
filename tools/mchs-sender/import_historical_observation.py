@@ -5,6 +5,8 @@ No scheduler, no listener modifications, no automated playout, no SQLite writes.
 Default: dry-run metadata only. Sends only with --send and an enabled ingest endpoint.
 """
 import argparse
+import ipaddress
+import subprocess
 import hashlib
 import hmac
 import json
@@ -51,7 +53,7 @@ def read_events(db_path, event_id):
     }
 
 
-def send(body, key):
+def send(body, key, connect_ip=None):
     stamp = str(int(time.time()))
     sig = hmac.new(key.encode(), stamp.encode() + b"." + body, hashlib.sha256).hexdigest()
     request = Request(URL, data=body, method="POST", headers={
@@ -59,11 +61,29 @@ def send(body, key):
         "X-MCHS-Timestamp": stamp,
         "X-MCHS-Signature": "sha256=" + sig,
     })
-    with urlopen(request, timeout=15) as response:
-        result = json.load(response)
-        if response.status != 200 or result.get("accepted") is not True or result.get("testOnly") is not True or result.get("verified") is not False:
-            raise ValueError("Unaccepted response or non-observation ACK")
-        return result
+    if connect_ip:
+        ipaddress.ip_address(connect_ip)
+        # curl --resolve changes TCP destination while preserving hostname/SNI and normal CA verification.
+        # Proxy environment settings must not silently reroute the private connection.
+        cmd = ["curl", "--fail-with-body", "--silent", "--show-error",
+               "--proto", "=https", "--noproxy", "*", "--max-time", "15",
+               "--resolve", f"mediarafraw.ru:443:{connect_ip}",
+               "-X", "POST", "-H", "Content-Type: application/json",
+               "-H", "X-MCHS-Timestamp: " + stamp,
+               "-H", "X-MCHS-Signature: sha256=" + sig,
+               "--data-binary", "@-", URL]
+        completed = subprocess.run(cmd, input=body, capture_output=True, timeout=20, check=False)
+        if completed.returncode:
+            raise ValueError("curl HTTPS failure: " + completed.stderr.decode(errors="replace")[:140])
+        result = json.loads(completed.stdout)
+    else:
+        with urlopen(request, timeout=15) as response:
+            if response.status != 200:
+                raise ValueError("Non-200 ingest ACK")
+            result = json.load(response)
+    if (result.get("accepted") is not True or result.get("testOnly") is not True or result.get("verified") is not False):
+        raise ValueError("Unaccepted response or non-observation ACK")
+    return result
 
 
 def main():
@@ -71,6 +91,7 @@ def main():
     p.add_argument("--db", required=True, help="SQLite snapshot copied from Android, never its live DB")
     p.add_argument("--event-id", required=True)
     p.add_argument("--send", action="store_true", help="Explicitly send ONE historical unverified observation")
+    p.add_argument("--connect-ip", help="Private IPv4/IPv6 TCP destination; HTTPS hostname and CA validation remain unchanged")
     a = p.parse_args()
     if not Path(a.db).is_file():
         p.error("Snapshot does not exist")
@@ -85,7 +106,7 @@ def main():
         key = os.environ.get("MCHS_INGEST_HMAC_KEY", "")
         if len(key) < 32:
             raise ValueError("MCHS_INGEST_HMAC_KEY >=32 required; must differ from diagnostic key")
-        ack = send(body, key)
+        ack = send(body, key, a.connect_ip)
         if ack.get("eventId") != payload["eventId"] or not ack.get("id"):
             raise ValueError("ACK eventId mismatch")
         print("ACK saved in server journal, ID:", ack["id"])
