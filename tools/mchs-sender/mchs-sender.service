@@ -1,0 +1,24 @@
+[Unit]
+Description=MCHS Bridge test-only queued telemetry collector
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mchs-android
+Environment=MCHS_ADB=/usr/bin/adb
+Environment=MCHS_SERIAL=127.0.0.1:5557
+Environment=MCHS_QUEUE_DB=/var/lib/mchs-sender/queue.sqlite3
+Environment=MCHS_SEND_ENABLED=false
+ExecStart=/usr/bin/python3 /opt/mchs-sender/mchs_sender.py
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mchs-sender
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
