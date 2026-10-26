@@ -31,9 +31,10 @@ export default function SafetyMchs({ token }) {
     {error && <p role="alert" className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-300 p-3">{error}</p>}
     {notice && <p role="status" className="rounded-xl bg-emerald-500/10 p-3">{notice}</p>}
     <div className="grid gap-3 md:grid-cols-3">
-      {[['Источник МЧС', 'Не подключён'], ['Notification Listener', 'Не проверен сайтом'], ['Радио и громкоговорители', 'Автозапуск отключён']].map(([name, value]) =>
+      {[['Источник Android', data?.source?.connection === 'HEARTBEAT_RECENT' ? 'Heartbeat недавно получен' : data?.source?.connection === 'HEARTBEAT_STALE' ? 'Связь потеряна / устарела' : 'Нет данных о соединении'], ['Listener / Push', data?.source?.connection === 'HEARTBEAT_RECENT' ? `${data?.source?.listener || 'UNKNOWN'} / ${data?.source?.push || 'UNKNOWN'}` : 'Не подтверждены'], ['Радио и громкоговорители', 'Автозапуск отключён']].map(([name, value]) =>
         <div key={name} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4"><p className="text-xs text-slate-500 dark:text-white/50">{name}</p><p className="mt-2 font-semibold">{value}</p></div>)}
     </div>
+    <p className="text-xs text-slate-500 dark:text-white/50">Последний heartbeat: {data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU') : 'не получен'}. Heartbeat не подтверждает доставку push.</p>
     <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
       {!draft ? <p>Загрузка…</p> : <>

@@ -55,10 +55,12 @@ router.get('/dashboard', canView, async (_req, res, next) => {
       prisma.safetyMchsEvent.count(),
       prisma.safetyMchsHealth.findUnique({ where: { id: 'mchs-android' } }),
     ]);
+    const lastSeenMs = health?.lastSeenAt ? new Date(health.lastSeenAt).getTime() : null;
+    const online = lastSeenMs !== null && Date.now() - lastSeenMs < 180000;
     res.json({
       config,
-      source: { name: 'МЧС России / Android', connection: 'NOT_CONFIGURED', lastSeen: health?.lastSeenAt || null, listener: health?.listener || 'UNVERIFIED', push: health?.push || 'UNVERIFIED' },
-      integration: { status: 'DISABLED', receiverConfigured: false, deliveryVerified: false },
+      source: { name: 'МЧС России / Android', connection: online ? 'HEARTBEAT_RECENT' : health ? 'HEARTBEAT_STALE' : 'NOT_CONFIGURED', lastSeen: health?.lastSeenAt || null, listener: online ? health.listener : 'UNVERIFIED', push: online ? health.push : 'UNVERIFIED' },
+      integration: { status: process.env.MCHS_INGEST_ENABLED === 'true' ? 'TEST_INGEST_ENABLED' : 'DISABLED', receiverConfigured: process.env.MCHS_INGEST_ENABLED === 'true' && (process.env.MCHS_INGEST_HMAC_KEY || '').length >= 32, deliveryVerified: false },
       events,
       eventCount: count,
       eventHistoryAvailable: true,

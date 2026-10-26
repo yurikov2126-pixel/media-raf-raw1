@@ -8,7 +8,7 @@ import { prisma } from '../lib/prisma.js';
 const router = Router();
 router.use(express.raw({ type: 'application/json', limit: '16kb' }));
 const fail = (res, status, code) => res.status(status).json({ error: code });
-router.post('/event', async (req, res, next) => {
+async function signedRequest(req, res, next) {
   try {
     const key = process.env.MCHS_INGEST_HMAC_KEY || '';
     if (process.env.MCHS_INGEST_ENABLED !== 'true' || key.length < 32) return fail(res, 503, 'INGEST_DISABLED');
@@ -26,6 +26,13 @@ router.post('/event', async (req, res, next) => {
     let input;
     try { input = JSON.parse(req.body.toString('utf8')); } catch { return fail(res, 400, 'INVALID_JSON'); }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(res, 400, 'INVALID_BODY');
+    req.safetyInput = input;
+    return next();
+  } catch (error) { next(error); }
+}
+router.post('/event', signedRequest, async (req, res, next) => {
+  try {
+    const input = req.safetyInput;
     const { eventId, title, body, channelId, occurredAt, region } = input;
     if (typeof eventId !== 'string' || !/^[a-zA-Z0-9._:-]{1,160}$/.test(eventId) ||
       typeof title !== 'string' || title.length < 1 || title.length > 300 ||
@@ -47,6 +54,23 @@ router.post('/event', async (req, res, next) => {
       select: { id: true, receivedAt: true, verified: true }
     });
     res.status(200).json({ accepted: true, id: result.id, receivedAt: result.receivedAt, verified: false, testOnly: true });
+  } catch (error) { next(error); }
+});
+router.post('/heartbeat', signedRequest, async (req, res, next) => {
+  try {
+    const { source, listener, push } = req.safetyInput;
+    if (source !== 'mchs-android' || !['CONNECTED','DISCONNECTED','UNKNOWN'].includes(listener) ||
+      !['REGISTERED','ERROR','UNKNOWN'].includes(push)) {
+      return fail(res, 400, 'INVALID_BODY');
+    }
+    const health = await prisma.safetyMchsHealth.upsert({
+      where: { id: 'mchs-android' },
+      create: { id: 'mchs-android', lastSeenAt: new Date(), listener, push },
+      update: { lastSeenAt: new Date(), listener, push },
+      select: { lastSeenAt: true, listener: true, push: true }
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ received: true, lastSeenAt: health.lastSeenAt, testOnly: true });
   } catch (error) { next(error); }
 });
 export default router;
