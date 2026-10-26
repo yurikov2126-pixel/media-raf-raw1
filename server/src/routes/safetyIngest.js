@@ -1,25 +1,12 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import express from 'express';
 import { prisma } from '../lib/prisma.js';
 
 // Dedicated machine-to-machine route. Never accepts user JWT or triggers any playback.
 // Disabled by default, even after deployment.
 const router = Router();
-router.use(expressRaw());
-function expressRaw() {
-  // Wrap raw request parser locally to sign exactly the transmitted bytes.
-  return (req, res, next) => {
-    let size = 0;
-    const chunks = [];
-    req.on('data', chunk => {
-      size += chunk.length;
-      if (size > 16384) { res.status(413).end(); req.destroy(); return; }
-      chunks.push(chunk);
-    });
-    req.on('end', () => { if (!res.headersSent) { req.safetyRaw = Buffer.concat(chunks); next(); } });
-    req.on('error', next);
-  };
-}
+router.use(express.raw({ type: 'application/json', limit: '16kb' }));
 const fail = (res, status, code) => res.status(status).json({ error: code });
 router.post('/event', async (req, res, next) => {
   try {
@@ -31,12 +18,13 @@ router.post('/event', async (req, res, next) => {
     const ts = Number(stamp);
     const ms = stamp.length === 10 ? ts * 1000 : ts;
     if (!Number.isSafeInteger(ms) || Math.abs(Date.now() - ms) > 120000) return fail(res, 401, 'STALE_REQUEST');
-    const signed = Buffer.concat([Buffer.from(stamp + '.', 'utf8'), req.safetyRaw]);
+    if (!Buffer.isBuffer(req.body)) return fail(res, 415, 'JSON_REQUIRED');
+    const signed = Buffer.concat([Buffer.from(stamp + '.', 'utf8'), req.body]);
     const expected = crypto.createHmac('sha256', key).update(signed).digest();
     const provided = Buffer.from(signature.slice(7), 'hex');
     if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) return fail(res, 401, 'UNAUTHORIZED');
     let input;
-    try { input = JSON.parse(req.safetyRaw.toString('utf8')); } catch { return fail(res, 400, 'INVALID_JSON'); }
+    try { input = JSON.parse(req.body.toString('utf8')); } catch { return fail(res, 400, 'INVALID_JSON'); }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(res, 400, 'INVALID_BODY');
     const { eventId, title, body, channelId, occurredAt, region } = input;
     if (typeof eventId !== 'string' || !/^[a-zA-Z0-9._:-]{1,160}$/.test(eventId) ||
