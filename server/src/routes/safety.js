@@ -62,7 +62,14 @@ router.get('/dashboard', canView, async (_req, res, next) => {
     res.json({
       config,
       source: { name: 'МЧС России / Android', connection: online ? 'HEARTBEAT_RECENT' : health ? 'HEARTBEAT_STALE' : 'NOT_CONFIGURED', lastSeen: health?.lastSeenAt || null, listener: online ? health.listener : 'UNVERIFIED', push: online ? health.push : 'UNVERIFIED' },
-      integration: { status: process.env.MCHS_INGEST_ENABLED === 'true' ? 'TEST_INGEST_ENABLED' : 'DISABLED', receiverConfigured: process.env.MCHS_INGEST_ENABLED === 'true' && (process.env.MCHS_INGEST_HMAC_KEY || '').length >= 32, deliveryVerified: false },
+      integration: {
+        status: process.env.MCHS_INGEST_ENABLED === 'true' ? 'OBSERVATION_RECEIVER_ENABLED' : 'DISABLED',
+        receiverConfigured: process.env.MCHS_INGEST_ENABLED === 'true' && (process.env.MCHS_INGEST_HMAC_KEY || '').length >= 32,
+        deliveryVerified: count > 0,
+        deliveryMode: 'MANUAL_CONFIRMED_AUTOMATIC_UNVERIFIED',
+        lastReceivedAt: events[0]?.receivedAt || null,
+        automaticDeliveryVerified: false,
+      },
       events,
       diagnosticEvents: diagnostics,
       diagnosticCount,
@@ -70,7 +77,7 @@ router.get('/dashboard', canView, async (_req, res, next) => {
       eventCount: count,
       eventHistoryAvailable: true,
       liveActivationAvailable: false,
-      message: 'Приём событий Android пока не подключён. Пустой журнал не означает отсутствия предупреждений МЧС.',
+      message: count > 0 ? 'Исторические уведомления Android поступали в журнал. Автоматическая доставка и подлинность сообщений не подтверждены.' : 'События Android пока не поступали. Пустой журнал не означает отсутствия предупреждений МЧС.',
     });
   } catch (error) { next(error); }
 });
@@ -84,7 +91,7 @@ router.get('/events', canView, async (req, res, next) => {
         eventType: true, verified: true }
     });
     res.set('Cache-Control', 'no-store');
-    res.json({ events, ingestionEnabled: false });
+    res.json({ events, ingestionEnabled: process.env.MCHS_INGEST_ENABLED === 'true' });
   } catch (error) { next(error); }
 });
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {

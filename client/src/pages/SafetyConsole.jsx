@@ -19,15 +19,16 @@ export default function SafetyConsole() {
     {status && <>
       <div className="rounded-2xl border border-amber-400/40 bg-amber-100/60 p-5 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100">
         <strong>ТЕСТОВЫЙ РЕЖИМ — никаких команд в эфир</strong>
-        <p className="mt-2 text-sm">Связь с Android ещё не настроена. Не используйте эту страницу для принятия оперативных решений об эвакуации.</p>
+        <p className="mt-2 text-sm">Ручной приём наблюдений из Android проверен; постоянная доставка и статус источника пока не подтверждены. Не используйте эту страницу для принятия оперативных решений об эвакуации.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Источник</p><p className="font-semibold mt-2">МЧС России — не подключён к сайту</p></div>
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Источник</p><p className="font-semibold mt-2">{status.integration?.deliveryVerified ? 'Историческая доставка из Android подтверждена' : 'События Android не поступали'}</p></div>
         <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><p className="text-sm opacity-60">Оповещение</p><p className="font-semibold mt-2">Выключено</p></div>
       </div>
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><h2 className="font-semibold">Полученные предупреждения</h2><p className="text-sm opacity-60 mt-2">В базе: {status.eventCount ?? 0} записей. Источник Android ещё не подключён.</p>
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-5"><h2 className="font-semibold">Полученные предупреждения</h2><p className="text-sm opacity-60 mt-2">В базе: {status.eventCount ?? 0} записей. Приёмник: {status.integration?.receiverConfigured ? 'включён' : 'выключен'}. Автоматическая доставка Android не подтверждена.</p>
         <div className="mt-3 space-y-2">{status.events?.map(event => <div key={event.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
-          <div className="text-xs opacity-60">{new Date(event.receivedAt).toLocaleString('ru-RU')} · {event.verified ? 'Проверено' : 'Не подтверждено'}</div>
+          <div className="text-xs opacity-60">Получено сервером: {new Date(event.receivedAt).toLocaleString('ru-RU')} · {event.verified ? 'Проверено оператором' : 'Не подтверждено независимо'}</div>
+          <p className="text-xs opacity-60 mt-1">Время уведомления Android: {event.occurredAt ? new Date(event.occurredAt).toLocaleString('ru-RU') : 'не указано'} · {event.occurredAt && Date.now() - new Date(event.occurredAt).getTime() > 30 * 60000 ? 'Историческая запись' : 'Наблюдение — актуальность не установлена'}</p>
           <p className="font-semibold mt-1 break-words">{event.title}</p><p className="text-sm mt-1 whitespace-pre-wrap break-words">{event.body}</p>
         </div>)}</div></div>
       <section className="rounded-2xl border border-sky-400/40 p-5 space-y-3">
