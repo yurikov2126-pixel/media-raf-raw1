@@ -16,6 +16,12 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(parse('{"event":"posted","package":"com.android.shell","key":"1","postTime":1,"title":"x"}'))
     def test_removed_event(self):
         self.assertIsNone(parse('{"event":"removed","package":"io.citizens.security","key":"1","postTime":1}'))
+    def test_json_array(self):
+        self.assertIsNone(parse('[]'))
+    def test_wrong_title_type(self):
+        self.assertIsNone(parse('{"event":"posted","package":"io.citizens.security","key":"1","postTime":1793000000000,"title":{}}'))
+    def test_bad_time(self):
+        self.assertIsNone(parse('{"event":"posted","package":"io.citizens.security","key":"1","postTime":999999999999999999999,"title":"x"}'))
     def test_non_json(self):
         self.assertIsNone(parse("LISTENER_CONNECTED TEST_MODE=true"))
 

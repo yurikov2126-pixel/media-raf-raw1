@@ -53,7 +53,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
       update: {},
       select: { id: true, receivedAt: true, verified: true }
     });
-    res.status(200).json({ accepted: true, id: result.id, receivedAt: result.receivedAt, verified: false, testOnly: true });
+    res.status(200).json({ accepted: true, eventId, id: result.id, receivedAt: result.receivedAt, verified: false, testOnly: true });
   } catch (error) { next(error); }
 });
 router.post('/heartbeat', signedRequest, async (req, res, next) => {
