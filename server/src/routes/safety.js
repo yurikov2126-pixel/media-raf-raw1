@@ -47,15 +47,37 @@ router.get('/dashboard', canView, async (_req, res, next) => {
   try {
     const config = await load();
     res.set('Cache-Control', 'no-store');
+    const [events, count, health] = await Promise.all([
+      prisma.safetyMchsEvent.findMany({ orderBy: { receivedAt: 'desc' }, take: 50, select: {
+        id: true, source: true, receivedAt: true, occurredAt: true, title: true,
+        body: true, channelId: true, region: true, eventType: true, verified: true,
+      } }),
+      prisma.safetyMchsEvent.count(),
+      prisma.safetyMchsHealth.findUnique({ where: { id: 'mchs-android' } }),
+    ]);
     res.json({
       config,
-      source: { name: 'МЧС России / Android', connection: 'NOT_CONFIGURED', lastSeen: null, listener: 'UNVERIFIED', push: 'UNVERIFIED' },
+      source: { name: 'МЧС России / Android', connection: 'NOT_CONFIGURED', lastSeen: health?.lastSeenAt || null, listener: health?.listener || 'UNVERIFIED', push: health?.push || 'UNVERIFIED' },
       integration: { status: 'DISABLED', receiverConfigured: false, deliveryVerified: false },
-      events: [], // Until an authenticated ingestion path and durable event storage are implemented.
-      eventHistoryAvailable: false,
+      events,
+      eventCount: count,
+      eventHistoryAvailable: true,
       liveActivationAvailable: false,
-      message: 'Источник Android пока не подключён к сайту. Журнал событий появится после создания защищённого шлюза.',
+      message: 'Приём событий Android пока не подключён. Пустой журнал не означает отсутствия предупреждений МЧС.',
     });
+  } catch (error) { next(error); }
+});
+router.get('/events', canView, async (req, res, next) => {
+  try {
+    const take = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100);
+    const events = await prisma.safetyMchsEvent.findMany({
+      orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }], take,
+      select: { id: true, source: true, sourceEventId: true, receivedAt: true,
+        occurredAt: true, title: true, body: true, channelId: true, region: true,
+        eventType: true, verified: true }
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ events, ingestionEnabled: false });
   } catch (error) { next(error); }
 });
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
