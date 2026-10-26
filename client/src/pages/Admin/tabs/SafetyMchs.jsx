@@ -8,6 +8,7 @@ export default function SafetyMchs({ token }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [eventFilter, setEventFilter] = useState('all');
   const load = () => api('/safety/dashboard', { token }).then((result) => {
     setData(result); setDraft(result.config); setError('');
   }).catch((e) => setError(e.message));
@@ -53,10 +54,21 @@ export default function SafetyMchs({ token }) {
       </>}
     </section>
     <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5">
-      <h3 className="font-semibold text-lg">Журнал сообщений МЧС</h3>
+      <h3 className="font-semibold text-lg">Журнал сообщений МЧС</h3><p className="text-sm text-amber-700 dark:text-amber-300">Наблюдения из Android не доказывают подлинность официального предупреждения и не означают действующую угрозу. Автоматический радиоэфир отключён.</p>
       <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Событий в базе: {data?.eventCount ?? '—'}. Приём событий Android пока отключён. Пустой журнал не подтверждает отсутствия предупреждений.</p>
-      {data?.events?.length > 0 && <div className="mt-4 space-y-3">{data.events.map(event => <article key={event.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-4">
-        <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-white/50"><time>{new Date(event.receivedAt).toLocaleString('ru-RU')}</time><span>{event.verified ? 'Проверено' : 'Не подтверждено'}</span></div>
+      <label className="mt-3 flex items-center gap-2 text-sm">Показать
+        <select className="rounded-lg border border-slate-300 dark:border-white/20 bg-transparent p-2" value={eventFilter} onChange={e => setEventFilter(e.target.value)}>
+          <option value="all">Все наблюдения</option>
+          <option value="historical">Исторические (старше 30 минут)</option>
+          <option value="recent">Полученные недавно (до 30 минут)</option>
+        </select>
+      </label>
+      {data?.events?.length > 0 && <div className="mt-4 space-y-3">{data.events.filter(event => {
+        const age = Date.now() - new Date(event.occurredAt || event.receivedAt).getTime();
+        const historical = !Number.isFinite(age) || age > 30 * 60 * 1000 || age < -2 * 60 * 1000;
+        return eventFilter === 'all' || (eventFilter === 'historical' ? historical : !historical);
+      }).map(event => <article key={event.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-4">
+        <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-white/50"><time>{new Date(event.receivedAt).toLocaleString('ru-RU')}</time><span>{event.verified ? 'Подтверждение зафиксировано' : 'Не подтверждено независимо'}</span><span>{(Date.now() - new Date(event.occurredAt || event.receivedAt).getTime() > 30 * 60 * 1000) ? 'Историческое' : 'Недавнее наблюдение (не означает активную тревогу)'}</span></div>
         <h4 className="mt-2 font-semibold break-words">{event.title}</h4><p className="mt-1 text-sm whitespace-pre-wrap break-words">{event.body}</p>
         <p className="mt-2 text-xs opacity-60">Канал: {event.channelId || 'не указан'} · Регион: {event.region || 'не указан'}</p>
       </article>)}</div>}
