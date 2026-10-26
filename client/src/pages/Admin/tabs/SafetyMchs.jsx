@@ -20,8 +20,10 @@ export default function SafetyMchs({ token }) {
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
   return <div className="space-y-5 text-slate-800 dark:text-white">
-    <header><h2 className="text-2xl font-bold">🛡️ Экстренное оповещение</h2>
-      <p className="mt-1 text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · этап 1: подготовка, без автоматического запуска</p></header>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · этап 1: подготовка, без автоматического запуска</p>
+      <button type="button" onClick={load} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-white/10">Обновить состояние</button>
+    </div>
     <div role="status" className="rounded-2xl border border-amber-400/40 bg-amber-100/60 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100 p-4">
       <strong>Тестовый режим. Реальное оповещение заблокировано.</strong>
       <p className="text-sm mt-1">Android ещё не подключён к API сайта. Отсутствие сообщений в журнале не означает отсутствия предупреждений МЧС.</p>
