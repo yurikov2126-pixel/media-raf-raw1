@@ -8,7 +8,6 @@ import hashlib
 import hmac
 import json
 import os
-import queue
 import signal
 import sqlite3
 import subprocess
@@ -51,7 +50,7 @@ def parse(line):
         value = json.loads(raw)
     except (ValueError, TypeError):
         return None
-    if value.get("event") != "posted" or value.get("package") != "io.citizens.security":
+    if not isinstance(value, dict) or value.get("event") != "posted" or value.get("package") != "io.citizens.security":
         return None
     key = value.get("key")
     occurred = value.get("postTime")
@@ -59,19 +58,27 @@ def parse(line):
         return None
     if type(occurred) is not int or occurred < 0:
         return None
-    title = str(value.get("title") or "").strip()[:300]
-    body = str(value.get("bigText") or value.get("text") or "")[:4000]
+    title = value.get("title")
+    body = value.get("bigText") or value.get("text") or ""
+    if not isinstance(title, str) or not isinstance(body, str):
+        return None
+    title = title.strip()[:300]
+    body = body[:4000]
     if not title:
         title = "Уведомление МЧС без заголовка"
     channel = value.get("channel")
     channel = channel if isinstance(channel, str) else None
+    try:
+        occurred_iso = datetime.fromtimestamp(occurred / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    except (ValueError, OverflowError, OSError):
+        return None
     event_id = hashlib.sha256((key + "|" + str(occurred) + "|" + title + "|" + body).encode("utf8")).hexdigest()
     return {
         "eventId": event_id,
         "title": title,
         "body": body,
         "channelId": channel[:100] if channel else None,
-        "occurredAt": datetime.fromtimestamp(occurred / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "occurredAt": occurred_iso,
     }
 
 def collect(connection):
@@ -80,7 +87,7 @@ def collect(connection):
             # New log stream; no replay guarantee across disconnects.
             with subprocess.Popen([ADB, "-s", SERIAL, "logcat", "-v", "raw", "-s",
                                    "MCHS_BRIDGE:I", "*:S"], stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE, text=True, bufsize=1) as process:
+                                  stderr=subprocess.DEVNULL, text=True, bufsize=1) as process:
                 for line in process.stdout:
                     if STOP.is_set():
                         process.terminate()
@@ -112,7 +119,8 @@ def transmit(item):
     })
     with urllib.request.urlopen(req, timeout=10) as response:
         result = json.load(response)
-        if response.status != 200 or result.get("accepted") is not True:
+        expected_id = json.loads(item)["eventId"]
+        if response.status != 200 or result.get("accepted") is not True or result.get("eventId") != expected_id or result.get("testOnly") is not True:
             raise ValueError("No positive server acknowledgement")
 
 def sender(db_path):
@@ -135,7 +143,7 @@ def sender(db_path):
             connection.execute("UPDATE pending SET delivered_at=?,last_error=NULL WHERE event_id=?",
                                (int(time.time()), event_id))
             log("delivered id=" + event_id[:12])
-        except (urllib.error.URLError, ValueError, TimeoutError, OSError) as error:
+        except (urllib.error.URLError, ValueError, TimeoutError, OSError, KeyError) as error:
             backoff = min(300, 2 ** min(attempts + 1, 8))
             connection.execute(
                 "UPDATE pending SET attempts=attempts+1,next_attempt=?,last_error=? WHERE event_id=?",
