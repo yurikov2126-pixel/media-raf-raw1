@@ -40,6 +40,7 @@ import mentorAcademyRouter from './routes/mentorAcademy.js';
 import editorialRouter from './routes/editorial.js';
 import radioRouter from './routes/radio.js';
 import radioAgentRouter from './routes/radioAgent.js';
+import safetyIngestRouter from './routes/safetyIngest.js';
 import safetyRouter from './routes/safety.js';
 import editorialWorkflowRouter from './routes/editorialWorkflow.js';
 import editorialMaterialsRouter from './routes/editorialMaterials.js';
@@ -70,6 +71,8 @@ export const corsOptions = {
 const app = express();
 
 app.use(cors(corsOptions));
+// Raw signed requests must be processed BEFORE the global JSON parser.
+app.use('/api/safety-ingest', safetyIngestRouter);
 app.use(express.json({ limit: '10mb' }));
 
 // Статика загрузок (фото, видео, файлы, голосовые)
