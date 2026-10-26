@@ -25,6 +25,7 @@ import { readCues, writeCue, validateCue } from '../lib/radioAudioCue.js';
 import { readJingles, writeJingles, planJingleBreaks } from '../lib/radioJingles.js';
 import { readTimeSignal, writeTimeSignal } from '../lib/radioTimeSignal.js';
 import { workerRequest } from '../lib/radioLiveOpusGateway.js';
+import { validateRadioAlertAsset } from '../lib/radioEmergencyPolicy.js';
 import {readSourceControl,writeSourceControl,resolveSourcePriority} from '../lib/radioSourceControl.js';
 import {planSourceHandover} from '../lib/radioLiveHandover.js';
 
@@ -1376,6 +1377,33 @@ router.delete('/schedule/:id', safe(async (req, res) => {
     });
     if (!result.count) return res.status(404).json({ error: 'Текущая или будущая передача не найдена' });
     res.json({ ok: true });
+}));
+
+
+// Operational announcements share the station MP3 stream with the site and radio agent.
+// Not a replacement for certified fire/evacuation public-address infrastructure.
+router.get('/operator-alert',safe(async(_req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  try{res.json({worker:await workerRequest('GET','/operator-alert/status')});}
+  catch(error){res.status(503).json({error:'Радиообработчик недоступен',detail:String(error.message||error)});}
+}));
+router.post('/operator-alert/start',safe(async(req,res)=>{
+  if(process.env.RADIO_OPERATOR_ALERTS_ENABLED!=='true')
+    return res.status(409).json({error:'Оповещения отключены в настройках сервера'});
+  const assetId=String(req.body?.assetId||'');
+  if(!/^[a-zA-Z0-9_-]{8,100}$/.test(assetId))
+    return res.status(400).json({error:'Некорректный идентификатор файла'});
+  const asset=await prisma.radioAsset.findUnique({where:{id:assetId}});
+  try{validateRadioAlertAsset(asset);}
+  catch(error){return res.status(400).json({error:error.message});}
+  try{
+    const worker=await workerRequest('POST','/operator-alert/start',null,{'x-radio-alert-asset-id':assetId});
+    res.status(202).json({worker});
+  }catch(error){res.status(503).json({error:'Не удалось передать команду оповещения',detail:String(error.message||error)});}
+}));
+router.post('/operator-alert/stop',safe(async(_req,res)=>{
+  try{res.json({worker:await workerRequest('POST','/operator-alert/stop')});}
+  catch(error){res.status(503).json({error:'Не удалось остановить оповещение',detail:String(error.message||error)});}
 }));
 
 export default router;
