@@ -1067,7 +1067,7 @@ router.post('/student/episodes/:id/submit',studentOnly,safe(async(req,res)=>{
  const admins=await prisma.user.findMany({where:{role:'ADMIN',isBanned:false},select:{id:true}});
  await prisma.notification.createMany({data:admins.map(a=>({
   userId:a.id,type:'RADIO_EPISODE_REVIEW',
-  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:'submitted',url:'/app/radio?tab=hosts'})
+  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:'submitted',url:'/app/radio?tab=hosts&episode='+encodeURIComponent(episode.id)})
  }))});
  res.json({episode});
 }));
@@ -1085,7 +1085,7 @@ router.post('/editorial/episodes/:id/review',requireRole('ADMIN'),safe(async(req
  const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
  await prisma.notification.createMany({data:episode.hostIds.map(userId=>({
   userId,type:'RADIO_EPISODE_REVIEW',
-  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:decision,reason:decision==='return'?reason:undefined,url:'/app/radio/student'})
+  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:decision,reason:decision==='return'?reason:undefined,url:'/app/radio/playlists/my?episode='+encodeURIComponent(episode.id)})
  }))});
  res.json({episode});
 }));
@@ -1266,7 +1266,7 @@ router.post('/editorial/episodes/:id/assign',requireRole('ADMIN'),safe(async(req
   await prisma.notification.createMany({data:result.hostIds.map(userId=>({
    userId,type:'RADIO_EPISODE_ASSIGNED',
    payload:JSON.stringify({episodeId:result.id,title:result.title,startAt:result.startAt,
-    event:'assigned',url:'/app/radio/student'})
+    event:'assigned',url:'/app/radio/playlists/my?episode='+encodeURIComponent(result.id)})
   }))});
  }
  res.json({episode:result});

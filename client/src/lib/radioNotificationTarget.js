@@ -16,5 +16,11 @@ export function radioNotificationTarget(notification) {
   if (kind === 'RADIO_PLAYLIST_RETURNED' || kind === 'RADIO_PLAYLIST_APPROVED') {
     return '/app/radio/playlists/my' + (id ? '?playlist=' + encodeURIComponent(String(id)) : '');
   }
+  if (kind === 'RADIO_EPISODE_ASSIGNED' || kind === 'RADIO_EPISODE_REVIEW') {
+    const episodeId = payload.episodeId;
+    const isAdminTarget = payload.event === 'submitted';
+    const base = isAdminTarget ? '/app/radio?tab=hosts' : '/app/radio/playlists/my';
+    return base + (episodeId ? (isAdminTarget ? '&' : '?') + 'episode=' + encodeURIComponent(String(episodeId)) : '');
+  }
   return null;
 }
