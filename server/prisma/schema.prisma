@@ -1464,6 +1464,9 @@ model SafetyMchsDiagnostic {
 }
 
 model RadioEditorialEpisode {
+  publishedPlaylistId String?
+  publishedAt DateTime?
+  liveReady Boolean @default(false)
   reviewReason String?
   submittedAt DateTime?
   reviewedAt DateTime?
