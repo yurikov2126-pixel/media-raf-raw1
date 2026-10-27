@@ -46,3 +46,35 @@ def send_heartbeat(host, secret, mode, audio_ready, platform_authorized, timeout
         if signed:
             _counter[key]=seq
         return result
+
+
+def restart_esp32(host, secret, timeout=4):
+    """Operator-requested, HMAC-authorized safe restart of compatible firmware."""
+    if not isinstance(secret,str) or len(secret)<32:
+        raise ValueError("Local ESP32 secret must be 32+ characters")
+    address=ipaddress.ip_address(host)
+    if address.version!=4 or not address.is_private:
+        raise ValueError("ESP32 must use private IPv4")
+    host=str(address)
+    with _lock:
+        with urllib.request.urlopen("http://"+host+"/health",timeout=timeout) as response:
+            health=json.load(response)
+        if health.get("mode")!="POWER_CONTROL_V1":
+            raise RuntimeError("ESP32 firmware does not support authenticated restart")
+        nonce=health.get("bootNonce")
+        if not isinstance(nonce,str) or len(nonce)!=16:
+            raise ValueError("Missing boot nonce")
+        key=(host,nonce)
+        seq=max(_counter.get(key,0),int(health.get("powerSequence",0)))+1
+        if seq>=2**31:raise ValueError("ESP32 sequence overflow")
+        payload=f"{nonce}:restart:{seq}"
+        signature=hmac.new(secret.encode(),payload.encode(),hashlib.sha256).hexdigest()
+        request=urllib.request.Request("http://"+host+"/restart",
+            data=json.dumps({"seq":seq}).encode(),
+            headers={"Content-Type":"application/json","X-Radio-Signature":signature},
+            method="POST")
+        with urllib.request.urlopen(request,timeout=timeout) as response:
+            result=json.load(response)
+        if not result.get("ok"):
+            raise RuntimeError("ESP32 restart not acknowledged")
+        return result
