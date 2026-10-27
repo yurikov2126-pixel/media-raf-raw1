@@ -19,7 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run, PLAYBACK_STATE
 from updater import check_latest, stage_update, UpdateCheckError
-from esp32_local import send_heartbeat
+from esp32_local import send_heartbeat, restart_esp32, upload_firmware
 from esp32_telemetry import report_status
 from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
@@ -28,7 +28,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.4'
+AGENT_VERSION = '0.5.5'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -203,6 +203,8 @@ class RadioAgentApp(tk.Tk):
         linkbar = ttk.Frame(links, style="Main.TFrame")
         linkbar.pack(fill="x", pady=(9, 4))
         ttk.Button(linkbar, text="Проверить связь", command=self.test_esp32).pack(side="left")
+        ttk.Button(linkbar, text="Перезагрузить ESP32", command=self.reboot_esp32).pack(side="left",padx=8)
+        ttk.Button(links, text="Перепрошить ESP32 (.bin)", command=self.flash_esp32).pack(anchor="w",pady=(5,0))
         ttk.Label(linkbar, textvariable=self.esp32_status, style="Main.TLabel").pack(side="left", padx=12)
         ttk.Label(links, textvariable=self.esp32_platform_status, style="Main.TLabel").pack(anchor="w", pady=(3, 0))
         ttk.Label(links, textvariable=self.power_status,style="Main.TLabel").pack(anchor="w",pady=(5,0))
@@ -512,6 +514,46 @@ class RadioAgentApp(tk.Tk):
                     self.messages.put(("power_done",None))
             threading.Thread(target=job,daemon=True).start()
         self.after(3000,self.power_tick)
+
+    def flash_esp32(self):
+        host=self.esp32_ip.get().strip()
+        secret=self.esp32_secret.get().strip()
+        if not host or len(secret)<32:
+            self.esp32_status.set("Для прошивки нужны IP и секрет ESP32")
+            return
+        file=filedialog.askopenfilename(title="Выберите прошивку ESP32",
+            filetypes=[("ESP32 application firmware","*.bin")])
+        if not file:
+            return
+        if not messagebox.askyesno("Перепрошивка ESP32",
+                "ВНИМАНИЕ: будет отключено реле усилителя. Обновляйте только доверенным .bin для вашей ESP32, когда эфир можно прервать. Не выключайте питание во время записи. Продолжить?"):
+            return
+        self.esp32_status.set("Перепрошивка ESP32…")
+        def task():
+            try:
+                upload_firmware(host,secret,file)
+                self.messages.put(("esp32_ok","Прошивка записана · ESP32 перезагружается"))
+            except Exception as error:
+                self.messages.put(("esp32_error",type(error).__name__+": "+str(error)[:110]))
+        threading.Thread(target=task,daemon=True).start()
+
+    def reboot_esp32(self):
+        host=self.esp32_ip.get().strip()
+        secret=self.esp32_secret.get().strip()
+        if not host or not secret:
+            self.esp32_status.set("Введите IP и секрет ESP32")
+            return
+        if not messagebox.askyesno("Перезагрузка ESP32",
+                "Перезапуск отключит реле усилителя и временно прервёт управление питанием. Продолжить?"):
+            return
+        self.esp32_status.set("Перезагрузка ESP32…")
+        def task():
+            try:
+                restart_esp32(host,secret)
+                self.messages.put(("esp32_ok","Команда перезагрузки принята · дождитесь восстановления связи"))
+            except Exception as error:
+                self.messages.put(("esp32_error",type(error).__name__+": "+str(error)[:100]))
+        threading.Thread(target=task,daemon=True).start()
 
     def test_esp32(self):
         host=self.esp32_ip.get().strip()

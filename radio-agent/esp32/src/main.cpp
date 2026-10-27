@@ -3,6 +3,8 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <esp_system.h>
+#include <Update.h>
+#include <mbedtls/sha256.h>
 #include <mbedtls/md.h>
 #include "secrets.h"
 
@@ -16,6 +18,12 @@ String lastMode="DISCONNECTED";
 String bootNonce;
 uint32_t lastHeartbeat=0,heartbeatCount=0,powerExpires=0,lastSequence=0,lastHeartbeatSequence=0;
 bool commandedOn=false;
+uint32_t lastWifiReconnect=0;
+uint32_t restartAt=0;
+bool otaAuthorized=false,otaCompleted=false;
+String otaExpectedDigest;
+mbedtls_sha256_context otaDigest;
+
 
 void powerOff(){
   digitalWrite(RELAY_GPIO,LOW);
@@ -113,6 +121,72 @@ void powerRequest(){
   powerExpires=millis()+lease;
   respond(200,"{\"ok\":true,\"amplifierPower\":\"ON_COMMANDED\"}");
 }
+void restartRequest(){
+  JsonDocument req;
+  if(deserializeJson(req,server.arg("plain"))){respond(400,R"({"error":"INVALID_JSON"})");return;}
+  const uint32_t seq=req["seq"]|uint32_t(0);
+  const String payload=bootNonce+":restart:"+String(seq);
+  if(strlen(RADIO_PAIR_SECRET)<32 || seq==0 || seq<=lastSequence ||
+     !equalDigest(server.header("X-Radio-Signature"),hmacHex(payload))){
+    respond(403,R"({"error":"INVALID_SIGNATURE_OR_REPLAY"})");return;
+  }
+  lastSequence=seq;
+  powerOff(); // Always drop relay before a remote maintenance reboot.
+  restartAt=millis()+500;
+  respond(202,R"({"ok":true,"restarting":true})");
+}
+// Signed local OTA: only a device-paired operator may upload an image, and
+// its SHA-256 is verified BEFORE activating the new partition. Never power
+// the amplifier during a firmware change.
+void firmwareUpload(){
+  HTTPUpload& upload=server.upload();
+  if(upload.status==UPLOAD_FILE_START){
+    otaAuthorized=false;otaCompleted=false;
+    const uint32_t seq=server.header("X-Radio-OTA-Seq").toInt();
+    const String digest=server.header("X-Radio-OTA-SHA256");
+    const String payload=bootNonce+":flash:"+String(seq)+":"+digest;
+    if(strlen(RADIO_PAIR_SECRET)<32 || seq==0 || seq<=lastSequence ||
+       digest.length()!=64 || !equalDigest(server.header("X-Radio-Signature"),hmacHex(payload))){
+      return;
+    }
+    for(size_t i=0;i<64;i++)if(!isxdigit(digest[i]))return;
+    lastSequence=seq;
+    powerOff();
+    otaExpectedDigest=digest;
+    mbedtls_sha256_init(&otaDigest);
+    mbedtls_sha256_starts(&otaDigest,0);
+    otaAuthorized=Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH);
+    if(!otaAuthorized)mbedtls_sha256_free(&otaDigest);
+  }else if(upload.status==UPLOAD_FILE_WRITE){
+    if(!otaAuthorized)return;
+    mbedtls_sha256_update(&otaDigest,upload.buf,upload.currentSize);
+    if(Update.write(upload.buf,upload.currentSize)!=upload.currentSize){
+      Update.abort();
+      mbedtls_sha256_free(&otaDigest);
+      otaAuthorized=false;
+    }
+  }else if(upload.status==UPLOAD_FILE_END){
+    if(!otaAuthorized)return;
+    unsigned char digest[32];
+    mbedtls_sha256_finish(&otaDigest,digest);
+    mbedtls_sha256_free(&otaDigest);
+    String got;
+    const char digits[]="0123456789abcdef";
+    for(uint8_t i=0;i<32;i++){got+=digits[digest[i]>>4];got+=digits[digest[i]&15];}
+    if(got!=otaExpectedDigest){Update.abort();otaAuthorized=false;return;}
+    otaCompleted=Update.end(true);
+    otaAuthorized=false;
+  }else if(upload.status==UPLOAD_FILE_ABORTED){
+    if(otaAuthorized){Update.abort();mbedtls_sha256_free(&otaDigest);}
+    otaAuthorized=false;
+  }
+}
+void firmwareResult(){
+  powerOff();
+  if(!otaCompleted){respond(400,R"({"error":"INVALID_FIRMWARE_OR_SIGNATURE"})");return;}
+  restartAt=millis()+800;
+  respond(202,R"({"ok":true,"updating":true})");
+}
 void setup(){
   // OFF before configuring as output; a physical pulldown is required at boot.
   digitalWrite(RELAY_GPIO,LOW);
@@ -129,16 +203,27 @@ void setup(){
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.begin(RADIO_WIFI_SSID,RADIO_WIFI_PASSWORD);
-  const char* headers[]={"X-Radio-Local-Secret","X-Radio-Signature"};
-  server.collectHeaders(headers,2);
+  const char* headers[]={"X-Radio-Local-Secret","X-Radio-Signature","X-Radio-OTA-Seq","X-Radio-OTA-SHA256"};
+  server.collectHeaders(headers,4);
   server.on("/health",HTTP_GET,status);
   server.on("/heartbeat",HTTP_POST,heartbeat);
   server.on("/power",HTTP_POST,powerRequest);
+  server.on("/restart",HTTP_POST,restartRequest);
+  server.on("/firmware",HTTP_POST,firmwareResult,firmwareUpload);
   server.onNotFound([](){respond(404,"{\"error\":\"NOT_FOUND\"}");});
   server.begin();
 }
 void loop(){
   server.handleClient();
+  if(restartAt && (int32_t)(millis()-restartAt)>=0){powerOff();ESP.restart();}
+  // Recover stalled studio Wi-Fi after router/internet outages without a
+  // physical power cycle. A reconnection is never authority to energize GPIO.
+  if(WiFi.status()!=WL_CONNECTED && millis()-lastWifiReconnect>=15000){
+    lastWifiReconnect=millis();
+    powerOff();
+    WiFi.disconnect();
+    WiFi.begin(RADIO_WIFI_SSID,RADIO_WIFI_PASSWORD);
+  }
   if(WiFi.status()!=WL_CONNECTED || !heartbeatFresh() || !powerLeaseValid()) {
     if(commandedOn)powerOff();
   }
