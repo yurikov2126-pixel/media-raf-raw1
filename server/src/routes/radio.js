@@ -1149,6 +1149,34 @@ router.post('/editorial/episodes/:id/publish',requireRole('ADMIN'),safe(async(re
  if(result.error)return res.status(result.code).json({error:result.error});
  res.json(result);
 }));
+// Undo a future editorial publication without deleting its approved script,
+// assigned hosts or planned time. Never rewrite a slot that is already on air.
+router.post('/editorial/episodes/:id/unpublish',requireRole('ADMIN'),safe(async(req,res)=>{
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const episode=await tx.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+  if(!episode)return {code:404,error:'Выпуск не найден'};
+  if(!episode.publishedAt||!episode.publishedPlaylistId||!episode.slotId)
+   return {code:409,error:'У выпуска нет активной публикации'};
+  const slot=await tx.radioScheduleSlot.findUnique({where:{id:episode.slotId}});
+  if(!slot||slot.startAt<=new Date())
+   return {code:409,error:'Нельзя отменить публикацию начавшейся или прошедшей передачи'};
+  if(slot.playlistId!==episode.publishedPlaylistId)
+   return {code:409,error:'Плейлист слота уже изменён — проверьте эфирную сетку'};
+  const restoredEnd=new Date(slot.startAt.getTime()+episode.durationMin*60000);
+  const collision=await tx.radioScheduleSlot.findFirst({where:{
+   id:{not:slot.id},startAt:{lt:restoredEnd},endAt:{gt:slot.startAt}
+  },select:{id:true}});
+  if(collision)return {code:409,error:'Не удалось восстановить плановую длительность: время занято'};
+  const updatedSlot=await tx.radioScheduleSlot.update({where:{id:slot.id},
+   data:{playlistId:null,endAt:restoredEnd,title:episode.title,hostIds:episode.hostIds}});
+  const updatedEpisode=await tx.radioEditorialEpisode.update({where:{id:episode.id},
+   data:{publishedAt:null,publishedPlaylistId:null}});
+  return {episode:updatedEpisode,slot:updatedSlot};
+ });
+ if(result.error)return res.status(result.code).json({error:result.error});
+ res.json(result);
+}));
 router.post('/editorial/episodes/:id/live-ready',requireRole('ADMIN'),safe(async(req,res)=>{
  if(typeof req.body?.ready!=='boolean')
   return res.status(400).json({error:'Укажите готовность прямого эфира'});
