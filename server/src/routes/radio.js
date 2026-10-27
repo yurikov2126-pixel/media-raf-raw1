@@ -1051,8 +1051,13 @@ router.patch('/editorial/episodes/:id',requireRole('ADMIN'),safe(async(req,res)=
  if(!data||!await checkRadioHostIds(data.hostIds))return res.status(400).json({error:'Некорректные данные выпуска'});
  const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
  if(!episode)return res.status(404).json({error:'Выпуск не найден'});
- if(episode.slotId)return res.status(409).json({error:'Выпуск уже связан с сеткой. Изменения даты сначала согласуйте в сетке вещания'});
- const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},data});
+ if(episode.slotId){
+  if(data.startAt.getTime()!==episode.startAt.getTime()||data.durationMin!==episode.durationMin||
+     data.title!==episode.title||data.format!==episode.format||
+     JSON.stringify(data.hostIds)!==JSON.stringify(episode.hostIds))
+   return res.status(409).json({error:'Выпуск уже в сетке: дату и ведущих меняйте через сетку. Сценарий редактировать можно'});
+ }
+ const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},data:episode.slotId?{script:data.script}:data});
  res.json({episode:updated});
 }));
 router.delete('/editorial/episodes/:id',requireRole('ADMIN'),safe(async(req,res)=>{
