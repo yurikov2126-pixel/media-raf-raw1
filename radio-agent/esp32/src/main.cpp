@@ -16,6 +16,8 @@ String lastMode="DISCONNECTED";
 String bootNonce;
 uint32_t lastHeartbeat=0,heartbeatCount=0,powerExpires=0,lastSequence=0,lastHeartbeatSequence=0;
 bool commandedOn=false;
+uint32_t lastWifiReconnect=0;
+uint32_t restartAt=0;
 
 void powerOff(){
   digitalWrite(RELAY_GPIO,LOW);
@@ -113,6 +115,20 @@ void powerRequest(){
   powerExpires=millis()+lease;
   respond(200,"{\"ok\":true,\"amplifierPower\":\"ON_COMMANDED\"}");
 }
+void restartRequest(){
+  JsonDocument req;
+  if(deserializeJson(req,server.arg("plain"))){respond(400,R"({"error":"INVALID_JSON"})");return;}
+  const uint32_t seq=req["seq"]|uint32_t(0);
+  const String payload=bootNonce+":restart:"+String(seq);
+  if(strlen(RADIO_PAIR_SECRET)<32 || seq==0 || seq<=lastSequence ||
+     !equalDigest(server.header("X-Radio-Signature"),hmacHex(payload))){
+    respond(403,R"({"error":"INVALID_SIGNATURE_OR_REPLAY"})");return;
+  }
+  lastSequence=seq;
+  powerOff(); // Always drop relay before a remote maintenance reboot.
+  restartAt=millis()+500;
+  respond(202,R"({"ok":true,"restarting":true})");
+}
 void setup(){
   // OFF before configuring as output; a physical pulldown is required at boot.
   digitalWrite(RELAY_GPIO,LOW);
@@ -134,11 +150,21 @@ void setup(){
   server.on("/health",HTTP_GET,status);
   server.on("/heartbeat",HTTP_POST,heartbeat);
   server.on("/power",HTTP_POST,powerRequest);
+  server.on("/restart",HTTP_POST,restartRequest);
   server.onNotFound([](){respond(404,"{\"error\":\"NOT_FOUND\"}");});
   server.begin();
 }
 void loop(){
   server.handleClient();
+  if(restartAt && (int32_t)(millis()-restartAt)>=0){powerOff();ESP.restart();}
+  // Recover stalled studio Wi-Fi after router/internet outages without a
+  // physical power cycle. A reconnection is never authority to energize GPIO.
+  if(WiFi.status()!=WL_CONNECTED && millis()-lastWifiReconnect>=15000){
+    lastWifiReconnect=millis();
+    powerOff();
+    WiFi.disconnect();
+    WiFi.begin(RADIO_WIFI_SSID,RADIO_WIFI_PASSWORD);
+  }
   if(WiFi.status()!=WL_CONNECTED || !heartbeatFresh() || !powerLeaseValid()) {
     if(commandedOn)powerOff();
   }
