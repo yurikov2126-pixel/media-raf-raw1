@@ -103,6 +103,7 @@ export default function RadioStudentPlaylists() {
     });
   };
   return <main className="mx-auto max-w-5xl space-y-4 p-3 pb-24 sm:p-6">
+    <RadioHostAssignments/>
     <header className="space-y-1">
       <p className="text-xs uppercase tracking-widest opacity-55">MEDIA · РАФ · RAW / Радио</p>
       <h1 className="text-2xl font-bold">Мои плейлисты</h1>
