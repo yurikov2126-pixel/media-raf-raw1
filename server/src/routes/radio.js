@@ -1032,6 +1032,65 @@ const episodeFields=body=>{
     hostIds.some(id=>typeof id!=='string'||!id)||new Set(hostIds).size!==hostIds.length)return null;
  return {title,script,startAt,durationMin,hostIds,format};
 };
+// Student-facing radio assignment desk, scoped to the user's assigned host IDs.
+router.get('/student/episodes',studentOnly,safe(async(req,res)=>{
+ const episodes=await prisma.radioEditorialEpisode.findMany({
+  where:{hostIds:{has:req.user.id}},orderBy:{startAt:'asc'},take:250
+ });
+ res.json({episodes});
+}));
+router.patch('/student/episodes/:id/script',studentOnly,safe(async(req,res)=>{
+ const script=req.body?.script;
+ if(typeof script!=='string'||script.length>100000)
+  return res.status(400).json({error:'Сценарий должен быть текстом не длиннее 100 000 символов'});
+ const expectedRevision=req.body?.revision;
+ if(!Number.isInteger(expectedRevision)||expectedRevision<1)
+  return res.status(400).json({error:'Укажите текущую версию сценария'});
+ const episode=await prisma.radioEditorialEpisode.findFirst({
+  where:{id:req.params.id,hostIds:{has:req.user.id}}
+ });
+ if(!episode)return res.status(404).json({error:'Назначение не найдено'});
+ if(!['ASSIGNED','DRAFT','RETURNED'].includes(episode.status))
+  return res.status(409).json({error:'Сценарий на проверке либо утверждён'});
+ const result=await prisma.radioEditorialEpisode.updateMany({
+  where:{id:episode.id,scriptRevision:expectedRevision,status:{in:['ASSIGNED','DRAFT','RETURNED']}},
+  data:{script,scriptRevision:{increment:1},status:episode.status==='RETURNED'?'ASSIGNED':episode.status}
+ });
+ if(!result.count)return res.status(409).json({error:'Сценарий был обновлён в другой вкладке. Обновите задание'});
+ res.json({episode:await prisma.radioEditorialEpisode.findUnique({where:{id:episode.id}})});
+}));
+router.post('/student/episodes/:id/submit',studentOnly,safe(async(req,res)=>{
+ const result=await prisma.radioEditorialEpisode.updateMany({
+  where:{id:req.params.id,hostIds:{has:req.user.id},status:{in:['ASSIGNED','RETURNED']},
+    script:{not:''}},data:{status:'REVIEW',submittedAt:new Date(),reviewReason:null}
+ });
+ if(!result.count)return res.status(409).json({error:'Не найдено доступное задание с подготовленным сценарием'});
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ const admins=await prisma.user.findMany({where:{role:'ADMIN',isBanned:false},select:{id:true}});
+ await prisma.notification.createMany({data:admins.map(a=>({
+  userId:a.id,type:'RADIO_EPISODE_REVIEW',
+  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:'submitted',url:'/app/radio?tab=hosts'})
+ }))});
+ res.json({episode});
+}));
+router.post('/editorial/episodes/:id/review',requireRole('ADMIN'),safe(async(req,res)=>{
+ const decision=req.body?.decision,reason=String(req.body?.reason||'').trim();
+ if(!['approve','return'].includes(decision)||decision==='return'&&!reason)
+  return res.status(400).json({error:'Для возврата укажите причину'});
+ const result=await prisma.radioEditorialEpisode.updateMany({
+  where:{id:req.params.id,status:'REVIEW'},
+  data:{status:decision==='approve'?'APPROVED':'RETURNED',
+   reviewReason:decision==='return'?reason:null,
+   reviewedBy:req.user.id,reviewedAt:new Date()}
+ });
+ if(!result.count)return res.status(409).json({error:'Выпуск не находится на проверке'});
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ await prisma.notification.createMany({data:episode.hostIds.map(userId=>({
+  userId,type:'RADIO_EPISODE_REVIEW',
+  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:decision,reason:decision==='return'?reason:undefined,url:'/app/radio/student'})
+ }))});
+ res.json({episode});
+}));
 router.get('/editorial/episodes',requireRole('ADMIN'),safe(async(req,res)=>{
  const from=new Date(req.query.from),to=new Date(req.query.to);
  if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||to<=from||
@@ -1088,6 +1147,13 @@ router.post('/editorial/episodes/:id/assign',requireRole('ADMIN'),safe(async(req
     data:{slotId:slot.id,status:'ASSIGNED'}});
  });
  if(!result)return res.status(409).json({error:'Время занято в эфирной сетке'});
+ if(result.status==='ASSIGNED'&&result.hostIds.length){
+  await prisma.notification.createMany({data:result.hostIds.map(userId=>({
+   userId,type:'RADIO_EPISODE_ASSIGNED',
+   payload:JSON.stringify({episodeId:result.id,title:result.title,startAt:result.startAt,
+    event:'assigned',url:'/app/radio/student'})
+  }))});
+ }
  res.json({episode:result});
 }));
 router.get('/hosts',requireRole('ADMIN'),safe(async(req,res)=>{
