@@ -1266,7 +1266,7 @@ router.post('/editorial/episodes/:id/assign',requireRole('ADMIN'),safe(async(req
   await prisma.notification.createMany({data:result.hostIds.map(userId=>({
    userId,type:'RADIO_EPISODE_ASSIGNED',
    payload:JSON.stringify({episodeId:result.id,title:result.title,startAt:result.startAt,
-    event:'assigned',url:'/app/radio/playlists/my?episode='+encodeURIComponent(episode.id)})
+    event:'assigned',url:'/app/radio/playlists/my?episode='+encodeURIComponent(result.id)})
   }))});
  }
  res.json({episode:result});
