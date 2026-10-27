@@ -1,4 +1,5 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 
 const newDraft=(day)=>({title:'',script:'',day,time:'10:00',durationMin:30,format:'RECORDED',hostIds:[]});
 const pad=n=>String(n).padStart(2,'0');
@@ -27,6 +28,30 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
  const [recurring,setRecurring]=useState(false),[repeatCount,setRepeatCount]=useState(4),[repeatDays,setRepeatDays]=useState([]);
  const [draft,setDraft]=useState(null),[editingId,setEditingId]=useState(null),[view,setView]=useState('month');
  const [refreshKey,setRefreshKey]=useState(0);
+ const [modalVisible,setModalVisible]=useState(false);
+ const closeTimer=useRef(null),dialogRef=useRef(null),previousFocus=useRef(null);
+ const closeEditor=()=>{if(busy)return;setModalVisible(false);clearTimeout(closeTimer.current);closeTimer.current=setTimeout(()=>setDraft(null),210)};
+ useEffect(()=>()=>clearTimeout(closeTimer.current),[]);
+ useEffect(()=>{
+  if(!draft)return;
+  const prior=document.activeElement;previousFocus.current=prior;
+  const oldOverflow=document.body.style.overflow;
+  document.body.style.overflow='hidden';
+  const frame=requestAnimationFrame(()=>{setModalVisible(true);dialogRef.current?.focus()});
+  const onKey=e=>{
+   if(e.key==='Escape'){e.preventDefault();closeEditor();}
+   if(e.key==='Tab'&&dialogRef.current){
+    const elements=[...dialogRef.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"]')];
+    if(!elements.length)return;
+    const first=elements[0],last=elements[elements.length-1];
+    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+   }
+  };
+  document.addEventListener('keydown',onKey);
+  return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',onKey);document.body.style.overflow=oldOverflow;prior?.focus?.()};
+ },[!!draft]);
+
  useEffect(()=>{let live=true;setBusy(true);const start=month+'-01T00:00:00+03:00';
   const [y,m]=month.split('-').map(Number),end=new Date(Date.UTC(y,m,1)).toISOString();
   call('/editorial/episodes?from='+encodeURIComponent(new Date(start).toISOString())+'&to='+encodeURIComponent(end))
@@ -110,8 +135,15 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    <strong className="block whitespace-normal break-words">{localDay(e.startAt)} · {localTime(e.startAt)} — {e.title}</strong>
    <span className="block text-xs opacity-75">{planStages[planStage(e)].label} · {statuses[e.status]||e.status} · {e.durationMin} мин · {e.hostIds.length} ведущих</span>
    </button>)}{!episodes.length&&<p className="text-sm opacity-60">Пока нет запланированных выпусков.</p>}</div>}
-  {draft&&<div className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
-   <div className="flex items-center justify-between"><h3 className="font-bold">{editingId?'Карточка выпуска':'Новый выпуск'}</h3><button type="button" onClick={()=>setDraft(null)} aria-label="Закрыть карточку">✕</button></div>
+  {draft&&createPortal(<div className={'fixed inset-0 z-[120] flex items-end justify-center sm:items-center p-0 sm:p-5 transition-all duration-200 '+(modalVisible?'bg-slate-950/65 backdrop-blur-md':'bg-slate-950/0 backdrop-blur-none')}
+  onMouseDown={e=>{if(e.target===e.currentTarget)closeEditor()}}>
+  <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="radio-editor-modal-title" tabIndex={-1}
+    className={'flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-current/15 bg-white text-slate-900 shadow-2xl transition-all duration-200 ease-out dark:bg-slate-900 dark:text-slate-100 sm:max-h-[90dvh] sm:max-w-4xl sm:rounded-2xl '+(modalVisible?'translate-y-0 scale-100 opacity-100':'translate-y-6 scale-[0.98] opacity-0')}>
+  <div className="flex shrink-0 items-center justify-between border-b border-current/10 px-4 py-4 sm:px-6">
+    <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-wider opacity-55">Политех-FM · Радиоредакция</p><h3 id="radio-editor-modal-title" className="break-words text-lg font-bold">{editingId?'Редактирование выпуска':'Новый выпуск'}</h3></div>
+    <button type="button" onClick={closeEditor} disabled={busy} aria-label="Закрыть карточку" className="ml-3 grid h-9 w-9 shrink-0 place-items-center rounded-full border border-current/15 text-xl hover:bg-slate-500/10">×</button>
+  </div>
+  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-6">
    <label className="block text-sm">Название<input value={draft.title} maxLength={140} onChange={e=>setDraft(v=>({...v,title:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2"/></label>
    <div className="grid gap-2 sm:grid-cols-3">
     <label className="text-sm">Дата<input type="date" value={draft.day} disabled={!!draft.slotId} onChange={e=>setDraft(v=>({...v,day:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-2"/></label>
@@ -151,7 +183,7 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
      <span className="ml-2 text-xs">{draft.liveReady?'Готово к запуску вручную':'Ожидает подготовки'}</span>
     </>}
    </div>}
-   <div className="flex flex-wrap gap-2">
+   <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap gap-2 border-t border-current/10 bg-white/95 px-4 py-3 backdrop-blur dark:bg-slate-900/95 sm:-mx-6 sm:-mb-6 sm:px-6">
     {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} disabled={busy||(recurring&&!repeatDays.length)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
     <button type="button" disabled={busy} onClick={()=>submit(true)} disabled={busy||(recurring&&!repeatDays.length)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
     {draft.slotId&&<button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white">Сохранить сценарий</button>}
@@ -159,6 +191,8 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
      <button type="button" disabled={busy} onClick={()=>review('return')} className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm">Вернуть с причиной</button></>}
     {draft.slotId&&<button type="button" onClick={onOpenSchedule} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Открыть сетку</button>}
    </div>
-  </div>}
+  </div>
+  </div>
+ </div>,document.body)}
  </section>;
 }
