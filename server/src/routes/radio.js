@@ -1140,6 +1140,74 @@ router.post('/editorial/episodes/:id/live-ready',requireRole('ADMIN'),safe(async
   data:{liveReady:req.body.ready}});
  res.json({episode:updated});
 }));
+// The existing audio library is the single source of attached episode media.
+router.get('/student/episodes/:id/media',studentOnly,safe(async(req,res)=>{
+ const episode=await prisma.radioEditorialEpisode.findFirst({where:{id:req.params.id,hostIds:{has:req.user.id}}});
+ if(!episode)return res.status(404).json({error:'Задание не найдено'});
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:episode.mediaAssetIds||[]}},
+  select:{id:true,name:true,durationMs:true,category:true}});
+ res.json({assets});
+}));
+router.patch('/student/episodes/:id/media',studentOnly,safe(async(req,res)=>{
+ const ids=req.body?.assetIds;
+ if(!Array.isArray(ids)||ids.length>30||ids.some(x=>typeof x!=='string'||!x)||new Set(ids).size!==ids.length)
+  return res.status(400).json({error:'Выберите не более 30 уникальных файлов'});
+ const episode=await prisma.radioEditorialEpisode.findFirst({where:{id:req.params.id,hostIds:{has:req.user.id}}});
+ if(!episode)return res.status(404).json({error:'Задание не найдено'});
+ if(!['ASSIGNED','DRAFT','RETURNED'].includes(episode.status))
+  return res.status(409).json({error:'Материалы заблокированы на проверке'});
+ if(await prisma.radioAsset.count({where:{id:{in:ids}}})!==ids.length)
+  return res.status(400).json({error:'Один из файлов отсутствует в медиатеке'});
+ const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},data:{mediaAssetIds:ids}});
+ res.json({episode:updated});
+}));
+router.get('/editorial/episodes/:id/media',requireRole('ADMIN'),safe(async(req,res)=>{
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ if(!episode)return res.status(404).json({error:'Выпуск не найден'});
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:episode.mediaAssetIds||[]}},
+  select:{id:true,name:true,durationMs:true,category:true}});
+ res.json({assets});
+}));
+router.post('/editorial/episodes/series',requireRole('ADMIN'),safe(async(req,res)=>{
+ const base=episodeFields(req.body);
+ const weekdays=req.body?.weekdays;
+ const count=Number(req.body?.count);
+ if(!base||!await checkRadioHostIds(base.hostIds)||!Array.isArray(weekdays)||
+    !weekdays.length||weekdays.length>7||weekdays.some(d=>!Number.isInteger(d)||d<0||d>6)||
+    !Number.isInteger(count)||count<1||count>31)
+  return res.status(400).json({error:'Укажите корректные данные и дни недели (0=воскресенье)'});
+ const dates=[];let cursor=new Date(base.startAt);
+ for(let i=0;i<62&&dates.length<count;i++){
+  if(weekdays.includes(cursor.getUTCDay())&&cursor>new Date())dates.push(new Date(cursor));
+  cursor=new Date(cursor.getTime()+86400000);
+ }
+ if(dates.length!==count)return res.status(400).json({error:'Не удалось сформировать указанное число будущих выпусков'});
+ const seriesKey=randomUUID();
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const reserved=[];
+  for(const startAt of dates){
+   const endAt=new Date(startAt.getTime()+base.durationMin*60000);
+   const collision=await tx.radioScheduleSlot.findFirst({where:{startAt:{lt:endAt},endAt:{gt:startAt}}});
+   if(collision)return {error:'Время занято: '+startAt.toISOString()};
+   reserved.push({startAt,endAt});
+  }
+  const episodes=[];
+  for(const item of reserved){
+   const slot=await tx.radioScheduleSlot.create({data:{
+    title:base.title,startAt:item.startAt,endAt:item.endAt,
+    hostIds:base.hostIds,createdBy:req.user.id
+   }});
+   episodes.push(await tx.radioEditorialEpisode.create({data:{
+    ...base,startAt:item.startAt,status:'ASSIGNED',slotId:slot.id,
+    seriesKey,createdBy:req.user.id
+   }}));
+  }
+  return {episodes};
+ });
+ if(result.error)return res.status(409).json({error:result.error});
+ res.status(201).json(result);
+}));
 router.get('/editorial/episodes',requireRole('ADMIN'),safe(async(req,res)=>{
  const from=new Date(req.query.from),to=new Date(req.query.to);
  if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||to<=from||
