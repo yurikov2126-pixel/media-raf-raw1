@@ -94,6 +94,68 @@ router.get('/events', canView, async (req, res, next) => {
     res.json({ events, ingestionEnabled: process.env.MCHS_INGEST_ENABLED === 'true' });
   } catch (error) { next(error); }
 });
+
+/**
+ * Operator-only policy drafts. Deliberately never consumed by ingest,
+ * dispatch, radio or any scheduled job. Default is OFF for every event.
+ */
+const POLICY_KEY = 'mchs_notification_policy_drafts_v1';
+const policyModes = new Set(['IGNORE', 'REVIEW']);
+async function policies() {
+  const stored = await prisma.setting.findUnique({ where: { key: POLICY_KEY } });
+  try {
+    const value = JSON.parse(stored?.value || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+router.get('/notification-policy-drafts', canView, async (_req, res, next) => {
+  try {
+    const [rules, assets] = await Promise.all([
+      policies(),
+      prisma.radioAsset.findMany({
+        where: { mimeType: { startsWith: 'audio/' } },
+        select: { id: true, name: true, durationMs: true, category: true },
+        orderBy: { createdAt: 'desc' }, take: 200,
+      }),
+    ]);
+    res.set('Cache-Control', 'no-store');
+    return res.json({ rules, assets, liveDispatchEnabled: false,
+      description: 'Настройки для анализа и предварительного выбора. Ни одна запись не запускает радио.' });
+  } catch (error) { next(error); }
+});
+router.put('/notification-policy-drafts/:eventId', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const event = await prisma.safetyMchsEvent.findUnique({ where: { id: req.params.eventId },
+      select: { id: true, sourceEventId: true } });
+    if (!event) return res.status(404).json({ error: 'EVENT_NOT_FOUND' });
+    const { mode, audioAssetId, note } = req.body || {};
+    if (!policyModes.has(mode) || typeof note !== 'string' || note.length > 500 ||
+        (audioAssetId !== null && audioAssetId !== undefined && (typeof audioAssetId !== 'string' || audioAssetId.length > 120))) {
+      return res.status(400).json({ error: 'INVALID_POLICY' });
+    }
+    if (audioAssetId) {
+      const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true } });
+      if (!asset?.mimeType?.startsWith('audio/')) return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
+    }
+    // A single JSON document serializes per-event choices; concurrent edits use an
+    // advisory PostgreSQL transaction lock to prevent lost updates.
+    const entry = { mode, audioAssetId: audioAssetId || null, note: note.trim(),
+      updatedAt: new Date().toISOString(), updatedBy: req.user.id, executable: false };
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581420)`;
+      const row = await tx.setting.findUnique({ where: { key: POLICY_KEY } });
+      let existing = {};
+      try { const parsed = JSON.parse(row?.value || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed; } catch {}
+      existing[event.id] = entry;
+      await tx.setting.upsert({ where: { key: POLICY_KEY },
+        create: { key: POLICY_KEY, value: JSON.stringify(existing) },
+        update: { value: JSON.stringify(existing) } });
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ saved: true, eventId: event.id, rule: entry, liveDispatchEnabled: false });
+  } catch (error) { next(error); }
+});
+
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
   try {
     const config = sanitize(req.body);
