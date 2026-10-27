@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
+import {useSearchParams} from 'react-router-dom';
 import {api} from '../api/client.js';
 import {useAuth} from '../store/auth.jsx';
 import {useToast} from '../store/toast.jsx';
@@ -6,11 +7,16 @@ const textField='w-full rounded-xl border border-current/20 bg-transparent p-3 t
 const titles={DRAFT:'Черновик',ASSIGNED:'Назначено',REVIEW:'На проверке',RETURNED:'На доработке',APPROVED:'Сценарий утверждён'};
 export default function RadioHostAssignments(){
  const {token}=useAuth(),toast=useToast();
+ const [searchParams]=useSearchParams();
+ const episodeFromLink=searchParams.get('episode');
+ const [loadError,setLoadError]=useState('');
  const [assets,setAssets]=useState([]),[mediaIds,setMediaIds]=useState([]),[mediaOpen,setMediaOpen]=useState(false);
  const [episodes,setEpisodes]=useState([]),[selected,setSelected]=useState(null),[script,setScript]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const call=useCallback((route,options)=>api('/radio/student'+route,{token,...options}),[token]);
- const refresh=useCallback(async()=>{const result=await call('/episodes');setEpisodes(result.episodes||[]);return result.episodes||[];},[call]);
+ const refresh=useCallback(async()=>{try{const result=await call('/episodes');setEpisodes(result.episodes||[]);setLoadError('');return result.episodes||[];}catch(e){setLoadError(e.message||'Не удалось получить радиозадания');throw e;}},[call]);
  useEffect(()=>{let alive=true;refresh().catch(e=>{if(alive)toast.error(e.message)}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[refresh]);
+ useEffect(()=>{if(!episodeFromLink)return;const item=episodes.find(e=>e.id===episodeFromLink);if(item){setSelected(item);setScript(item.script||'');setMediaIds(item.mediaAssetIds||[])}},[episodeFromLink,episodes]);
+ useEffect(()=>{const onFocus=()=>{void refresh().catch(()=>{});};window.addEventListener('focus',onFocus);return()=>window.removeEventListener('focus',onFocus)},[refresh]);
  const open=e=>{setSelected(e);setScript(e.script||'');setMediaIds(e.mediaAssetIds||[]);setMediaOpen(false)};
  const saveMedia=async()=>{if(!selected)return;setBusy(true);try{const result=await call('/episodes/'+selected.id+'/media',{method:'PATCH',body:{assetIds:mediaIds}});setSelected(result.episode);await refresh();toast.success('Материалы задания сохранены');}catch(e){toast.error(e.message)}finally{setBusy(false)}};
  const submit=async send=>{if(!selected)return;setBusy(true);try{
@@ -27,12 +33,14 @@ export default function RadioHostAssignments(){
  return <section className="space-y-3 rounded-2xl border border-current/15 p-4">
   <header><h2 className="text-lg font-bold">Мои радиозадания</h2><p className="text-xs opacity-70">Сценарии назначенных выпусков Политех-FM. Изменения сохраняются по кнопке.</p></header>
   {loading&&<p className="text-sm opacity-60">Загружаем задания…</p>}
+  {loadError&&<div role="alert" className="rounded-xl border border-red-500/30 p-3 text-sm text-red-600">Ошибка получения заданий: {loadError} <button type="button" className="underline" onClick={()=>refresh().catch(()=>{})}>Повторить</button></div>}
+  <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-xs" onClick={()=>refresh().catch(()=>{})}>Обновить задания</button>
   <div className="grid gap-2 sm:grid-cols-2">{episodes.map(e=><button key={e.id} onClick={()=>open(e)}
    className="rounded-xl border border-current/15 p-3 text-left hover:bg-violet-500/10">
    <span className="block font-semibold text-sm">{e.title}</span>
    <span className="block text-xs opacity-70">{new Date(e.startAt).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',dateStyle:'medium',timeStyle:'short'})} · {titles[e.status]||e.status}</span>
   </button>)}</div>
-  {!loading&&!episodes.length&&<p className="text-sm opacity-60">Пока нет назначенных передач.</p>}
+  {!loading&&!loadError&&!episodes.length&&<p className="text-sm opacity-60">Пока нет назначенных передач.</p>}
   {selected&&<div className="space-y-3 rounded-xl border border-violet-500/25 p-3">
    <div className="flex justify-between gap-2"><div><h3 className="font-semibold">{selected.title}</h3><p className="text-xs opacity-60">{titles[selected.status]||selected.status}</p></div>
     <button onClick={()=>setSelected(null)} aria-label="Закрыть карточку">✕</button></div>
