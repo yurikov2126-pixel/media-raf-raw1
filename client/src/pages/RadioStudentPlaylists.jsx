@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
 import { useToast } from '../store/toast.jsx';
 import RadioTrackPlayer from '../components/RadioTrackPlayer.jsx';
+import RadioHostAssignments from '../components/RadioHostAssignments.jsx';
 import RadioPlaylistTransitions,{pairTransitions,transitionSettingsFromItems} from '../components/RadioPlaylistTransitions.jsx';
 import { useRadioUploads } from '../components/RadioUploadManager.jsx';
 
