@@ -320,6 +320,69 @@ const streamAudio = safe(async (req, res) => {
 });
 router.get('/student/assets/:id/audio', studentOnly, streamAudio);
 router.get('/assets/:id/audio', requireRole('ADMIN'), streamAudio);
+// Student-facing radio assignment desk, scoped to the user's assigned host IDs.
+router.get('/student/episodes',studentOnly,safe(async(req,res)=>{
+ const episodes=await prisma.radioEditorialEpisode.findMany({
+  where:{hostIds:{has:req.user.id}},orderBy:{startAt:'asc'},take:250
+ });
+ res.json({episodes});
+}));
+router.patch('/student/episodes/:id/script',studentOnly,safe(async(req,res)=>{
+ const script=req.body?.script;
+ if(typeof script!=='string'||script.length>100000)
+  return res.status(400).json({error:'Сценарий должен быть текстом не длиннее 100 000 символов'});
+ const expectedRevision=req.body?.revision;
+ if(!Number.isInteger(expectedRevision)||expectedRevision<1)
+  return res.status(400).json({error:'Укажите текущую версию сценария'});
+ const episode=await prisma.radioEditorialEpisode.findFirst({
+  where:{id:req.params.id,hostIds:{has:req.user.id}}
+ });
+ if(!episode)return res.status(404).json({error:'Назначение не найдено'});
+ if(!['ASSIGNED','DRAFT','RETURNED'].includes(episode.status))
+  return res.status(409).json({error:'Сценарий на проверке либо утверждён'});
+ const result=await prisma.radioEditorialEpisode.updateMany({
+  where:{id:episode.id,scriptRevision:expectedRevision,status:{in:['ASSIGNED','DRAFT','RETURNED']}},
+  data:{script,scriptRevision:{increment:1},status:episode.status==='RETURNED'?'ASSIGNED':episode.status}
+ });
+ if(!result.count)return res.status(409).json({error:'Сценарий был обновлён в другой вкладке. Обновите задание'});
+ res.json({episode:await prisma.radioEditorialEpisode.findUnique({where:{id:episode.id}})});
+}));
+router.post('/student/episodes/:id/submit',studentOnly,safe(async(req,res)=>{
+ const result=await prisma.radioEditorialEpisode.updateMany({
+  where:{id:req.params.id,hostIds:{has:req.user.id},status:{in:['ASSIGNED','RETURNED']},
+    script:{not:''}},data:{status:'REVIEW',submittedAt:new Date(),reviewReason:null}
+ });
+ if(!result.count)return res.status(409).json({error:'Не найдено доступное задание с подготовленным сценарием'});
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ const admins=await prisma.user.findMany({where:{role:'ADMIN',isBanned:false},select:{id:true}});
+ await prisma.notification.createMany({data:admins.map(a=>({
+  userId:a.id,type:'RADIO_EPISODE_REVIEW',
+  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:'submitted',url:'/app/radio?tab=hosts&episode='+encodeURIComponent(episode.id)})
+ }))});
+ res.json({episode});
+}));
+
+// The existing audio library is the single source of attached episode media.
+router.get('/student/episodes/:id/media',studentOnly,safe(async(req,res)=>{
+ const episode=await prisma.radioEditorialEpisode.findFirst({where:{id:req.params.id,hostIds:{has:req.user.id}}});
+ if(!episode)return res.status(404).json({error:'Задание не найдено'});
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:episode.mediaAssetIds||[]}},
+  select:{id:true,name:true,durationMs:true,category:true}});
+ res.json({assets});
+}));
+router.patch('/student/episodes/:id/media',studentOnly,safe(async(req,res)=>{
+ const ids=req.body?.assetIds;
+ if(!Array.isArray(ids)||ids.length>30||ids.some(x=>typeof x!=='string'||!x)||new Set(ids).size!==ids.length)
+  return res.status(400).json({error:'Выберите не более 30 уникальных файлов'});
+ const episode=await prisma.radioEditorialEpisode.findFirst({where:{id:req.params.id,hostIds:{has:req.user.id}}});
+ if(!episode)return res.status(404).json({error:'Задание не найдено'});
+ if(!['ASSIGNED','DRAFT','RETURNED'].includes(episode.status))
+  return res.status(409).json({error:'Материалы заблокированы на проверке'});
+ if(await prisma.radioAsset.count({where:{id:{in:ids}}})!==ids.length)
+  return res.status(400).json({error:'Один из файлов отсутствует в медиатеке'});
+ const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},data:{mediaAssetIds:ids}});
+ res.json({episode:updated});
+}));
 router.use(requireRole('ADMIN'));
 
 // AutoPlaylist configurations are draft-only. No route here changes live playout.
@@ -1030,47 +1093,6 @@ const episodeFields=body=>{
     hostIds.some(id=>typeof id!=='string'||!id)||new Set(hostIds).size!==hostIds.length)return null;
  return {title,script,startAt,durationMin,hostIds,format};
 };
-// Student-facing radio assignment desk, scoped to the user's assigned host IDs.
-router.get('/student/episodes',studentOnly,safe(async(req,res)=>{
- const episodes=await prisma.radioEditorialEpisode.findMany({
-  where:{hostIds:{has:req.user.id}},orderBy:{startAt:'asc'},take:250
- });
- res.json({episodes});
-}));
-router.patch('/student/episodes/:id/script',studentOnly,safe(async(req,res)=>{
- const script=req.body?.script;
- if(typeof script!=='string'||script.length>100000)
-  return res.status(400).json({error:'Сценарий должен быть текстом не длиннее 100 000 символов'});
- const expectedRevision=req.body?.revision;
- if(!Number.isInteger(expectedRevision)||expectedRevision<1)
-  return res.status(400).json({error:'Укажите текущую версию сценария'});
- const episode=await prisma.radioEditorialEpisode.findFirst({
-  where:{id:req.params.id,hostIds:{has:req.user.id}}
- });
- if(!episode)return res.status(404).json({error:'Назначение не найдено'});
- if(!['ASSIGNED','DRAFT','RETURNED'].includes(episode.status))
-  return res.status(409).json({error:'Сценарий на проверке либо утверждён'});
- const result=await prisma.radioEditorialEpisode.updateMany({
-  where:{id:episode.id,scriptRevision:expectedRevision,status:{in:['ASSIGNED','DRAFT','RETURNED']}},
-  data:{script,scriptRevision:{increment:1},status:episode.status==='RETURNED'?'ASSIGNED':episode.status}
- });
- if(!result.count)return res.status(409).json({error:'Сценарий был обновлён в другой вкладке. Обновите задание'});
- res.json({episode:await prisma.radioEditorialEpisode.findUnique({where:{id:episode.id}})});
-}));
-router.post('/student/episodes/:id/submit',studentOnly,safe(async(req,res)=>{
- const result=await prisma.radioEditorialEpisode.updateMany({
-  where:{id:req.params.id,hostIds:{has:req.user.id},status:{in:['ASSIGNED','RETURNED']},
-    script:{not:''}},data:{status:'REVIEW',submittedAt:new Date(),reviewReason:null}
- });
- if(!result.count)return res.status(409).json({error:'Не найдено доступное задание с подготовленным сценарием'});
- const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
- const admins=await prisma.user.findMany({where:{role:'ADMIN',isBanned:false},select:{id:true}});
- await prisma.notification.createMany({data:admins.map(a=>({
-  userId:a.id,type:'RADIO_EPISODE_REVIEW',
-  payload:JSON.stringify({episodeId:episode.id,title:episode.title,event:'submitted',url:'/app/radio?tab=hosts&episode='+encodeURIComponent(episode.id)})
- }))});
- res.json({episode});
-}));
 router.post('/editorial/episodes/:id/review',requireRole('ADMIN'),safe(async(req,res)=>{
  const decision=req.body?.decision,reason=String(req.body?.reason||'').trim();
  if(!['approve','return'].includes(decision)||decision==='return'&&!reason)
@@ -1136,27 +1158,6 @@ router.post('/editorial/episodes/:id/live-ready',requireRole('ADMIN'),safe(async
   return res.status(409).json({error:'Для подготовки LIVE нужен утверждённый сценарий и планируемый слот'});
  const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},
   data:{liveReady:req.body.ready}});
- res.json({episode:updated});
-}));
-// The existing audio library is the single source of attached episode media.
-router.get('/student/episodes/:id/media',studentOnly,safe(async(req,res)=>{
- const episode=await prisma.radioEditorialEpisode.findFirst({where:{id:req.params.id,hostIds:{has:req.user.id}}});
- if(!episode)return res.status(404).json({error:'Задание не найдено'});
- const assets=await prisma.radioAsset.findMany({where:{id:{in:episode.mediaAssetIds||[]}},
-  select:{id:true,name:true,durationMs:true,category:true}});
- res.json({assets});
-}));
-router.patch('/student/episodes/:id/media',studentOnly,safe(async(req,res)=>{
- const ids=req.body?.assetIds;
- if(!Array.isArray(ids)||ids.length>30||ids.some(x=>typeof x!=='string'||!x)||new Set(ids).size!==ids.length)
-  return res.status(400).json({error:'Выберите не более 30 уникальных файлов'});
- const episode=await prisma.radioEditorialEpisode.findFirst({where:{id:req.params.id,hostIds:{has:req.user.id}}});
- if(!episode)return res.status(404).json({error:'Задание не найдено'});
- if(!['ASSIGNED','DRAFT','RETURNED'].includes(episode.status))
-  return res.status(409).json({error:'Материалы заблокированы на проверке'});
- if(await prisma.radioAsset.count({where:{id:{in:ids}}})!==ids.length)
-  return res.status(400).json({error:'Один из файлов отсутствует в медиатеке'});
- const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},data:{mediaAssetIds:ids}});
  res.json({episode:updated});
 }));
 router.get('/editorial/episodes/:id/media',requireRole('ADMIN'),safe(async(req,res)=>{
