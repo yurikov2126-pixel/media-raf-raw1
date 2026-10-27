@@ -19,7 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run, PLAYBACK_STATE
 from updater import check_latest, stage_update, UpdateCheckError
-from esp32_local import send_heartbeat
+from esp32_local import send_heartbeat, restart_esp32
 from esp32_telemetry import report_status
 from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
@@ -203,6 +203,7 @@ class RadioAgentApp(tk.Tk):
         linkbar = ttk.Frame(links, style="Main.TFrame")
         linkbar.pack(fill="x", pady=(9, 4))
         ttk.Button(linkbar, text="Проверить связь", command=self.test_esp32).pack(side="left")
+         ttk.Button(linkbar, text="Перезагрузить ESP32", command=self.reboot_esp32).pack(side="left",padx=8)
         ttk.Label(linkbar, textvariable=self.esp32_status, style="Main.TLabel").pack(side="left", padx=12)
         ttk.Label(links, textvariable=self.esp32_platform_status, style="Main.TLabel").pack(anchor="w", pady=(3, 0))
         ttk.Label(links, textvariable=self.power_status,style="Main.TLabel").pack(anchor="w",pady=(5,0))
@@ -512,6 +513,24 @@ class RadioAgentApp(tk.Tk):
                     self.messages.put(("power_done",None))
             threading.Thread(target=job,daemon=True).start()
         self.after(3000,self.power_tick)
+
+    def reboot_esp32(self):
+        host=self.esp32_ip.get().strip()
+        secret=self.esp32_secret.get().strip()
+        if not host or not secret:
+            self.esp32_status.set("Введите IP и секрет ESP32")
+            return
+        if not messagebox.askyesno("Перезагрузка ESP32",
+                "Перезапуск отключит реле усилителя и временно прервёт управление питанием. Продолжить?"):
+            return
+        self.esp32_status.set("Перезагрузка ESP32…")
+        def task():
+            try:
+                restart_esp32(host,secret)
+                self.messages.put(("esp32_ok","Команда перезагрузки принята · дождитесь восстановления связи"))
+            except Exception as error:
+                self.messages.put(("esp32_error",type(error).__name__+": "+str(error)[:100]))
+        threading.Thread(target=task,daemon=True).start()
 
     def test_esp32(self):
         host=self.esp32_ip.get().strip()
