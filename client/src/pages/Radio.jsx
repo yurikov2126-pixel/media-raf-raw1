@@ -4,6 +4,7 @@ import { useAuth } from '../store/auth.jsx';
 import { api } from '../api/client.js';
 import { useToast } from '../store/toast.jsx';
 import RadioLiveStudio from '../components/RadioLiveStudio.jsx';
+import RadioEditorialCalendar from '../components/RadioEditorialCalendar.jsx';
 import RadioCommandStudio from '../components/RadioCommandStudio.jsx';
 
 import RadioAssetManager from '../components/RadioAssetManager.jsx';
@@ -541,7 +542,9 @@ export default function Radio() {
         })}
       </div>
     </section>}
-    {tab==='hosts'&&<section className="space-y-4"><div className="rounded-2xl border border-current/10 p-4"><h2 className="text-xl font-bold">Ведущие «Политех-FM»</h2><p className="mt-1 text-sm opacity-70">Список формируется автоматически из пользователей с должностью «Радиоведущий» в админке. Чтобы назначить ведущего передаче, откройте её в сетке вещания.</p><button type="button" className="mt-3 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white" onClick={()=>openWorkspace('schedule')}>Открыть сетку вещания →</button></div>
+    {tab==='hosts'&&<section className="space-y-4">
+      <RadioEditorialCalendar call={call} hosts={radioHosts} onOpenSchedule={()=>openWorkspace('schedule')}/>
+      <div className="rounded-2xl border border-current/10 p-4"><h2 className="text-xl font-bold">Ведущие «Политех-FM»</h2><p className="mt-1 text-sm opacity-70">Список формируется автоматически из пользователей с должностью «Радиоведущий» в админке. Чтобы назначить ведущего передаче, откройте её в сетке вещания.</p><button type="button" className="mt-3 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white" onClick={()=>openWorkspace('schedule')}>Открыть сетку вещания →</button></div>
       <section className="rounded-2xl border border-current/15 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">🎙 Ведущие радиостанции</h3><p className="text-xs opacity-65">Профили пользователей с должностью «Радиоведущий» из команды редакции</p></div><button type="button" className="rounded-xl border border-current/20 px-3 py-2 text-sm" onClick={()=>setHostsOpen(x=>!x)}>{hostsOpen?'Скрыть':'Показать ведущих'} ({radioHosts.length})</button></div>{hostsOpen&&<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{radioHosts.map(host=><div key={host.id} className="flex items-center gap-3 rounded-xl border border-current/10 p-2">{host.avatar?<img className="h-11 w-11 rounded-full object-cover" src={host.avatar} alt=""/>:<div className="grid h-11 w-11 place-items-center rounded-full bg-violet-500/15">🎙</div>}<div className="min-w-0"><p className="truncate text-sm font-semibold">{host.fullName||host.firstName+' '+host.lastName}</p><p className="text-xs opacity-60">@{host.username}</p></div></div>)}{!radioHosts.length&&<p className="text-sm opacity-60">Назначьте пользователям должность «Радиоведущий» в админке → Команда редакции.</p>}</div>}</section>
     </section>}
     {tab==='schedule' && <section className="space-y-4">

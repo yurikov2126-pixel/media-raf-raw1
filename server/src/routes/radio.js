@@ -1017,6 +1017,79 @@ router.put('/autodj', safe(async (req,res) => {
     res.json({settings:await readAutoDjSettings()});
 }));
 const publicHostFields={id:true,username:true,fullName:true,firstName:true,lastName:true,avatar:true};
+// Radio editorial planning is separate from approved PCM playout. Publication
+// only reserves an empty planning slot and never starts broadcast audio.
+const episodeFields=body=>{
+ const title=typeof body?.title==='string'?body.title.trim():'';
+ const script=body?.script??'';
+ const startAt=new Date(body?.startAt);
+ const durationMin=Number(body?.durationMin);
+ const hostIds=body?.hostIds??[];
+ const format=body?.format??'RECORDED';
+ if(!title||title.length>140||typeof script!=='string'||script.length>100000||
+    !Number.isFinite(startAt.getTime())||!Number.isInteger(durationMin)||durationMin<1||durationMin>720||
+    !['RECORDED','LIVE'].includes(format)||!Array.isArray(hostIds)||hostIds.length>8||
+    hostIds.some(id=>typeof id!=='string'||!id)||new Set(hostIds).size!==hostIds.length)return null;
+ return {title,script,startAt,durationMin,hostIds,format};
+};
+router.get('/editorial/episodes',requireRole('ADMIN'),safe(async(req,res)=>{
+ const from=new Date(req.query.from),to=new Date(req.query.to);
+ if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||to<=from||
+    to-from>45*86400000)return res.status(400).json({error:'Диапазон не более 45 дней'});
+ const episodes=await prisma.radioEditorialEpisode.findMany({where:{startAt:{gte:from,lt:to}},
+  orderBy:{startAt:'asc'},take:300});
+ res.json({episodes});
+}));
+router.post('/editorial/episodes',requireRole('ADMIN'),safe(async(req,res)=>{
+ const data=episodeFields(req.body);
+ if(!data||!await checkRadioHostIds(data.hostIds))return res.status(400).json({error:'Проверьте дату, ведущих и поля выпуска'});
+ const episode=await prisma.radioEditorialEpisode.create({data:{...data,createdBy:req.user.id}});
+ res.status(201).json({episode});
+}));
+router.patch('/editorial/episodes/:id',requireRole('ADMIN'),safe(async(req,res)=>{
+ const data=episodeFields(req.body);
+ if(!data||!await checkRadioHostIds(data.hostIds))return res.status(400).json({error:'Некорректные данные выпуска'});
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ if(!episode)return res.status(404).json({error:'Выпуск не найден'});
+ if(episode.slotId){
+  if(data.startAt.getTime()!==episode.startAt.getTime()||data.durationMin!==episode.durationMin||
+     data.title!==episode.title||data.format!==episode.format||
+     JSON.stringify(data.hostIds)!==JSON.stringify(episode.hostIds))
+   return res.status(409).json({error:'Выпуск уже в сетке: дату и ведущих меняйте через сетку. Сценарий редактировать можно'});
+ }
+ const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},data:episode.slotId?{script:data.script}:data});
+ res.json({episode:updated});
+}));
+router.delete('/editorial/episodes/:id',requireRole('ADMIN'),safe(async(req,res)=>{
+ const item=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ if(!item)return res.status(404).json({error:'Выпуск не найден'});
+ if(item.slotId)return res.status(409).json({error:'Сначала отмените планируемый слот в сетке'});
+ await prisma.radioEditorialEpisode.delete({where:{id:item.id}});
+ res.json({ok:true});
+}));
+router.post('/editorial/episodes/:id/assign',requireRole('ADMIN'),safe(async(req,res)=>{
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ if(!episode)return res.status(404).json({error:'Выпуск не найден'});
+ if(episode.slotId)return res.json({episode});
+ if(episode.startAt<=new Date())return res.status(409).json({error:'Время выпуска уже прошло'});
+ const endAt=new Date(episode.startAt.getTime()+episode.durationMin*60000);
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const current=await tx.radioEditorialEpisode.findUnique({where:{id:episode.id}});
+  if(current.slotId)return current;
+  const clash=await tx.radioScheduleSlot.findFirst({where:{
+    startAt:{lt:endAt},endAt:{gt:episode.startAt}}});
+  if(clash)return null;
+  const slot=await tx.radioScheduleSlot.create({data:{
+    title:episode.title,playlistId:null,startAt:episode.startAt,endAt,
+    hostIds:episode.hostIds,createdBy:req.user.id
+  }});
+  return tx.radioEditorialEpisode.update({where:{id:episode.id},
+    data:{slotId:slot.id,status:'ASSIGNED'}});
+ });
+ if(!result)return res.status(409).json({error:'Время занято в эфирной сетке'});
+ res.json({episode:result});
+}));
 router.get('/hosts',requireRole('ADMIN'),safe(async(req,res)=>{
  const members=await prisma.editorialTeamMember.findMany({where:{position:'RADIO_HOST'},include:{user:{select:publicHostFields}},orderBy:{createdAt:'asc'}});
  res.json({hosts:members.map(m=>m.user).filter(Boolean)});
