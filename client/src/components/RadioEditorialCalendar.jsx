@@ -91,6 +91,13 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    setDraft(null);setRefreshKey(v=>v+1);
   }catch(e){setError(e.message||'Публикация не удалась')}finally{setBusy(false)}
  };
+ const unpublish=async()=>{
+  if(!editingId||!window.confirm('Отменить публикацию? Эфирный плейлист будет снят с будущего слота, но сценарий, ведущие и задание сохранятся.'))return;
+  setBusy(true);setError('');
+  try{await call('/editorial/episodes/'+editingId+'/unpublish',{method:'POST'});
+   setDraft(null);setRefreshKey(v=>v+1);
+  }catch(e){setError(e.message||'Не удалось отменить публикацию')}finally{setBusy(false)}
+ };
  const toggleLive=async ready=>{
   setBusy(true);setError('');
   try{const result=await call('/editorial/episodes/'+editingId+'/live-ready',{method:'POST',body:{ready}});
@@ -117,7 +124,7 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
   </div>
   {error&&<p role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-600">{error}</p>}
   {busy&&<p className="text-xs opacity-60">Обновляем данные…</p>}
-  {view==='month'?<div className="grid grid-cols-7 gap-1" aria-label="Месячное планирование">
+  {view==='month'&&<div className="hidden md:grid grid-cols-7 gap-1" aria-label="Месячное планирование">
    {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=><div key={d} className="p-1 text-center text-xs font-semibold opacity-70">{d}</div>)}
    {days.map((day,i)=>day===null?<div key={'empty'+i} aria-hidden="true"/>:
     <div key={day} className="min-h-24 min-w-0 rounded-lg border border-current/15 p-1 sm:p-2">
@@ -130,10 +137,13 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
       <span className="mt-1 block text-[10px] opacity-75">{planStages[planStage(e)].label}</span>
      </button>)}</div>
     </div>)}
-  </div>:<div className="space-y-2">{episodes.map(e=><button key={e.id} type="button" onClick={()=>open(1,e)}
-   className={'w-full rounded-xl border p-3 text-left text-sm '+planStages[planStage(e)].classes}>
-   <strong className="block whitespace-normal break-words">{localDay(e.startAt)} · {localTime(e.startAt)} — {e.title}</strong>
-   <span className="block text-xs opacity-75">{planStages[planStage(e)].label} · {statuses[e.status]||e.status} · {e.durationMin} мин · {e.hostIds.length} ведущих</span>
+  </div>}
+  <div className={(view==='month'?'md:hidden ':'')+'space-y-3'} aria-label="Выпуски по датам">
+   {episodes.map(e=><button key={e.id} type="button" onClick={()=>open(1,e)}
+   className={'block w-full min-w-0 rounded-xl border p-3 text-left text-sm '+planStages[planStage(e)].classes}>
+   <span className="block text-xs font-semibold opacity-80">{new Date(e.startAt).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',weekday:'short'})} · {localTime(e.startAt)} МСК</span>
+   <strong className="mt-1 block whitespace-normal break-words text-base leading-snug">{e.title}</strong>
+   <span className="mt-1 block text-xs opacity-75">{planStages[planStage(e)].label} · {statuses[e.status]||e.status} · {e.durationMin} мин · {e.hostIds.length} ведущих</span>
    </button>)}{!episodes.length&&<p className="text-sm opacity-60">Пока нет запланированных выпусков.</p>}</div>}
   {draft&&createPortal(<div className={'fixed inset-0 z-[120] flex items-end justify-center sm:items-center p-0 sm:p-5 transition-all duration-200 '+(modalVisible?'bg-slate-950/65 backdrop-blur-md':'bg-slate-950/0 backdrop-blur-none')}
   onMouseDown={e=>{if(e.target===e.currentTarget)closeEditor()}}>
@@ -168,7 +178,12 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    {draft.slotId?<p className="text-sm text-violet-700 dark:text-violet-300">Место в эфирной сетке зарезервировано. Для изменения времени откройте сетку вещания.</p>:<p className="text-xs opacity-65">Черновик не влияет на эфир. Назначение создаёт планируемый слот без воспроизведения, до выбора утверждённого плейлиста.</p>}
    {draft.status==='APPROVED'&&draft.slotId&&<div className="space-y-2 rounded-xl border border-violet-500/25 p-3">
     <h4 className="font-semibold text-sm">Подготовка к эфиру</h4>
-    {draft.format==='RECORDED'?draft.publishedAt?<p className="text-sm text-emerald-700 dark:text-emerald-300">Передача опубликована в эфирную сетку · плейлист закреплён</p>:<>
+    {draft.format==='RECORDED'?draft.publishedAt?<div className="space-y-2">
+     <p className="text-sm text-emerald-700 dark:text-emerald-300">Передача опубликована в эфирную сетку · плейлист закреплён</p>
+     <button type="button" disabled={busy||new Date(draft.day+'T'+draft.time+':00+03:00')<=new Date()} onClick={unpublish}
+      className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm text-rose-700 disabled:opacity-40 dark:text-rose-300">Отменить публикацию в сетке</button>
+     <p className="text-xs opacity-65">Отмена доступна только до начала эфира. Планируемое время и утверждённый сценарий сохраняются.</p>
+    </div>:<>
      <p className="text-xs opacity-70">Выберите утверждённый плейлист. Его реальная длительность будет проверена на конфликты расписания.</p>
      <select value={publishPlaylistId} onChange={e=>setPublishPlaylistId(e.target.value)} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm">
       <option value="">Выберите плейлист</option>
