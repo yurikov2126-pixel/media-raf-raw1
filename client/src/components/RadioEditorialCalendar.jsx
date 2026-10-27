@@ -98,6 +98,13 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    setDraft(null);setRefreshKey(v=>v+1);
   }catch(e){setError(e.message||'Не удалось отменить публикацию')}finally{setBusy(false)}
  };
+ const removeFromGrid=async()=>{
+  if(!editingId||!window.confirm('Убрать выпуск из эфирной сетки? Задание, ведущие и сценарий сохранятся, но зарезервированное эфирное время освободится.'))return;
+  setBusy(true);setError('');
+  try{await call('/editorial/episodes/'+editingId+'/unassign',{method:'POST'});
+   setDraft(null);setRefreshKey(v=>v+1);
+  }catch(e){setError(e.message||'Не удалось убрать выпуск из сетки')}finally{setBusy(false)}
+ };
  const toggleLive=async ready=>{
   setBusy(true);setError('');
   try{const result=await call('/editorial/episodes/'+editingId+'/live-ready',{method:'POST',body:{ready}});
@@ -144,7 +151,7 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    <span className="block text-xs font-semibold opacity-80">{new Date(e.startAt).toLocaleDateString('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',weekday:'short'})} · {localTime(e.startAt)} МСК</span>
    <strong className="mt-1 block whitespace-normal break-words text-base leading-snug">{e.title}</strong>
    <span className="mt-1 block text-xs opacity-75">{planStages[planStage(e)].label} · {statuses[e.status]||e.status} · {e.durationMin} мин · {e.hostIds.length} ведущих</span>
-   </button>)}{!episodes.length&&<p className="text-sm opacity-60">Пока нет запланированных выпусков.</p>}</div>}
+   </button>)}{!episodes.length&&<p className="text-sm opacity-60">Пока нет запланированных выпусков.</p>}</div>
   {draft&&createPortal(<div className={'fixed inset-0 z-[120] flex items-end justify-center sm:items-center p-0 sm:p-5 transition-all duration-200 '+(modalVisible?'bg-slate-950/65 backdrop-blur-md':'bg-slate-950/0 backdrop-blur-none')}
   onMouseDown={e=>{if(e.target===e.currentTarget)closeEditor()}}>
   <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="radio-editor-modal-title" tabIndex={-1}
@@ -204,7 +211,9 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
     {draft.slotId&&<button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white">Сохранить сценарий</button>}
     {draft.status==='REVIEW'&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white">Утвердить сценарий</button>
      <button type="button" disabled={busy} onClick={()=>review('return')} className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm">Вернуть с причиной</button></>}
-    {draft.slotId&&<button type="button" onClick={onOpenSchedule} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Открыть сетку</button>}
+    {draft.slotId&&!draft.publishedAt&&<button type="button" disabled={busy||new Date(draft.day+'T'+draft.time+':00+03:00')<=new Date()} onClick={removeFromGrid}
+    className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm text-rose-700 disabled:opacity-40 dark:text-rose-300">Убрать из эфирной сетки</button>}
+   {draft.slotId&&<button type="button" onClick={onOpenSchedule} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Открыть сетку</button>}
    </div>
   </div>
   </div>
