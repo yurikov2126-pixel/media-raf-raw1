@@ -6,9 +6,10 @@ const moscowParts=date=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow
 const localDay=date=>{const p=moscowParts(date);return p.year+'-'+p.month+'-'+p.day;};
 const localTime=date=>{const p=moscowParts(date);return p.hour+':'+p.minute;};
 const statuses={DRAFT:'Черновик',ASSIGNED:'Задание назначено',REVIEW:'На проверке',APPROVED:'Утверждено'};
-export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
+export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpenSchedule}){
  const now=new Date(),initial=localDay(now).slice(0,7);
  const [month,setMonth]=useState(initial),[episodes,setEpisodes]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [publishPlaylistId,setPublishPlaylistId]=useState('');
  const [draft,setDraft]=useState(null),[editingId,setEditingId]=useState(null),[view,setView]=useState('month');
  const [refreshKey,setRefreshKey]=useState(0);
  useEffect(()=>{let live=true;setBusy(true);const start=month+'-01T00:00:00+03:00';
@@ -19,10 +20,10 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
    .finally(()=>{if(live)setBusy(false);});return()=>{live=false};},[call,month,refreshKey]);
  const days=useMemo(()=>{const [y,m]=month.split('-').map(Number);const first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
   const length=new Date(Date.UTC(y,m,0)).getUTCDate();return [...Array(first).fill(null),...Array.from({length},(_,i)=>i+1)]},[month]);
- const open=(day,episode=null)=>{setEditingId(episode?.id||null);setDraft(episode?{
+ const open=(day,episode=null)=>{setPublishPlaylistId(episode?.publishedPlaylistId||'');setEditingId(episode?.id||null);setDraft(episode?{
   title:episode.title,script:episode.script,day:localDay(episode.startAt),time:localTime(episode.startAt),
   durationMin:episode.durationMin,format:episode.format,hostIds:episode.hostIds||[],
-  slotId:episode.slotId,status:episode.status,reviewReason:episode.reviewReason
+  slotId:episode.slotId,status:episode.status,reviewReason:episode.reviewReason,publishedAt:episode.publishedAt,publishedPlaylistId:episode.publishedPlaylistId,liveReady:episode.liveReady
  }:newDraft(month+'-'+pad(day)));setError('');};
  const submit=async(publish=false)=>{if(!draft?.title.trim())return setError('Введите название передачи');
   if(!/^\d{4}-\d\d-\d\d$/.test(draft.day)||!/^\d\d:\d\d$/.test(draft.time))return setError('Укажите дату и время');
@@ -42,6 +43,19 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
    await call('/editorial/episodes/'+editingId+'/review',{method:'POST',body:{decision,reason}});
    setDraft(null);setRefreshKey(v=>v+1);
   }catch(e){setError(e.message||'Не удалось согласовать сценарий')}finally{setBusy(false)}
+ };
+ const publish=async()=>{
+  if(!editingId||!publishPlaylistId)return setError('Выберите утверждённый плейлист');
+  setBusy(true);setError('');
+  try{await call('/editorial/episodes/'+editingId+'/publish',{method:'POST',body:{playlistId:publishPlaylistId}});
+   setDraft(null);setRefreshKey(v=>v+1);
+  }catch(e){setError(e.message||'Публикация не удалась')}finally{setBusy(false)}
+ };
+ const toggleLive=async ready=>{
+  setBusy(true);setError('');
+  try{const result=await call('/editorial/episodes/'+editingId+'/live-ready',{method:'POST',body:{ready}});
+   setDraft(v=>({...v,liveReady:result.episode.liveReady}));setRefreshKey(v=>v+1);
+  }catch(e){setError(e.message||'Не удалось изменить готовность')}finally{setBusy(false)}
  };
  const shift=n=>{const [y,m]=month.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+n,1));setMonth(d.toISOString().slice(0,7));setDraft(null);};
  const byDay=day=>episodes.filter(e=>localDay(e.startAt)===month+'-'+pad(day));
@@ -90,6 +104,23 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
    <label className="block text-sm">Текст сценария<textarea value={draft.script} rows={9} maxLength={100000} onChange={e=>setDraft(v=>({...v,script:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-3" placeholder="Приветствие, подводки, новости, реплики ведущих…"/></label>
    {draft.reviewReason&&<p className="rounded-lg border border-amber-500/30 p-3 text-sm">Последнее замечание: {draft.reviewReason}</p>}
    {draft.slotId?<p className="text-sm text-violet-700 dark:text-violet-300">Место в эфирной сетке зарезервировано. Для изменения времени откройте сетку вещания.</p>:<p className="text-xs opacity-65">Черновик не влияет на эфир. Назначение создаёт планируемый слот без воспроизведения, до выбора утверждённого плейлиста.</p>}
+   {draft.status==='APPROVED'&&draft.slotId&&<div className="space-y-2 rounded-xl border border-violet-500/25 p-3">
+    <h4 className="font-semibold text-sm">Подготовка к эфиру</h4>
+    {draft.format==='RECORDED'?draft.publishedAt?<p className="text-sm text-emerald-700 dark:text-emerald-300">Передача опубликована в эфирную сетку · плейлист закреплён</p>:<>
+     <p className="text-xs opacity-70">Выберите утверждённый плейлист. Его реальная длительность будет проверена на конфликты расписания.</p>
+     <select value={publishPlaylistId} onChange={e=>setPublishPlaylistId(e.target.value)} className="w-full rounded-lg border border-current/20 bg-transparent p-2 text-sm">
+      <option value="">Выберите плейлист</option>
+      {playlists.filter(p=>p.status==='APPROVED'&&!p.archivedAt&&p.items?.length).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+     </select>
+     <button type="button" onClick={publish} disabled={busy||!publishPlaylistId}
+      className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white disabled:opacity-50">Опубликовать в сетку</button>
+    </>:<>
+     <p className="text-xs opacity-70">Готовность LIVE не запускает студию и не переключает источник. Запуск эфира — только через действующий эфирный пульт.</p>
+     <button type="button" disabled={busy} onClick={()=>toggleLive(!draft.liveReady)}
+      className="rounded-lg border border-current/20 px-4 py-2 text-sm">{draft.liveReady?'Снять готовность LIVE':'Подтвердить готовность LIVE'}</button>
+     <span className="ml-2 text-xs">{draft.liveReady?'Готово к запуску вручную':'Ожидает подготовки'}</span>
+    </>}
+   </div>}
    <div className="flex flex-wrap gap-2">
     {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
     <button type="button" disabled={busy} onClick={()=>submit(true)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
