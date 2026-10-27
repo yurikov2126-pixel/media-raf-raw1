@@ -90,7 +90,7 @@ function RadioGate({ admin = false, children }) {
     if (loading) return <div role="status" className="p-6">Проверяем доступ к Радио…</div>;
     if (!allowed) return <Navigate to="/app" replace />;
     // One public entry point; authorized student presenters enter their own studio.
-    if (admin && user?.role === 'STUDENT') return <Navigate to="/app/radio/playlists/my" replace />;
+    if (admin && user?.role !== 'ADMIN') return <Navigate to="/app/radio/playlists/my" replace />;
     if (admin && user?.role !== 'ADMIN') return <Navigate to="/app" replace />;
     return children;
 }
@@ -137,7 +137,7 @@ export default function App() {
                     <Route path="feed" element={<LazyPage><Feed /></LazyPage>} />
                     <Route path="safety" element={<LazyPage><SafetyConsole /></LazyPage>} />
                     <Route path="radio" element={<Private><RadioGate admin><LazyPage><Radio /></LazyPage></RadioGate></Private>} />
-                    <Route path="radio/playlists/my" element={<Private roles={['STUDENT']}><RadioGate><LazyPage><RadioStudentPlaylists /></LazyPage></RadioGate></Private>} />
+                    <Route path="radio/playlists/my" element={<Private><RadioGate><LazyPage><RadioStudentPlaylists /></LazyPage></RadioGate></Private>} />
                     <Route path="editorial" element={<EditorialGate><LazyPage><Editorial /></LazyPage></EditorialGate>}>
                         <Route index element={<LazyPage><EditorialOverview /></LazyPage>} />
                         <Route path="projects" element={<LazyPage><EditorialProjects /></LazyPage>} />
