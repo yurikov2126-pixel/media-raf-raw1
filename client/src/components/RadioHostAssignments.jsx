@@ -6,11 +6,13 @@ const textField='w-full rounded-xl border border-current/20 bg-transparent p-3 t
 const titles={DRAFT:'Черновик',ASSIGNED:'Назначено',REVIEW:'На проверке',RETURNED:'На доработке',APPROVED:'Сценарий утверждён'};
 export default function RadioHostAssignments(){
  const {token}=useAuth(),toast=useToast();
+ const [assets,setAssets]=useState([]),[mediaIds,setMediaIds]=useState([]),[mediaOpen,setMediaOpen]=useState(false);
  const [episodes,setEpisodes]=useState([]),[selected,setSelected]=useState(null),[script,setScript]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const call=useCallback((route,options)=>api('/radio/student'+route,{token,...options}),[token]);
  const refresh=useCallback(async()=>{const result=await call('/episodes');setEpisodes(result.episodes||[]);return result.episodes||[];},[call]);
  useEffect(()=>{let alive=true;refresh().catch(e=>{if(alive)toast.error(e.message)}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[refresh]);
- const open=e=>{setSelected(e);setScript(e.script||'')};
+ const open=e=>{setSelected(e);setScript(e.script||'');setMediaIds(e.mediaAssetIds||[]);setMediaOpen(false)};
+ const saveMedia=async()=>{if(!selected)return;setBusy(true);try{const result=await call('/episodes/'+selected.id+'/media',{method:'PATCH',body:{assetIds:mediaIds}});setSelected(result.episode);await refresh();toast.success('Материалы задания сохранены');}catch(e){toast.error(e.message)}finally{setBusy(false)}};
  const submit=async send=>{if(!selected)return;setBusy(true);try{
   let episode=selected;
   if(script!==episode.script){
@@ -34,6 +36,15 @@ export default function RadioHostAssignments(){
   {selected&&<div className="space-y-3 rounded-xl border border-violet-500/25 p-3">
    <div className="flex justify-between gap-2"><div><h3 className="font-semibold">{selected.title}</h3><p className="text-xs opacity-60">{titles[selected.status]||selected.status}</p></div>
     <button onClick={()=>setSelected(null)} aria-label="Закрыть карточку">✕</button></div>
+   <div className="rounded-xl border border-current/15 p-3 space-y-2">
+    <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Аудиоматериалы задания ({mediaIds.length})</strong>
+     <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-xs" onClick={async()=>{if(!mediaOpen){try{const result=await call('/assets');setAssets(result.assets||[])}catch(e){toast.error(e.message)}}setMediaOpen(v=>!v)}}>{mediaOpen?'Скрыть медиатеку':'Выбрать из медиатеки'}</button>
+    </div>
+    {mediaOpen&&<div className="max-h-52 overflow-y-auto space-y-1">{assets.map(a=><label key={a.id} className="flex items-center gap-2 rounded-md p-1 text-xs">
+     <input type="checkbox" disabled={!['ASSIGNED','DRAFT','RETURNED'].includes(selected.status)} checked={mediaIds.includes(a.id)}
+      onChange={e=>setMediaIds(v=>e.target.checked?[...v,a.id]:v.filter(id=>id!==a.id))}/><span className="truncate">{a.name}</span></label>)}</div>}
+    {mediaOpen&&['ASSIGNED','DRAFT','RETURNED'].includes(selected.status)&&<button type="button" disabled={busy||mediaIds.length>30} className="rounded-lg bg-violet-700 px-3 py-2 text-xs text-white" onClick={saveMedia}>Сохранить вложения</button>}
+   </div>
    {selected.reviewReason&&<p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">Замечания редактора: {selected.reviewReason}</p>}
    <label className="block text-sm">Сценарий выпуска<textarea rows={12} value={script} disabled={!['ASSIGNED','DRAFT','RETURNED'].includes(selected.status)||busy}
     onChange={e=>setScript(e.target.value)} className={'mt-2 '+textField}/></label>
