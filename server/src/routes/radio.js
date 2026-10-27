@@ -1151,6 +1151,26 @@ router.post('/editorial/episodes/:id/publish',requireRole('ADMIN'),safe(async(re
 }));
 // Undo a future editorial publication without deleting its approved script,
 // assigned hosts or planned time. Never rewrite a slot that is already on air.
+// Cancel an unpublished reservation without losing the episode assignment.
+router.post('/editorial/episodes/:id/unassign',requireRole('ADMIN'),safe(async(req,res)=>{
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const episode=await tx.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+  if(!episode)return {code:404,error:'Выпуск не найден'};
+  if(!episode.slotId)return {code:409,error:'Выпуск ещё не назначен в сетку'};
+  if(episode.publishedAt||episode.publishedPlaylistId)
+   return {code:409,error:'Сначала отмените публикацию утверждённого плейлиста'};
+  const slot=await tx.radioScheduleSlot.findUnique({where:{id:episode.slotId}});
+  if(!slot||slot.startAt<=new Date())return {code:409,error:'Начавшийся или прошедший слот изменять нельзя'};
+  if(slot.playlistId!==null)return {code:409,error:'Слот уже содержит эфирный плейлист'};
+  await tx.radioScheduleSlot.delete({where:{id:slot.id}});
+  const updated=await tx.radioEditorialEpisode.update({where:{id:episode.id},
+   data:{slotId:null,status:episode.status==='ASSIGNED'?'DRAFT':episode.status,liveReady:false}});
+  return {episode:updated};
+ });
+ if(result.error)return res.status(result.code).json({error:result.error});
+ res.json(result);
+}));
 router.post('/editorial/episodes/:id/unpublish',requireRole('ADMIN'),safe(async(req,res)=>{
  const result=await prisma.$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
