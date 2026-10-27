@@ -10,6 +10,7 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
  const now=new Date(),initial=localDay(now).slice(0,7);
  const [month,setMonth]=useState(initial),[episodes,setEpisodes]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [publishPlaylistId,setPublishPlaylistId]=useState('');
+ const [recurring,setRecurring]=useState(false),[repeatCount,setRepeatCount]=useState(4),[repeatDays,setRepeatDays]=useState([]);
  const [draft,setDraft]=useState(null),[editingId,setEditingId]=useState(null),[view,setView]=useState('month');
  const [refreshKey,setRefreshKey]=useState(0);
  useEffect(()=>{let live=true;setBusy(true);const start=month+'-01T00:00:00+03:00';
@@ -20,7 +21,7 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    .finally(()=>{if(live)setBusy(false);});return()=>{live=false};},[call,month,refreshKey]);
  const days=useMemo(()=>{const [y,m]=month.split('-').map(Number);const first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
   const length=new Date(Date.UTC(y,m,0)).getUTCDate();return [...Array(first).fill(null),...Array.from({length},(_,i)=>i+1)]},[month]);
- const open=(day,episode=null)=>{setPublishPlaylistId(episode?.publishedPlaylistId||'');setEditingId(episode?.id||null);setDraft(episode?{
+ const open=(day,episode=null)=>{setRecurring(false);setRepeatDays([]);setPublishPlaylistId(episode?.publishedPlaylistId||'');setEditingId(episode?.id||null);setDraft(episode?{
   title:episode.title,script:episode.script,day:localDay(episode.startAt),time:localTime(episode.startAt),
   durationMin:episode.durationMin,format:episode.format,hostIds:episode.hostIds||[],
   slotId:episode.slotId,status:episode.status,reviewReason:episode.reviewReason,publishedAt:episode.publishedAt,publishedPlaylistId:episode.publishedPlaylistId,liveReady:episode.liveReady
@@ -101,6 +102,13 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
      <input type="checkbox" disabled={!!draft.slotId} checked={draft.hostIds.includes(h.id)} onChange={e=>setDraft(v=>({...v,hostIds:e.target.checked?[...v.hostIds,h.id]:v.hostIds.filter(id=>id!==h.id)}))}/>
      {h.fullName||[h.firstName,h.lastName].filter(Boolean).join(' ')}</label>)}{!hosts.length&&<p className="text-xs opacity-65">Ведущие назначаются через должность «Радиоведущий».</p>}</div>
    </fieldset>
+   {!editingId&&<div className="rounded-xl border border-current/15 p-3 space-y-2">
+    <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/>Повторять выпуски</label>
+    {recurring&&<><p className="text-xs opacity-70">Для каждого дня будет создано самостоятельное задание и зарезервировано время в сетке. При конфликте серия не создаётся.</p>
+     <div className="flex flex-wrap gap-2">{['Вс','Пн','Вт','Ср','Чт','Пт','Сб'].map((name,index)=><label key={index} className="flex items-center gap-1 rounded-md border border-current/15 px-2 py-1 text-xs"><input type="checkbox" checked={repeatDays.includes(index)} onChange={e=>setRepeatDays(v=>e.target.checked?[...v,index]:v.filter(x=>x!==index))}/>{name}</label>)}</div>
+     <label className="block text-xs">Количество будущих выпусков<input type="number" min={1} max={31} value={repeatCount} onChange={e=>setRepeatCount(e.target.value)} className="mt-1 block w-24 rounded-lg border border-current/20 bg-transparent p-2"/></label>
+    </>}
+   </div>}
    <label className="block text-sm">Текст сценария<textarea value={draft.script} rows={9} maxLength={100000} onChange={e=>setDraft(v=>({...v,script:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-3" placeholder="Приветствие, подводки, новости, реплики ведущих…"/></label>
    {draft.reviewReason&&<p className="rounded-lg border border-amber-500/30 p-3 text-sm">Последнее замечание: {draft.reviewReason}</p>}
    {draft.slotId?<p className="text-sm text-violet-700 dark:text-violet-300">Место в эфирной сетке зарезервировано. Для изменения времени откройте сетку вещания.</p>:<p className="text-xs opacity-65">Черновик не влияет на эфир. Назначение создаёт планируемый слот без воспроизведения, до выбора утверждённого плейлиста.</p>}
@@ -122,8 +130,8 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
     </>}
    </div>}
    <div className="flex flex-wrap gap-2">
-    {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
-    <button type="button" disabled={busy} onClick={()=>submit(true)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
+    {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} disabled={busy||(recurring&&!repeatDays.length)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
+    <button type="button" disabled={busy} onClick={()=>submit(true)} disabled={busy||(recurring&&!repeatDays.length)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
     {draft.slotId&&<button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white">Сохранить сценарий</button>}
     {draft.status==='REVIEW'&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white">Утвердить сценарий</button>
      <button type="button" disabled={busy} onClick={()=>review('return')} className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm">Вернуть с причиной</button></>}
