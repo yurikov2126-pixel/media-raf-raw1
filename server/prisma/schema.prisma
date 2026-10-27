@@ -1464,6 +1464,11 @@ model SafetyMchsDiagnostic {
 }
 
 model RadioEditorialEpisode {
+  reviewReason String?
+  submittedAt DateTime?
+  reviewedAt DateTime?
+  reviewedBy String?
+  scriptRevision Int @default(1)
   id          String   @id @default(cuid())
   title       String
   script      String   @default("")
