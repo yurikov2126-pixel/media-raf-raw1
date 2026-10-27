@@ -1147,6 +1147,13 @@ router.post('/editorial/episodes/:id/assign',requireRole('ADMIN'),safe(async(req
     data:{slotId:slot.id,status:'ASSIGNED'}});
  });
  if(!result)return res.status(409).json({error:'Время занято в эфирной сетке'});
+ if(result.status==='ASSIGNED'&&result.hostIds.length){
+  await prisma.notification.createMany({data:result.hostIds.map(userId=>({
+   userId,type:'RADIO_EPISODE_ASSIGNED',
+   payload:JSON.stringify({episodeId:result.id,title:result.title,startAt:result.startAt,
+    event:'assigned',url:'/app/radio/student'})
+  }))});
+ }
  res.json({episode:result});
 }));
 router.get('/hosts',requireRole('ADMIN'),safe(async(req,res)=>{
