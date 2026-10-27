@@ -6,6 +6,20 @@ const moscowParts=date=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow
 const localDay=date=>{const p=moscowParts(date);return p.year+'-'+p.month+'-'+p.day;};
 const localTime=date=>{const p=moscowParts(date);return p.hour+':'+p.minute;};
 const statuses={DRAFT:'Черновик',ASSIGNED:'Задание назначено',REVIEW:'На проверке',APPROVED:'Утверждено'};
+// Visual milestones are derived from the saved episode, not inferred from the
+// card title. The editorial review status remains visible as secondary text.
+const planStages={
+ created:{label:'Создано',classes:'border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-100 dark:hover:bg-slate-700',dot:'bg-slate-500'},
+ draft:{label:'Черновик',classes:'border-amber-300 bg-amber-100 text-amber-950 hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-950/55 dark:text-amber-100 dark:hover:bg-amber-900/70',dot:'bg-amber-500'},
+ script:{label:'Есть сценарий',classes:'border-sky-300 bg-sky-100 text-sky-950 hover:bg-sky-200 dark:border-sky-700 dark:bg-sky-950/55 dark:text-sky-100 dark:hover:bg-sky-900/70',dot:'bg-sky-500'},
+ scheduled:{label:'Назначено в сетку',classes:'border-emerald-300 bg-emerald-100 text-emerald-950 hover:bg-emerald-200 dark:border-emerald-700 dark:bg-emerald-950/55 dark:text-emerald-100 dark:hover:bg-emerald-900/70',dot:'bg-emerald-500'}
+};
+const planStage=episode=>{
+ if(episode.slotId)return 'scheduled';
+ if(['REVIEW','APPROVED','RETURNED'].includes(episode.status)&&episode.script?.trim())return 'script';
+ if(episode.script?.trim())return 'draft';
+ return 'created';
+};
 export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpenSchedule}){
  const now=new Date(),initial=localDay(now).slice(0,7);
  const [month,setMonth]=useState(initial),[episodes,setEpisodes]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -72,6 +86,10 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    <button type="button" className="rounded-lg border border-current/20 px-3 py-2 text-sm" onClick={()=>setView(v=>v==='month'?'list':'month')}>{view==='month'?'Список':'Календарь'}</button>
    <button type="button" onClick={onOpenSchedule} className="rounded-lg border border-current/20 px-3 py-2 text-sm">Эфирная сетка</button>
   </div>
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Обозначения цветов выпусков">
+   {Object.entries(planStages).map(([key,stage])=><span key={key} className="inline-flex items-center gap-1.5 text-xs">
+    <span aria-hidden="true" className={'h-2.5 w-2.5 rounded-full '+stage.dot}/>{stage.label}</span>)}
+  </div>
   {error&&<p role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-600">{error}</p>}
   {busy&&<p className="text-xs opacity-60">Обновляем данные…</p>}
   {view==='month'?<div className="grid grid-cols-7 gap-1" aria-label="Месячное планирование">
@@ -79,14 +97,18 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
    {days.map((day,i)=>day===null?<div key={'empty'+i} aria-hidden="true"/>:
     <div key={day} className="min-h-24 min-w-0 rounded-lg border border-current/15 p-1 sm:p-2">
      <button type="button" onClick={()=>open(day)} aria-label={'Добавить выпуск '+day+' числа'} className="mb-1 rounded-md px-1 text-sm font-semibold hover:bg-violet-500/10">{day} +</button>
-     <div className="space-y-1">{byDay(day).map(e=><button key={e.id} type="button" onClick={()=>open(day,e)}
-      className="block w-full truncate rounded-md bg-violet-500/10 px-1 py-1 text-left text-[11px] hover:bg-violet-500/20" title={e.title}>
-      {localTime(e.startAt)} {e.title}</button>)}</div>
+     <div className="space-y-1.5">{byDay(day).map(e=><button key={e.id} type="button" onClick={()=>open(day,e)}
+      className={'block w-full min-w-0 whitespace-normal break-words rounded-md border px-1.5 py-1.5 text-left text-[11px] leading-snug transition-colors '+planStages[planStage(e)].classes}
+      title={e.title} aria-label={localTime(e.startAt)+' — '+e.title+' — '+planStages[planStage(e)].label}>
+      <span className="block text-[10px] font-semibold opacity-80">{localTime(e.startAt)}</span>
+      <span className="block font-semibold break-words [overflow-wrap:anywhere]">{e.title}</span>
+      <span className="mt-1 block text-[10px] opacity-75">{planStages[planStage(e)].label}</span>
+     </button>)}</div>
     </div>)}
   </div>:<div className="space-y-2">{episodes.map(e=><button key={e.id} type="button" onClick={()=>open(1,e)}
-   className="w-full rounded-xl border border-current/15 p-3 text-left text-sm hover:bg-violet-500/10">
-   <strong>{localDay(e.startAt)} · {localTime(e.startAt)} — {e.title}</strong>
-   <span className="block text-xs opacity-65">{statuses[e.status]||e.status} · {e.durationMin} мин · {e.hostIds.length} ведущих</span>
+   className={'w-full rounded-xl border p-3 text-left text-sm '+planStages[planStage(e)].classes}>
+   <strong className="block whitespace-normal break-words">{localDay(e.startAt)} · {localTime(e.startAt)} — {e.title}</strong>
+   <span className="block text-xs opacity-75">{planStages[planStage(e)].label} · {statuses[e.status]||e.status} · {e.durationMin} мин · {e.hostIds.length} ведущих</span>
    </button>)}{!episodes.length&&<p className="text-sm opacity-60">Пока нет запланированных выпусков.</p>}</div>}
   {draft&&<div className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
    <div className="flex items-center justify-between"><h3 className="font-bold">{editingId?'Карточка выпуска':'Новый выпуск'}</h3><button type="button" onClick={()=>setDraft(null)} aria-label="Закрыть карточку">✕</button></div>
