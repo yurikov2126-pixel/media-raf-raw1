@@ -22,7 +22,7 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
  const open=(day,episode=null)=>{setEditingId(episode?.id||null);setDraft(episode?{
   title:episode.title,script:episode.script,day:localDay(episode.startAt),time:localTime(episode.startAt),
   durationMin:episode.durationMin,format:episode.format,hostIds:episode.hostIds||[],
-  slotId:episode.slotId,status:episode.status
+  slotId:episode.slotId,status:episode.status,reviewReason:episode.reviewReason
  }:newDraft(month+'-'+pad(day)));setError('');};
  const submit=async(publish=false)=>{if(!draft?.title.trim())return setError('Введите название передачи');
   if(!/^\d{4}-\d\d-\d\d$/.test(draft.day)||!/^\d\d:\d\d$/.test(draft.time))return setError('Укажите дату и время');
@@ -34,6 +34,15 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
    if(publish)await call('/editorial/episodes/'+result.episode.id+'/assign',{method:'POST'});
    setDraft(null);setEditingId(null);setRefreshKey(v=>v+1);
   }catch(e){setError(e.message||'Не удалось сохранить выпуск');}finally{setBusy(false)}};
+ const review=async decision=>{
+  const reason=decision==='return'?window.prompt('Причина возврата сценария ведущему:',''):'';
+  if(decision==='return'&&!reason?.trim())return;
+  setBusy(true);setError('');
+  try{
+   await call('/editorial/episodes/'+editingId+'/review',{method:'POST',body:{decision,reason}});
+   setDraft(null);setRefreshKey(v=>v+1);
+  }catch(e){setError(e.message||'Не удалось согласовать сценарий')}finally{setBusy(false)}
+ };
  const shift=n=>{const [y,m]=month.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+n,1));setMonth(d.toISOString().slice(0,7));setDraft(null);};
  const byDay=day=>episodes.filter(e=>localDay(e.startAt)===month+'-'+pad(day));
  return <section className="space-y-4">
@@ -79,11 +88,14 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
      {h.fullName||[h.firstName,h.lastName].filter(Boolean).join(' ')}</label>)}{!hosts.length&&<p className="text-xs opacity-65">Ведущие назначаются через должность «Радиоведущий».</p>}</div>
    </fieldset>
    <label className="block text-sm">Текст сценария<textarea value={draft.script} rows={9} maxLength={100000} onChange={e=>setDraft(v=>({...v,script:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-3" placeholder="Приветствие, подводки, новости, реплики ведущих…"/></label>
+   {draft.reviewReason&&<p className="rounded-lg border border-amber-500/30 p-3 text-sm">Последнее замечание: {draft.reviewReason}</p>}
    {draft.slotId?<p className="text-sm text-violet-700 dark:text-violet-300">Место в эфирной сетке зарезервировано. Для изменения времени откройте сетку вещания.</p>:<p className="text-xs opacity-65">Черновик не влияет на эфир. Назначение создаёт планируемый слот без воспроизведения, до выбора утверждённого плейлиста.</p>}
    <div className="flex flex-wrap gap-2">
     {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
     <button type="button" disabled={busy} onClick={()=>submit(true)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
     {draft.slotId&&<button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white">Сохранить сценарий</button>}
+    {draft.status==='REVIEW'&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white">Утвердить сценарий</button>
+     <button type="button" disabled={busy} onClick={()=>review('return')} className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm">Вернуть с причиной</button></>}
     {draft.slotId&&<button type="button" onClick={onOpenSchedule} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Открыть сетку</button>}
    </div>
   </div>}
