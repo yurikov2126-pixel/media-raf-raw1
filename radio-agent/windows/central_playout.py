@@ -239,9 +239,29 @@ def run(args, token):
                 if results:
                     snapshot=results[-1]
                     results.clear()
-            if denied or now-last_authorized>args.offline_grace:
-                print('PLAYBACK_PERMISSION_EXPIRED',flush=True)
+            if denied:
+                print('PLAYBACK_PERMISSION_DENIED',flush=True)
                 break
+            # Keep the operator-started agent alive during a multi-hour outage.
+            # Expired authorization must stop *both* audible decks, not the
+            # reconnect loop. Probe will reauthorize after the network returns.
+            if now-last_authorized>args.offline_grace:
+                if primary is not None or fallback is not None:
+                    stop_vlc(primary)
+                    stop_vlc(fallback)
+                    primary=None
+                    fallback=None
+                    fallback_key=None
+                    relay.failed.set()
+                    print('PLAYBACK_PERMISSION_EXPIRED_WAITING_FOR_NETWORK',flush=True)
+                network_ok=False
+                PLAYBACK_STATE['mode']='STOPPED'
+                if now>=last_probe and not probe_running.is_set():
+                    probe_running.set()
+                    threading.Thread(target=probe,daemon=True).start()
+                    last_probe=now+5
+                STOP.wait(0.5)
+                continue
             if now>=last_probe and not probe_running.is_set():
                 probe_running.set()
                 threading.Thread(target=probe,daemon=True).start()
