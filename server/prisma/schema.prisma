@@ -1462,3 +1462,20 @@ model SafetyMchsDiagnostic {
   receivedAt DateTime @default(now())
   @@index([receivedAt])
 }
+
+model RadioEditorialEpisode {
+  id          String   @id @default(cuid())
+  title       String
+  script      String   @default("")
+  startAt     DateTime
+  durationMin Int      @default(30)
+  status      String   @default("DRAFT")
+  format      String   @default("RECORDED")
+  hostIds     String[] @default([])
+  slotId      String?  @unique
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([startAt])
+  @@index([status])
+}
