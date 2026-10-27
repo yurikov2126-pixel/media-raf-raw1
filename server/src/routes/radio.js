@@ -1091,6 +1091,55 @@ router.post('/editorial/episodes/:id/review',requireRole('ADMIN'),safe(async(req
  }))});
  res.json({episode});
 }));
+// Only explicitly approved recorded episodes can be attached to PCM playout.
+// The slot and episode are committed together under the scheduler advisory lock.
+router.post('/editorial/episodes/:id/publish',requireRole('ADMIN'),safe(async(req,res)=>{
+ const playlistId=req.body?.playlistId;
+ if(typeof playlistId!=='string'||!playlistId.trim())
+  return res.status(400).json({error:'Выберите утверждённый плейлист для выпуска'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(1729002)`;
+  const episode=await tx.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+  if(!episode)return {code:404,error:'Выпуск не найден'};
+  if(episode.format!=='RECORDED')return {code:409,error:'Для LIVE запись плейлиста не публикуется автоматически'};
+  if(episode.status!=='APPROVED')return {code:409,error:'Сначала утвердите сценарий выпуска'};
+  if(!episode.slotId)return {code:409,error:'Сначала назначьте выпуск в эфирную сетку'};
+  if(episode.publishedAt)return {code:409,error:'Выпуск уже опубликован'};
+  const slot=await tx.radioScheduleSlot.findUnique({where:{id:episode.slotId}});
+  if(!slot||slot.startAt<=new Date()||slot.playlistId)
+   return {code:409,error:'Слот уже начался, удалён или занят другим плейлистом'};
+  if(slot.startAt.getTime()!==episode.startAt.getTime())
+   return {code:409,error:'Время выпуска и слота расходится — проверьте сетку'};
+  const playlist=await tx.radioPlaylist.findUnique({where:{id:playlistId},include:playlistInclude});
+  if(!playlist||playlist.status!=='APPROVED'||!playlist.items.length||playlist.archivedAt)
+   return {code:400,error:'Плейлист отсутствует, архивирован или не утверждён'};
+  const length=playlistMs(playlist);
+  if(!length||length>12*3600000)return {code:400,error:'Некорректная длительность плейлиста'};
+  const endAt=new Date(slot.startAt.getTime()+length);
+  const clash=await tx.radioScheduleSlot.findFirst({where:{
+   id:{not:slot.id},startAt:{lt:endAt},endAt:{gt:slot.startAt}
+  },select:{id:true}});
+  if(clash)return {code:409,error:'Плейлист пересекается со следующей передачей'};
+  const updatedSlot=await tx.radioScheduleSlot.update({where:{id:slot.id},
+   data:{playlistId:playlist.id,endAt,title:episode.title,hostIds:episode.hostIds}});
+  const published=await tx.radioEditorialEpisode.update({where:{id:episode.id},
+   data:{publishedPlaylistId:playlist.id,publishedAt:new Date()}});
+  return {episode:published,slot:updatedSlot};
+ });
+ if(result.error)return res.status(result.code).json({error:result.error});
+ res.json(result);
+}));
+router.post('/editorial/episodes/:id/live-ready',requireRole('ADMIN'),safe(async(req,res)=>{
+ if(typeof req.body?.ready!=='boolean')
+  return res.status(400).json({error:'Укажите готовность прямого эфира'});
+ const episode=await prisma.radioEditorialEpisode.findUnique({where:{id:req.params.id}});
+ if(!episode)return res.status(404).json({error:'Выпуск не найден'});
+ if(episode.format!=='LIVE'||episode.status!=='APPROVED'||!episode.slotId)
+  return res.status(409).json({error:'Для подготовки LIVE нужен утверждённый сценарий и планируемый слот'});
+ const updated=await prisma.radioEditorialEpisode.update({where:{id:episode.id},
+  data:{liveReady:req.body.ready}});
+ res.json({episode:updated});
+}));
 router.get('/editorial/episodes',requireRole('ADMIN'),safe(async(req,res)=>{
  const from=new Date(req.query.from),to=new Date(req.query.to);
  if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||to<=from||
