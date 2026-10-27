@@ -78,11 +78,12 @@ export default function RadioEditorialCalendar({call,hosts=[],onOpenSchedule}){
      <input type="checkbox" disabled={!!draft.slotId} checked={draft.hostIds.includes(h.id)} onChange={e=>setDraft(v=>({...v,hostIds:e.target.checked?[...v.hostIds,h.id]:v.hostIds.filter(id=>id!==h.id)}))}/>
      {h.fullName||[h.firstName,h.lastName].filter(Boolean).join(' ')}</label>)}{!hosts.length&&<p className="text-xs opacity-65">Ведущие назначаются через должность «Радиоведущий».</p>}</div>
    </fieldset>
-   <label className="block text-sm">Текст сценария<textarea value={draft.script} rows={9} maxLength={100000} disabled={!!draft.slotId} onChange={e=>setDraft(v=>({...v,script:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-3" placeholder="Приветствие, подводки, новости, реплики ведущих…"/></label>
+   <label className="block text-sm">Текст сценария<textarea value={draft.script} rows={9} maxLength={100000} onChange={e=>setDraft(v=>({...v,script:e.target.value}))} className="mt-1 w-full rounded-lg border border-current/20 bg-transparent p-3" placeholder="Приветствие, подводки, новости, реплики ведущих…"/></label>
    {draft.slotId?<p className="text-sm text-violet-700 dark:text-violet-300">Место в эфирной сетке зарезервировано. Для изменения времени откройте сетку вещания.</p>:<p className="text-xs opacity-65">Черновик не влияет на эфир. Назначение создаёт планируемый слот без воспроизведения, до выбора утверждённого плейлиста.</p>}
    <div className="flex flex-wrap gap-2">
     {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
     <button type="button" disabled={busy} onClick={()=>submit(true)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
+    {draft.slotId&&<button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white">Сохранить сценарий</button>}
     {draft.slotId&&<button type="button" onClick={onOpenSchedule} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Открыть сетку</button>}
    </div>
   </div>}
