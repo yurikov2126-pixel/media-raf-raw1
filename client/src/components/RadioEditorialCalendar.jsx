@@ -29,12 +29,12 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
  const [draft,setDraft]=useState(null),[editingId,setEditingId]=useState(null),[view,setView]=useState('month');
  const [refreshKey,setRefreshKey]=useState(0);
  const [modalVisible,setModalVisible]=useState(false);
- const closeTimer=useRef(null),dialogRef=useRef(null),previousFocus=useRef(null);
+ const closeTimer=useRef(null),dialogRef=useRef(null);
  const closeEditor=()=>{if(busy)return;setModalVisible(false);clearTimeout(closeTimer.current);closeTimer.current=setTimeout(()=>setDraft(null),210)};
  useEffect(()=>()=>clearTimeout(closeTimer.current),[]);
  useEffect(()=>{
   if(!draft)return;
-  const prior=document.activeElement;previousFocus.current=prior;
+  const prior=document.activeElement;
   const oldOverflow=document.body.style.overflow;
   document.body.style.overflow='hidden';
   const frame=requestAnimationFrame(()=>{setModalVisible(true);dialogRef.current?.focus()});
@@ -184,8 +184,8 @@ export default function RadioEditorialCalendar({call,hosts=[],playlists=[],onOpe
     </>}
    </div>}
    <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap gap-2 border-t border-current/10 bg-white/95 px-4 py-3 backdrop-blur dark:bg-slate-900/95 sm:-mx-6 sm:-mb-6 sm:px-6">
-    {!draft.slotId&&<><button type="button" disabled={busy} onClick={()=>submit(false)} disabled={busy||(recurring&&!repeatDays.length)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
-    <button type="button" disabled={busy} onClick={()=>submit(true)} disabled={busy||(recurring&&!repeatDays.length)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
+    {!draft.slotId&&<><button type="button" disabled={busy||(recurring&&!repeatDays.length)} onClick={()=>submit(false)} className="rounded-lg border border-current/20 px-4 py-2 text-sm">Сохранить черновик</button>
+    <button type="button" disabled={busy||(recurring&&!repeatDays.length)} onClick={()=>submit(true)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white">Назначить и добавить в сетку</button></>}
     {draft.slotId&&<button type="button" disabled={busy} onClick={()=>submit(false)} className="rounded-lg bg-violet-700 px-4 py-2 text-sm text-white">Сохранить сценарий</button>}
     {draft.status==='REVIEW'&&<><button type="button" disabled={busy} onClick={()=>review('approve')} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm text-white">Утвердить сценарий</button>
      <button type="button" disabled={busy} onClick={()=>review('return')} className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm">Вернуть с причиной</button></>}
