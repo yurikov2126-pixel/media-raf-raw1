@@ -4,6 +4,7 @@ import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
 import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
 import {workerRequest} from '../lib/radioLiveOpusGateway.js';
+import {planRadioEmergencyResume} from '../lib/radioEmergencyResumePlan.js';
 import {runEmergencySimulationSuite,runEmergencySimulationScenario} from '../lib/mchsEmergencySimulationSuite.js';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -53,6 +54,35 @@ async function load() {
 router.use(auth);
 // No actual control commands are accepted here. Pure in-process diagnostics only.
 // Read-only worker health; distinct from simulator success and physical output verification.
+// Real schedule snapshot + worker status, READ ONLY. No emergency commands, no playout.
+router.get('/radio-resume-diagnostic', canView, async (_req,res,next) => {
+  try {
+    const at=new Date();
+    const [slots,workerResult]=await Promise.all([
+      prisma.radioScheduleSlot.findMany({
+        where:{startAt:{lte:at},endAt:{gt:at},playlist:{status:'APPROVED'}},
+        include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:{
+          select:{id:true,name:true,durationMs:true}
+        }}}}}},orderBy:{startAt:'asc'},take:5
+      }),
+      workerRequest('GET','/health').then(value=>({ok:true,value}))
+        .catch(()=>({ok:false,value:null}))
+    ]);
+    const worker=workerResult.value;
+    const source=workerResult.ok?String(worker?.mode||'UNKNOWN'):'UNKNOWN';
+    const plan=workerResult.ok?planRadioEmergencyResume({
+      source,nowMs:at.getTime(),slots,previousTrackId:worker?.trackId||null,
+      // Live and playlist authority cannot be proven by health alone.
+      liveConnected:false,liveAuthorized:false,playlistActive:false
+    }):{ready:false,action:'RECHECK_STATION_AUTHORITY',reason:'WORKER_UNAVAILABLE',simulationOnly:true};
+    res.set('Cache-Control','no-store');
+    res.json({checkedAt:at.toISOString(),workerReachable:workerResult.ok,
+      currentSource:source,workerTrackId:worker?.trackId||null,workerSlotId:worker?.slotId||null,
+      scheduledSlotIds:slots.map(x=>x.id),plan,
+      liveAuthorityVerified:false,playlistAuthorityVerified:false,
+      simulationOnly:true,programRestorationVerified:false,audioOutputVerified:false,playbackChanged:false});
+  }catch(error){next(error);}
+});
 router.get('/radio-worker-readiness', canView, async (_req,res) => {
   res.set('Cache-Control','no-store');
   try {
