@@ -24,6 +24,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
   const [busy, setBusy] = useState(false);
   const [probeResult, setProbeResult] = useState('');
   const [probing, setProbing] = useState(false);
+  const [queueFilter, setQueueFilter] = useState('ALL');
   const refresh = useCallback(async () => {
     try {
       const [items, status, transport, journal] = await Promise.all([
@@ -101,13 +102,19 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         <p className="text-xs text-slate-500 dark:text-white/50">{title}</p>
         <p className="mt-1 text-base font-semibold break-words">{value ?? '—'}</p></div>)}
     </div>}
+    <details className="text-xs text-slate-500 dark:text-white/50">
+      <summary className="cursor-pointer font-medium">Технические подробности анализатора</summary>
+      <div className="mt-2 space-y-1">
+        {health?.runtime?.lastSuccessAt && <p>Последняя успешная проверка: {fmt(health.runtime.lastSuccessAt)}</p>}
+        {health?.runtime?.lastAttemptAt && <p>Последний запуск: {fmt(health.runtime.lastAttemptAt)}</p>}
+        {health?.runtime?.lastError && <p className="text-red-700 dark:text-red-300">Ошибка: {health.runtime.lastError}</p>}
+        {health?.runtime?.lastErrorAt && <p>Время ошибки: {fmt(health.runtime.lastErrorAt)}</p>}
+        {health?.saved?.savedAt && <p>Сохранено в БД: {fmt(health.saved.savedAt)}</p>}
+      </div>
+    </details>
     <p className="text-xs text-slate-500 dark:text-white/50">
       {lastRefresh ? 'Обновлено: ' + fmt(lastRefresh) : 'Загрузка…'} · Автообновление каждые 15 секунд при открытой вкладке.
-      {health?.runtime?.lastSuccessAt && ' · Последняя успешная проверка: ' + fmt(health.runtime.lastSuccessAt)}
-      {health?.runtime?.lastAttemptAt && ' · Последний запуск: ' + fmt(health.runtime.lastAttemptAt)}
-      {health?.runtime?.lastError && ' · Ошибка: ' + health.runtime.lastError}
-      {health?.runtime?.lastErrorAt && ' (' + fmt(health.runtime.lastErrorAt) + ')'}
-      {health?.saved?.savedAt && ' · Сохранено в БД: ' + fmt(health.saved.savedAt)}
+
     </p>
     {error && <p role="alert" className="rounded-lg bg-red-500/10 text-red-700 dark:text-red-300 p-3 text-sm">{error}</p>}
     {view === "queue" && queue?.pending > 0 && <button type="button" disabled={busy} onClick={analyze}
@@ -116,7 +123,22 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
     </button>}
     {(view === "overview" || view === "delivery") && <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2 text-sm">
       <h4 className="font-semibold">Доставка Android → API → очередь</h4>
-      <div className="grid sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-2">
+        {[
+          ['Связь с Android', delivery?.connection==='HEARTBEAT_RECENT'?'Связь подтверждена':delivery?.connection==='HEARTBEAT_STALE'?'Нет свежего heartbeat':'Нет данных'],
+          ['SQLite Android', delivery?.vmTelemetry?.snapshotOk===true?'Чтение успешно':delivery?.vmTelemetry?.snapshotOk===false?'Ошибка чтения':'Нет подтверждения'],
+          ['Локальная очередь',delivery?.vmTelemetry?.telemetryFresh ? delivery.vmTelemetry.queuedLocal ?? '—':'Нет свежих данных'],
+          ['Повторные отправки',delivery?.vmTelemetry?.telemetryFresh ? delivery.vmTelemetry.retryPending ?? '—':'Нет свежих данных'],
+          ['Анализатор',delivery?.analyzerHealthy?'Работает':'Нет свежего подтверждения'],
+          ['Последний heartbeat',fmt(delivery?.lastHeartbeatAt)]
+        ].map(([title,value])=><div key={title} className="min-w-0 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-3">
+          <p className="text-xs text-slate-500 dark:text-white/50">{title}</p>
+          <p className="mt-1 font-semibold break-words">{value}</p>
+        </div>)}
+      </div>
+      <details className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+        <summary className="cursor-pointer font-medium">Подробнее о доставке и задержках</summary>
+        <div className="grid sm:grid-cols-2 gap-2 mt-3">
         <p>Heartbeat Android: <strong>{delivery?.connection === 'HEARTBEAT_RECENT' ? 'Недавно получен' : delivery?.connection === 'HEARTBEAT_STALE' ? 'Устарел / связь не подтверждена' : 'Нет данных'}</strong></p>
         <p>Последний heartbeat: {fmt(delivery?.lastHeartbeatAt)}</p>
         <p>Последнее уведомление в API: {fmt(delivery?.lastReceivedAt)}</p>
@@ -124,7 +146,8 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         <p>Ожидают анализа: {delivery?.pending ?? '—'}</p>
         <p>Фоновая обработка: {delivery?.analyzerHealthy ? 'Последняя проверка успешна' : 'Нет свежего подтверждения'}</p>
       </div>
-      <div className="border-t border-slate-200 dark:border-white/10 pt-2 space-y-1">
+      </details>
+      <div className="border-t border-slate-200 dark:border-white/10 pt-3 space-y-1">
         <p className="font-medium">Телеметрия Android VM</p>
         {!delivery?.vmTelemetry?.available ? <p className="text-xs opacity-70">Android пока передаёт heartbeat без сведений о локальной очереди. Это не означает, что очередь пуста.</p> : <>
           <p>Данные VM: {delivery.vmTelemetry.telemetryFresh ? 'свежие' : 'устарели'} · обновлены {fmt(delivery.vmTelemetry.lastReportedAt)}</p>
@@ -143,7 +166,18 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
     {view === "queue" && <div className="space-y-2">
       {!queue && !error && <p className="text-sm opacity-70">Загрузка очереди…</p>}
       {queue?.items?.length === 0 && <p className="text-sm opacity-70">Записей пока нет.</p>}
-      {queue?.items?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="mchs-queue-filter" className="text-sm font-medium">Показать</label>
+        <select id="mchs-queue-filter" value={queueFilter} onChange={e=>setQueueFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
+          <option value="ALL">Все события</option>
+          <option value="OBSERVED">Ожидают анализа</option>
+          <option value="ANALYZED">Проанализированы</option>
+        </select>
+        <span className="text-xs text-slate-500 dark:text-white/50">Фильтр по загруженным записям</span>
+      </div>
+      {queue?.items?.filter(item=>queueFilter==='ALL'||item.status===queueFilter).length===0 && queue?.items?.length>0 && <p className="text-sm opacity-70">По выбранному фильтру записей нет.</p>}
+      {queue?.items?.filter(item=>queueFilter==='ALL'||item.status===queueFilter).map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
         <div className="flex flex-wrap justify-between items-start gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-medium break-words">{item.event?.title || 'Без заголовка'}</p>
