@@ -21,3 +21,35 @@
 .mchs-admin-workspace[data-mchs-theme="dark"] :is(.text-slate-900,.text-slate-800,.text-slate-700) {color:#f8fafc}
 .mchs-admin-workspace[data-mchs-theme="dark"] .mchs-safety-banner {background-color:rgba(245,158,11,.14)}
 .mchs-admin-workspace[data-mchs-theme="light"] .mchs-safety-banner {background-color:#fffbeb}
+
+/* Light-only visual hierarchy: distinct panels, readable labels and controls.
+   Dark mode is intentionally unaffected. */
+.mchs-admin-workspace[data-mchs-theme="light"] :is(.rounded-2xl,.rounded-xl) {
+  border-color:#cbd5e1;
+}
+.mchs-admin-workspace[data-mchs-theme="light"] :is(.bg-white,.bg-white\/70,.bg-slate-50) {
+  background-color:#ffffff;
+}
+.mchs-admin-workspace[data-mchs-theme="light"] :is(.text-slate-400,.text-slate-500,.text-slate-600) {
+  color:#475569;
+}
+.mchs-admin-workspace[data-mchs-theme="light"] .text-violet-700,
+.mchs-admin-workspace[data-mchs-theme="light"] .text-violet-600 {
+  color:#6d28d9;
+}
+.mchs-admin-workspace[data-mchs-theme="light"] nav button:not([aria-current="page"]),
+.mchs-admin-workspace[data-mchs-theme="light"] button[aria-pressed="false"] {
+  border-color:#cbd5e1;
+  background-color:#f8fafc;
+}
+.mchs-admin-workspace[data-mchs-theme="light"] button[aria-current="page"],
+.mchs-admin-workspace[data-mchs-theme="light"] button[aria-pressed="true"] {
+  color:#fff;
+  background-color:#7c3aed;
+}
+.mchs-admin-workspace[data-mchs-theme="light"] button:not([aria-current="page"]):not([aria-pressed="true"]):focus-visible,
+.mchs-admin-workspace[data-mchs-theme="light"] input:focus-visible,
+.mchs-admin-workspace[data-mchs-theme="light"] select:focus-visible {
+  outline:2px solid #7c3aed;
+  outline-offset:2px;
+}
