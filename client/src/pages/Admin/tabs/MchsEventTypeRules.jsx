@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+const API = import.meta.env.VITE_API || 'http://localhost:4000/api';
 import { api } from '../../../api/client.js';
 
 export default function MchsEventTypeRules({ token }) {
@@ -9,6 +10,38 @@ export default function MchsEventTypeRules({ token }) {
   const [message, setMessage] = useState('');
   const [dispatchMode, setDispatchMode] = useState('MANUAL');
   const [modeSaving, setModeSaving] = useState(false);
+  const playerRef = useRef(null);
+  const audioUrlRef = useRef(null);
+  const [playing, setPlaying] = useState('');
+  useEffect(() => () => {
+    playerRef.current?.pause();
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+  }, []);
+  const stopPreview = () => {
+    playerRef.current?.pause();
+    playerRef.current?.removeAttribute('src');
+    playerRef.current?.load();
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+    setPlaying('');
+  };
+  const preview = async (type, assetId) => {
+    if (playing === type) { stopPreview(); return; }
+    const asset = data?.assets?.find(item => item.id === assetId);
+    if (!asset) { setError('Выберите доступную запись ALARM'); return; }
+    stopPreview(); setError('');
+    try {
+      const response = await fetch(API + '/radio/assets/' + encodeURIComponent(asset.id) + '/audio',
+        { headers: { Authorization: 'Bearer ' + token } });
+      if (!response.ok) throw new Error('Не удалось загрузить аудиозапись');
+      const url = URL.createObjectURL(await response.blob());
+      audioUrlRef.current = url;
+      playerRef.current.src = url;
+      playerRef.current.volume = 0.35;
+      await playerRef.current.play();
+      setPlaying(type);
+    } catch (e) { stopPreview(); setError(e.message); }
+  };
   useEffect(() => {
     let active = true;
     api('/safety/event-type-rules', { token }).then(result => {
@@ -49,7 +82,9 @@ export default function MchsEventTypeRules({ token }) {
     } catch (e) { setError(e.message); } finally { setSaving(''); }
   };
   return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5 md:p-5">
+    <audio ref={playerRef} onEnded={stopPreview} aria-label="Локальный предпросмотр оповещения" />
     <h3 className="text-lg font-semibold">Четыре типа оповещений</h3>
+    <p className="text-xs opacity-70">Прослушивание запускается только по нажатию и звучит исключительно на текущем устройстве администратора. Radio Worker, публичный поток и громкоговорители не затрагиваются.</p>
     <div className="rounded-xl border border-amber-300/50 bg-amber-100/40 p-3 space-y-2 dark:bg-amber-400/10">
       <h4 className="font-semibold">Режим обработки — подготовка</h4>
       <p className="text-sm opacity-80">Автоматический режим пока доступен только для изолированной симуляции. Ни один режим не отправляет аудио на громкоговорители или в прямой эфир.</p>
@@ -86,6 +121,7 @@ export default function MchsEventTypeRules({ token }) {
             </select>
           </label>
         </div>
+        <button type="button" disabled={!rule.audioAssetId} onClick={() => preview(type.id, rule.audioAssetId)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-white/20 disabled:opacity-50">{playing === type.id ? 'Остановить прослушивание' : 'Прослушать выбранное ALARM'}</button>
         <label className="block text-sm">Комментарий
           <input maxLength={500} value={rule.note || ''} onChange={e => change(type.id, 'note', e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent p-2 dark:border-white/20" placeholder="Требования к проверке сообщения"/>
         </label>
