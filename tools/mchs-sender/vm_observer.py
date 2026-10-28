@@ -102,6 +102,11 @@ def state_db(path):
       event_id TEXT PRIMARY KEY, payload_json TEXT NOT NULL,
       attempt INTEGER NOT NULL DEFAULT 0, next_retry INTEGER NOT NULL DEFAULT 0,
       ack_id TEXT, ack_at INTEGER, last_error TEXT)""")
+    columns = {row[1] for row in db.execute("PRAGMA table_info(queue)")}
+    if "first_queued_at" not in columns:
+        db.execute("ALTER TABLE queue ADD COLUMN first_queued_at INTEGER")
+    # Existing queue rows have no reliable initial enqueue timestamp.
+    # Leave unknown rather than fabricate an age.
     db.commit()
     return db
 
@@ -111,8 +116,8 @@ def ingest_snapshot(db):
     for row in rows:
         item = payload(row)
         if item:
-            db.execute("INSERT OR IGNORE INTO queue(event_id,payload_json) VALUES (?,?)",
-                       (item["eventId"], json.dumps(item, ensure_ascii=False)))
+            db.execute("INSERT OR IGNORE INTO queue(event_id,payload_json,first_queued_at) VALUES (?,?,?)",
+                       (item["eventId"], json.dumps(item, ensure_ascii=False), int(time.time())))
     db.commit()
     return len(rows)
 
@@ -153,8 +158,14 @@ def queue_telemetry(db):
         """SELECT COUNT(*), MIN(CASE WHEN next_retry > 0 THEN next_retry END)
            FROM queue WHERE ack_at IS NULL AND attempt > 0"""
     ).fetchone()
+    oldest = db.execute("SELECT MIN(first_queued_at) FROM queue WHERE ack_at IS NULL").fetchone()[0]
     metrics = {"queuedLocal": pending, "failedSends": failures,
                "retryPending": retry_pending}
+    if pending == 0:
+        metrics["oldestPendingAt"] = None
+    elif oldest is not None:
+        metrics["oldestPendingAt"] = datetime.fromtimestamp(
+            oldest, timezone.utc).isoformat().replace("+00:00", "Z")
     if next_retry is not None:
         metrics["nextRetryAt"] = datetime.fromtimestamp(
             next_retry, timezone.utc).isoformat().replace("+00:00", "Z")
