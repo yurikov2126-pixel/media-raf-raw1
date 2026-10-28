@@ -22,6 +22,8 @@ export default function MchsQueueMonitor({ token }) {
   const [error, setError] = useState('');
   const [lastRefresh, setLastRefresh] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [probeResult, setProbeResult] = useState('');
+  const [probing, setProbing] = useState(false);
   const refresh = useCallback(async () => {
     try {
       const [items, status, transport, journal] = await Promise.all([
@@ -65,7 +67,17 @@ export default function MchsQueueMonitor({ token }) {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="text-lg font-semibold">Очередь МЧС · диагностика</h3>
         <p className="text-sm text-slate-500 dark:text-white/60">Анализ уведомлений не подтверждает официальную тревогу и не запускает оповещение.</p></div>
-      <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={probing} onClick={async()=>{
+          setProbing(true);setProbeResult('');
+          try {
+            const result=await api('/safety/technical-notification-probe',{token,method:'POST',body:{}});
+            setProbeResult(result.socketAvailable ? 'Тестовое уведомление сохранено и отправлено в Socket.IO. Проверьте колокольчик без перезагрузки.' : 'Тестовое уведомление сохранено, но Socket.IO недоступен.');
+          }catch(e){setProbeResult(e.message || 'Ошибка диагностического теста');}
+          finally{setProbing(false);}
+        }} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">Проверить Socket.IO</button>
+        <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
+      </div>
     </div>
     <details open={selectedIncident ? true : undefined} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
       <summary className="cursor-pointer font-medium">Журнал технических неисправностей · {incidents?.length ?? '—'} записей</summary>
