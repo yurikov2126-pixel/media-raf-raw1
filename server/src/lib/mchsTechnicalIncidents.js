@@ -40,7 +40,7 @@ export function technicalIncidentNotification(incident, phase) {
     diagnosticOnly:true,officialAlert:false};
 }
 
-export async function recordMchsTechnicalIncidents(db=prisma, now=new Date()) {
+export async function recordMchsTechnicalIncidents(db=prisma, now=new Date(), {io=getIo()}={}) {
   const result=await db.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581427)`;
     const health=await tx.safetyMchsHealth.findUnique({where:{id:'mchs-android'}});
@@ -71,7 +71,6 @@ export async function recordMchsTechnicalIncidents(db=prisma, now=new Date()) {
     return {observed:true,playbackEnabled:false,emitted};
   });
   // Emit only after COMMIT: clients never see notifications rolled back by the DB.
-  const io=getIo();
   for(const item of result.emitted || []) io?.to(`user:${item.userId}`).emit('notification:new',item.notification);
   return {observed:result.observed,playbackEnabled:false};
 }
