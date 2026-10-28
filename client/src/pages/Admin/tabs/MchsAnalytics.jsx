@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
 
-const metrics=[['messages','Полученные сообщения'],['analyzed','Анализ очереди'],['incidents','Новые неисправности'],['reviews','Решения оператора']];
+const metrics=[['messages','Полученные сообщения'],['analyzed','Анализ очереди'],['incidents','Новые неисправности'],['reviews','Архив ручных решений']];
 const fmtMs=value=>value==null?'Нет данных':value<60000?Math.round(value/1000)+' сек':(value/60000).toFixed(1)+' мин';
 
 export default function MchsAnalytics({token}) {
@@ -26,7 +26,7 @@ export default function MchsAnalytics({token}) {
   {error&&<p role="alert" className="text-red-700 dark:text-red-300">{error}</p>}
   {data&&<>
    <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-    {[['Получено сообщений',data.totals.messages],['Проанализировано',data.totals.analyzed],['Ожидают анализа',data.totals.pending],['Технические неисправности',data.totals.incidents],['Решения оператора',data.totals.reviews],['Среднее время анализа',fmtMs(data.totals.averageAnalysisMs)]].map(([label,value])=><div key={label} className="rounded-xl border border-slate-200 dark:border-white/15 p-3"><span className="block text-xs text-slate-600 dark:text-slate-300">{label}</span><strong className="block mt-1 text-xl">{value}</strong></div>)}
+    {[['Получено сообщений',data.totals.messages],['Проанализировано',data.totals.analyzed],['Ожидают анализа',data.totals.pending],['Технические неисправности',data.totals.incidents],['Архив ручных решений',data.totals.reviews],['Среднее время анализа',fmtMs(data.totals.averageAnalysisMs)]].map(([label,value])=><div key={label} className="rounded-xl border border-slate-200 dark:border-white/15 p-3"><span className="block text-xs text-slate-600 dark:text-slate-300">{label}</span><strong className="block mt-1 text-xl">{value}</strong></div>)}
    </div>
    <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
     <h4 className="font-semibold">Сообщения по дням</h4>
