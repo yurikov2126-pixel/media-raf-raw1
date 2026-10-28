@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import MchsEventJournal from '../../../components/MchsEventJournal.jsx';
 import MchsEventTypeRules from './MchsEventTypeRules.jsx';
@@ -13,6 +14,25 @@ export default function SafetyMchs({ token }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const panes = [
+    ['overview', 'Обзор'],
+    ['delivery', 'Android и доставка'],
+    ['queue', 'Очередь и анализ'],
+    ['incidents', 'Неисправности'],
+    ['events', 'Уведомления'],
+    ['rules', 'Правила и сценарии'],
+    ['settings', 'Настройки'],
+  ];
+  const selectedPane = searchParams.get('mchsView');
+  const pane = searchParams.has('incident') ? 'incidents' : panes.some(([id]) => id === selectedPane) ? selectedPane : 'overview';
+  const switchPane = next => {
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', 'safety-mchs');
+    params.set('mchsView', next);
+    params.delete('incident');
+    setSearchParams(params, { replace: true });
+  };
   const load = () => api('/safety/dashboard', { token }).then((result) => {
     setData(result); setDraft(result.config); setError('');
   }).catch((e) => setError(e.message));
@@ -35,12 +55,21 @@ export default function SafetyMchs({ token }) {
     </div>
     {error && <p role="alert" className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-300 p-3">{error}</p>}
     {notice && <p role="status" className="rounded-xl bg-emerald-500/10 p-3">{notice}</p>}
-    <div className="grid gap-3 md:grid-cols-3">
+    <nav aria-label="Разделы управления МЧС" className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+      {panes.map(([id,label]) => <button key={id} type="button" onClick={() => switchPane(id)}
+        aria-current={pane === id ? 'page' : undefined}
+        className={`shrink-0 snap-start rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${pane === id ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200 dark:border-white/20 bg-white/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
+    </nav>
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="text-xl font-semibold">{panes.find(([id])=>id===pane)?.[1]}</h2>
+      <span className="text-xs text-slate-500 dark:text-white/50">Диагностика · без запуска эфира</span>
+    </div>
+    {(pane === 'overview') && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {[['Источник Android', data?.source?.connection === 'HEARTBEAT_RECENT' ? 'Heartbeat недавно получен' : data?.source?.connection === 'HEARTBEAT_STALE' ? 'Связь потеряна / устарела' : 'Нет данных о соединении'], ['Listener / Push', data?.source?.connection === 'HEARTBEAT_RECENT' ? `${data?.source?.listener || 'UNKNOWN'} / ${data?.source?.push || 'UNKNOWN'}` : 'Не подтверждены'], ['Радио и громкоговорители', 'Автозапуск отключён']].map(([name, value]) =>
         <div key={name} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4"><p className="text-xs text-slate-500 dark:text-white/50">{name}</p><p className="mt-2 font-semibold">{value}</p></div>)}
-    </div>
-    <p className="text-xs text-slate-500 dark:text-white/50">Последний heartbeat: {data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU') : 'не получен'}. Heartbeat не подтверждает доставку push.</p>
-    <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-5 space-y-4">
+    </div>}
+    {(pane === 'overview') && <p className="text-xs text-slate-500 dark:text-white/50">Последний heartbeat: {data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU') : 'не получен'}. Heartbeat не подтверждает доставку push.</p>}
+    {pane === "settings" && <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
       {!draft ? <p>Загрузка…</p> : <>
         <label className="block text-sm">Регион
@@ -56,20 +85,21 @@ export default function SafetyMchs({ token }) {
         </label>
         <button type="button" disabled={saving} onClick={save} className="rounded-xl bg-violet-600 px-5 py-2.5 text-white font-semibold disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить настройки'}</button>
       </>}
-    </section>
-    <MchsQueueMonitor token={token} />
-    <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />
-    {data && <MchsEventTypeRules token={token} />}
-    {data && <MchsDispatchPreview token={token} />}
-    {data && <MchsOperatorReviews token={token} events={data.events || []} />}
-    <section className="rounded-2xl border border-sky-400/40 p-5 space-y-3">
+    </section>}
+    {(pane === 'overview' || pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
+
+    {pane === "events" && <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />}
+    {pane === "rules" && data && <MchsEventTypeRules token={token} />}
+    {pane === "rules" && data && <MchsDispatchPreview token={token} />}
+    {pane === "rules" && data && <MchsOperatorReviews token={token} events={data.events || []} />}
+    {pane === "settings" && <section className="rounded-2xl border border-sky-400/40 p-4 sm:p-5 space-y-3">
         <h2 className="font-semibold">Диагностические события — только TEST ONLY</h2>
         <p className="text-sm opacity-70">Изолированный журнал. Приём: {data?.diagnosticIngestEnabled ? 'включён' : 'выключен'}. Записей: {data?.diagnosticCount ?? 0}. Эти записи не являются предупреждениями МЧС и не запускают радио.</p>
         {data?.diagnosticEvents?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 text-sm">
           <strong>ТЕСТ: диагностика приёмника</strong>
           <p className="opacity-70 break-all">{item.eventId} · {new Date(item.receivedAt).toLocaleString('ru-RU')}</p>
         </div>)}
-      </section>
+      </section>}
     <Link to="/app/safety" className="text-violet-600 dark:text-violet-300 underline">Открыть пульт ответственного за безопасность</Link>
   </div>;
 }
