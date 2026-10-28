@@ -320,7 +320,7 @@ router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
   try {
     const [health,lastEvent,pending] = await Promise.all([
       prisma.safetyMchsHealth.findUnique({where:{id:'mchs-android'},
-        select:{lastSeenAt:true,listener:true,push:true}}),
+        select:{lastSeenAt:true,listener:true,push:true,queuedLocal:true,failedSends:true,lastSentAt:true,telemetryAt:true}}),
       prisma.safetyMchsEvent.findFirst({orderBy:[{receivedAt:'desc'},{id:'desc'}],
         select:{occurredAt:true,receivedAt:true}}),
       prisma.safetyMchsQueueItem.count({where:{status:'OBSERVED'}}),
@@ -329,7 +329,15 @@ router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
     const data=summarizeMchsDelivery({health,lastEvent,pending,
       analyzer:mchsAnalyzerPublicStatus(configured)});
     res.set('Cache-Control','no-store');
-    res.json(data);
+    res.json({...data,vmTelemetry:{
+      available:Boolean(health?.telemetryAt),
+      lastReportedAt:health?.telemetryAt||null,
+      queuedLocal:health?.queuedLocal??null,
+      failedSends:health?.failedSends??null,
+      lastSentAt:health?.lastSentAt||null,
+      countersAreSelfReported:true,
+      telemetryFresh:Boolean(health?.telemetryAt&&Date.now()-new Date(health.telemetryAt).getTime()<180000)
+    }});
   } catch(error){next(error);}
 });
 
