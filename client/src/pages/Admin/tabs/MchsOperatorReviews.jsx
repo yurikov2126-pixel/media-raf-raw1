@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
-export default function MchsOperatorReviews({ token, events = [] }) {
+export default function MchsOperatorReviews({ token, events = [], selectedEvent, onOpenEvent }) {
   const [reviews, setReviews] = useState({});
   const [notes, setNotes] = useState({});
   const [saving, setSaving] = useState('');
   const [filter, setFilter] = useState('pending');
+  useEffect(() => { if(selectedEvent) {setFilter('all');setSearch(selectedEvent);} },[selectedEvent]);
   const [search, setSearch] = useState('');
   const visible = events.filter(event => (filter==='all'||(filter==='pending'?!reviews[event.id]:Boolean(reviews[event.id]))) && [event.title,event.body,event.id].some(s=>String(s||'').toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru'))));
   const [error, setError] = useState('');
@@ -37,9 +38,10 @@ export default function MchsOperatorReviews({ token, events = [] }) {
       </select>
     </div>
     <p className="text-xs opacity-60">Фильтр применяется только к загруженным событиям. Показано: {Math.min(visible.length,20)} из {visible.length} подходящих.</p>
-    {visible.slice(0, 20).map(event => <article key={event.id} className="rounded-xl border border-slate-200 p-3 dark:border-white/10 space-y-2">
+    {visible.slice(0, 20).map(event => <article key={event.id} className={`rounded-xl border p-3 space-y-2 ${selectedEvent===event.id ? "border-violet-500 ring-1 ring-violet-400" : "border-slate-200 dark:border-white/10"}`}>
       <div className="text-xs opacity-60">{new Date(event.receivedAt).toLocaleString('ru-RU')}</div>
       <h4 className="font-semibold break-words">{event.title}</h4>
+      {onOpenEvent && <button type="button" onClick={()=>onOpenEvent(event.id)} className="text-sm underline underline-offset-2">Открыть сообщение в журнале</button>}
       <p className="text-sm opacity-70 line-clamp-2 break-words">{event.body}</p>
       {reviews[event.id] ? <p className="text-sm">Решение: <strong>{reviews[event.id].decision === 'ACKNOWLEDGED' ? 'Ознакомлен' : 'Отклонено'}</strong> · {reviews[event.id].note} · {new Date(reviews[event.id].reviewedAt).toLocaleString('ru-RU')}</p> :
         <><label className="block text-sm">Примечание ответственного
