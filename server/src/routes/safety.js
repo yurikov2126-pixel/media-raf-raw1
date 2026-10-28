@@ -313,6 +313,13 @@ router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, 
   } catch (error) { next(error); }
 });
 
+/** Configuration visibility is not a heartbeat or execution proof. */
+router.get('/observation-analyzer/status', canView, (_req,res) => {
+  res.set('Cache-Control','no-store');
+  res.json({ configured: process.env.MCHS_OBSERVATION_ANALYZER_ENABLED === 'true' &&
+    process.env.PREVIEW_MODE !== 'true', executionConfirmed:false, playbackEnabled:false });
+});
+
 /** Read-only durable observation queue; not a command queue. */
 router.get('/observation-queue', canView, async (req, res, next) => {
   try {
