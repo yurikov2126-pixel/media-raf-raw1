@@ -76,7 +76,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
     } catch (e) { setError(e.message || 'Ошибка обработки'); }
     finally { setBusy(false); }
   };
-  return <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4" aria-label="Мониторинг очереди МЧС">
+  return <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4" aria-label="Мониторинг очереди МЧС">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="text-lg font-semibold">{({overview:'Сводка диагностики',delivery:'Связь и доставка Android',queue:'Очередь обработки',incidents:'История технических неисправностей'})[view] || 'Диагностика МЧС'}</h3>
         <p className="text-sm text-slate-500 dark:text-white/60">Анализ уведомлений не подтверждает официальную тревогу и не запускает оповещение.</p></div>
@@ -92,7 +92,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
       </div>
     </div>
-    {view === 'incidents' && <div className="space-y-3">
+    {view === 'incidents' && <div className="mchs-incident-journal space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {[
           ['Всего записей',incidents?.length ?? '—'],
@@ -102,7 +102,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
           <p className="text-xs text-slate-500 dark:text-white/60">{label}</p><p className="text-xl font-semibold mt-1">{value}</p>
         </div>)}
       </div>
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="mchs-filter-bar flex flex-col sm:flex-row gap-2">
         <input aria-label="Поиск неисправностей" placeholder="Поиск по типу, причине, ID" value={incidentText} onChange={e=>setIncidentText(e.target.value)}
           className="min-w-0 flex-1 rounded-xl border border-slate-300 dark:border-white/20 bg-transparent px-3 py-2.5 text-sm" />
         <select aria-label="Статус неисправностей" value={incidentFilter} onChange={e=>setIncidentFilter(e.target.value)}
