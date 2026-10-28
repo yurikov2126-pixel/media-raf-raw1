@@ -59,7 +59,7 @@ export default function SafetyMchs({ token }) {
     </div>
     {error && <p role="alert" className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-300 p-3">{error}</p>}
     {notice && <p role="status" className="rounded-xl bg-emerald-500/10 p-3">{notice}</p>}
-    <nav aria-label="Разделы управления МЧС" className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+    <nav aria-label="Разделы управления МЧС" className="mchs-section-tabs flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
       {panes.map(([id,label]) => <button key={id} type="button" onClick={() => switchPane(id)}
         aria-current={pane === id ? 'page' : undefined}
         className={`shrink-0 snap-start rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${pane === id ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200 dark:border-white/20 bg-white/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
@@ -75,7 +75,7 @@ export default function SafetyMchs({ token }) {
           {name:'Listener / Push',value:data?.source?.connection==='HEARTBEAT_RECENT' ? (data?.source?.listener || 'UNKNOWN') + ' / ' + (data?.source?.push || 'UNKNOWN') : 'Не подтверждены',detail:'Heartbeat не подтверждает доставку push',to:'delivery'},
           {name:'Радио и громкоговорители',value:'Автозапуск отключён',detail:'Реальное оповещение заблокировано',to:'settings'}
         ].map(card=><button type="button" key={card.name} onClick={()=>switchPane(card.to)}
-          className="group rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 text-left shadow-sm hover:border-violet-400 dark:hover:border-violet-400 transition-colors">
+          className="mchs-status-card group rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 text-left shadow-sm hover:border-violet-400 dark:hover:border-violet-400 transition-colors">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{card.name}</span>
           <strong className="mt-2 block text-base sm:text-lg text-slate-900 dark:text-white break-words">{card.value}</strong>
           <span className="mt-2 block text-xs text-slate-600 dark:text-slate-300">{card.detail}</span>
@@ -91,7 +91,7 @@ export default function SafetyMchs({ token }) {
         </div>
       </div>
     </div>}
-    {pane === "settings" && <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
+    {pane === "settings" && <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
       {!draft ? <p>Загрузка…</p> : <>
         <label className="block text-sm">Регион
@@ -112,7 +112,7 @@ export default function SafetyMchs({ token }) {
 
     {pane === "events" && <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />}
     {pane === "rules" && data && <div className="space-y-4">
-      <nav aria-label="Разделы правил МЧС" className="flex flex-wrap gap-2">
+      <nav aria-label="Разделы правил МЧС" className="mchs-subtabs flex flex-wrap gap-2">
         {[
           ['templates','Шаблоны сообщений'],
           ['preview','Проверка решений'],
