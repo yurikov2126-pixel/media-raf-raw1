@@ -27,3 +27,35 @@ describe('MCHS technical notification content',()=>{
   expect(n.url).toBe('/app/admin?tab=safety-mchs&incident=test-incident');
  });
 });
+
+describe('MCHS historical anomalies integrated into existing incident kinds',()=>{
+ const sample=(age,fields)=>({receivedAt:new Date(now-age),telemetryPresent:true,queuedLocal:0,retryPending:0,snapshotOk:true,...fields});
+ const sustained=[sample(1000,{queuedLocal:6,retryPending:1,snapshotOk:false}),sample(61000,{queuedLocal:7,retryPending:1,snapshotOk:false}),sample(122000,{queuedLocal:8,retryPending:2,snapshotOk:false})];
+ it('maps sustained backlog, retry and SQLite errors to existing incident types',()=>{
+  const signals=mchsIncidentSignals(fresh,now,sustained);
+  expect(signals.BACKLOG).toBe('SUSTAINED_LOCAL_QUEUE_5_OR_MORE');
+  expect(signals.RETRY).toBe('SUSTAINED_RETRY_PENDING');
+  expect(signals.SNAPSHOT).toBe('SUSTAINED_SQLITE_READ_FAILURE');
+ });
+ it('does not flag one high sample as a sustained anomaly',()=>{
+  const signals=mchsIncidentSignals(fresh,now,[sample(1000,{queuedLocal:8,retryPending:1}),sample(61000,{}),sample(122000,{})]);
+  expect(signals.BACKLOG).toBe(null);
+  expect(signals.RETRY).toBe(null);
+ });
+ it('closes sustained signals after three spaced healthy samples',()=>{
+  const clean=[sample(1000,{}),sample(61000,{}),sample(122000,{})];
+  const signals=mchsIncidentSignals(fresh,now,clean);
+  expect(signals.BACKLOG).toBe(null);
+  expect(signals.RETRY).toBe(null);
+  expect(signals.SNAPSHOT).toBe(null);
+ });
+ it('detects stale telemetry independently from fresh heartbeat',()=>{
+  expect(mchsIncidentSignals({...fresh,telemetryAt:new Date(now-700000)},now,[]).TELEMETRY).toBe('TELEMETRY_STALE_OVER_10_MINUTES');
+ });
+ it('does not close incidents from stale heartbeat or missing samples',()=>{
+  const signals=mchsIncidentSignals({...fresh,lastSeenAt:new Date(now-700000)},now,[]);
+  expect(signals.SNAPSHOT).toBe(undefined);
+  expect(signals.BACKLOG).toBe(undefined);
+  expect(signals.RETRY).toBe(undefined);
+ });
+});
