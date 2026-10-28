@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
 export default function MchsOperatorReviews({ token, events = [], selectedEvent, onOpenEvent }) {
   const [reviews, setReviews] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(null);
   const [notes, setNotes] = useState({});
   const [saving, setSaving] = useState('');
   const [filter, setFilter] = useState('pending');
@@ -14,11 +16,18 @@ export default function MchsOperatorReviews({ token, events = [], selectedEvent,
   const reviewedCount = events.length - pendingCount;
   const visible = [...events].sort((a,b)=>new Date(b.receivedAt||0)-new Date(a.receivedAt||0)).filter(event => (filter==='all'||(filter==='pending'?!reviews[event.id]:Boolean(reviews[event.id]))) && [event.title,event.body,event.id].some(s=>String(s||'').toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru'))));
   const [error, setError] = useState('');
-  useEffect(() => { let live = true;
-    api('/safety/operator-reviews', { token }).then(v => { if (live) setReviews(v.reviews || {}); })
-      .catch(e => { if (live) setError(e.message); });
-    return () => { live = false; };
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await api('/safety/operator-reviews', { token });
+      setReviews(result.reviews || {});
+      setError('');
+      setLastRefresh(new Date());
+    } catch (e) {
+      setError(e.message || 'Не удалось обновить решения');
+    } finally { setLoading(false); }
   }, [token]);
+  useEffect(() => { void reload(); }, [reload]);
   const record = async (eventId, decision) => {
     const note = (notes[eventId] || '').trim();
     if (note.length < 3) { setError('Укажите причину или результат проверки (минимум 3 символа)'); return; }
@@ -33,7 +42,8 @@ export default function MchsOperatorReviews({ token, events = [], selectedEvent,
     } catch (e) { setError(e.message); } finally { setSaving(''); }
   };
   return <section className="rounded-2xl border border-slate-200 p-4 dark:border-white/10 md:p-5 space-y-3">
-    <h3 className="text-lg font-semibold">Ручная проверка наблюдений</h3>
+    <div className="flex flex-wrap gap-3 items-center justify-between"><h3 className="text-lg font-semibold">Очередь проверки сообщений</h3><button type="button" disabled={loading} onClick={()=>void reload()} className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">{loading ? 'Обновление…' : 'Обновить решения'}</button></div>
+    <p className="text-xs opacity-70">Данные решений: {lastRefresh ? lastRefresh.toLocaleString('ru-RU') : 'ещё не загружены'}.</p>
     <p className="text-sm opacity-70">Подтвердите ознакомление или отклоните запись с причиной. Это журнал решений, а не подтверждение официальной угрозы. Ни одна кнопка не запускает аудио.</p>
     {success && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{success}</p>}
     {error && <p role="alert" className="text-red-600 dark:text-red-300 text-sm">{error}</p>}
