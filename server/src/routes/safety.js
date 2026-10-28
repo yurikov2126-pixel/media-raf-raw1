@@ -317,6 +317,16 @@ router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, 
 });
 
 /** Telemetry only: heartbeat does not prove that no push notifications were missed. */
+router.get('/technical-incidents', canView, async (_req,res,next) => {
+  try {
+    const rows=await prisma.safetyMchsTechnicalIncident.findMany({
+      orderBy:[{openedAt:'desc'},{id:'desc'}],take:100,
+      select:{id:true,kind:true,reason:true,openedAt:true,resolvedAt:true}
+    });
+    res.set('Cache-Control','no-store');
+    res.json({items:rows,observationOnly:true,playbackEnabled:false});
+  }catch(error){next(error);}
+});
 router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
   try {
     const [health,lastEvent,pending] = await Promise.all([
