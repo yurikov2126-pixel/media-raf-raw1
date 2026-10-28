@@ -3,6 +3,7 @@ import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
 import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
 import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
+import {workerRequest} from '../lib/radioLiveOpusGateway.js';
 import {runEmergencySimulationSuite,runEmergencySimulationScenario} from '../lib/mchsEmergencySimulationSuite.js';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -51,6 +52,26 @@ async function load() {
 }
 router.use(auth);
 // No actual control commands are accepted here. Pure in-process diagnostics only.
+// Read-only worker health; distinct from simulator success and physical output verification.
+router.get('/radio-worker-readiness', canView, async (_req,res) => {
+  res.set('Cache-Control','no-store');
+  try {
+    const worker=await workerRequest('GET','/health');
+    const source=String(worker?.mode||'UNKNOWN');
+    const recognized=['AUTO_DJ','SCHEDULE','LIVE','MANUAL_PLAYLIST','AUTO_PLAYLIST'].includes(source);
+    res.json({reachable:true,source,sourceRecognized:recognized,trackId:worker?.trackId||null,
+      slotId:worker?.slotId||null,nextTrackId:worker?.nextTrackId||null,
+      frames:Number.isFinite(worker?.frames)?worker.frames:null,
+      lastError:worker?.lastError||null,connected:worker?.connected??null,
+      startedAt:worker?.startedAt||null,
+      emergencySimulation:worker?.emergencySimulation?.mode==='DRY_RUN_ONLY'?'DRY_RUN_ONLY':null,
+      programRestorationVerified:false,audioOutputVerified:false,amplifierVerified:false,
+      diagnosticOnly:true,playbackChanged:false});
+  } catch(error) {
+    res.status(503).json({reachable:false,reason:'WORKER_HEALTH_UNAVAILABLE',diagnosticOnly:true,
+      programRestorationVerified:false,audioOutputVerified:false,amplifierVerified:false});
+  }
+});
 router.get('/emergency-simulation', canView, (req,res) => {
   const source=String(req.query.source||'');
   const result=source?runEmergencySimulationScenario(source):runEmergencySimulationSuite();

@@ -7,6 +7,8 @@ export default function MchsEmergencySimulation({token}){
  const [source,setSource]=useState('');
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState('');
+ const [worker,setWorker]=useState(null);
+ const [workerLoading,setWorkerLoading]=useState(false);
  const [selected,setSelected]=useState(null);
  const load=useCallback(async()=>{
   setLoading(true);setError('');
@@ -15,6 +17,13 @@ export default function MchsEmergencySimulation({token}){
   finally{setLoading(false);}
  },[token,source]);
  useEffect(()=>{void load();},[load]);
+ const refreshWorker=useCallback(async()=>{
+  setWorkerLoading(true);
+  try{setWorker(await api('/safety/radio-worker-readiness',{token}));}
+  catch(e){setWorker({reachable:false,reason:e.message||'Нет данных о Radio Worker'});}
+  finally{setWorkerLoading(false);}
+ },[token]);
+ useEffect(()=>{void refreshWorker();},[refreshWorker]);
  const scenarios=result?.scenarios|| (result?.source?[result]:[]);
  const active=scenarios.find(s=>s.source===selected);
  useEffect(()=>{if(!active)return;const handle=e=>{if(e.key==='Escape')setSelected(null);};window.addEventListener('keydown',handle);return()=>window.removeEventListener('keydown',handle);},[active]);
@@ -28,6 +37,26 @@ export default function MchsEmergencySimulation({token}){
       {Object.entries(labels).map(([key,title])=><option key={key} value={key}>{title}</option>)}
     </select>
     <button type="button" disabled={loading} onClick={()=>void load()} className="rounded-xl bg-violet-600 px-4 py-2 text-sm text-white disabled:opacity-50">{loading?'Проверка…':'Повторить симуляцию'}</button>
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+    <div className="flex flex-wrap gap-2 justify-between items-center">
+      <h4 className="font-semibold">Состояние реального Radio Worker — только чтение</h4>
+      <button type="button" onClick={()=>void refreshWorker()} disabled={workerLoading} className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">{workerLoading?'Обновление…':'Обновить состояние'}</button>
+    </div>
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+      {[
+        ['Доступность',worker?.reachable===true?'Worker отвечает':worker?.reachable===false?'Нет ответа':'Нет данных'],
+        ['Текущий источник',worker?.source||'Неизвестен'],
+        ['Трек',worker?.trackId||'Нет данных'],
+        ['Слот расписания',worker?.slotId||'Нет данных'],
+        ['Следующий трек',worker?.nextTrackId||'Нет данных'],
+        ['Последняя ошибка',worker?.lastError||'Не сообщалась']
+      ].map(([label,value])=><div key={label} className="rounded-lg bg-slate-50 dark:bg-white/5 p-3 min-w-0">
+        <p className="text-xs text-slate-600 dark:text-slate-300">{label}</p>
+        <p className="font-medium mt-1 break-all">{value}</p>
+      </div>)}
+    </div>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Проверка восстановления программы: не выполнялась. Реальный звук и усилитель: не проверялись. Ответ Worker не доказывает готовность к экстренному переключению. Действующий эфир не меняется.</p>
   </div>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/15">
