@@ -112,6 +112,18 @@ router.post('/heartbeat', signedRequest, async (req, res, next) => {
       update: { lastSeenAt: new Date(), listener, push, ...telemetry },
       select: { lastSeenAt: true, listener: true, push: true }
     });
+    // Store a snapshot on each authenticated heartbeat. Null fields mean not reported.
+    // Keep the latest health upsert compatible with existing agents.
+    await prisma.safetyMchsTelemetrySample.create({ data: {
+      listener, push, telemetryPresent: hasTelemetry,
+      queuedLocal: queuedLocal ?? null, failedSends: failedSends ?? null,
+      retryPending: retryPending ?? null,
+      oldestPendingAt: oldestPendingAt ? new Date(oldestPendingAt) : null,
+      nextRetryAt: nextRetryAt ? new Date(nextRetryAt) : null,
+      snapshotOk: snapshotOk ?? null,
+      snapshotAt: snapshotAt ? new Date(snapshotAt) : null,
+      lastSentAt: lastSentAt ? new Date(lastSentAt) : null
+    }});
     res.set('Cache-Control', 'no-store');
     return res.json({ received: true, lastSeenAt: health.lastSeenAt, testOnly: true });
   } catch (error) { next(error); }
