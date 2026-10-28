@@ -1459,7 +1459,6 @@ model SafetyMchsHealth {
   snapshotOk   Boolean?
   snapshotAt   DateTime?
   retryPending Int?
-  oldestPendingAt DateTime?
   nextRetryAt DateTime?
   updatedAt    DateTime @updatedAt
 }
