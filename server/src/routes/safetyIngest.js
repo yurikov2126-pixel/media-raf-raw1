@@ -73,13 +73,13 @@ router.post('/event', signedRequest, async (req, res, next) => {
 });
 router.post('/heartbeat', signedRequest, async (req, res, next) => {
   try {
-    const { source, listener, push, queuedLocal, failedSends, lastSentAt, snapshotOk, snapshotAt } = req.safetyInput;
+    const { source, listener, push, queuedLocal, failedSends, lastSentAt, snapshotOk, snapshotAt, retryPending, nextRetryAt } = req.safetyInput;
     if (source !== 'mchs-android' || !['CONNECTED','DISCONNECTED','UNKNOWN'].includes(listener) ||
       !['REGISTERED','ERROR','UNKNOWN'].includes(push)) {
       return fail(res, 400, 'INVALID_BODY');
     }
     const validCount = value => value === undefined || (Number.isSafeInteger(value) && value >= 0 && value <= 10000000);
-    if (!validCount(queuedLocal) || !validCount(failedSends) ||
+    if (!validCount(queuedLocal) || !validCount(failedSends) || !validCount(retryPending) ||
         (lastSentAt !== undefined && (typeof lastSentAt !== 'string' ||
           !Number.isFinite(Date.parse(lastSentAt))))) {
       return fail(res, 400, 'INVALID_TELEMETRY');
@@ -88,8 +88,13 @@ router.post('/heartbeat', signedRequest, async (req, res, next) => {
         (snapshotAt !== undefined && (typeof snapshotAt !== 'string' || !Number.isFinite(Date.parse(snapshotAt))))) {
       return fail(res, 400, 'INVALID_SNAPSHOT_TELEMETRY');
     }
-    const hasTelemetry = snapshotOk !== undefined || snapshotAt !== undefined || queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
+    if (nextRetryAt !== undefined && (typeof nextRetryAt !== 'string' ||
+        !Number.isFinite(Date.parse(nextRetryAt)))) return fail(res,400,'INVALID_RETRY_TIME');
+    const hasTelemetry = retryPending !== undefined || nextRetryAt !== undefined || snapshotOk !== undefined || snapshotAt !== undefined || queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
     const telemetry = {};
+    if (retryPending !== undefined) telemetry.retryPending = retryPending;
+    if (nextRetryAt !== undefined) telemetry.nextRetryAt = new Date(nextRetryAt);
+    if (retryPending === 0) telemetry.nextRetryAt = null;
     if (snapshotOk !== undefined) telemetry.snapshotOk = snapshotOk;
     if (snapshotAt !== undefined) telemetry.snapshotAt = new Date(snapshotAt);
     if (queuedLocal !== undefined) telemetry.queuedLocal = queuedLocal;
