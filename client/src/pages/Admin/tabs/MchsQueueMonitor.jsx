@@ -10,7 +10,7 @@ const labels = {
 };
 const fmt = value => value ? new Date(value).toLocaleString('ru-RU') : '—';
 
-export default function MchsQueueMonitor({ token }) {
+export default function MchsQueueMonitor({ token, view = 'overview' }) {
   const [searchParams] = useSearchParams();
   const selectedIncident = searchParams.get('incident');
   const [queue, setQueue] = useState(null);
@@ -79,7 +79,7 @@ export default function MchsQueueMonitor({ token }) {
         <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
       </div>
     </div>
-    <details open={selectedIncident ? true : undefined} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+    {(view === 'incidents' || (view === 'overview' && selectedIncident)) && <details open={view === 'incidents' || Boolean(selectedIncident)} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
       <summary className="cursor-pointer font-medium">Журнал технических неисправностей · {incidents?.length ?? '—'} записей</summary>
       <p className="text-xs text-slate-500 dark:text-white/50 my-2">Записи отражают только техническую диагностику. Проверка выполняется примерно раз в минуту, поэтому время начала и восстановления приблизительное.</p>
       {incidents?.length === 0 && <p className="text-sm">Неисправностей пока не зафиксировано.</p>}
@@ -90,8 +90,8 @@ export default function MchsQueueMonitor({ token }) {
         {item.resolvedAt && <p>Продолжительность: {Math.max(0,Math.round((new Date(item.resolvedAt)-new Date(item.openedAt))/60000))} мин</p>}
         <p className="text-xs opacity-70">{item.reason}</p>
       </div>)}
-    </details>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+    </details>}
+    {(view === "overview" || view === "queue") && <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
       {[
         ['Получено всего', queue?.total],
         ['Ожидает', queue?.pending],
@@ -100,7 +100,7 @@ export default function MchsQueueMonitor({ token }) {
       ].map(([title, value]) => <div key={title} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 min-w-0">
         <p className="text-xs text-slate-500 dark:text-white/50">{title}</p>
         <p className="mt-1 text-base font-semibold break-words">{value ?? '—'}</p></div>)}
-    </div>
+    </div>}
     <p className="text-xs text-slate-500 dark:text-white/50">
       {lastRefresh ? 'Обновлено: ' + fmt(lastRefresh) : 'Загрузка…'} · Автообновление каждые 15 секунд при открытой вкладке.
       {health?.runtime?.lastSuccessAt && ' · Последняя успешная проверка: ' + fmt(health.runtime.lastSuccessAt)}
@@ -110,11 +110,11 @@ export default function MchsQueueMonitor({ token }) {
       {health?.saved?.savedAt && ' · Сохранено в БД: ' + fmt(health.saved.savedAt)}
     </p>
     {error && <p role="alert" className="rounded-lg bg-red-500/10 text-red-700 dark:text-red-300 p-3 text-sm">{error}</p>}
-    {queue?.pending > 0 && <button type="button" disabled={busy} onClick={analyze}
+    {view === "queue" && queue?.pending > 0 && <button type="button" disabled={busy} onClick={analyze}
       className="rounded-xl border border-violet-400 px-3 py-2 text-sm text-violet-700 dark:text-violet-200 disabled:opacity-50">
       {busy ? 'Анализируем…' : 'Анализировать ожидающие (до 50)'}
     </button>}
-    <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2 text-sm">
+    {(view === "overview" || view === "delivery") && <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2 text-sm">
       <h4 className="font-semibold">Доставка Android → API → очередь</h4>
       <div className="grid sm:grid-cols-2 gap-2">
         <p>Heartbeat Android: <strong>{delivery?.connection === 'HEARTBEAT_RECENT' ? 'Недавно получен' : delivery?.connection === 'HEARTBEAT_STALE' ? 'Устарел / связь не подтверждена' : 'Нет данных'}</strong></p>
@@ -139,8 +139,8 @@ export default function MchsQueueMonitor({ token }) {
         </>}
       </div>
       <p className="text-xs text-slate-500 dark:text-white/50">Отсутствие новых уведомлений не является неисправностью. Heartbeat подтверждает только контакт Android с API, а не полноту доставки push или подлинность сообщений. Задержка вычисляется по времени внутри уведомления, если оно доступно.</p>
-    </div>
-    <div className="space-y-2">
+    </div>}
+    {view === "queue" && <div className="space-y-2">
       {!queue && !error && <p className="text-sm opacity-70">Загрузка очереди…</p>}
       {queue?.items?.length === 0 && <p className="text-sm opacity-70">Записей пока нет.</p>}
       {queue?.items?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
@@ -164,6 +164,6 @@ export default function MchsQueueMonitor({ token }) {
             </div>) : 'История отсутствует.'}
         </div>}
       </div>)}
-    </div>
+    </div>}
   </section>;
 }
