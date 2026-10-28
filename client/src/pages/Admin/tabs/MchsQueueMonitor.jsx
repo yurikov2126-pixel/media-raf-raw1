@@ -24,6 +24,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
   const [busy, setBusy] = useState(false);
   const [probeResult, setProbeResult] = useState('');
   const [probing, setProbing] = useState(false);
+  const [queueFilter, setQueueFilter] = useState('ALL');
   const refresh = useCallback(async () => {
     try {
       const [items, status, transport, journal] = await Promise.all([
@@ -101,13 +102,19 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         <p className="text-xs text-slate-500 dark:text-white/50">{title}</p>
         <p className="mt-1 text-base font-semibold break-words">{value ?? '—'}</p></div>)}
     </div>}
+    <details className="text-xs text-slate-500 dark:text-white/50">
+      <summary className="cursor-pointer font-medium">Технические подробности анализатора</summary>
+      <div className="mt-2 space-y-1">
+        {health?.runtime?.lastSuccessAt && <p>Последняя успешная проверка: {fmt(health.runtime.lastSuccessAt)}</p>}
+        {health?.runtime?.lastAttemptAt && <p>Последний запуск: {fmt(health.runtime.lastAttemptAt)}</p>}
+        {health?.runtime?.lastError && <p className="text-red-700 dark:text-red-300">Ошибка: {health.runtime.lastError}</p>}
+        {health?.runtime?.lastErrorAt && <p>Время ошибки: {fmt(health.runtime.lastErrorAt)}</p>}
+        {health?.saved?.savedAt && <p>Сохранено в БД: {fmt(health.saved.savedAt)}</p>}
+      </div>
+    </details>
     <p className="text-xs text-slate-500 dark:text-white/50">
       {lastRefresh ? 'Обновлено: ' + fmt(lastRefresh) : 'Загрузка…'} · Автообновление каждые 15 секунд при открытой вкладке.
-      {health?.runtime?.lastSuccessAt && ' · Последняя успешная проверка: ' + fmt(health.runtime.lastSuccessAt)}
-      {health?.runtime?.lastAttemptAt && ' · Последний запуск: ' + fmt(health.runtime.lastAttemptAt)}
-      {health?.runtime?.lastError && ' · Ошибка: ' + health.runtime.lastError}
-      {health?.runtime?.lastErrorAt && ' (' + fmt(health.runtime.lastErrorAt) + ')'}
-      {health?.saved?.savedAt && ' · Сохранено в БД: ' + fmt(health.saved.savedAt)}
+
     </p>
     {error && <p role="alert" className="rounded-lg bg-red-500/10 text-red-700 dark:text-red-300 p-3 text-sm">{error}</p>}
     {view === "queue" && queue?.pending > 0 && <button type="button" disabled={busy} onClick={analyze}
@@ -143,7 +150,18 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
     {view === "queue" && <div className="space-y-2">
       {!queue && !error && <p className="text-sm opacity-70">Загрузка очереди…</p>}
       {queue?.items?.length === 0 && <p className="text-sm opacity-70">Записей пока нет.</p>}
-      {queue?.items?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="mchs-queue-filter" className="text-sm font-medium">Показать</label>
+        <select id="mchs-queue-filter" value={queueFilter} onChange={e=>setQueueFilter(e.target.value)}
+          className="rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
+          <option value="ALL">Все события</option>
+          <option value="OBSERVED">Ожидают анализа</option>
+          <option value="ANALYZED">Проанализированы</option>
+        </select>
+        <span className="text-xs text-slate-500 dark:text-white/50">Фильтр по загруженным записям</span>
+      </div>
+      {queue?.items?.filter(item=>queueFilter==='ALL'||item.status===queueFilter).length===0 && queue?.items?.length>0 && <p className="text-sm opacity-70">По выбранному фильтру записей нет.</p>}
+      {queue?.items?.filter(item=>queueFilter==='ALL'||item.status===queueFilter).map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
         <div className="flex flex-wrap justify-between items-start gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-medium break-words">{item.event?.title || 'Без заголовка'}</p>
