@@ -73,7 +73,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
 });
 router.post('/heartbeat', signedRequest, async (req, res, next) => {
   try {
-    const { source, listener, push, queuedLocal, failedSends, lastSentAt } = req.safetyInput;
+    const { source, listener, push, queuedLocal, failedSends, lastSentAt, snapshotOk, snapshotAt } = req.safetyInput;
     if (source !== 'mchs-android' || !['CONNECTED','DISCONNECTED','UNKNOWN'].includes(listener) ||
       !['REGISTERED','ERROR','UNKNOWN'].includes(push)) {
       return fail(res, 400, 'INVALID_BODY');
@@ -84,8 +84,14 @@ router.post('/heartbeat', signedRequest, async (req, res, next) => {
           !Number.isFinite(Date.parse(lastSentAt))))) {
       return fail(res, 400, 'INVALID_TELEMETRY');
     }
-    const hasTelemetry = queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
+    if ((snapshotOk !== undefined && typeof snapshotOk !== 'boolean') ||
+        (snapshotAt !== undefined && (typeof snapshotAt !== 'string' || !Number.isFinite(Date.parse(snapshotAt))))) {
+      return fail(res, 400, 'INVALID_SNAPSHOT_TELEMETRY');
+    }
+    const hasTelemetry = snapshotOk !== undefined || snapshotAt !== undefined || queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
     const telemetry = {};
+    if (snapshotOk !== undefined) telemetry.snapshotOk = snapshotOk;
+    if (snapshotAt !== undefined) telemetry.snapshotAt = new Date(snapshotAt);
     if (queuedLocal !== undefined) telemetry.queuedLocal = queuedLocal;
     if (failedSends !== undefined) telemetry.failedSends = failedSends;
     if (lastSentAt !== undefined) telemetry.lastSentAt = new Date(lastSentAt);

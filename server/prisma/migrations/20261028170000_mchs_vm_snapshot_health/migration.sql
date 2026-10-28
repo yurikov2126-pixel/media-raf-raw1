@@ -1,0 +1,1 @@
+ALTER TABLE "SafetyMchsHealth" ADD COLUMN "snapshotOk" BOOLEAN, ADD COLUMN "snapshotAt" TIMESTAMP(3);

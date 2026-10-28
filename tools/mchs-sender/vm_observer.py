@@ -188,14 +188,26 @@ def main():
     if not args.dry_run and len(key) < 32:
         parser.error("MCHS_INGEST_HMAC_KEY missing")
     db = state_db(Path(args.state))
+    last_snapshot_at = None
     while True:
         try:
-            count = ingest_snapshot(db)
+            snapshot_ok = False
+            try:
+                count = ingest_snapshot(db)
+                snapshot_ok = True
+                last_snapshot_at = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+            except Exception as snapshot_error:
+                print('SNAPSHOT_ERROR', type(snapshot_error).__name__, str(snapshot_error)[:100], flush=True)
+                count = -1
             pending = db.execute("SELECT COUNT(*) FROM queue WHERE ack_at IS NULL").fetchone()[0]
             print("SNAPSHOT", count, "pending", pending, "dry_run", args.dry_run, flush=True)
             if not args.dry_run:
                 drain(db, key, args.connect_ip)
-                heartbeat(key, args.connect_ip, listener_running(), queue_telemetry(db))
+                metrics = queue_telemetry(db)
+                metrics['snapshotOk'] = snapshot_ok
+                if last_snapshot_at:
+                    metrics['snapshotAt'] = last_snapshot_at
+                heartbeat(key, args.connect_ip, listener_running(), metrics)
                 print("HEARTBEAT_ACK", flush=True)
         except Exception as exc:
             print("POLL_ERROR", type(exc).__name__, str(exc)[:140], flush=True)

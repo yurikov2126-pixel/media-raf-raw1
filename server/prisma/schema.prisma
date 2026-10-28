@@ -1456,6 +1456,8 @@ model SafetyMchsHealth {
   failedSends  Int?
   lastSentAt   DateTime?
   telemetryAt  DateTime?
+  snapshotOk   Boolean?
+  snapshotAt   DateTime?
   updatedAt    DateTime @updatedAt
 }
 

@@ -99,6 +99,7 @@ export default function MchsQueueMonitor({ token }) {
         <p className="font-medium">Телеметрия Android VM</p>
         {!delivery?.vmTelemetry?.available ? <p className="text-xs opacity-70">Android пока передаёт heartbeat без сведений о локальной очереди. Это не означает, что очередь пуста.</p> : <>
           <p>Данные VM: {delivery.vmTelemetry.telemetryFresh ? 'свежие' : 'устарели'} · обновлены {fmt(delivery.vmTelemetry.lastReportedAt)}</p>
+          <p>Чтение Android SQLite: {delivery.vmTelemetry.snapshotOk === true ? 'Успешно' : delivery.vmTelemetry.snapshotOk === false ? 'Ошибка чтения' : 'Нет данных'} · Последний успешный снимок: {fmt(delivery.vmTelemetry.snapshotAt)}</p>
           <p>В локальной очереди: {delivery.vmTelemetry.queuedLocal ?? 'неизвестно'} · Неудачных отправок (счётчик VM): {delivery.vmTelemetry.failedSends ?? 'неизвестно'}</p>
           <p>Последняя успешная отправка с VM: {fmt(delivery.vmTelemetry.lastSentAt)}</p>
         </>}
