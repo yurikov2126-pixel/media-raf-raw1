@@ -73,7 +73,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
 });
 router.post('/heartbeat', signedRequest, async (req, res, next) => {
   try {
-    const { source, listener, push, queuedLocal, failedSends, lastSentAt, snapshotOk, snapshotAt, retryPending, nextRetryAt } = req.safetyInput;
+    const { source, listener, push, queuedLocal, failedSends, lastSentAt, snapshotOk, snapshotAt, retryPending, nextRetryAt, oldestPendingAt } = req.safetyInput;
     if (source !== 'mchs-android' || !['CONNECTED','DISCONNECTED','UNKNOWN'].includes(listener) ||
       !['REGISTERED','ERROR','UNKNOWN'].includes(push)) {
       return fail(res, 400, 'INVALID_BODY');
@@ -90,8 +90,13 @@ router.post('/heartbeat', signedRequest, async (req, res, next) => {
     }
     if (nextRetryAt !== undefined && (typeof nextRetryAt !== 'string' ||
         !Number.isFinite(Date.parse(nextRetryAt)))) return fail(res,400,'INVALID_RETRY_TIME');
-    const hasTelemetry = retryPending !== undefined || nextRetryAt !== undefined || snapshotOk !== undefined || snapshotAt !== undefined || queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
+    if (oldestPendingAt !== undefined && oldestPendingAt !== null &&
+        (typeof oldestPendingAt !== 'string' || !Number.isFinite(Date.parse(oldestPendingAt))))
+      return fail(res,400,'INVALID_OLDEST_PENDING_TIME');
+    const hasTelemetry = oldestPendingAt !== undefined || retryPending !== undefined || nextRetryAt !== undefined || snapshotOk !== undefined || snapshotAt !== undefined || queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
     const telemetry = {};
+    if (oldestPendingAt !== undefined) telemetry.oldestPendingAt = oldestPendingAt === null ? null : new Date(oldestPendingAt);
+    if (queuedLocal === 0) telemetry.oldestPendingAt = null;
     if (retryPending !== undefined) telemetry.retryPending = retryPending;
     if (nextRetryAt !== undefined) telemetry.nextRetryAt = new Date(nextRetryAt);
     if (retryPending === 0) telemetry.nextRetryAt = null;
