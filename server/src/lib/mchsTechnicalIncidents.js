@@ -31,7 +31,7 @@ export function mchsIncidentSignals(health, nowMs=Date.now(), history=null) {
       nowMs-new Date(sample.receivedAt).getTime()>=0);
     // Require three independent samples spanning at least two minutes.
     const spansWindow=recent.length>=3 &&
-      new Date(recent[0].receivedAt).getTime()-new Date(recent[recent.length-1].receivedAt).getTime()>=120000;
+      new Date(recent[0].receivedAt).getTime()-new Date(recent[2].receivedAt).getTime()>=120000;
     if(spansWindow){
       const lastThree=recent.slice(0,3);
       if(lastThree.every(x=>x.queuedLocal!==null&&x.queuedLocal>=5))
