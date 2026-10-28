@@ -5,6 +5,7 @@
  * This stage mixes scheduled tracks and silence, NOT browser microphone audio.
  */
 import 'dotenv/config';
+import {createEmergencyDryRun} from '../src/lib/radioEmergencyDryRun.js';
 import http from 'node:http';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -60,6 +61,8 @@ import {resolveHourlyScheduledResume} from '../src/lib/radioScheduledHourlyResum
 import {preflightTimeSignal} from '../src/lib/radioTimeSignalPreflight.js';
 import { chooseJingleAsset } from '../src/lib/radioJingleRuntime.js';
 
+// Diagnostic-only state machine: never feeds PCM, source authority or amplifier control.
+const emergencyDryRun=createEmergencyDryRun();
 const port = Number(process.env.RADIO_PLAYOUT_PORT || 4105);
 const secret = process.env.RADIO_PLAYOUT_SECRET || '';
 if (process.env.RADIO_PLAYOUT_ENABLED !== 'true' || secret.length < 32) {
@@ -2009,7 +2012,7 @@ const server=http.createServer((req,res)=>{
   }
   if(req.url==='/health') {
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({...state,loudness:loudnessMeter.snapshot(),connected:listeners.size}));return;
+    res.end(JSON.stringify({...state,loudness:loudnessMeter.snapshot(),connected:listeners.size,emergencySimulation:emergencyDryRun.snapshot()}));return;
   }
   if(req.url!=='/stream') {res.writeHead(404).end();return;}
   res.writeHead(200,{'Content-Type':'audio/mpeg','Cache-Control':'private, no-store, no-transform',
