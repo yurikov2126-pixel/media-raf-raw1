@@ -7,11 +7,13 @@ export function mchsIncidentSignals(health, nowMs=Date.now()) {
   const fresh = nowMs-new Date(health.lastSeenAt).getTime() <= 180000;
   const signals = {
     HEARTBEAT: !fresh ? 'HEARTBEAT_STALE' : null,
-    SNAPSHOT: fresh && health.snapshotOk === false ? 'ANDROID_SQLITE_READ_FAILED' : null,
-    RETRY: null,
-    BACKLOG: null,
+    SNAPSHOT: !fresh || health.snapshotOk == null ? undefined : (health.snapshotOk === false ? 'ANDROID_SQLITE_READ_FAILED' : null),
+    RETRY: undefined,
+    BACKLOG: undefined,
   };
   if (fresh && health.telemetryAt && nowMs-new Date(health.telemetryAt).getTime() <= 180000) {
+    signals.RETRY=null;
+    signals.BACKLOG=null;
     const retry = assessMchsRetryBacklog(health,{nowMs});
     if (retry.state === 'WARNING') signals.RETRY = retry.reason;
     const oldest=health.oldestPendingAt ? new Date(health.oldestPendingAt).getTime() : NaN;
@@ -30,6 +32,7 @@ export async function recordMchsTechnicalIncidents(db=prisma, now=new Date()) {
     const open=await tx.safetyMchsTechnicalIncident.findMany({where:{resolvedAt:null}});
     for(const [kind,reason] of Object.entries(signals)) {
       const active=open.find(x=>x.kind===kind);
+      if (reason === undefined) continue;
       if (reason && !active) await tx.safetyMchsTechnicalIncident.create({data:{kind,reason,openedAt:now}});
       if (!reason && active) await tx.safetyMchsTechnicalIncident.update({where:{id:active.id},data:{resolvedAt:now}});
     }
