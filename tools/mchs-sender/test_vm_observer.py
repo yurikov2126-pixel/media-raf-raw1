@@ -19,7 +19,7 @@ class TelemetryTests(unittest.TestCase):
             db = module.state_db(Path(directory) / "queue.db")
             try:
                 self.assertEqual(module.queue_telemetry(db), {
-                    "queuedLocal": 0, "failedSends": 0
+                    "queuedLocal": 0, "failedSends": 0, "retryPending": 0
                 })
             finally:
                 db.close()
