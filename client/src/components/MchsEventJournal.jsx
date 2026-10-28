@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const ageOf = (event) => event.occurredAt ? Date.now() - new Date(event.occurredAt).getTime() : null;
 const historical = (event) => { const age = ageOf(event); return age === null || !Number.isFinite(age) || age > 30 * 60 * 1000 || age < -120000; };
@@ -8,6 +8,17 @@ export default function MchsEventJournal({ events = [], total = 0 }) {
   const [query, setQuery] = useState('');
   const [ageFilter, setAgeFilter] = useState('all');
   const [selected, setSelected] = useState(null);
+  const closeRef = useRef(null);
+  const openerRef = useRef(null);
+  useEffect(() => {
+    if (!selected) return;
+    closeRef.current?.focus();
+    const onKey = e => { if (e.key === 'Escape') setSelected(null); };
+    document.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown',onKey); document.body.style.overflow=previous; openerRef.current?.focus(); };
+  }, [selected]);
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const visible = useMemo(() => events.filter(e => {
@@ -42,14 +53,31 @@ export default function MchsEventJournal({ events = [], total = 0 }) {
         <p className="text-sm mt-1 whitespace-pre-wrap break-words">{e.body}</p>
         <div className="mt-2 text-xs opacity-65">Время Android: {dateText(e.occurredAt)} · Запись на сервере: {dateText(e.receivedAt)}</div>
         <div className="mt-1 text-xs opacity-65">Регион: {e.region || 'не установлен'} · Канал: {e.channelId || 'не указан'}</div>
-        <button type="button" onClick={() => setSelected(selected === e.id ? null : e.id)} className="mt-2 text-sm underline underline-offset-2">{selected === e.id ? 'Скрыть сведения' : 'Подробнее'}</button>
-        {selected === e.id && <div className="mt-2 rounded-lg bg-slate-100 p-3 text-xs dark:bg-white/10 space-y-1">
-          <p>Идентификатор записи: <span className="break-all">{e.id}</span></p>
-          <p>Источник: {e.source || 'неизвестен'}</p>
-          <p>Тип: {e.eventType || 'Не классифицировано'}</p>
-          <p>Это наблюдение, а не разрешение на трансляцию предупреждения.</p>
-        </div>}
+        <button type="button" onClick={event => { openerRef.current=event.currentTarget; setSelected(e); }} className="mt-3 rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-white/10">Открыть сообщение</button>
       </article>)}</div>}
+    {selected && <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null);}}>
+      <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" aria-hidden="true" />
+      <section role="dialog" aria-modal="true" aria-labelledby="mchs-message-detail-title"
+        className="relative w-full max-w-2xl max-h-[88dvh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/15 shadow-2xl p-4 sm:p-6 space-y-4 text-slate-900 dark:text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="text-xs text-slate-600 dark:text-slate-300">Журнал сообщений МЧС · диагностическое наблюдение</p><h3 id="mchs-message-detail-title" className="font-semibold text-lg mt-1 break-words">{selected.title || 'Без заголовка'}</h3></div>
+          <button ref={closeRef} type="button" onClick={()=>setSelected(null)} className="shrink-0 rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Закрыть</button>
+        </div>
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-400/10 p-3 text-sm text-amber-950 dark:text-amber-100">Сообщение получено через диагностический канал. Официальное происхождение и актуальность угрозы независимо не подтверждены. Радиоэфир не запускается.</div>
+        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed rounded-xl border border-slate-200 dark:border-white/15 p-4">{selected.body || 'Текст отсутствует'}</div>
+        <dl className="grid sm:grid-cols-2 gap-3 text-sm">
+          {[
+            ['Время в Android',dateText(selected.occurredAt)],['Получено сервером',dateText(selected.receivedAt)],
+            ['Регион',selected.region||'Не установлен'],['Канал',selected.channelId||'Не указан'],
+            ['Источник',selected.source||'Неизвестен'],['Тип сообщения',selected.eventType||'Не классифицировано'],
+            ['Отметка проверки',selected.verified?'Имеется отметка (не подтверждает подлинность)':'Не подтверждено независимо'],
+            ['Состояние по времени',historical(selected)?'Историческая или неизвестная дата':'Недавнее наблюдение']
+          ].map(([label,value])=><div key={label} className="min-w-0 rounded-lg bg-slate-50 dark:bg-white/5 p-3"><dt className="text-xs text-slate-600 dark:text-slate-300">{label}</dt><dd className="mt-1 font-medium break-words">{value}</dd></div>)}
+        </dl>
+        <div className="text-xs text-slate-600 dark:text-slate-300 break-all">ID: {selected.id}</div>
+        <p className="text-xs text-slate-600 dark:text-slate-300">История обработки и решения оператора доступны только там, где они предоставляются отдельными диагностическими API; это окно не показывает неподтверждённых этапов.</p>
+      </section>
+    </div>}
     {pageCount > 1 && <div className="flex items-center justify-between gap-3 text-sm">
       <button type="button" className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40 dark:border-white/20" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Назад</button>
       <span>Страница {Math.min(page, pageCount)} из {pageCount}</span>
