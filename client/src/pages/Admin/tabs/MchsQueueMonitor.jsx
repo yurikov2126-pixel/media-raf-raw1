@@ -13,6 +13,7 @@ export default function MchsQueueMonitor({ token }) {
   const [queue, setQueue] = useState(null);
   const [health, setHealth] = useState(null);
   const [delivery, setDelivery] = useState(null);
+  const [incidents, setIncidents] = useState(null);
   const [selected, setSelected] = useState('');
   const [history, setHistory] = useState(null);
   const [error, setError] = useState('');
@@ -20,12 +21,13 @@ export default function MchsQueueMonitor({ token }) {
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
     try {
-      const [items, status, transport] = await Promise.all([
+      const [items, status, transport, journal] = await Promise.all([
         api('/safety/observation-queue?limit=50', { token }),
         api('/safety/observation-analyzer/status', { token }),
         api('/safety/delivery-diagnostics', { token }),
+        api('/safety/technical-incidents', { token }),
       ]);
-      setQueue(items); setHealth(status); setDelivery(transport); setLastRefresh(new Date()); setError('');
+      setQueue(items); setHealth(status); setDelivery(transport); setIncidents(journal.items || []); setLastRefresh(new Date()); setError('');
     } catch (e) { setError(e.message || 'Ошибка загрузки'); }
   }, [token]);
   useEffect(() => {
@@ -62,6 +64,17 @@ export default function MchsQueueMonitor({ token }) {
         <p className="text-sm text-slate-500 dark:text-white/60">Анализ уведомлений не подтверждает официальную тревогу и не запускает оповещение.</p></div>
       <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
     </div>
+    <details className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+      <summary className="cursor-pointer font-medium">Журнал технических неисправностей · {incidents?.length ?? '—'} записей</summary>
+      <p className="text-xs text-slate-500 dark:text-white/50 my-2">Записи отражают только техническую диагностику. Проверка выполняется примерно раз в минуту, поэтому время начала и восстановления приблизительное.</p>
+      {incidents?.length === 0 && <p className="text-sm">Неисправностей пока не зафиксировано.</p>}
+      {incidents?.map(item => <div key={item.id} className="border-t border-slate-200 dark:border-white/10 py-2 text-sm">
+        <strong>{({HEARTBEAT:'Нет heartbeat',SNAPSHOT:'Ошибка чтения Android SQLite',RETRY:'Просроченная повторная отправка',BACKLOG:'Длительное ожидание в очереди'})[item.kind] || item.kind}</strong>
+        <p>{item.resolvedAt ? 'Восстановлено' : 'Не устранено'} · Начало: {fmt(item.openedAt)} · Завершение: {fmt(item.resolvedAt)}</p>
+        {item.resolvedAt && <p>Продолжительность: {Math.max(0,Math.round((new Date(item.resolvedAt)-new Date(item.openedAt))/60000))} мин</p>}
+        <p className="text-xs opacity-70">{item.reason}</p>
+      </div>)}
+    </details>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
       {[
         ['Получено всего', queue?.total],
