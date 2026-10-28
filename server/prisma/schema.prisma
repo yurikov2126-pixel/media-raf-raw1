@@ -1466,6 +1466,24 @@ model SafetyMchsHealth {
 
 
  // Isolated synthetic diagnostics: never consumed by safety dispatch or radio.
+// Received heartbeat snapshots only. Diagnostic history; never a command to radio.
+model SafetyMchsTelemetrySample {
+  id              String   @id @default(cuid())
+  receivedAt      DateTime @default(now())
+  listener        String
+  push            String
+  queuedLocal     Int?
+  failedSends     Int?
+  retryPending    Int?
+  oldestPendingAt DateTime?
+  nextRetryAt     DateTime?
+  snapshotOk      Boolean?
+  snapshotAt      DateTime?
+  lastSentAt      DateTime?
+  telemetryPresent Boolean @default(false)
+  @@index([receivedAt])
+}
+
 model SafetyMchsDiagnostic {
   id         String   @id @default(cuid())
   eventId    String   @unique
