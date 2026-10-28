@@ -102,6 +102,8 @@ export default function MchsQueueMonitor({ token }) {
           <p>Чтение Android SQLite: {delivery.vmTelemetry.snapshotOk === true ? 'Успешно' : delivery.vmTelemetry.snapshotOk === false ? 'Ошибка чтения' : 'Нет данных'} · Последний успешный снимок: {fmt(delivery.vmTelemetry.snapshotAt)}</p>
           <p>В локальной очереди: {delivery.vmTelemetry.queuedLocal ?? 'неизвестно'} · Неудачных отправок (счётчик VM): {delivery.vmTelemetry.failedSends ?? 'неизвестно'}</p>
           <p>Последняя успешная отправка с VM: {fmt(delivery.vmTelemetry.lastSentAt)}</p>
+          <p>Самое старое ожидающее событие: {fmt(delivery.vmTelemetry.oldestPendingAt)} · возраст: {delivery.vmTelemetry.oldestPendingAgeMs == null ? 'неизвестен' : Math.floor(delivery.vmTelemetry.oldestPendingAgeMs/60000) + ' мин'}</p>
+          {delivery.vmTelemetry.telemetryFresh && delivery.vmTelemetry.queuedLocal > 0 && delivery.vmTelemetry.oldestPendingAgeMs > 600000 && <p className="text-amber-700 dark:text-amber-300">Очередь содержит событие, ожидающее подтверждения более 10 минут.</p>}
           <p>Ожидают повторной отправки: {delivery.vmTelemetry.retryPending ?? 'неизвестно'} · Следующая попытка: {fmt(delivery.vmTelemetry.nextRetryAt)}</p>
           <p>Диагностика очереди: {({CLEAR:'Нет ожидающих отправок',PENDING:'Есть ожидающие отправки',WARNING:'Повторная попытка существенно просрочена',UNKNOWN:'Недостаточно свежих данных'})[delivery.vmTelemetry.backlog?.state] || 'Нет данных'}</p>
           {delivery.vmTelemetry.telemetryFresh && delivery.vmTelemetry.retryPending > 0 && <p className="text-amber-700 dark:text-amber-300">Есть неподтверждённые отправки. Проверь журнал VM; это не подтверждение потери уведомления.</p>}
