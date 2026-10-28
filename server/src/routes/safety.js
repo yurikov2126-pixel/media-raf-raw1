@@ -3,6 +3,7 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
+import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 
 const router = Router();
 const KEY = 'safety_mchs_config_v1';
@@ -331,6 +332,21 @@ router.get('/observation-queue', canView, async (req, res, next) => {
     res.json({ total, items, dispatchEnabled: false, playbackEnabled: false,
       queuePurpose: 'OBSERVATION_ONLY' });
   } catch (error) { next(error); }
+});
+
+/** Chronological assessment, read-only; never serves as an official all-clear. */
+router.get('/observation-order', canView, async (_req, res, next) => {
+  try {
+    const events = await prisma.safetyMchsEvent.findMany({
+      orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }], take: 200,
+      select: { id: true, source: true, sourceEventId: true,
+        occurredAt: true, receivedAt: true, title: true, body: true },
+    });
+    const observations=inspectMchsObservationOrder(events);
+    res.set('Cache-Control', 'no-store');
+    res.json({ observations, assessedCount:observations.length, officialState:'UNKNOWN',
+      authoritative:false, playbackEnabled:false, scope:'LATEST_200_OBSERVATIONS' });
+  } catch(error) { next(error); }
 });
 
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
