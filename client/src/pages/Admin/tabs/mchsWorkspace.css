@@ -1,0 +1,38 @@
+/* Explicit readable palette for the MCHS workspace in the admin light theme.
+   Scoped intentionally: never changes other admin tabs or dark theme. */
+html:not(.dark) .mchs-admin-workspace {
+  color: #0f172a;
+  color-scheme: light;
+}
+html:not(.dark) .mchs-admin-workspace :is(section,article,details) {
+  color: #0f172a;
+}
+html:not(.dark) .mchs-admin-workspace :is(h2,h3,h4,strong,summary,label) {
+  color: #0f172a;
+}
+html:not(.dark) .mchs-admin-workspace :is(p,time,small) {
+  color: #475569;
+}
+html:not(.dark) .mchs-admin-workspace :is(input,textarea,select) {
+  color: #0f172a;
+  background-color: #fff;
+}
+html:not(.dark) .mchs-admin-workspace :is(input,textarea)::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+html:not(.dark) .mchs-admin-workspace button:not([aria-current="page"]):not([aria-pressed="true"]) {
+  color: #334155;
+}
+html:not(.dark) .mchs-admin-workspace button[aria-current="page"],
+html:not(.dark) .mchs-admin-workspace button[aria-pressed="true"] {
+  color: #fff;
+}
+html:not(.dark) .mchs-admin-workspace [role="alert"] {
+  color: #991b1b;
+}
+/* Preserve contrast on warning banner, unlike inherited admin pale text. */
+html:not(.dark) .mchs-admin-workspace [role="status"].mchs-safety-banner,
+html:not(.dark) .mchs-admin-workspace [role="status"].mchs-safety-banner :is(strong,p) {
+  color: #78350f;
+}
