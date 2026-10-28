@@ -67,7 +67,7 @@ export default function SafetyMchs({ token }) {
     {(pane === 'overview') && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {[['Источник Android', data?.source?.connection === 'HEARTBEAT_RECENT' ? 'Heartbeat недавно получен' : data?.source?.connection === 'HEARTBEAT_STALE' ? 'Связь потеряна / устарела' : 'Нет данных о соединении'], ['Listener / Push', data?.source?.connection === 'HEARTBEAT_RECENT' ? `${data?.source?.listener || 'UNKNOWN'} / ${data?.source?.push || 'UNKNOWN'}` : 'Не подтверждены'], ['Радио и громкоговорители', 'Автозапуск отключён']].map(([name, value]) =>
         <div key={name} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4"><p className="text-xs text-slate-500 dark:text-white/50">{name}</p><p className="mt-2 font-semibold">{value}</p></div>)}
-    </div>
+    </div>}
     {(pane === 'overview') && <p className="text-xs text-slate-500 dark:text-white/50">Последний heartbeat: {data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU') : 'не получен'}. Heartbeat не подтверждает доставку push.</p>}
     {pane === "settings" && <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
