@@ -55,9 +55,15 @@ router.post('/event', signedRequest, async (req, res, next) => {
       update: {},
       select: { id: true, receivedAt: true, verified: true }
       });
-      await tx.safetyMchsQueueItem.upsert({
+      const queue = await tx.safetyMchsQueueItem.upsert({
         where: { eventId: event.id },
         create: { eventId: event.id, status: 'OBSERVED' },
+        update: {},
+        select: { id: true },
+      });
+      await tx.safetyMchsQueueHistory.upsert({
+        where: { queueId_status_reason: { queueId: queue.id, status: 'OBSERVED', reason: 'INITIAL_INGEST' } },
+        create: { queueId: queue.id, status: 'OBSERVED', reason: 'INITIAL_INGEST' },
         update: {},
       });
       return event;
