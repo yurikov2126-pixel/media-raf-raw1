@@ -12,6 +12,7 @@ const fmt = value => value ? new Date(value).toLocaleString('ru-RU') : '—';
 export default function MchsQueueMonitor({ token }) {
   const [queue, setQueue] = useState(null);
   const [health, setHealth] = useState(null);
+  const [delivery, setDelivery] = useState(null);
   const [selected, setSelected] = useState('');
   const [history, setHistory] = useState(null);
   const [error, setError] = useState('');
@@ -19,11 +20,12 @@ export default function MchsQueueMonitor({ token }) {
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
     try {
-      const [items, status] = await Promise.all([
+      const [items, status, transport] = await Promise.all([
         api('/safety/observation-queue?limit=50', { token }),
         api('/safety/observation-analyzer/status', { token }),
+        api('/safety/delivery-diagnostics', { token }),
       ]);
-      setQueue(items); setHealth(status); setLastRefresh(new Date()); setError('');
+      setQueue(items); setHealth(status); setDelivery(transport); setLastRefresh(new Date()); setError('');
     } catch (e) { setError(e.message || 'Ошибка загрузки'); }
   }, [token]);
   useEffect(() => {
@@ -83,6 +85,18 @@ export default function MchsQueueMonitor({ token }) {
       className="rounded-xl border border-violet-400 px-3 py-2 text-sm text-violet-700 dark:text-violet-200 disabled:opacity-50">
       {busy ? 'Анализируем…' : 'Анализировать ожидающие (до 50)'}
     </button>}
+    <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2 text-sm">
+      <h4 className="font-semibold">Доставка Android → API → очередь</h4>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <p>Heartbeat Android: <strong>{delivery?.connection === 'HEARTBEAT_RECENT' ? 'Недавно получен' : delivery?.connection === 'HEARTBEAT_STALE' ? 'Устарел / связь не подтверждена' : 'Нет данных'}</strong></p>
+        <p>Последний heartbeat: {fmt(delivery?.lastHeartbeatAt)}</p>
+        <p>Последнее уведомление в API: {fmt(delivery?.lastReceivedAt)}</p>
+        <p>Задержка последнего события: {delivery?.lastEventLagMs == null ? 'Неизвестна' : Math.round(delivery.lastEventLagMs/1000) + ' с'}</p>
+        <p>Ожидают анализа: {delivery?.pending ?? '—'}</p>
+        <p>Фоновая обработка: {delivery?.analyzerHealthy ? 'Последняя проверка успешна' : 'Нет свежего подтверждения'}</p>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-white/50">Отсутствие новых уведомлений не является неисправностью. Heartbeat подтверждает только контакт Android с API, а не полноту доставки push или подлинность сообщений. Задержка вычисляется по времени внутри уведомления, если оно доступно.</p>
+    </div>
     <div className="space-y-2">
       {!queue && !error && <p className="text-sm opacity-70">Загрузка очереди…</p>}
       {queue?.items?.length === 0 && <p className="text-sm opacity-70">Записей пока нет.</p>}
