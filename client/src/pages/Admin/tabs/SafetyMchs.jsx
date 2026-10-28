@@ -7,6 +7,7 @@ import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
 import MchsOperationalOverview from './MchsOperationalOverview.jsx';
 import MchsAnalytics from './MchsAnalytics.jsx';
+import MchsDeliveryReliability from './MchsDeliveryReliability.jsx';
 import { api } from '../../../api/client.js';
 import { useTheme } from '../../../store/theme.jsx';
 import './mchsWorkspace.css';
@@ -25,6 +26,7 @@ export default function SafetyMchs({ token }) {
   const panes = [
     ['overview', 'Обзор'],
     ['delivery', 'Android и доставка'],
+    ['reliability', 'Надёжность доставки'],
     ['queue', 'Очередь и анализ'],
     ['incidents', 'Неисправности'],
     ['events', 'Уведомления'],
@@ -105,6 +107,7 @@ export default function SafetyMchs({ token }) {
     </section>}
     {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
     {pane === 'analytics' && <MchsAnalytics token={token} />}
+    {pane === 'reliability' && <MchsDeliveryReliability token={token} onOpen={switchPane} />}
     {(pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
 
     {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />}
