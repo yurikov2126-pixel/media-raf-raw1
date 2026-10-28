@@ -8,6 +8,8 @@ export default function MchsEmergencySimulation({token}){
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState('');
  const [worker,setWorker]=useState(null);
+ const [resume,setResume]=useState(null);
+ const [resumeError,setResumeError]=useState('');
  const [workerLoading,setWorkerLoading]=useState(false);
  const [selected,setSelected]=useState(null);
  const load=useCallback(async()=>{
@@ -24,6 +26,8 @@ export default function MchsEmergencySimulation({token}){
   finally{setWorkerLoading(false);}
  },[token]);
  useEffect(()=>{void refreshWorker();},[refreshWorker]);
+ const refreshResume=useCallback(async()=>{try{setResumeError('');setResume(await api('/safety/radio-resume-diagnostic',{token}));}catch(e){setResume(null);setResumeError(e.message||'Не удалось получить план');}},[token]);
+ useEffect(()=>{void refreshResume();},[refreshResume]);
  const scenarios=result?.scenarios|| (result?.source?[result]:[]);
  const active=scenarios.find(s=>s.source===selected);
  useEffect(()=>{if(!active)return;const handle=e=>{if(e.key==='Escape')setSelected(null);};window.addEventListener('keydown',handle);return()=>window.removeEventListener('keydown',handle);},[active]);
@@ -57,6 +61,21 @@ export default function MchsEmergencySimulation({token}){
       </div>)}
     </div>
     <p className="text-xs text-slate-600 dark:text-slate-300">Проверка восстановления программы: не выполнялась. Реальный звук и усилитель: не проверялись. Ответ Worker не доказывает готовность к экстренному переключению. Действующий эфир не меняется.</p>
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">План возврата по актуальной сетке</h4><button type="button" onClick={()=>void refreshResume()} className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Пересчитать</button></div>
+    {resumeError&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{resumeError}</p>}
+    {resume&&<div className="grid sm:grid-cols-2 gap-2 text-sm">
+      {[
+        ['Текущий источник',resume.currentSource],
+        ['Время расчёта',new Date(resume.checkedAt).toLocaleString('ru-RU')],
+        ['Предложенное действие',resume.plan?.action||'Нет'],
+        ['Причина',resume.plan?.reason||'Нет данных'],
+        ['Слот',resume.plan?.slotId||'Нет подтверждения'],
+        ['Трек',resume.plan?.trackId||'Нет подтверждения']
+      ].map(([name,value])=><div key={name} className="rounded-lg bg-slate-50 dark:bg-white/5 p-3"><span className="block text-xs text-slate-600 dark:text-slate-300">{name}</span><strong className="block mt-1 break-all">{value}</strong></div>)}
+    </div>}
+    <p className="text-xs text-slate-600 dark:text-slate-300">Расчёт использует действующее расписание и снимок Radio Worker. Доступность студии, полномочия плейлистов и реальное восстановление звука не подтверждены. Никакого переключения не выполняется.</p>
   </div>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/15">
