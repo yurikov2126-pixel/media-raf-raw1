@@ -43,6 +43,20 @@ export default function SafetyMchs({ token }) {
     if (next !== 'events' && next !== 'rules') params.delete('mchsEvent');
     setSearchParams(params, { replace: true });
   };
+  const openOperationalItem = (view, id) => {
+    if (view === 'review') {
+      setRulesView('review');
+      const params = new URLSearchParams(searchParams);
+      params.set('tab', 'safety-mchs');
+      params.set('mchsView', 'rules');
+      params.delete('incident');
+      if (id) params.set('mchsEvent', id);
+      else params.delete('mchsEvent');
+      setSearchParams(params, { replace: true });
+    } else {
+      switchPane(view, id);
+    }
+  };
   const load = () => api('/safety/dashboard', { token }).then((result) => {
     setData(result); setDraft(result.config); setError('');
   }).catch((e) => setError(e.message));
@@ -91,7 +105,7 @@ export default function SafetyMchs({ token }) {
         <button type="button" disabled={saving} onClick={save} className="rounded-xl bg-violet-600 px-5 py-2.5 text-white font-semibold disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить настройки'}</button>
       </>}
     </section>}
-    {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
+    {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={openOperationalItem} />}
     {(pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
 
     {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} onReview={eventId => { setRulesView("review"); const params=new URLSearchParams(searchParams); params.set("tab","safety-mchs");params.set("mchsView","rules");params.set("mchsEvent",eventId);params.delete("incident");setSearchParams(params); }} />}
