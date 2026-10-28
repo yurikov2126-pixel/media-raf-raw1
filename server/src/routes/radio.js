@@ -210,7 +210,7 @@ router.get('/assets/storage-analytics',requireRole('ADMIN'),safe(async(req,res)=
   unused:assets.filter(a=>!used.has(a.id)).slice(0,200).map(a=>({id:a.id,name:a.name,folderId:a.folderId,byteSize:a.byteSize,createdAt:a.createdAt})),
  });
 }));
-const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','SHOW','TIME_SIGNAL','OTHER'];
+const radioCategories=['MUSIC','JINGLE','INTRO','PROMO','EFFECT','SHOW','TIME_SIGNAL','OTHER','ALARM'];
 const folderCategory=async(folderId,db=prisma)=>folderId?(await db.radioAssetFolder.findUnique({where:{id:folderId},select:{category:true}}))?.category||'MUSIC':'MUSIC';
 async function folderDescendantIds(rootId,db=prisma){
  const rows=await db.radioAssetFolder.findMany({select:{id:true,parentId:true}});
