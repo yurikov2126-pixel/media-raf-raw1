@@ -392,6 +392,23 @@ router.get('/technical-incidents', canView, async (_req,res,next) => {
     res.json({items:rows,observationOnly:true,playbackEnabled:false});
   }catch(error){next(error);}
 });
+// Historical heartbeat snapshots; not proof of push delivery or official alert validity.
+router.get('/telemetry-history', canView, async (req,res,next) => {
+  try {
+    const hours=[24,72,168].includes(Number(req.query.hours))?Number(req.query.hours):24;
+    const since=new Date(Date.now()-hours*3600000);
+    const rows=await prisma.safetyMchsTelemetrySample.findMany({
+      where:{receivedAt:{gte:since}},orderBy:{receivedAt:'desc'},take:3000,
+      select:{id:true,receivedAt:true,listener:true,push:true,telemetryPresent:true,
+        queuedLocal:true,failedSends:true,retryPending:true,oldestPendingAt:true,
+        nextRetryAt:true,snapshotOk:true,snapshotAt:true,lastSentAt:true}
+    });
+    const chronological=rows.reverse();
+    res.set('Cache-Control','no-store');
+    res.json({hours,items:chronological,truncated:rows.length===3000,
+      scope:'ANDROID_HEARTBEAT_TELEMETRY',officialVerified:false,playbackEnabled:false});
+  } catch(error){next(error);}
+});
 router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
   try {
     const [health,lastEvent,pending] = await Promise.all([
