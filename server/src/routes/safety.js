@@ -270,6 +270,47 @@ router.get('/dispatch-preview', canView, async (_req, res, next) => {
   } catch (error) { next(error); }
 });
 
+
+/** Persisted operator review notes only. No dispatch or speaker actions. */
+const REVIEW_KEY = 'mchs_operator_reviews_v1';
+router.get('/operator-reviews', canView, async (_req, res, next) => {
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: REVIEW_KEY } });
+    let reviews = {};
+    try { const parsed = JSON.parse(row?.value || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) reviews = parsed; } catch {}
+    res.set('Cache-Control', 'no-store');
+    res.json({ reviews, playbackEnabled: false });
+  } catch (error) { next(error); }
+});
+router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const { decision, note } = req.body || {};
+    if (!['ACKNOWLEDGED','DISMISSED'].includes(decision) || typeof note !== 'string' ||
+        note.trim().length < 3 || note.length > 500 || Object.keys(req.body).some(k => !['decision','note'].includes(k)))
+      return res.status(400).json({ error: 'INVALID_REVIEW' });
+    const exists = await prisma.safetyMchsEvent.findUnique({ where: { id: req.params.eventId }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'EVENT_NOT_FOUND' });
+    const entry = { decision, note: note.trim(), reviewedAt: new Date().toISOString(),
+      reviewedBy: req.user.id, playbackRequested: false };
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581422)`;
+      const row = await tx.setting.findUnique({ where: { key: REVIEW_KEY } });
+      let reviews = {};
+      try { const parsed = JSON.parse(row?.value || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) reviews = parsed; } catch {}
+      if (reviews[exists.id]) return;
+      reviews[exists.id] = entry;
+      await tx.setting.upsert({ where: { key: REVIEW_KEY },
+        create: { key: REVIEW_KEY, value: JSON.stringify(reviews) },
+        update: { value: JSON.stringify(reviews) } });
+    });
+    const current = await prisma.setting.findUnique({ where: { key: REVIEW_KEY } });
+    const saved = JSON.parse(current?.value || '{}')[exists.id];
+    res.set('Cache-Control', 'no-store');
+    res.json({ eventId: exists.id, review: saved, alreadyReviewed: saved.reviewedAt !== entry.reviewedAt,
+      playbackEnabled: false });
+  } catch (error) { next(error); }
+});
+
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
   try {
     const config = sanitize(req.body);
