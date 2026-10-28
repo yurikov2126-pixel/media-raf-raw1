@@ -19,7 +19,7 @@ class TelemetryTests(unittest.TestCase):
             db = module.state_db(Path(directory) / "queue.db")
             try:
                 self.assertEqual(module.queue_telemetry(db), {
-                    "queuedLocal": 0, "failedSends": 0, "retryPending": 0
+                    "queuedLocal": 0, "failedSends": 0, "retryPending": 0, "oldestPendingAt": None
                 })
             finally:
                 db.close()
@@ -103,6 +103,33 @@ class TelemetryTests(unittest.TestCase):
                 cleared = module.queue_telemetry(db)
                 self.assertEqual(cleared["retryPending"], 0)
                 self.assertNotIn("nextRetryAt", cleared)
+            finally:
+                db.close()
+
+    def test_oldest_pending_time_stays_stable_across_snapshot_retries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = module.state_db(Path(directory) / "queue.db")
+            try:
+                db.execute("INSERT INTO queue(event_id,payload_json,first_queued_at) VALUES (?,?,?)",
+                           ("new", "{}", 1000))
+                db.commit()
+                first = module.queue_telemetry(db)["oldestPendingAt"]
+                db.execute("UPDATE queue SET attempt=attempt+1,next_retry=2000 WHERE event_id='new'")
+                db.commit()
+                self.assertEqual(first, module.queue_telemetry(db)["oldestPendingAt"])
+                db.execute("UPDATE queue SET ack_at=2001 WHERE event_id='new'")
+                db.commit()
+                self.assertIsNone(module.queue_telemetry(db)["oldestPendingAt"])
+            finally:
+                db.close()
+
+    def test_legacy_pending_row_has_unknown_oldest_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = module.state_db(Path(directory) / "queue.db")
+            try:
+                db.execute("INSERT INTO queue(event_id,payload_json) VALUES (?,?)", ("legacy", "{}"))
+                db.commit()
+                self.assertNotIn("oldestPendingAt", module.queue_telemetry(db))
             finally:
                 db.close()
 
