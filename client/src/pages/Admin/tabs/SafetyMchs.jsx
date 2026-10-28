@@ -7,6 +7,7 @@ import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsOperatorReviews from './MchsOperatorReviews.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
 import { api } from '../../../api/client.js';
+import './mchsWorkspace.css';
 
 export default function SafetyMchs({ token }) {
   const [data, setData] = useState(null);
@@ -45,12 +46,12 @@ export default function SafetyMchs({ token }) {
       setDraft(result.config); setNotice('Тестовые настройки сохранены. Оповещение не активировано.');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
-  return <div className="space-y-5 text-slate-800 dark:text-white">
+  return <div className="mchs-admin-workspace space-y-5 text-slate-900 dark:text-white">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · этап 1: подготовка, без автоматического запуска</p>
       <button type="button" onClick={load} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-white/10">Обновить состояние</button>
     </div>
-    <div role="status" className="rounded-2xl border border-amber-400/40 bg-amber-100/60 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100 p-4">
+    <div role="status" className="mchs-safety-banner rounded-2xl border border-amber-400/40 bg-amber-100/60 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100 p-4">
       <strong>Тестовый режим. Реальное оповещение заблокировано.</strong>
       <p className="text-sm mt-1">Уведомления из Android сохраняются в журнале для наблюдения. Heartbeat не гарантирует получение всех push; отсутствующие записи не доказывают отсутствие предупреждений.</p>
     </div>
@@ -65,11 +66,29 @@ export default function SafetyMchs({ token }) {
       <h2 className="text-xl font-semibold">{panes.find(([id])=>id===pane)?.[1]}</h2>
       <span className="text-xs text-slate-500 dark:text-white/50">Диагностика · без запуска эфира</span>
     </div>
-    {(pane === 'overview') && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {[['Источник Android', data?.source?.connection === 'HEARTBEAT_RECENT' ? 'Heartbeat недавно получен' : data?.source?.connection === 'HEARTBEAT_STALE' ? 'Связь потеряна / устарела' : 'Нет данных о соединении'], ['Listener / Push', data?.source?.connection === 'HEARTBEAT_RECENT' ? `${data?.source?.listener || 'UNKNOWN'} / ${data?.source?.push || 'UNKNOWN'}` : 'Не подтверждены'], ['Радио и громкоговорители', 'Автозапуск отключён']].map(([name, value]) =>
-        <div key={name} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4"><p className="text-xs text-slate-500 dark:text-white/50">{name}</p><p className="mt-2 font-semibold">{value}</p></div>)}
+    {pane === 'overview' && <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          {name:'Android VM',value:data?.source?.connection==='HEARTBEAT_RECENT'?'Контакт установлен':data?.source?.connection==='HEARTBEAT_STALE'?'Связь устарела':'Нет свежих данных',detail:'Последний heartbeat: '+(data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU'):'не получен'),to:'delivery'},
+          {name:'Listener / Push',value:data?.source?.connection==='HEARTBEAT_RECENT' ? (data?.source?.listener || 'UNKNOWN') + ' / ' + (data?.source?.push || 'UNKNOWN') : 'Не подтверждены',detail:'Heartbeat не подтверждает доставку push',to:'delivery'},
+          {name:'Радио и громкоговорители',value:'Автозапуск отключён',detail:'Реальное оповещение заблокировано',to:'settings'}
+        ].map(card=><button type="button" key={card.name} onClick={()=>switchPane(card.to)}
+          className="group rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 text-left shadow-sm hover:border-violet-400 dark:hover:border-violet-400 transition-colors">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{card.name}</span>
+          <strong className="mt-2 block text-base sm:text-lg text-slate-900 dark:text-white break-words">{card.value}</strong>
+          <span className="mt-2 block text-xs text-slate-600 dark:text-slate-300">{card.detail}</span>
+          <span className="mt-3 block text-xs font-semibold text-violet-700 dark:text-violet-300">Открыть раздел →</span>
+        </button>)}
+      </div>
+      <div className="rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 sm:p-5">
+        <h3 className="font-semibold text-slate-900 dark:text-white">Быстрый доступ</h3>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Перейдите к нужной проверке, не прокручивая всю админку.</p>
+        <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {[['delivery','Доставка Android'],['queue','Очередь событий'],['incidents','Неисправности'],['events','Журнал уведомлений']].map(([id,label])=>
+            <button type="button" key={id} onClick={()=>switchPane(id)} className="rounded-xl border border-slate-200 dark:border-white/15 p-3 text-left text-sm font-medium text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10">{label}</button>)}
+        </div>
+      </div>
     </div>}
-    {(pane === 'overview') && <p className="text-xs text-slate-500 dark:text-white/50">Последний heartbeat: {data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU') : 'не получен'}. Heartbeat не подтверждает доставку push.</p>}
     {pane === "settings" && <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
       {!draft ? <p>Загрузка…</p> : <>
