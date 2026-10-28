@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
+import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
 const router = Router();
 const KEY = 'safety_mchs_config_v1';
@@ -346,6 +347,35 @@ router.get('/observation-queue/:queueId/history', canView, async (req,res,next)=
   res.json({items:rows,playbackEnabled:false,officialState:'UNKNOWN'});
  }catch(error){next(error);}
 });
+/** Admin-triggered diagnostic processing: never dispatches or verifies alerts. */
+router.post('/observation-queue/analyze', requireRole('ADMIN'), async (req,res,next)=>{
+ try {
+  if (Object.keys(req.body||{}).length) return res.status(400).json({error:'NO_ARGUMENTS_ALLOWED'});
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581423)`;
+   const items=await tx.safetyMchsQueueItem.findMany({
+    where:{status:'OBSERVED'},orderBy:[{createdAt:'asc'},{id:'asc'}],take:50,
+    select:{id:true,event:{select:{title:true,body:true,occurredAt:true}}}
+   });
+   const counts={};
+   for(const item of items){
+    const outcome=assessMchsQueueObservation(item.event);
+    await tx.safetyMchsQueueItem.update({where:{id:item.id,status:'OBSERVED'},
+      data:{status:'ANALYZED'}});
+    await tx.safetyMchsQueueHistory.upsert({
+      where:{queueId_status_reason:{queueId:item.id,status:'ANALYZED',reason:outcome.reason}},
+      create:{queueId:item.id,status:'ANALYZED',reason:outcome.reason},update:{}
+    });
+    counts[outcome.reason]=(counts[outcome.reason]||0)+1;
+   }
+   return {processed:items.length,reasons:counts};
+  },{timeout:15000});
+  res.set('Cache-Control','no-store');
+  res.json({...result,status:'ANALYZED',officialVerified:false,playbackEnabled:false,
+   note:'Diagnostic observation review only'});
+ }catch(error){next(error);}
+});
+
 router.get('/observation-order', canView, async (_req, res, next) => {
   try {
     const events = await prisma.safetyMchsEvent.findMany({
