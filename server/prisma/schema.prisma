@@ -1452,6 +1452,10 @@ model SafetyMchsHealth {
   lastSeenAt   DateTime?
   listener     String   @default("UNKNOWN")
   push         String   @default("UNKNOWN")
+  queuedLocal  Int?
+  failedSends  Int?
+  lastSentAt   DateTime?
+  telemetryAt  DateTime?
   updatedAt    DateTime @updatedAt
 }
 
