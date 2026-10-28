@@ -8,7 +8,7 @@ export default function MchsOperatorReviews({ token, events = [], selectedEvent,
   const [expanded, setExpanded] = useState(null);
   const [page, setPage] = useState(1);
   const [success, setSuccess] = useState('');
-  useEffect(() => { if(selectedEvent) {setFilter('all');setSearch(selectedEvent);} },[selectedEvent]);
+  useEffect(() => { if(selectedEvent) {setFilter('all');setSearch(selectedEvent);setPage(1);setExpanded(selectedEvent);} },[selectedEvent]);
   const [search, setSearch] = useState('');
   const pendingCount = events.filter(e => !reviews[e.id]).length;
   const reviewedCount = events.length - pendingCount;
@@ -46,7 +46,7 @@ export default function MchsOperatorReviews({ token, events = [], selectedEvent,
         <option value="pending">Ожидают решения</option><option value="reviewed">Рассмотрены</option><option value="all">Все</option>
       </select>
     </div>
-    <p className="text-xs opacity-60">Фильтр применяется только к загруженным событиям. Показано: {Math.min(visible.length,20)} из {visible.length} подходящих. Счётчики относятся только к загруженным сообщениям.</p>
+    <p className="text-xs opacity-60">Фильтр применяется только к загруженным событиям. Показано: {Math.min(20,Math.max(0,visible.length-(page-1)*20))} из {visible.length} подходящих. Счётчики относятся только к загруженным сообщениям.</p>
     {visible.slice((page-1)*20, page*20).map(event => <article key={event.id} className={`rounded-xl border p-3 space-y-2 ${selectedEvent===event.id ? "border-violet-500 ring-1 ring-violet-400" : "border-slate-200 dark:border-white/10"}`}>
       <div className="text-xs opacity-60">{new Date(event.receivedAt).toLocaleString('ru-RU')}</div>
       <h4 className="font-semibold break-words">{event.title}</h4>
