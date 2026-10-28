@@ -3,6 +3,7 @@ import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
 import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
 import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
+import {runEmergencySimulationSuite,runEmergencySimulationScenario} from '../lib/mchsEmergencySimulationSuite.js';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
@@ -49,6 +50,13 @@ async function load() {
   } catch { return defaults; }
 }
 router.use(auth);
+// No actual control commands are accepted here. Pure in-process diagnostics only.
+router.get('/emergency-simulation', canView, (req,res) => {
+  const source=String(req.query.source||'');
+  const result=source?runEmergencySimulationScenario(source):runEmergencySimulationSuite();
+  res.set('Cache-Control','no-store');
+  res.status(result.ok===false?400:200).json(result);
+});
 router.get('/access', canView, (_req, res) => res.json({ allowed: true, canConfigure: _req.user.role === 'ADMIN' }));
 router.get('/dashboard', canView, async (_req, res, next) => {
   try {
