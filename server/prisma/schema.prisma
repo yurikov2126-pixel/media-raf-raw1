@@ -1502,5 +1502,18 @@ model SafetyMchsQueueItem {
   lastError   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  history     SafetyMchsQueueHistory[]
   @@index([status, createdAt])
+}
+
+// Diagnostic history only. No official verification and no playout authority.
+model SafetyMchsQueueHistory {
+  id        String @id @default(cuid())
+  queueId   String
+  queue     SafetyMchsQueueItem @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  status    String
+  reason    String
+  createdAt DateTime @default(now())
+  @@unique([queueId, status, reason])
+  @@index([createdAt])
 }
