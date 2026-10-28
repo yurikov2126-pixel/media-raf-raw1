@@ -1,52 +1,23 @@
-/* The admin shell may put .dark on an ancestor instead of <html>.
-   Use a scoped palette and explicit dark overrides for the MCHS workspace. */
-.mchs-admin-workspace {
-  --mchs-ink: #0f172a;
-  --mchs-muted: #475569;
-  --mchs-surface: #ffffff;
-  --mchs-border: #cbd5e1;
-  color: var(--mchs-ink);
+/* Scoped MCHS palette. A data-theme on the workspace is authoritative,
+   independent of where the admin shell attaches its theme class. */
+.mchs-admin-workspace[data-mchs-theme="light"] {
+  --mchs-ink:#0f172a; --mchs-muted:#475569; --mchs-subtle:#64748b;
+  --mchs-surface:#fff; --mchs-border:#cbd5e1; --mchs-warn:#78350f;
 }
-.mchs-admin-workspace :is(h2,h3,h4,strong,summary,label) { color: var(--mchs-ink); }
-.mchs-admin-workspace :is(p,time,small) { color: var(--mchs-muted); }
-.mchs-admin-workspace :is(input,textarea,select) {
-  color: var(--mchs-ink);
-  background-color: var(--mchs-surface);
-  border-color: var(--mchs-border);
+.mchs-admin-workspace[data-mchs-theme="dark"] {
+  --mchs-ink:#f8fafc; --mchs-muted:#cbd5e1; --mchs-subtle:#94a3b8;
+  --mchs-surface:#171923; --mchs-border:#475569; --mchs-warn:#fcd34d;
 }
-.mchs-admin-workspace :is(input,textarea)::placeholder { color: #64748b; opacity: 1; }
-.mchs-admin-workspace button:not([aria-current="page"]):not([aria-pressed="true"]):not([class*="bg-violet-"]):not([class*="bg-indigo-"]) { color: var(--mchs-ink); }
+.mchs-admin-workspace {color:var(--mchs-ink)}
+.mchs-admin-workspace :is(h2,h3,h4,strong,summary,label,p,time,small) {color:var(--mchs-ink)}
+.mchs-admin-workspace :is(.text-slate-400,.text-slate-500,.text-slate-600,.text-white\/50,.text-white\/60,.opacity-60,.opacity-70) {color:var(--mchs-muted);opacity:1}
+.mchs-admin-workspace :is(input,select,textarea) {color:var(--mchs-ink);background-color:var(--mchs-surface);border-color:var(--mchs-border)}
+.mchs-admin-workspace :is(input,textarea)::placeholder {color:var(--mchs-subtle);opacity:1}
+.mchs-admin-workspace button:not([aria-current="page"]):not([aria-pressed="true"]):not([class*="bg-violet-"]):not([class*="bg-indigo-"]) {color:var(--mchs-ink)}
 .mchs-admin-workspace button[aria-current="page"],
-.mchs-admin-workspace button[aria-pressed="true"] { color: #fff; }
+.mchs-admin-workspace button[aria-pressed="true"] {color:#fff}
 .mchs-admin-workspace .mchs-safety-banner,
-.mchs-admin-workspace .mchs-safety-banner :is(strong,p) { color: #78350f; }
-.mchs-admin-workspace [role="alert"] { color: #991b1b; }
-
-/* Dark mode is often applied on a parent container of the admin page. */
-.dark .mchs-admin-workspace {
-  --mchs-ink: #f1f5f9;
-  --mchs-muted: #cbd5e1;
-  --mchs-surface: #111827;
-  --mchs-border: #475569;
-}
-.dark .mchs-admin-workspace :is(section,article,details,h2,h3,h4,strong,summary,label) { color: #f1f5f9; }
-.dark .mchs-admin-workspace :is(p,time,small) { color: #cbd5e1; }
-.dark .mchs-admin-workspace :is(input,textarea,select) {
-  color: #f1f5f9;
-  background-color: #111827;
-  border-color: #475569;
-}
-.dark .mchs-admin-workspace :is(input,textarea)::placeholder { color: #94a3b8; }
-.dark .mchs-admin-workspace button:not([aria-current="page"]):not([aria-pressed="true"]):not([class*="bg-violet-"]):not([class*="bg-indigo-"]) { color: #e2e8f0; }
-.dark .mchs-admin-workspace button[aria-current="page"],
-.dark .mchs-admin-workspace button[aria-pressed="true"] { color: #fff; }
-.dark .mchs-admin-workspace .mchs-safety-banner,
-.dark .mchs-admin-workspace .mchs-safety-banner :is(strong,p) { color: #fcd34d; }
-.dark .mchs-admin-workspace [role="alert"] { color: #fca5a5; }
-
-/* Prevent heading and metric text from becoming dark on dark backgrounds. */
-.dark .mchs-admin-workspace .text-slate-900,
-.dark .mchs-admin-workspace .text-slate-800,
-.dark .mchs-admin-workspace .text-slate-700 { color: #f1f5f9; }
-.dark .mchs-admin-workspace .text-slate-600,
-.dark .mchs-admin-workspace .text-slate-500 { color: #cbd5e1; }
+.mchs-admin-workspace .mchs-safety-banner :is(strong,p) {color:var(--mchs-warn)}
+.mchs-admin-workspace[data-mchs-theme="dark"] :is(.text-slate-900,.text-slate-800,.text-slate-700) {color:#f8fafc}
+.mchs-admin-workspace[data-mchs-theme="dark"] .mchs-safety-banner {background-color:rgba(245,158,11,.14)}
+.mchs-admin-workspace[data-mchs-theme="light"] .mchs-safety-banner {background-color:#fffbeb}
