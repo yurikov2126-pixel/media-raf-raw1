@@ -1,4 +1,5 @@
 import { prisma } from './prisma.js';
+import { getIo } from './notify.js';
 import { assessMchsRetryBacklog } from './mchsRetryBacklog.js';
 
 // Operational observations only; never authorizes emergency alerts or audio.
@@ -35,23 +36,25 @@ export function technicalIncidentNotification(incident, phase) {
   const subject=incidentTitles[incident.kind] || 'Неисправность диагностики';
   const time=restored?incident.resolvedAt:incident.openedAt;
   const message=`${subject}. ${restored?'Восстановление':'Обнаружение'}: ${time.toISOString()}.`;
-  return {title,message,url:'/app',incidentId:incident.id,phase,
+  return {title,message,url:`/app/admin?tab=safety-mchs&incident=${encodeURIComponent(incident.id)}`,incidentId:incident.id,phase,
     diagnosticOnly:true,officialAlert:false};
 }
 
 export async function recordMchsTechnicalIncidents(db=prisma, now=new Date()) {
-  return db.$transaction(async tx=>{
+  const result=await db.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581427)`;
     const health=await tx.safetyMchsHealth.findUnique({where:{id:'mchs-android'}});
     const signals=mchsIncidentSignals(health,now.getTime());
     if(!signals) return {observed:false,playbackEnabled:false};
     const open=await tx.safetyMchsTechnicalIncident.findMany({where:{resolvedAt:null}});
     const admins=await tx.user.findMany({where:{role:'ADMIN',isBanned:false},select:{id:true}});
+    const emitted=[];
     const notify=async (incident,phase)=>{
       const payload=technicalIncidentNotification(incident,phase);
-      for(const admin of admins) await tx.notification.create({
-        data:{userId:admin.id,type:'system',payload:JSON.stringify(payload)}
-      });
+      for(const admin of admins) {
+        const n=await tx.notification.create({data:{userId:admin.id,type:'system',payload:JSON.stringify(payload)}});
+        emitted.push({userId:admin.id,notification:{...n,payload}});
+      }
     };
     for(const [kind,reason] of Object.entries(signals)) {
       const active=open.find(x=>x.kind===kind);
@@ -65,8 +68,12 @@ export async function recordMchsTechnicalIncidents(db=prisma, now=new Date()) {
         await notify(resolved,'resolved');
       }
     }
-    return {observed:true,playbackEnabled:false};
+    return {observed:true,playbackEnabled:false,emitted};
   });
+  // Emit only after COMMIT: clients never see notifications rolled back by the DB.
+  const io=getIo();
+  for(const item of result.emitted || []) io?.to(`user:${item.userId}`).emit('notification:new',item.notification);
+  return {observed:result.observed,playbackEnabled:false};
 }
 export function startMchsTechnicalIncidentMonitor({intervalMs=60000,logger=console}={}) {
   let busy=false;
