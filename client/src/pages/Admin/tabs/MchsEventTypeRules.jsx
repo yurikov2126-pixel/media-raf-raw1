@@ -7,6 +7,8 @@ export default function MchsEventTypeRules({ token }) {
   const [saving, setSaving] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [dispatchMode, setDispatchMode] = useState('MANUAL');
+  const [modeSaving, setModeSaving] = useState(false);
   useEffect(() => {
     let active = true;
     api('/safety/event-type-rules', { token }).then(result => {
@@ -16,6 +18,21 @@ export default function MchsEventTypeRules({ token }) {
     }).catch(e => { if (active) setError(e.message); });
     return () => { active = false; };
   }, [token]);
+  useEffect(() => {
+    let mounted = true;
+    api('/safety/dispatch-mode', { token }).then(result => {
+      if (mounted) setDispatchMode(result.mode);
+    }).catch(e => { if (mounted) setError(e.message); });
+    return () => { mounted = false; };
+  }, [token]);
+  const saveMode = async mode => {
+    setModeSaving(true); setMessage(''); setError('');
+    try {
+      const result = await api('/safety/dispatch-mode', { token, method: 'PUT', body: { mode } });
+      setDispatchMode(result.mode);
+      setMessage('Режим сохранён для подготовки. Звук в громкоговорители не передаётся.');
+    } catch (e) { setError(e.message); } finally { setModeSaving(false); }
+  };
   const change = (type, field, value) => setRules(old => ({
     ...old, [type]: { ...old[type], [field]: value },
   }));
@@ -33,6 +50,16 @@ export default function MchsEventTypeRules({ token }) {
   };
   return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5 md:p-5">
     <h3 className="text-lg font-semibold">Четыре типа оповещений</h3>
+    <div className="rounded-xl border border-amber-300/50 bg-amber-100/40 p-3 space-y-2 dark:bg-amber-400/10">
+      <h4 className="font-semibold">Режим обработки — подготовка</h4>
+      <p className="text-sm opacity-80">Автоматический режим пока доступен только для изолированной симуляции. Ни один режим не отправляет аудио на громкоговорители или в прямой эфир.</p>
+      <label className="block text-sm">Выберите режим
+        <select aria-label="Режим обработки уведомлений МЧС" disabled={modeSaving} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent p-2 dark:border-white/20" value={dispatchMode} onChange={e => saveMode(e.target.value)}>
+          <option value="MANUAL">Ручной — проверка и подтверждение (подготовка)</option>
+          <option value="AUTO_SIMULATION">Автоматический — только симуляция, без громкоговорителей</option>
+        </select>
+      </label>
+    </div>
     <p className="text-sm opacity-70">Распознавание выполняется по тексту Android. Неоднозначные уведомления остаются без категории. Выберите аудио и необходимость проверки оператором отдельно для каждого типа. Эти правила не запускают эфир.</p>
     {error && <p role="alert" className="text-red-600 dark:text-red-300 text-sm">{error}</p>}
     {message && <p role="status" className="text-emerald-700 dark:text-emerald-300 text-sm">{message}</p>}
