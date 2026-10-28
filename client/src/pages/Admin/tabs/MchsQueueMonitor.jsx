@@ -123,7 +123,22 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
     </button>}
     {(view === "overview" || view === "delivery") && <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2 text-sm">
       <h4 className="font-semibold">Доставка Android → API → очередь</h4>
-      <div className="grid sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-2">
+        {[
+          ['Связь с Android', delivery?.connection==='HEARTBEAT_RECENT'?'Связь подтверждена':delivery?.connection==='HEARTBEAT_STALE'?'Нет свежего heartbeat':'Нет данных'],
+          ['SQLite Android', delivery?.vmTelemetry?.snapshotOk===true?'Чтение успешно':delivery?.vmTelemetry?.snapshotOk===false?'Ошибка чтения':'Нет подтверждения'],
+          ['Локальная очередь',delivery?.vmTelemetry?.telemetryFresh ? delivery.vmTelemetry.queuedLocal ?? '—':'Нет свежих данных'],
+          ['Повторные отправки',delivery?.vmTelemetry?.telemetryFresh ? delivery.vmTelemetry.retryPending ?? '—':'Нет свежих данных'],
+          ['Анализатор',delivery?.analyzerHealthy?'Работает':'Нет свежего подтверждения'],
+          ['Последний heartbeat',fmt(delivery?.lastHeartbeatAt)]
+        ].map(([title,value])=><div key={title} className="min-w-0 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-3">
+          <p className="text-xs text-slate-500 dark:text-white/50">{title}</p>
+          <p className="mt-1 font-semibold break-words">{value}</p>
+        </div>)}
+      </div>
+      <details className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+        <summary className="cursor-pointer font-medium">Подробнее о доставке и задержках</summary>
+        <div className="grid sm:grid-cols-2 gap-2 mt-3">
         <p>Heartbeat Android: <strong>{delivery?.connection === 'HEARTBEAT_RECENT' ? 'Недавно получен' : delivery?.connection === 'HEARTBEAT_STALE' ? 'Устарел / связь не подтверждена' : 'Нет данных'}</strong></p>
         <p>Последний heartbeat: {fmt(delivery?.lastHeartbeatAt)}</p>
         <p>Последнее уведомление в API: {fmt(delivery?.lastReceivedAt)}</p>
@@ -131,7 +146,8 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         <p>Ожидают анализа: {delivery?.pending ?? '—'}</p>
         <p>Фоновая обработка: {delivery?.analyzerHealthy ? 'Последняя проверка успешна' : 'Нет свежего подтверждения'}</p>
       </div>
-      <div className="border-t border-slate-200 dark:border-white/10 pt-2 space-y-1">
+      </details>
+      <div className="border-t border-slate-200 dark:border-white/10 pt-3 space-y-1">
         <p className="font-medium">Телеметрия Android VM</p>
         {!delivery?.vmTelemetry?.available ? <p className="text-xs opacity-70">Android пока передаёт heartbeat без сведений о локальной очереди. Это не означает, что очередь пуста.</p> : <>
           <p>Данные VM: {delivery.vmTelemetry.telemetryFresh ? 'свежие' : 'устарели'} · обновлены {fmt(delivery.vmTelemetry.lastReportedAt)}</p>
