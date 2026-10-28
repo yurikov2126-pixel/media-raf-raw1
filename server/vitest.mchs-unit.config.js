@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
-    include: ['tests/mchsAudioTransitionPlan.test.js', 'tests/mchsRadioResumePlan.test.js', 'tests/mchsRadioAuthorityInspection.test.js', 'tests/mchsEventSequenceInspection.test.js'],
+    include: ['tests/mchsAudioTransitionPlan.test.js', 'tests/mchsRadioResumePlan.test.js', 'tests/mchsRadioAuthorityInspection.test.js', 'tests/mchsEventSequenceInspection.test.js', 'tests/mchsObservationOrder.test.js'],
     setupFiles: [],
     pool: 'forks',
     fileParallelism: false,
