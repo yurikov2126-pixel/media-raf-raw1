@@ -205,6 +205,32 @@ router.put('/event-type-rules/:type', requireRole('ADMIN'), async (req, res, nex
   } catch (error) { next(error); }
 });
 
+
+/** Dispatch mode staging: never grants access to radio/PA playout. */
+const DISPATCH_MODE_KEY = 'mchs_dispatch_mode_staging_v1';
+router.get('/dispatch-mode', canView, async (_req, res, next) => {
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: DISPATCH_MODE_KEY } });
+    let mode = 'MANUAL';
+    try { const parsed = JSON.parse(row?.value || '{}'); if (['MANUAL','AUTO_SIMULATION'].includes(parsed.mode)) mode = parsed.mode; } catch {}
+    res.set('Cache-Control', 'no-store');
+    res.json({ mode, realPlaybackEnabled: false, automaticPlaybackEnabled: false, output: 'ISOLATED_SIMULATION_ONLY' });
+  } catch (error) { next(error); }
+});
+router.put('/dispatch-mode', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const mode = req.body?.mode;
+    if (!['MANUAL','AUTO_SIMULATION'].includes(mode) || Object.keys(req.body || {}).some(k => k !== 'mode'))
+      return res.status(400).json({ error: 'INVALID_DISPATCH_MODE' });
+    const entry = { mode, updatedAt: new Date().toISOString(), updatedBy: req.user.id,
+      realPlaybackEnabled: false };
+    await prisma.setting.upsert({ where: { key: DISPATCH_MODE_KEY },
+      create: { key: DISPATCH_MODE_KEY, value: JSON.stringify(entry) },
+      update: { value: JSON.stringify(entry) } });
+    res.json({ ...entry, automaticPlaybackEnabled: false, output: 'ISOLATED_SIMULATION_ONLY' });
+  } catch (error) { next(error); }
+});
+
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
   try {
     const config = sanitize(req.body);
