@@ -76,6 +76,18 @@ export default function SafetyMchs({ token }) {
     </div>
     {pane === "settings" && <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-1">
+          <h4 className="font-semibold">Автоматическая диагностика</h4>
+          <p className="text-sm">Сообщения сохраняются и анализируются без обязательного подтверждения ответственного. Приоритет — контроль связи, очереди и технических сбоев.</p>
+          <p className="text-xs text-slate-600 dark:text-slate-300">Не является автоматическим разрешением на эфир.</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-1">
+          <h4 className="font-semibold">Ручное управление</h4>
+          <p className="text-sm">Ответственный сохраняет доступ к отдельному пульту безопасности для разрешённых ручных действий.</p>
+          <p className="text-xs text-slate-600 dark:text-slate-300">Автоматическое экстренное вещание пока заблокировано сервером.</p>
+        </div>
+      </div>
       {!draft ? <p>Загрузка…</p> : <>
         <label className="block text-sm">Регион
           <input className="mt-1 w-full rounded-xl border border-slate-300 dark:border-white/20 bg-transparent p-3" value={draft.region} maxLength={120} onChange={e => setDraft({ ...draft, region: e.target.value })} />
