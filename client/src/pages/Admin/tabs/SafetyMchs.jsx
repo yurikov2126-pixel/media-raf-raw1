@@ -7,9 +7,11 @@ import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsOperatorReviews from './MchsOperatorReviews.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
 import { api } from '../../../api/client.js';
+import { useTheme } from '../../../store/theme.jsx';
 import './mchsWorkspace.css';
 
 export default function SafetyMchs({ token }) {
+  const { resolved } = useTheme();
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);
   const [error, setError] = useState('');
@@ -46,7 +48,7 @@ export default function SafetyMchs({ token }) {
       setDraft(result.config); setNotice('Тестовые настройки сохранены. Оповещение не активировано.');
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
-  return <div className="mchs-admin-workspace space-y-5 text-slate-900 dark:text-white">
+  return <div data-mchs-theme={resolved} className="mchs-admin-workspace space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · этап 1: подготовка, без автоматического запуска</p>
       <button type="button" onClick={load} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-white/10">Обновить состояние</button>
