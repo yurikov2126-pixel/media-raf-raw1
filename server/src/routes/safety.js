@@ -1,6 +1,7 @@
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
 import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
+import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -317,6 +318,29 @@ router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, 
 });
 
 /** Telemetry only: heartbeat does not prove that no push notifications were missed. */
+// Explicit admin-only socket probe. Not an MCHS event or technical incident.
+router.post('/technical-notification-probe', requireRole('ADMIN'), async (req,res,next)=>{
+  try {
+    const since=new Date(Date.now()-60000);
+    const recent=await prisma.notification.findMany({
+      where:{userId:req.user.id,type:'system',createdAt:{gte:since}},
+      select:{payload:true},take:50
+    });
+    if(recent.some(n=>{try{return JSON.parse(n.payload)?.diagnosticProbe===true;}catch{return false;}}))
+      return res.status(429).json({error:'PROBE_COOLDOWN'});
+    const payload={
+      title:'Проверка уведомлений МЧС · тест',
+      message:'Тест доставки Socket.IO. Это НЕ предупреждение МЧС и НЕ неисправность.',
+      url:'/app/admin?tab=safety-mchs',diagnosticProbe:true,diagnosticOnly:true,officialAlert:false
+    };
+    const notification=await prisma.notification.create({
+      data:{userId:req.user.id,type:'system',payload:JSON.stringify(payload)}
+    });
+    getIo()?.to(`user:${req.user.id}`).emit('notification:new',{...notification,payload});
+    res.set('Cache-Control','no-store');
+    return res.json({ok:true,notificationId:notification.id,socketAvailable:Boolean(getIo()),testOnly:true});
+  }catch(error){next(error);}
+});
 router.get('/technical-incidents', canView, async (_req,res,next) => {
   try {
     const rows=await prisma.safetyMchsTechnicalIncident.findMany({
