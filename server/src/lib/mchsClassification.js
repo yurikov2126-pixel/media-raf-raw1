@@ -1,6 +1,4 @@
-/** Conservative classification of Android notification text for operator REVIEW only.
- *  Never an authorization to broadcast or a claim of official provenance.
- */
+/** Conservative recognition for observation-only operator review. No broadcast authorization. */
 export const MCHS_EVENT_TYPES = Object.freeze([
   { id: 'UAV_DANGER', label: 'Опасность атаки БПЛА' },
   { id: 'UAV_ALL_CLEAR', label: 'Отбой опасности атаки БПЛА' },
@@ -10,15 +8,21 @@ export const MCHS_EVENT_TYPES = Object.freeze([
 export function classifyMchsObservation(title, body) {
   const text = [title, body].filter(Boolean).join(' ')
     .normalize('NFKC').toLocaleUpperCase('ru-RU')
-    .replace(/Ё/g, 'Е').replace(/[\u00a0\s]+/g, ' ').trim();
-  // End-of-alert takes precedence over a threat mention when both appear.
-  const uavClear = /\b(ОТБОЙ|ОТМЕНА|СНЯТА|СНЯТИЕ)\b[^.!?]{0,85}\b(ОПАСНОСТ[ЬИ]|УГРОЗ[ЫА]|АТАК[ЫА])\b[^.!?]{0,85}\b(БПЛА|БЕСПИЛОТНИК)/u.test(text) ||
-    /\b(ОПАСНОСТЬ|УГРОЗА)\b[^.!?]{0,85}\b(АТАКИ\s+)?(БПЛА|БЕСПИЛОТНИК)/u.test(text) && /\b(ОТБОЙ|ОТМЕНЕНА|ОТМЕНЕН|СНЯТА)\b/u.test(text);
-  const missileClear = /\b(ОТБОЙ|ОТМЕНА|СНЯТА|СНЯТИЕ)\b[^.!?]{0,100}\bРАКЕТНОЙ\s+(ОПАСНОСТИ|УГРОЗЫ)\b/u.test(text) ||
-    /\bРАКЕТНАЯ\s+(ОПАСНОСТЬ|УГРОЗА)\b[^.!?]{0,85}\b(ОТБОЙ|ОТМЕНЕНА|ОТМЕНЕН|СНЯТА)\b/u.test(text);
-  const uavDanger = /\b(ОПАСНОСТЬ|УГРОЗА)\s+(АТАКИ\s+)?(БПЛА|БЕСПИЛОТНИКОВ?)\b/u.test(text);
-  const missileDanger = /\bРАКЕТНАЯ\s+(ОПАСНОСТЬ|УГРОЗА)\b/u.test(text);
-  const matches = [uavClear && 'UAV_ALL_CLEAR', missileClear && 'MISSILE_ALL_CLEAR',
-    uavDanger && !uavClear && 'UAV_DANGER', missileDanger && !missileClear && 'MISSILE_DANGER'].filter(Boolean);
-  return matches.length === 1 ? matches[0] : 'UNCLASSIFIED';
+    .replace(/Ё/g, 'Е')
+    .replace(/[^А-ЯA-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Use explicit token boundaries: JavaScript \\b does not correctly handle Cyrillic.
+  const token = pattern => new RegExp('(?:^| )' + pattern + '(?: |$)', 'u').test(text);
+  const uav = token('(?:БПЛА|БЕСПИЛОТНИК(?:ОВ|И|А)?)');
+  const missile = token('РАКЕТНАЯ ОПАСНОСТЬ') || token('РАКЕТНОЙ ОПАСНОСТИ') ||
+                  token('РАКЕТНАЯ УГРОЗА') || token('РАКЕТНОЙ УГРОЗЫ');
+  const clear = token('(?:ОТБОЙ|ОТМЕНА|ОТМЕНЕНА|ОТМЕНЕН|СНЯТА|СНЯТИЕ)');
+  const danger = token('(?:ОПАСНОСТЬ|ОПАСНОСТИ|УГРОЗА|УГРОЗЫ)');
+  const attack = token('(?:АТАКИ|АТАКА)');
+  // Fail closed on mixed hazards or negated threat statements, even if recognisable words exist.
+  if (uav && missile) return 'UNCLASSIFIED';
+  if (uav && clear && (danger || attack)) return 'UAV_ALL_CLEAR';
+  if (missile && clear) return 'MISSILE_ALL_CLEAR';
+  if (uav && danger && attack && !clear) return 'UAV_DANGER';
+  if (missile && !clear) return 'MISSILE_DANGER';
+  return 'UNCLASSIFIED';
 }
