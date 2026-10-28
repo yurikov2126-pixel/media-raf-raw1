@@ -341,6 +341,47 @@ router.post('/technical-notification-probe', requireRole('ADMIN'), async (req,re
     return res.json({ok:true,notificationId:notification.id,socketAvailable:Boolean(getIo()),testOnly:true});
   }catch(error){next(error);}
 });
+/** Historical diagnostics only; no assertion of push completeness or official alert validity. */
+router.get('/analytics', canView, async (req,res,next) => {
+  try {
+    const days = [7,30,90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+    const since = new Date(Date.now() - days * 86400000);
+    const [events,queues,incidents,reviewsRow] = await Promise.all([
+      prisma.safetyMchsEvent.findMany({where:{receivedAt:{gte:since}},
+        select:{id:true,receivedAt:true,source:true,eventType:true},orderBy:{receivedAt:'asc'},take:10000}),
+      prisma.safetyMchsQueueItem.findMany({where:{createdAt:{gte:since}},
+        select:{eventId:true,status:true,createdAt:true,updatedAt:true},take:10000}),
+      prisma.safetyMchsTechnicalIncident.findMany({where:{openedAt:{gte:since}},
+        select:{kind:true,openedAt:true,resolvedAt:true},take:10000}),
+      prisma.setting.findUnique({where:{key:REVIEW_KEY}})
+    ]);
+    const series=Array.from({length:days},(_,i)=>{
+      const date=new Date(since.getTime()+i*86400000).toISOString().slice(0,10);
+      return {date,messages:0,analyzed:0,incidents:0,reviews:0};
+    });
+    const byDay=new Map(series.map(row=>[row.date,row]));
+    const add=(at,key)=>{const row=byDay.get(new Date(at).toISOString().slice(0,10));if(row)row[key]++;};
+    for(const e of events)add(e.receivedAt,'messages');
+    const times=[];
+    for(const q of queues){
+      if(q.status==='ANALYZED'){add(q.updatedAt,'analyzed');const ms=new Date(q.updatedAt)-new Date(q.createdAt);if(ms>=0&&Number.isFinite(ms))times.push(ms);}
+    }
+    for(const i of incidents)add(i.openedAt,'incidents');
+    let reviews={};try{reviews=JSON.parse(reviewsRow?.value||'{}');}catch{}
+    const eventIds=new Set(events.map(e=>e.id));
+    let reviewCount=0;
+    for(const [id,review] of Object.entries(reviews)){
+      if(eventIds.has(id)&&review?.reviewedAt&&new Date(review.reviewedAt)>=since){add(review.reviewedAt,'reviews');reviewCount++;}
+    }
+    const averageAnalysisMs=times.length?Math.round(times.reduce((a,b)=>a+b,0)/times.length):null;
+    res.set('Cache-Control','no-store');
+    res.json({days,series,totals:{messages:events.length,analyzed:queues.filter(q=>q.status==='ANALYZED').length,
+      pending:queues.filter(q=>q.status==='OBSERVED').length,incidents:incidents.length,
+      openIncidents:incidents.filter(i=>!i.resolvedAt).length,reviews:reviewCount,averageAnalysisMs},
+      limits:{maxRowsPerTable:10000,truncated:events.length===10000||queues.length===10000||incidents.length===10000},
+      scope:'OBSERVED_DIAGNOSTICS_ONLY',officialVerified:false,automaticDeliveryVerified:false,playbackEnabled:false});
+  }catch(error){next(error);}
+});
 router.get('/technical-incidents', canView, async (_req,res,next) => {
   try {
     const rows=await prisma.safetyMchsTechnicalIncident.findMany({
