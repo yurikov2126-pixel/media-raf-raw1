@@ -19,6 +19,7 @@ export default function SafetyMchs({ token }) {
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [rulesView, setRulesView] = useState('templates');
+  useEffect(() => { if (searchParams.get('mchsView') === 'rules' && searchParams.has('mchsEvent')) setRulesView('review'); }, [searchParams]);
   const [searchParams, setSearchParams] = useSearchParams();
   const panes = [
     ['overview', 'Обзор'],
@@ -29,6 +30,7 @@ export default function SafetyMchs({ token }) {
     ['rules', 'Правила и сценарии'],
     ['settings', 'Настройки'],
   ];
+  const selectedEvent = searchParams.get('mchsEvent');
   const selectedPane = searchParams.get('mchsView');
   const pane = searchParams.has('incident') ? 'incidents' : panes.some(([id]) => id === selectedPane) ? selectedPane : 'overview';
   const switchPane = (next,incidentId) => {
@@ -37,6 +39,7 @@ export default function SafetyMchs({ token }) {
     params.set('mchsView', next);
     if(incidentId)params.set('incident',incidentId);
     else params.delete('incident');
+    if (next !== 'events' && next !== 'rules') params.delete('mchsEvent');
     setSearchParams(params, { replace: true });
   };
   const load = () => api('/safety/dashboard', { token }).then((result) => {
@@ -90,7 +93,7 @@ export default function SafetyMchs({ token }) {
     {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
     {(pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
 
-    {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />}
+    {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} onReview={eventId => { setRulesView("review"); const params=new URLSearchParams(searchParams); params.set("tab","safety-mchs");params.set("mchsView","rules");params.set("mchsEvent",eventId);params.delete("incident");setSearchParams(params); }} />}
     {pane === "rules" && data && <div className="space-y-4">
       <nav aria-label="Разделы правил МЧС" className="mchs-subtabs flex flex-wrap gap-2">
         {[
@@ -103,7 +106,7 @@ export default function SafetyMchs({ token }) {
       <p className="text-sm text-slate-500 dark:text-white/60">Это инструменты диагностики. Шаблоны и ручные решения не подтверждают официальную тревогу и не разрешают эфир.</p>
       {rulesView==='templates' && <MchsEventTypeRules token={token} />}
       {rulesView==='preview' && <MchsDispatchPreview token={token} />}
-      {rulesView==='review' && <MchsOperatorReviews token={token} events={data.events || []} />}
+      {rulesView==='review' && <MchsOperatorReviews token={token} events={data.events || []} selectedEvent={selectedEvent} onOpenEvent={eventId => { const params=new URLSearchParams(searchParams);params.set("mchsView","events");params.set("mchsEvent",eventId);setSearchParams(params); }} />}
     </div>}
     {pane === "settings" && <details className="rounded-2xl border border-sky-400/40 p-4 sm:p-5 space-y-3">
         <summary className="cursor-pointer font-semibold">Диагностические события — только TEST ONLY</summary>
