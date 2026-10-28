@@ -65,21 +65,21 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
   };
   return <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4" aria-label="Мониторинг очереди МЧС">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="text-lg font-semibold">Очередь МЧС · диагностика</h3>
+      <div><h3 className="text-lg font-semibold">{({overview:'Сводка диагностики',delivery:'Связь и доставка Android',queue:'Очередь обработки',incidents:'История технических неисправностей'})[view] || 'Диагностика МЧС'}</h3>
         <p className="text-sm text-slate-500 dark:text-white/60">Анализ уведомлений не подтверждает официальную тревогу и не запускает оповещение.</p></div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={probing} onClick={async()=>{
+        {view === 'delivery' && <button type="button" disabled={probing} onClick={async()=>{
           setProbing(true);setProbeResult('');
           try {
             const result=await api('/safety/technical-notification-probe',{token,method:'POST',body:{}});
             setProbeResult(result.socketAvailable ? 'Тестовое уведомление сохранено и отправлено в Socket.IO. Проверьте колокольчик без перезагрузки.' : 'Тестовое уведомление сохранено, но Socket.IO недоступен.');
           }catch(e){setProbeResult(e.message || 'Ошибка диагностического теста');}
           finally{setProbing(false);}
-        }} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">Проверить Socket.IO</button>
+        }} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">Проверить Socket.IO</button>}
         <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
       </div>
     </div>
-    {(view === 'incidents' || (view === 'overview' && selectedIncident)) && <details open={view === 'incidents' || Boolean(selectedIncident)} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+    {view === 'incidents' && <details open={view === 'incidents' || Boolean(selectedIncident)} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
       <summary className="cursor-pointer font-medium">Журнал технических неисправностей · {incidents?.length ?? '—'} записей</summary>
       <p className="text-xs text-slate-500 dark:text-white/50 my-2">Записи отражают только техническую диагностику. Проверка выполняется примерно раз в минуту, поэтому время начала и восстановления приблизительное.</p>
       {incidents?.length === 0 && <p className="text-sm">Неисправностей пока не зафиксировано.</p>}
