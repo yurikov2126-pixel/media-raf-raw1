@@ -393,6 +393,52 @@ router.get('/technical-incidents', canView, async (_req,res,next) => {
   }catch(error){next(error);}
 });
 // Historical heartbeat snapshots; not proof of push delivery or official alert validity.
+// Read-only anomaly assessment of sampled Android VM health. No radio dispatch authority.
+router.get('/telemetry-alerts', canView, async (req,res,next) => {
+  try {
+    const now=Date.now();
+    const windowStart=new Date(now-60*60000);
+    const [samples,health]=await Promise.all([
+      prisma.safetyMchsTelemetrySample.findMany({
+        where:{receivedAt:{gte:windowStart}},
+        orderBy:{receivedAt:'desc'},take:200,
+        select:{receivedAt:true,queuedLocal:true,retryPending:true,failedSends:true,
+          telemetryPresent:true,snapshotOk:true}
+      }),
+      prisma.safetyMchsHealth.findUnique({where:{id:'mchs-android'},
+        select:{lastSeenAt:true,telemetryAt:true}})
+    ]);
+    const alerts=[];
+    const latest=samples[0];
+    const age=health?.lastSeenAt?now-new Date(health.lastSeenAt).getTime():null;
+    if(age===null || age>5*60000)alerts.push({
+      code:'HEARTBEAT_GAP',severity:'attention',title:'Нет свежего heartbeat Android VM',
+      detail:age===null?'Контакт не зарегистрирован':'Последний контакт '+Math.round(age/60000)+' мин назад',
+      since:health?.lastSeenAt||null
+    });
+    const recent=samples.filter(x=>x.telemetryPresent && now-new Date(x.receivedAt).getTime()<=15*60000);
+    if(recent.length>=3){
+      const backlog=recent.filter(x=>x.queuedLocal!==null&&x.queuedLocal>=5);
+      if(backlog.length>=3)alerts.push({code:'LOCAL_BACKLOG',severity:'attention',
+        title:'Устойчивая локальная очередь Android',detail:'Не менее 3 свежих снимков с 5 и более сообщениями',since:backlog[backlog.length-1].receivedAt});
+      const retries=recent.filter(x=>x.retryPending!==null&&x.retryPending>0);
+      if(retries.length>=3)alerts.push({code:'RETRY_PENDING',severity:'attention',
+        title:'Повторные отправки ожидают выполнения',detail:'Повторы отмечены в 3 и более свежих снимках',since:retries[retries.length-1].receivedAt});
+      const sqlite=recent.filter(x=>x.snapshotOk===false);
+      if(sqlite.length>=3)alerts.push({code:'SQLITE_FAILURE',severity:'attention',
+        title:'Повторяющиеся ошибки чтения SQLite',detail:'Не менее 3 отрицательных снимков за 15 минут',since:sqlite[sqlite.length-1].receivedAt});
+    }
+    const telemetryAge=health?.telemetryAt?now-new Date(health.telemetryAt).getTime():null;
+    if(age!==null&&age<=5*60000&&(telemetryAge===null||telemetryAge>10*60000))
+      alerts.push({code:'TELEMETRY_STALE',severity:'unknown',title:'Heartbeat есть, но телеметрия устарела',
+        detail:'Новые сведения об очереди не поступали более 10 минут',since:health?.telemetryAt||null});
+    res.set('Cache-Control','no-store');
+    res.json({alerts,checkedAt:new Date(),sampleCount:samples.length,
+      status:alerts.some(x=>x.severity==='attention')?'ATTENTION':alerts.length?'UNKNOWN':'NO_DETECTED_ANOMALIES',
+      limitations:'Checks operate on recent stored snapshots. A clean result is not proof of delivery.',
+      playbackEnabled:false,officialVerified:false});
+  }catch(error){next(error);}
+});
 router.get('/telemetry-history', canView, async (req,res,next) => {
   try {
     const hours=[24,72,168].includes(Number(req.query.hours))?Number(req.query.hours):24;

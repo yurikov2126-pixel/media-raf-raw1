@@ -60,6 +60,7 @@ const diagnosticChecks = (delivery, incidentData, analytics) => {
 
 export default function MchsDeliveryReliability({ token, compact = false, onOpen }) {
   const [days, setDays] = useState(7);
+  const [alerts, setAlerts] = useState({items:[],checkedAt:null,error:'',loading:true});
   const [hours, setHours] = useState(24);
   const [history, setHistory] = useState({items:[],loading:true,error:'',truncated:false});
   const [state, setState] = useState({ delivery: null, analytics: null, incidents: null, updated: null, loading: true, error: '' });
@@ -105,6 +106,20 @@ export default function MchsDeliveryReliability({ token, compact = false, onOpen
       <p className="text-xs text-slate-600 dark:text-slate-300">Отчёты устройства; отсутствие измерений не равно нулю.</p>
     </div>;
   };
+  useEffect(() => {
+    let active=true;
+    const load=async()=>{
+      try {
+        const result=await api('/safety/telemetry-alerts',{token});
+        if(active)setAlerts({items:result.alerts||[],checkedAt:result.checkedAt,error:'',loading:false});
+      } catch(error) {
+        if(active)setAlerts(previous=>({...previous,error:error.message||'Не удалось проверить аномалии',loading:false}));
+      }
+    };
+    void load();
+    const timer=setInterval(()=>{if(!document.hidden)void load();},30000);
+    return()=>{active=false;clearInterval(timer);};
+  },[token]);
   const checks = useMemo(() => diagnosticChecks(state.delivery, state.incidents, state.analytics), [state.delivery, state.incidents, state.analytics]);
   const attention = checks.filter(check => check.state === 'attention');
   const unknown = checks.filter(check => check.state === 'unknown');
@@ -124,6 +139,21 @@ export default function MchsDeliveryReliability({ token, compact = false, onOpen
       </div>
     </div>
     {state.error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{state.error}. Недоступные показатели не считаются исправными.</p>}
+    <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+      <div className="flex flex-wrap justify-between items-center gap-2">
+        <h4 className="font-semibold">Автоматические технические проверки</h4>
+        <span className="text-xs text-slate-600 dark:text-slate-300">Проверено: {formatDate(alerts.checkedAt)}</span>
+      </div>
+      {alerts.loading && <p className="text-sm">Загрузка проверок…</p>}
+      {alerts.error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{alerts.error}</p>}
+      {!alerts.loading && !alerts.error && alerts.items.length===0 && <p className="text-sm">По сохранённой телеметрии срабатываний не обнаружено. Это не подтверждает полноту доставки.</p>}
+      {alerts.items.map(item=><div key={item.code} className="rounded-lg border border-amber-300/70 dark:border-amber-700 p-3">
+        <div className="flex flex-wrap gap-2 items-center justify-between"><strong className="text-sm">{item.title}</strong><span className="text-xs">{item.severity==='unknown'?'Нет свежих данных':'Требует внимания'}</span></div>
+        <p className="text-sm mt-1">{item.detail}</p>
+        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">Начало признаков: {formatDate(item.since)} · {item.code}</p>
+      </div>)}
+      <p className="text-xs text-slate-600 dark:text-slate-300">Оценка обновляется раз в 30 секунд на открытой странице. Это текущие диагностические признаки, а не журнал подтверждённых тревог МЧС. Автоматический эфир не активируется.</p>
+    </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
       {[
         ['Требует проверки', attention.length],
