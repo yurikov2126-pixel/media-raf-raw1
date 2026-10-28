@@ -6,7 +6,7 @@ import './radio-asset-manager-2.css';
 const fmt=ms=>{const s=Math.floor((ms||0)/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 const size=b=>b>1048576?(b/1048576).toFixed(1)+' МБ':(b/1024).toFixed(0)+' КБ';
 const name=a=>a.tags?.title?[a.tags.artist,a.tags.title].filter(Boolean).join(' — '):a.name;
-const categoryOptions=[['MUSIC','Музыка'],['JINGLE','Джинглы'],['INTRO','Подводки'],['PROMO','Промо'],['EFFECT','Эффекты'],['OTHER','Прочее'],['SHOW','Передачи'],['TIME_SIGNAL','Объявления времени']];
+const categoryOptions=[['MUSIC','Музыка'],['JINGLE','Джинглы'],['INTRO','Подводки'],['PROMO','Промо'],['EFFECT','Эффекты'],['OTHER','Прочее'],['SHOW','Передачи'],['TIME_SIGNAL','Объявления времени'],['ALARM','Оповещения']];
 const keys=['title','artist','album','genre','year','track','composer','comment'];
 const labels={title:'Название',artist:'Исполнитель',album:'Альбом',genre:'Жанр',year:'Год',track:'Номер трека',composer:'Композитор',comment:'Комментарий'};
 export default function RadioAssetManager({assets,token,refresh,preview,rename,remove,uploadPanel,player,onFolderChange}){
