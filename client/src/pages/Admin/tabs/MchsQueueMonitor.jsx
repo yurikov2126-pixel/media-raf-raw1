@@ -103,6 +103,7 @@ export default function MchsQueueMonitor({ token }) {
           <p>В локальной очереди: {delivery.vmTelemetry.queuedLocal ?? 'неизвестно'} · Неудачных отправок (счётчик VM): {delivery.vmTelemetry.failedSends ?? 'неизвестно'}</p>
           <p>Последняя успешная отправка с VM: {fmt(delivery.vmTelemetry.lastSentAt)}</p>
           <p>Ожидают повторной отправки: {delivery.vmTelemetry.retryPending ?? 'неизвестно'} · Следующая попытка: {fmt(delivery.vmTelemetry.nextRetryAt)}</p>
+          <p>Диагностика очереди: {({CLEAR:'Нет ожидающих отправок',PENDING:'Есть ожидающие отправки',WARNING:'Повторная попытка существенно просрочена',UNKNOWN:'Недостаточно свежих данных'})[delivery.vmTelemetry.backlog?.state] || 'Нет данных'}</p>
           {delivery.vmTelemetry.telemetryFresh && delivery.vmTelemetry.retryPending > 0 && <p className="text-amber-700 dark:text-amber-300">Есть неподтверждённые отправки. Проверь журнал VM; это не подтверждение потери уведомления.</p>}
         </>}
       </div>

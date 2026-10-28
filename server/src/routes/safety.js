@@ -1,5 +1,6 @@
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
+import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
 import { Router } from 'express';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -340,7 +341,8 @@ router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
       snapshotOk:health?.snapshotOk??null,
       snapshotAt:health?.snapshotAt||null,
       countersAreSelfReported:true,
-      telemetryFresh:Boolean(health?.telemetryAt&&Date.now()-new Date(health.telemetryAt).getTime()<180000)
+      telemetryFresh:Boolean(health?.telemetryAt&&Date.now()-new Date(health.telemetryAt).getTime()<180000),
+      backlog:assessMchsRetryBacklog(health)
     }});
   } catch(error){next(error);}
 });
