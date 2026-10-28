@@ -73,15 +73,27 @@ router.post('/event', signedRequest, async (req, res, next) => {
 });
 router.post('/heartbeat', signedRequest, async (req, res, next) => {
   try {
-    const { source, listener, push } = req.safetyInput;
+    const { source, listener, push, queuedLocal, failedSends, lastSentAt } = req.safetyInput;
     if (source !== 'mchs-android' || !['CONNECTED','DISCONNECTED','UNKNOWN'].includes(listener) ||
       !['REGISTERED','ERROR','UNKNOWN'].includes(push)) {
       return fail(res, 400, 'INVALID_BODY');
     }
+    const validCount = value => value === undefined || (Number.isSafeInteger(value) && value >= 0 && value <= 10000000);
+    if (!validCount(queuedLocal) || !validCount(failedSends) ||
+        (lastSentAt !== undefined && (typeof lastSentAt !== 'string' ||
+          !Number.isFinite(Date.parse(lastSentAt))))) {
+      return fail(res, 400, 'INVALID_TELEMETRY');
+    }
+    const hasTelemetry = queuedLocal !== undefined || failedSends !== undefined || lastSentAt !== undefined;
+    const telemetry = {};
+    if (queuedLocal !== undefined) telemetry.queuedLocal = queuedLocal;
+    if (failedSends !== undefined) telemetry.failedSends = failedSends;
+    if (lastSentAt !== undefined) telemetry.lastSentAt = new Date(lastSentAt);
+    if (hasTelemetry) telemetry.telemetryAt = new Date();
     const health = await prisma.safetyMchsHealth.upsert({
       where: { id: 'mchs-android' },
-      create: { id: 'mchs-android', lastSeenAt: new Date(), listener, push },
-      update: { lastSeenAt: new Date(), listener, push },
+      create: { id: 'mchs-android', lastSeenAt: new Date(), listener, push, ...telemetry },
+      update: { lastSeenAt: new Date(), listener, push, ...telemetry },
       select: { lastSeenAt: true, listener: true, push: true }
     });
     res.set('Cache-Control', 'no-store');
