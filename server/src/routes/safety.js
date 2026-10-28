@@ -114,7 +114,7 @@ router.get('/notification-policy-drafts', canView, async (_req, res, next) => {
     const [rules, assets] = await Promise.all([
       policies(),
       prisma.radioAsset.findMany({
-        where: { mimeType: { startsWith: 'audio/' } },
+        where: { mimeType: { startsWith: 'audio/' }, category: 'ALARM' },
         select: { id: true, name: true, durationMs: true, category: true },
         orderBy: { createdAt: 'desc' }, take: 200,
       }),
@@ -135,8 +135,8 @@ router.put('/notification-policy-drafts/:eventId', requireRole('ADMIN'), async (
       return res.status(400).json({ error: 'INVALID_POLICY' });
     }
     if (audioAssetId) {
-      const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true } });
-      if (!asset?.mimeType?.startsWith('audio/')) return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
+      const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true, category: true } });
+      if (!asset?.mimeType?.startsWith('audio/') || asset.category !== 'ALARM') return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
     }
     // A single JSON document serializes per-event choices; concurrent edits use an
     // advisory PostgreSQL transaction lock to prevent lost updates.
@@ -169,7 +169,7 @@ async function getTypeRules() {
 router.get('/event-type-rules', canView, async (_req, res, next) => {
   try {
     const [rules, assets] = await Promise.all([getTypeRules(),
-      prisma.radioAsset.findMany({ where: { mimeType: { startsWith: 'audio/' } },
+      prisma.radioAsset.findMany({ where: { mimeType: { startsWith: 'audio/' }, category: 'ALARM' },
         select: { id: true, name: true, durationMs: true }, orderBy: { createdAt: 'desc' }, take: 200 })]);
     const recent = await prisma.safetyMchsEvent.findMany({ orderBy: { receivedAt: 'desc' }, take: 100,
       select: { id: true, title: true, body: true, eventType: true } });
@@ -186,8 +186,8 @@ router.put('/event-type-rules/:type', requireRole('ADMIN'), async (req, res, nex
         (audioAssetId != null && (typeof audioAssetId !== 'string' || audioAssetId.length > 120)))
       return res.status(400).json({ error: 'INVALID_TYPE_RULE' });
     if (audioAssetId) {
-      const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true } });
-      if (!asset?.mimeType?.startsWith('audio/')) return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
+      const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true, category: true } });
+      if (!asset?.mimeType?.startsWith('audio/') || asset.category !== 'ALARM') return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
     }
     const entry = { mode, audioAssetId: audioAssetId || null, note: note.trim(), executable: false,
       updatedBy: req.user.id, updatedAt: new Date().toISOString() };
