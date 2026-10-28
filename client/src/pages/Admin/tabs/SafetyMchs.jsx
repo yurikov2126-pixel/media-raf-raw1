@@ -70,29 +70,6 @@ export default function SafetyMchs({ token }) {
       <h2 className="text-xl font-semibold">{panes.find(([id])=>id===pane)?.[1]}</h2>
       <span className="text-xs text-slate-500 dark:text-white/50">Диагностика · без запуска эфира</span>
     </div>
-    {pane === 'overview' && <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {[
-          {name:'Android VM',value:data?.source?.connection==='HEARTBEAT_RECENT'?'Контакт установлен':data?.source?.connection==='HEARTBEAT_STALE'?'Связь устарела':'Нет свежих данных',detail:'Последний heartbeat: '+(data?.source?.lastSeen ? new Date(data.source.lastSeen).toLocaleString('ru-RU'):'не получен'),to:'delivery'},
-          {name:'Listener / Push',value:data?.source?.connection==='HEARTBEAT_RECENT' ? (data?.source?.listener || 'UNKNOWN') + ' / ' + (data?.source?.push || 'UNKNOWN') : 'Не подтверждены',detail:'Heartbeat не подтверждает доставку push',to:'delivery'},
-          {name:'Радио и громкоговорители',value:'Автозапуск отключён',detail:'Реальное оповещение заблокировано',to:'settings'}
-        ].map(card=><button type="button" key={card.name} onClick={()=>switchPane(card.to)}
-          className="mchs-status-card group rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 text-left shadow-sm hover:border-violet-400 dark:hover:border-violet-400 transition-colors">
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{card.name}</span>
-          <strong className="mt-2 block text-base sm:text-lg text-slate-900 dark:text-white break-words">{card.value}</strong>
-          <span className="mt-2 block text-xs text-slate-600 dark:text-slate-300">{card.detail}</span>
-          <span className="mt-3 block text-xs font-semibold text-violet-700 dark:text-violet-300">Открыть раздел →</span>
-        </button>)}
-      </div>
-      <div className="rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 sm:p-5">
-        <h3 className="font-semibold text-slate-900 dark:text-white">Быстрый доступ</h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Перейдите к нужной проверке, не прокручивая всю админку.</p>
-        <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-2">
-          {[['delivery','Доставка Android'],['queue','Очередь событий'],['incidents','Неисправности'],['events','Журнал уведомлений']].map(([id,label])=>
-            <button type="button" key={id} onClick={()=>switchPane(id)} className="rounded-xl border border-slate-200 dark:border-white/15 p-3 text-left text-sm font-medium text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10">{label}</button>)}
-        </div>
-      </div>
-    </div>}
     {pane === "settings" && <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
       {!draft ? <p>Загрузка…</p> : <>
