@@ -24,5 +24,6 @@ describe('MCHS technical notification content',()=>{
   expect(n.phase).toBe('resolved');
   expect(n.title).toContain('восстановлена');
   expect(n.incidentId).toBe(incident.id);
+  expect(n.url).toBe('/app/admin?tab=safety-mchs&incident=test-incident');
  });
 });
