@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
+import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 
 const router = Router();
 const KEY = 'safety_mchs_config_v1';
@@ -153,6 +154,54 @@ router.put('/notification-policy-drafts/:eventId', requireRole('ADMIN'), async (
     });
     res.set('Cache-Control', 'no-store');
     res.json({ saved: true, eventId: event.id, rule: entry, liveDispatchEnabled: false });
+  } catch (error) { next(error); }
+});
+
+
+const TYPE_RULE_KEY = 'mchs_four_type_rules_v1';
+const emptyTypeRule = () => ({ mode: 'IGNORE', audioAssetId: null, note: '', executable: false });
+async function getTypeRules() {
+  const row = await prisma.setting.findUnique({ where: { key: TYPE_RULE_KEY } });
+  let stored = {};
+  try { const parsed = JSON.parse(row?.value || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed; } catch {}
+  return Object.fromEntries(MCHS_EVENT_TYPES.map(type => [type.id, { ...emptyTypeRule(), ...(stored[type.id] || {}), executable: false }]));
+}
+router.get('/event-type-rules', canView, async (_req, res, next) => {
+  try {
+    const [rules, assets] = await Promise.all([getTypeRules(),
+      prisma.radioAsset.findMany({ where: { mimeType: { startsWith: 'audio/' } },
+        select: { id: true, name: true, durationMs: true }, orderBy: { createdAt: 'desc' }, take: 200 })]);
+    const recent = await prisma.safetyMchsEvent.findMany({ orderBy: { receivedAt: 'desc' }, take: 100,
+      select: { id: true, title: true, body: true, eventType: true } });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ types: MCHS_EVENT_TYPES, rules, assets, liveDispatchEnabled: false,
+      classifications: recent.map(e => ({ id: e.id, type: classifyMchsObservation(e.title, e.body) })) });
+  } catch (error) { next(error); }
+});
+router.put('/event-type-rules/:type', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    if (!MCHS_EVENT_TYPES.some(t => t.id === req.params.type)) return res.status(404).json({ error: 'UNKNOWN_TYPE' });
+    const { mode, audioAssetId, note } = req.body || {};
+    if (!['IGNORE', 'REVIEW'].includes(mode) || typeof note !== 'string' || note.length > 500 ||
+        (audioAssetId != null && (typeof audioAssetId !== 'string' || audioAssetId.length > 120)))
+      return res.status(400).json({ error: 'INVALID_TYPE_RULE' });
+    if (audioAssetId) {
+      const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true } });
+      if (!asset?.mimeType?.startsWith('audio/')) return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
+    }
+    const entry = { mode, audioAssetId: audioAssetId || null, note: note.trim(), executable: false,
+      updatedBy: req.user.id, updatedAt: new Date().toISOString() };
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581421)`;
+      const row = await tx.setting.findUnique({ where: { key: TYPE_RULE_KEY } });
+      let stored = {};
+      try { const obj = JSON.parse(row?.value || '{}'); if (obj && typeof obj === 'object' && !Array.isArray(obj)) stored = obj; } catch {}
+      stored[req.params.type] = entry;
+      await tx.setting.upsert({ where: { key: TYPE_RULE_KEY },
+        create: { key: TYPE_RULE_KEY, value: JSON.stringify(stored) },
+        update: { value: JSON.stringify(stored) } });
+    });
+    res.json({ saved: true, rule: entry, liveDispatchEnabled: false });
   } catch (error) { next(error); }
 });
 

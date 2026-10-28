@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import express from 'express';
 import { prisma } from '../lib/prisma.js';
+import { classifyMchsObservation } from '../lib/mchsClassification.js';
 
 // Dedicated machine-to-machine route. Never accepts user JWT or triggers any playback.
 // Disabled by default, even after deployment.
@@ -49,7 +50,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
       where: { source_sourceEventId: { source: 'MCHS_ANDROID', sourceEventId: eventId } },
       create: { source: 'MCHS_ANDROID', sourceEventId: eventId, occurredAt: eventTime,
         title, body, channelId: channelId || null, region: region || null,
-        eventType: 'UNCLASSIFIED', verified: false },
+        eventType: classifyMchsObservation(title, body), verified: false },
       update: {},
       select: { id: true, receivedAt: true, verified: true }
     });
