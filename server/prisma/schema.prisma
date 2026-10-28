@@ -1526,3 +1526,13 @@ model SafetyMchsQueueHistory {
   @@unique([queueId, status, reason])
   @@index([createdAt])
 }
+
+model SafetyMchsTechnicalIncident {
+  id          String   @id @default(cuid())
+  kind        String
+  reason      String
+  openedAt    DateTime @default(now())
+  resolvedAt  DateTime?
+  @@index([openedAt])
+  @@index([kind, resolvedAt])
+}
