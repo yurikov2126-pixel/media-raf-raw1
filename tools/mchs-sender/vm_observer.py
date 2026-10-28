@@ -141,11 +141,29 @@ def drain(db, key, ip, max_send=20):
         db.commit()
 
 
-def heartbeat(key, ip, listener):
+def queue_telemetry(db):
+    """Reported from durable VM state, not inferred from Android connectivity."""
+    pending, failures, last_ack = db.execute(
+        """SELECT COUNT(CASE WHEN ack_at IS NULL THEN 1 END),
+                  COALESCE(SUM(CASE WHEN ack_at IS NULL THEN attempt ELSE 0 END), 0),
+                  MAX(ack_at)
+           FROM queue"""
+    ).fetchone()
+    metrics = {"queuedLocal": pending, "failedSends": failures}
+    if last_ack is not None:
+        metrics["lastSentAt"] = datetime.fromtimestamp(
+            last_ack, timezone.utc).isoformat().replace("+00:00", "Z")
+    return metrics
+
+
+def heartbeat(key, ip, listener, telemetry=None):
     # Push REGISTERED cannot be inferred from running Android or an active listener.
-    reply = post("heartbeat", {"source": "mchs-android",
-                "listener": "CONNECTED" if listener else "DISCONNECTED",
-                "push": "UNKNOWN"}, key, ip)
+    data = {"source": "mchs-android",
+            "listener": "CONNECTED" if listener else "DISCONNECTED",
+            "push": "UNKNOWN"}
+    if telemetry is not None:
+        data.update(telemetry)
+    reply = post("heartbeat", data, key, ip)
     if reply.get("received") is not True:
         raise RuntimeError("Invalid heartbeat ACK")
 
@@ -177,7 +195,7 @@ def main():
             print("SNAPSHOT", count, "pending", pending, "dry_run", args.dry_run, flush=True)
             if not args.dry_run:
                 drain(db, key, args.connect_ip)
-                heartbeat(key, args.connect_ip, listener_running())
+                heartbeat(key, args.connect_ip, listener_running(), queue_telemetry(db))
                 print("HEARTBEAT_ACK", flush=True)
         except Exception as exc:
             print("POLL_ERROR", type(exc).__name__, str(exc)[:140], flush=True)
