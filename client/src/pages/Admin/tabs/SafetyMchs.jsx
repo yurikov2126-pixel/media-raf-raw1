@@ -14,6 +14,7 @@ export default function SafetyMchs({ token }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [rulesView, setRulesView] = useState('templates');
   const [searchParams, setSearchParams] = useSearchParams();
   const panes = [
     ['overview', 'Обзор'],
@@ -89,17 +90,28 @@ export default function SafetyMchs({ token }) {
     {(pane === 'overview' || pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
 
     {pane === "events" && <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />}
-    {pane === "rules" && data && <MchsEventTypeRules token={token} />}
-    {pane === "rules" && data && <MchsDispatchPreview token={token} />}
-    {pane === "rules" && data && <MchsOperatorReviews token={token} events={data.events || []} />}
-    {pane === "settings" && <section className="rounded-2xl border border-sky-400/40 p-4 sm:p-5 space-y-3">
-        <h2 className="font-semibold">Диагностические события — только TEST ONLY</h2>
+    {pane === "rules" && data && <div className="space-y-4">
+      <nav aria-label="Разделы правил МЧС" className="flex flex-wrap gap-2">
+        {[
+          ['templates','Шаблоны сообщений'],
+          ['preview','Проверка решений'],
+          ['review','Ручная проверка']
+        ].map(([id,label])=><button key={id} type="button" aria-pressed={rulesView===id} onClick={()=>setRulesView(id)}
+          className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${rulesView===id?'bg-violet-600 border-violet-600 text-white':'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
+      </nav>
+      <p className="text-sm text-slate-500 dark:text-white/60">Это инструменты диагностики. Шаблоны и ручные решения не подтверждают официальную тревогу и не разрешают эфир.</p>
+      {rulesView==='templates' && <MchsEventTypeRules token={token} />}
+      {rulesView==='preview' && <MchsDispatchPreview token={token} />}
+      {rulesView==='review' && <MchsOperatorReviews token={token} events={data.events || []} />}
+    </div>}
+    {pane === "settings" && <details className="rounded-2xl border border-sky-400/40 p-4 sm:p-5 space-y-3">
+        <summary className="cursor-pointer font-semibold">Диагностические события — только TEST ONLY</summary>
         <p className="text-sm opacity-70">Изолированный журнал. Приём: {data?.diagnosticIngestEnabled ? 'включён' : 'выключен'}. Записей: {data?.diagnosticCount ?? 0}. Эти записи не являются предупреждениями МЧС и не запускают радио.</p>
         {data?.diagnosticEvents?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 text-sm">
           <strong>ТЕСТ: диагностика приёмника</strong>
           <p className="opacity-70 break-all">{item.eventId} · {new Date(item.receivedAt).toLocaleString('ru-RU')}</p>
         </div>)}
-      </section>}
+      </details>}
     <Link to="/app/safety" className="text-violet-600 dark:text-violet-300 underline">Открыть пульт ответственного за безопасность</Link>
   </div>;
 }
