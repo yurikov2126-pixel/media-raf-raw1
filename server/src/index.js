@@ -20,6 +20,7 @@ import { scheduleActionCleanup } from './lib/adminActionCleanupCron.js';
 import {scheduleRadioAutoPlaylists} from './lib/radioAutoPlaylistCron.js';
 import { scheduleStorageAudit } from './lib/storageAuditCron.js';
 import { startMchsObservationAnalyzer } from './lib/mchsObservationAnalyzer.js';
+import { startMchsTechnicalIncidentMonitor } from './lib/mchsTechnicalIncidents.js';
 
 
 /* ─────────── HTTP-сервер + Socket.IO ─────────── */
@@ -54,6 +55,7 @@ if (process.env.PREVIEW_MODE !== 'true') {
     scheduleStorageAudit();
     scheduleRadioAutoPlaylists();
     startMchsObservationAnalyzer();
+    startMchsTechnicalIncidentMonitor();
 } else {
     console.log('[PREVIEW] Background jobs disabled');
 }
