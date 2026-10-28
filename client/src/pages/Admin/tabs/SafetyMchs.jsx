@@ -100,7 +100,7 @@ export default function SafetyMchs({ token }) {
         {[
           ['templates','Шаблоны сообщений'],
           ['preview','Проверка решений'],
-          ['review','Ручная проверка']
+          ['review','Очередь проверки']
         ].map(([id,label])=><button key={id} type="button" aria-pressed={rulesView===id} onClick={()=>setRulesView(id)}
           className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${rulesView===id?'bg-violet-600 border-violet-600 text-white':'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
       </nav>
