@@ -3,7 +3,7 @@ import { getIo } from './notify.js';
 import { assessMchsRetryBacklog } from './mchsRetryBacklog.js';
 
 // Operational observations only; never authorizes emergency alerts or audio.
-export function mchsIncidentSignals(health, nowMs=Date.now()) {
+export function mchsIncidentSignals(health, nowMs=Date.now(), history=null) {
   if (!health?.lastSeenAt) return null; // no baseline, not an outage
   const fresh = nowMs-new Date(health.lastSeenAt).getTime() <= 180000;
   const signals = {
@@ -11,7 +11,11 @@ export function mchsIncidentSignals(health, nowMs=Date.now()) {
     SNAPSHOT: !fresh || health.snapshotOk == null ? undefined : (health.snapshotOk === false ? 'ANDROID_SQLITE_READ_FAILED' : null),
     RETRY: undefined,
     BACKLOG: undefined,
+    TELEMETRY: undefined,
   };
+  if (fresh) {
+    signals.TELEMETRY = !health.telemetryAt || nowMs-new Date(health.telemetryAt).getTime()>600000 ? 'TELEMETRY_STALE_OVER_10_MINUTES' : null;
+  }
   if (fresh && health.telemetryAt && nowMs-new Date(health.telemetryAt).getTime() <= 180000) {
     signals.RETRY=null;
     signals.BACKLOG=null;
@@ -21,6 +25,26 @@ export function mchsIncidentSignals(health, nowMs=Date.now()) {
     if (health.queuedLocal > 0 && Number.isFinite(oldest) && nowMs-oldest > 600000)
       signals.BACKLOG='OLDEST_PENDING_OVER_10_MINUTES';
   }
+  if (Array.isArray(history) && fresh) {
+    const recent=history.filter(sample=>sample.telemetryPresent &&
+      nowMs-new Date(sample.receivedAt).getTime()<=900000 &&
+      nowMs-new Date(sample.receivedAt).getTime()>=0);
+    // Require three independent samples spanning at least two minutes.
+    const spansWindow=recent.length>=3 &&
+      new Date(recent[0].receivedAt).getTime()-new Date(recent[recent.length-1].receivedAt).getTime()>=120000;
+    if(spansWindow){
+      const lastThree=recent.slice(0,3);
+      if(lastThree.every(x=>x.queuedLocal!==null&&x.queuedLocal>=5))
+        signals.BACKLOG='SUSTAINED_LOCAL_QUEUE_5_OR_MORE';
+      else if(lastThree.every(x=>x.queuedLocal===0)) signals.BACKLOG=null;
+      if(lastThree.every(x=>x.retryPending!==null&&x.retryPending>0))
+        signals.RETRY='SUSTAINED_RETRY_PENDING';
+      else if(lastThree.every(x=>x.retryPending===0)) signals.RETRY=null;
+      if(lastThree.every(x=>x.snapshotOk===false))
+        signals.SNAPSHOT='SUSTAINED_SQLITE_READ_FAILURE';
+      else if(lastThree.every(x=>x.snapshotOk===true)) signals.SNAPSHOT=null;
+    }
+  }
   return signals;
 }
 
@@ -29,6 +53,7 @@ const incidentTitles = {
   SNAPSHOT:'Ошибка чтения Android SQLite',
   RETRY:'Просрочена повторная отправка',
   BACKLOG:'Событие долго ожидает подтверждения',
+  TELEMETRY:'Телеметрия Android VM устарела',
 };
 export function technicalIncidentNotification(incident, phase) {
   const restored=phase==='resolved';
@@ -44,7 +69,12 @@ export async function recordMchsTechnicalIncidents(db=prisma, now=new Date(), {i
   const result=await db.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581427)`;
     const health=await tx.safetyMchsHealth.findUnique({where:{id:'mchs-android'}});
-    const signals=mchsIncidentSignals(health,now.getTime());
+    const history=await tx.safetyMchsTelemetrySample.findMany({
+      where:{receivedAt:{gte:new Date(now.getTime()-900000)}},
+      orderBy:{receivedAt:'desc'},take:30,
+      select:{receivedAt:true,telemetryPresent:true,queuedLocal:true,retryPending:true,snapshotOk:true}
+    });
+    const signals=mchsIncidentSignals(health,now.getTime(),history);
     if(!signals) return {observed:false,playbackEnabled:false};
     const open=await tx.safetyMchsTechnicalIncident.findMany({where:{resolvedAt:null}});
     const admins=await tx.user.findMany({where:{role:'ADMIN',isBanned:false},select:{id:true}});
