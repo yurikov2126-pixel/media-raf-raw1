@@ -60,6 +60,8 @@ const diagnosticChecks = (delivery, incidentData, analytics) => {
 
 export default function MchsDeliveryReliability({ token, compact = false, onOpen }) {
   const [days, setDays] = useState(7);
+  const [hours, setHours] = useState(24);
+  const [history, setHistory] = useState({items:[],loading:true,error:'',truncated:false});
   const [state, setState] = useState({ delivery: null, analytics: null, incidents: null, updated: null, loading: true, error: '' });
   const refresh = useCallback(async () => {
     setState(previous => ({ ...previous, loading: true }));
@@ -78,6 +80,31 @@ export default function MchsDeliveryReliability({ token, compact = false, onOpen
     const interval = setInterval(() => { if (!document.hidden) void refresh(); }, 30000);
     return () => clearInterval(interval);
   }, [refresh, compact]);
+  useEffect(() => {
+    let active = true;
+    setHistory(previous => ({...previous,loading:true,error:''}));
+    api('/safety/telemetry-history?hours=' + hours, { token }).then(result => {
+      if(active)setHistory({items:result.items||[],truncated:Boolean(result.truncated),loading:false,error:''});
+    }).catch(error => {
+      if(active)setHistory({items:[],truncated:false,loading:false,error:error.message||'Ошибка загрузки истории'});
+    });
+    return () => {active=false;};
+  }, [hours,token]);
+  const telemetryPoints = history.items.filter(item => item.telemetryPresent);
+  const graphValues = key => telemetryPoints.filter(item => typeof item[key] === 'number').map(item => ({time:item.receivedAt,value:item[key]}));
+  const historyGraph = (key, label) => {
+    const points = graphValues(key);
+    const max = Math.max(1,...points.map(point=>point.value));
+    return <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+      <h5 className="font-semibold text-sm">{label}</h5>
+      {points.length === 0 ? <p className="text-sm text-slate-600 dark:text-slate-300">Нет исторических измерений</p> :
+        <div role="img" aria-label={label + ': измерения по сохранённым heartbeat'} className="h-32 flex items-end gap-px">
+          {points.map((point,index)=><div key={index} title={new Date(point.time).toLocaleString('ru-RU') + ': ' + point.value}
+            style={{height:Math.max(2,point.value/max*100)+'%'}} className="flex-1 min-w-0 rounded-t bg-violet-500/80 dark:bg-violet-400/80" />)}
+        </div>}
+      <p className="text-xs text-slate-600 dark:text-slate-300">Отчёты устройства; отсутствие измерений не равно нулю.</p>
+    </div>;
+  };
   const checks = useMemo(() => diagnosticChecks(state.delivery, state.incidents, state.analytics), [state.delivery, state.incidents, state.analytics]);
   const attention = checks.filter(check => check.state === 'attention');
   const unknown = checks.filter(check => check.state === 'unknown');
@@ -113,6 +140,24 @@ export default function MchsDeliveryReliability({ token, compact = false, onOpen
       </div>)}
     </div>
     {!compact && <div className="space-y-3">
+      <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+        <div className="flex flex-wrap gap-2 items-center justify-between">
+          <h4 className="font-semibold">История телеметрии Android VM</h4>
+          <select value={hours} onChange={event=>setHours(Number(event.target.value))} aria-label="Период истории телеметрии"
+            className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm bg-white dark:bg-slate-900">
+            <option value={24}>24 часа</option><option value={72}>3 дня</option><option value={168}>7 дней</option>
+          </select>
+        </div>
+        {history.loading && <p className="text-sm">Загрузка истории…</p>}
+        {history.error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{history.error}</p>}
+        {history.truncated && <p className="text-sm text-amber-800 dark:text-amber-200">Выборка ограничена 3000 записями; графики могут быть неполными.</p>}
+        <div className="grid md:grid-cols-2 gap-3">
+          {historyGraph('queuedLocal','Локальная очередь Android')}
+          {historyGraph('failedSends','Счётчик неудачных отправок')}
+          {historyGraph('retryPending','Ожидаемые повторы')}
+        </div>
+        <p className="text-xs text-slate-600 dark:text-slate-300">Всего heartbeat в выборке: {history.items.length}. С данными телеметрии: {telemetryPoints.length}. История начинается после установки миграции и не восстанавливает прошлые измерения.</p>
+      </div>
       <div className="grid sm:grid-cols-3 gap-2">
         {[['Сообщения в базе за период', state.analytics?.totals?.messages ?? 'Нет данных'], ['Обработано анализатором', state.analytics?.totals?.analyzed ?? 'Нет данных'], ['Среднее время анализа', formatDuration(state.analytics?.totals?.averageAnalysisMs)]].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-200 dark:border-white/15 p-3"><p className="text-xs text-slate-600 dark:text-slate-300">{label}</p><strong className="text-lg block mt-1">{value}</strong></div>)}
       </div>
