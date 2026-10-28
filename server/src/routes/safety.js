@@ -335,6 +335,17 @@ router.get('/observation-queue', canView, async (req, res, next) => {
 });
 
 /** Chronological assessment, read-only; never serves as an official all-clear. */
+/** Immutable ingest history, read-only: never represents alert confirmation. */
+router.get('/observation-queue/:queueId/history', canView, async (req,res,next)=>{
+ try {
+  const rows=await prisma.safetyMchsQueueHistory.findMany({
+   where:{queueId:req.params.queueId},orderBy:[{createdAt:'asc'},{id:'asc'}],take:100,
+   select:{id:true,status:true,reason:true,createdAt:true}
+  });
+  res.set('Cache-Control','no-store');
+  res.json({items:rows,playbackEnabled:false,officialState:'UNKNOWN'});
+ }catch(error){next(error);}
+});
 router.get('/observation-order', canView, async (_req, res, next) => {
   try {
     const events = await prisma.safetyMchsEvent.findMany({
