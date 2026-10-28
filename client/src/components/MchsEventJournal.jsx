@@ -5,7 +5,7 @@ const ageOf = (event) => event.occurredAt ? Date.now() - new Date(event.occurred
 const historical = (event) => { const age = ageOf(event); return age === null || !Number.isFinite(age) || age > 30 * 60 * 1000 || age < -120000; };
 const dateText = (value) => value ? new Date(value).toLocaleString('ru-RU') : 'Не указано';
 
-export default function MchsEventJournal({ events = [], total = 0, token }) {
+export default function MchsEventJournal({ events = [], total = 0, token, onReview }) {
   const [query, setQuery] = useState('');
   const [ageFilter, setAgeFilter] = useState('all');
   const [selected, setSelected] = useState(null);
@@ -86,6 +86,7 @@ export default function MchsEventJournal({ events = [], total = 0, token }) {
             ['Состояние по времени',historical(selected)?'Историческая или неизвестная дата':'Недавнее наблюдение']
           ].map(([label,value])=><div key={label} className="min-w-0 rounded-lg bg-slate-50 dark:bg-white/5 p-3"><dt className="text-xs text-slate-600 dark:text-slate-300">{label}</dt><dd className="mt-1 font-medium break-words">{value}</dd></div>)}
         </dl>
+        {onReview && <button type="button" onClick={() => { const id=selected.id; setSelected(null); onReview(id); }} className="rounded-xl bg-violet-600 px-4 py-2.5 text-white text-sm font-semibold">Перейти к ручной проверке</button>}
         <section aria-label="История обработки" className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
           <h4 className="font-semibold">История обработки сообщения</h4>
           {!trace && !traceError && <p className="text-sm">Загрузка диагностической истории…</p>}
