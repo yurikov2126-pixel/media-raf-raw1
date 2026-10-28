@@ -1,5 +1,6 @@
 import { prisma } from './prisma.js';
 import { assessMchsQueueObservation } from './mchsQueueAssessment.js';
+import { noteMchsAnalyzerAttempt, noteMchsAnalyzerSuccess, noteMchsAnalyzerFailure, persistMchsAnalyzerHealth } from './mchsAnalyzerHealth.js';
 
 // Observation-only background worker. No official alert verification and no audio output.
 export async function analyzeMchsObservationBatch(db=prisma,{limit=20}={}) {
@@ -36,11 +37,19 @@ export function startMchsObservationAnalyzer({
   const tick=async()=>{
     if(stopped||running)return;
     running=true;
+    noteMchsAnalyzerAttempt();
     try {
       const result=await analyzeMchsObservationBatch();
+      noteMchsAnalyzerSuccess(result.processed);
       if(result.processed)logger.info('MCHS_OBSERVATION_ANALYZED',JSON.stringify(result));
-    }catch(error){logger.error('MCHS_OBSERVATION_ANALYZER_ERROR',error);}
-    finally{running=false;}
+    }catch(error){
+      noteMchsAnalyzerFailure(error);
+      logger.error('MCHS_OBSERVATION_ANALYZER_ERROR',error);
+    }finally{
+      try { await persistMchsAnalyzerHealth(); }
+      catch(error){ noteMchsAnalyzerFailure(error); logger.error('MCHS_OBSERVATION_HEALTH_PERSIST_ERROR',error); }
+      running=false;
+    }
   };
   const timer=setInterval(()=>{void tick();},intervalMs);
   timer.unref?.();

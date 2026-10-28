@@ -65,14 +65,18 @@ export default function MchsQueueMonitor({ token }) {
         ['Получено всего', queue?.total],
         ['Ожидает', queue?.pending],
         ['Проанализировано', queue?.analyzed],
-        ['Фоновый анализатор', health?.configured ? 'Включён в конфигурации' : 'Выключен'],
+        ['Фоновый анализатор', health?.healthy ? 'Работает' : health?.configured ? 'Нет подтверждения работы' : 'Выключен'],
       ].map(([title, value]) => <div key={title} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 min-w-0">
         <p className="text-xs text-slate-500 dark:text-white/50">{title}</p>
         <p className="mt-1 text-base font-semibold break-words">{value ?? '—'}</p></div>)}
     </div>
     <p className="text-xs text-slate-500 dark:text-white/50">
       {lastRefresh ? 'Обновлено: ' + fmt(lastRefresh) : 'Загрузка…'} · Автообновление каждые 15 секунд при открытой вкладке.
-      {health?.configured && ' Конфигурация включена; состояние исполнения фонового процесса этим показателем не подтверждается.'}
+      {health?.runtime?.lastSuccessAt && ' · Последняя успешная проверка: ' + fmt(health.runtime.lastSuccessAt)}
+      {health?.runtime?.lastAttemptAt && ' · Последний запуск: ' + fmt(health.runtime.lastAttemptAt)}
+      {health?.runtime?.lastError && ' · Ошибка: ' + health.runtime.lastError}
+      {health?.runtime?.lastErrorAt && ' (' + fmt(health.runtime.lastErrorAt) + ')'}
+      {health?.saved?.savedAt && ' · Сохранено в БД: ' + fmt(health.saved.savedAt)}
     </p>
     {error && <p role="alert" className="rounded-lg bg-red-500/10 text-red-700 dark:text-red-300 p-3 text-sm">{error}</p>}
     {queue?.pending > 0 && <button type="button" disabled={busy} onClick={analyze}

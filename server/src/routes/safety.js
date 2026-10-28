@@ -1,3 +1,4 @@
+import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { Router } from 'express';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -314,10 +315,19 @@ router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, 
 });
 
 /** Configuration visibility is not a heartbeat or execution proof. */
-router.get('/observation-analyzer/status', canView, (_req,res) => {
-  res.set('Cache-Control','no-store');
-  res.json({ configured: process.env.MCHS_OBSERVATION_ANALYZER_ENABLED === 'true' &&
-    process.env.PREVIEW_MODE !== 'true', executionConfirmed:false, playbackEnabled:false });
+router.get('/observation-analyzer/status', canView, async (_req,res,next) => {
+  try {
+    const configured = process.env.MCHS_OBSERVATION_ANALYZER_ENABLED === 'true' &&
+      process.env.PREVIEW_MODE !== 'true';
+    const persisted = await prisma.setting.findUnique({
+      where:{key:MCHS_ANALYZER_HEALTH_KEY},select:{value:true}
+    });
+    let saved=null;
+    try { saved=JSON.parse(persisted?.value||'null'); } catch {}
+    const current=mchsAnalyzerPublicStatus(configured);
+    res.set('Cache-Control','no-store');
+    res.json({...current,saved,playbackEnabled:false});
+  } catch(error){next(error);}
 });
 
 /** Read-only durable observation queue; not a command queue. */
