@@ -53,3 +53,21 @@
   outline:2px solid #7c3aed;
   outline-offset:2px;
 }
+
+/* Shared layout primitives. Color choices stay within the verified theme palette. */
+.mchs-admin-workspace .mchs-panel {min-width:0;}
+.mchs-admin-workspace .mchs-section-tabs {scrollbar-width:thin;scroll-padding-inline:8px;}
+.mchs-admin-workspace .mchs-section-tabs button {min-height:40px;white-space:nowrap;}
+.mchs-admin-workspace .mchs-subtabs button {min-height:40px;}
+.mchs-admin-workspace .mchs-status-card {min-width:0;min-height:126px;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;}
+.mchs-admin-workspace .mchs-filter-bar :is(input,select) {min-height:42px;}
+.mchs-admin-workspace .mchs-incident-journal button {overflow-wrap:anywhere;}
+.mchs-admin-workspace button:focus-visible,
+.mchs-admin-workspace summary:focus-visible,
+.mchs-admin-workspace select:focus-visible,
+.mchs-admin-workspace input:focus-visible {outline:2px solid #8b5cf6;outline-offset:2px;}
+@media (max-width:639px) {
+ .mchs-admin-workspace .mchs-panel {padding:14px;}
+ .mchs-admin-workspace .mchs-incident-journal .grid {min-width:0;}
+ .mchs-admin-workspace .mchs-filter-bar :is(input,select) {width:100%;}
+}
