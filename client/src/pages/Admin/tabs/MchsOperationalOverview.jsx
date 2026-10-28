@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../api/client.js';
 
 const fmt = value => value ? new Date(value).toLocaleString('ru-RU') : 'Нет данных';
-const status = (delivery,incidents,queue,messages,reviews) => {
+const status = (delivery,incidents,queue) => {
  const open=(incidents||[]).filter(x=>!x.resolvedAt);
  const fresh=delivery?.connection==='HEARTBEAT_RECENT';
  const attention=incidents ? open.length : null;
@@ -14,12 +14,12 @@ const status = (delivery,incidents,queue,messages,reviews) => {
    {name:'Очередь анализа',value:queue?.pending==null?'Нет данных':String(queue.pending),detail:'Ожидают анализа на сервере',view:'queue'},
    {name:'Android VM',value:fresh?'Heartbeat получен':delivery?.connection==='HEARTBEAT_STALE'?'Heartbeat устарел':'Нет подтверждения',detail:'Последний контакт: '+fmt(delivery?.lastHeartbeatAt),view:'delivery'},
    {name:'Локальные отправки',value:tele?.telemetryFresh&&tele?.queuedLocal!=null?String(tele.queuedLocal):'Нет свежих данных',detail:tele?.telemetryFresh?'Ожидают подтверждения на VM':'Состояние локальной очереди неизвестно',view:'delivery'},
-   {name:'Требуют внимания',value:attention===null?'Нет данных':String(attention),detail:'Открытые технические неисправности из загруженного журнала',view:'incidents'}
+   {name:'Требуют внимания',value:attention===null?'Нет данных':String(attention),detail:'Открытые технические неисправности (не все сообщения)',view:'incidents'}
   ]
  };
 };
 export default function MchsOperationalOverview({token,onOpen}) {
- const [state,setState]=useState({queue:null,delivery:null,incidents:null,messages:null,reviews:null,error:'',updated:null});
+ const [state,setState]=useState({queue:null,delivery:null,incidents:null,messages:null,error:'',updated:null});
  const refresh=useCallback(async()=>{
   try{
    const [queue,delivery,journal,dashboard]=await Promise.all([
@@ -32,7 +32,7 @@ export default function MchsOperationalOverview({token,onOpen}) {
   }catch(e){setState(x=>({...x,error:e.message||'Ошибка загрузки'}));}
  },[token]);
  useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},30000);return()=>clearInterval(timer);},[refresh]);
- const {cards,open,attention}=status(state.delivery,state.incidents,state.queue,state.messages,state.reviews);
+ const {cards,open,attention}=status(state.delivery,state.incidents,state.queue);
  return <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 sm:p-5 space-y-4">
   <div className="flex flex-wrap gap-2 justify-between items-start">
    <div><h3 className="font-semibold text-lg">Оперативная сводка</h3><p className="text-sm text-slate-600 dark:text-slate-300">Техническая диагностика, не подтверждение официальных тревог.</p></div>
