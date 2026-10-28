@@ -311,6 +311,28 @@ router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, 
   } catch (error) { next(error); }
 });
 
+/** Read-only durable observation queue; not a command queue. */
+router.get('/observation-queue', canView, async (req, res, next) => {
+  try {
+    const limit = Math.max(1, Math.min(100, Number.parseInt(String(req.query.limit || '30'), 10) || 30));
+    const [items, total] = await Promise.all([
+      prisma.safetyMchsQueueItem.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: limit,
+        select: {
+          id: true, status: true, attempts: true, lastError: true,
+          createdAt: true, updatedAt: true,
+          event: { select: { id: true, sourceEventId: true, eventType: true,
+            title: true, occurredAt: true, receivedAt: true, verified: true } },
+        },
+      }),
+      prisma.safetyMchsQueueItem.count(),
+    ]);
+    res.set('Cache-Control', 'no-store');
+    res.json({ total, items, dispatchEnabled: false, playbackEnabled: false,
+      queuePurpose: 'OBSERVATION_ONLY' });
+  } catch (error) { next(error); }
+});
+
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
   try {
     const config = sanitize(req.body);
