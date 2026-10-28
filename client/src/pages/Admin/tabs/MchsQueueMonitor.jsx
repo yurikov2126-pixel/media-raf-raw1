@@ -95,6 +95,14 @@ export default function MchsQueueMonitor({ token }) {
         <p>Ожидают анализа: {delivery?.pending ?? '—'}</p>
         <p>Фоновая обработка: {delivery?.analyzerHealthy ? 'Последняя проверка успешна' : 'Нет свежего подтверждения'}</p>
       </div>
+      <div className="border-t border-slate-200 dark:border-white/10 pt-2 space-y-1">
+        <p className="font-medium">Телеметрия Android VM</p>
+        {!delivery?.vmTelemetry?.available ? <p className="text-xs opacity-70">Android пока передаёт heartbeat без сведений о локальной очереди. Это не означает, что очередь пуста.</p> : <>
+          <p>Данные VM: {delivery.vmTelemetry.telemetryFresh ? 'свежие' : 'устарели'} · обновлены {fmt(delivery.vmTelemetry.lastReportedAt)}</p>
+          <p>В локальной очереди: {delivery.vmTelemetry.queuedLocal ?? 'неизвестно'} · Неудачных отправок (счётчик VM): {delivery.vmTelemetry.failedSends ?? 'неизвестно'}</p>
+          <p>Последняя успешная отправка с VM: {fmt(delivery.vmTelemetry.lastSentAt)}</p>
+        </>}
+      </div>
       <p className="text-xs text-slate-500 dark:text-white/50">Отсутствие новых уведомлений не является неисправностью. Heartbeat подтверждает только контакт Android с API, а не полноту доставки push или подлинность сообщений. Задержка вычисляется по времени внутри уведомления, если оно доступно.</p>
     </div>
     <div className="space-y-2">
