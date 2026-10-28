@@ -321,7 +321,7 @@ router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
   try {
     const [health,lastEvent,pending] = await Promise.all([
       prisma.safetyMchsHealth.findUnique({where:{id:'mchs-android'},
-        select:{lastSeenAt:true,listener:true,push:true,queuedLocal:true,failedSends:true,lastSentAt:true,telemetryAt:true,snapshotOk:true,snapshotAt:true,retryPending:true,nextRetryAt:true}}),
+        select:{lastSeenAt:true,listener:true,push:true,queuedLocal:true,failedSends:true,lastSentAt:true,telemetryAt:true,snapshotOk:true,snapshotAt:true,retryPending:true,nextRetryAt:true,oldestPendingAt:true}}),
       prisma.safetyMchsEvent.findFirst({orderBy:[{receivedAt:'desc'},{id:'desc'}],
         select:{occurredAt:true,receivedAt:true}}),
       prisma.safetyMchsQueueItem.count({where:{status:'OBSERVED'}}),
@@ -336,6 +336,8 @@ router.get('/delivery-diagnostics', canView, async (_req,res,next) => {
       queuedLocal:health?.queuedLocal??null,
       failedSends:health?.failedSends??null,
       lastSentAt:health?.lastSentAt||null,
+      oldestPendingAt:health?.oldestPendingAt||null,
+      oldestPendingAgeMs:health?.oldestPendingAt ? Math.max(0,Date.now()-new Date(health.oldestPendingAt).getTime()) : null,
       retryPending:health?.retryPending??null,
       nextRetryAt:health?.nextRetryAt||null,
       snapshotOk:health?.snapshotOk??null,
