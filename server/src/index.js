@@ -19,6 +19,7 @@ import { startPendingDeletionWorker } from './lib/pendingDeletion.js';
 import { scheduleActionCleanup } from './lib/adminActionCleanupCron.js';
 import {scheduleRadioAutoPlaylists} from './lib/radioAutoPlaylistCron.js';
 import { scheduleStorageAudit } from './lib/storageAuditCron.js';
+import { startMchsObservationAnalyzer } from './lib/mchsObservationAnalyzer.js';
 
 
 /* ─────────── HTTP-сервер + Socket.IO ─────────── */
@@ -52,6 +53,7 @@ if (process.env.PREVIEW_MODE !== 'true') {
     scheduleActionCleanup();
     scheduleStorageAudit();
     scheduleRadioAutoPlaylists();
+    startMchsObservationAnalyzer();
 } else {
     console.log('[PREVIEW] Background jobs disabled');
 }

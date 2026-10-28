@@ -317,7 +317,7 @@ router.put('/operator-reviews/:eventId', requireRole('ADMIN'), async (req, res, 
 router.get('/observation-queue', canView, async (req, res, next) => {
   try {
     const limit = Math.max(1, Math.min(100, Number.parseInt(String(req.query.limit || '30'), 10) || 30));
-    const [items, total] = await Promise.all([
+    const [items, total, pending, analyzed] = await Promise.all([
       prisma.safetyMchsQueueItem.findMany({
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: limit,
         select: {
@@ -328,9 +328,11 @@ router.get('/observation-queue', canView, async (req, res, next) => {
         },
       }),
       prisma.safetyMchsQueueItem.count(),
+      prisma.safetyMchsQueueItem.count({where:{status:'OBSERVED'}}),
+      prisma.safetyMchsQueueItem.count({where:{status:'ANALYZED'}}),
     ]);
     res.set('Cache-Control', 'no-store');
-    res.json({ total, items, dispatchEnabled: false, playbackEnabled: false,
+    res.json({ total, pending, analyzed, items, dispatchEnabled: false, playbackEnabled: false,
       queuePurpose: 'OBSERVATION_ONLY' });
   } catch (error) { next(error); }
 });
