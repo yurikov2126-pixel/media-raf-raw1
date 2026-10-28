@@ -19,8 +19,9 @@ export default function SafetyMchs({ token }) {
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [rulesView, setRulesView] = useState('templates');
-  useEffect(() => { if (searchParams.get('mchsView') === 'rules' && searchParams.has('mchsEvent')) setRulesView('review'); }, [searchParams]);
   const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => { if (searchParams.get('mchsView') === 'rules' && searchParams.has('mchsEvent')) setRulesView('review'); }, [searchParams]);
+
   const panes = [
     ['overview', 'Обзор'],
     ['delivery', 'Android и доставка'],
