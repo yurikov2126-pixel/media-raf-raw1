@@ -6,6 +6,7 @@ import MchsEventTypeRules from './MchsEventTypeRules.jsx';
 import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsOperatorReviews from './MchsOperatorReviews.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
+import MchsOperationalOverview from './MchsOperationalOverview.jsx';
 import { api } from '../../../api/client.js';
 import { useTheme } from '../../../store/theme.jsx';
 import './mchsWorkspace.css';
@@ -30,11 +31,12 @@ export default function SafetyMchs({ token }) {
   ];
   const selectedPane = searchParams.get('mchsView');
   const pane = searchParams.has('incident') ? 'incidents' : panes.some(([id]) => id === selectedPane) ? selectedPane : 'overview';
-  const switchPane = next => {
+  const switchPane = (next,incidentId) => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', 'safety-mchs');
     params.set('mchsView', next);
-    params.delete('incident');
+    if(incidentId)params.set('incident',incidentId);
+    else params.delete('incident');
     setSearchParams(params, { replace: true });
   };
   const load = () => api('/safety/dashboard', { token }).then((result) => {
@@ -108,7 +110,8 @@ export default function SafetyMchs({ token }) {
         <button type="button" disabled={saving} onClick={save} className="rounded-xl bg-violet-600 px-5 py-2.5 text-white font-semibold disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить настройки'}</button>
       </>}
     </section>}
-    {(pane === 'overview' || pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
+    {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
+    {(pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
 
     {pane === "events" && <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />}
     {pane === "rules" && data && <div className="space-y-4">
