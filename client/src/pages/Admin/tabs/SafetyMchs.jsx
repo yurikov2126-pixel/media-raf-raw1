@@ -90,7 +90,7 @@ export default function SafetyMchs({ token }) {
     {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
     {(pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
 
-    {pane === "events" && <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />}
+    {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />}
     {pane === "rules" && data && <div className="space-y-4">
       <nav aria-label="Разделы правил МЧС" className="mchs-subtabs flex flex-wrap gap-2">
         {[
