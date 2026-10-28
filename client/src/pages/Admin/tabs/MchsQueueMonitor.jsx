@@ -25,6 +25,18 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
   const [probeResult, setProbeResult] = useState('');
   const [probing, setProbing] = useState(false);
   const [queueFilter, setQueueFilter] = useState('ALL');
+  const [queryText, setQueryText] = useState('');
+  const [incidentFilter, setIncidentFilter] = useState('ALL');
+  const [incidentText, setIncidentText] = useState('');
+  const [activeIncident, setActiveIncident] = useState(null);
+  const visibleQueue = (queue?.items || []).filter(item =>
+    (queueFilter === 'ALL' || item.status === queueFilter) &&
+    [item.event?.title,item.event?.eventType,item.id].some(value=>String(value||'').toLocaleLowerCase('ru').includes(queryText.trim().toLocaleLowerCase('ru')))
+  );
+  const visibleIncidents = (incidents || []).filter(item =>
+    (incidentFilter === 'ALL' || (incidentFilter === 'OPEN' ? !item.resolvedAt : Boolean(item.resolvedAt))) &&
+    [item.kind,item.reason,item.id].some(value=>String(value||'').toLocaleLowerCase('ru').includes(incidentText.trim().toLocaleLowerCase('ru')))
+  );
   const refresh = useCallback(async () => {
     try {
       const [items, status, transport, journal] = await Promise.all([
@@ -80,18 +92,60 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         <button type="button" onClick={() => void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
       </div>
     </div>
-    {view === 'incidents' && <details open={view === 'incidents' || Boolean(selectedIncident)} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
-      <summary className="cursor-pointer font-medium">Журнал технических неисправностей · {incidents?.length ?? '—'} записей</summary>
-      <p className="text-xs text-slate-500 dark:text-white/50 my-2">Записи отражают только техническую диагностику. Проверка выполняется примерно раз в минуту, поэтому время начала и восстановления приблизительное.</p>
-      {incidents?.length === 0 && <p className="text-sm">Неисправностей пока не зафиксировано.</p>}
-      {selectedIncident && incidents && !incidents.some(item => item.id === selectedIncident) && <p className="text-sm">Запись не найдена среди последних 100 событий.</p>}
-      {incidents?.map(item => <div key={item.id} id={item.id === selectedIncident ? "mchs-incident-selected" : undefined} className={`border-t border-slate-200 dark:border-white/10 py-2 text-sm ${item.id === selectedIncident ? "rounded-lg ring-2 ring-amber-400 p-2 bg-amber-400/10" : ""}`}>
-        <strong>{({HEARTBEAT:'Нет heartbeat',SNAPSHOT:'Ошибка чтения Android SQLite',RETRY:'Просроченная повторная отправка',BACKLOG:'Длительное ожидание в очереди'})[item.kind] || item.kind}</strong>
-        <p>{item.resolvedAt ? 'Восстановлено' : 'Не устранено'} · Начало: {fmt(item.openedAt)} · Завершение: {fmt(item.resolvedAt)}</p>
-        {item.resolvedAt && <p>Продолжительность: {Math.max(0,Math.round((new Date(item.resolvedAt)-new Date(item.openedAt))/60000))} мин</p>}
-        <p className="text-xs opacity-70">{item.reason}</p>
-      </div>)}
-    </details>}
+    {view === 'incidents' && <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {[
+          ['Всего записей',incidents?.length ?? '—'],
+          ['Не устранено',incidents ? incidents.filter(x=>!x.resolvedAt).length : '—'],
+          ['Восстановлено',incidents ? incidents.filter(x=>Boolean(x.resolvedAt)).length : '—']
+        ].map(([label,value])=><div key={label} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-slate-50 dark:bg-white/5">
+          <p className="text-xs text-slate-500 dark:text-white/60">{label}</p><p className="text-xl font-semibold mt-1">{value}</p>
+        </div>)}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input aria-label="Поиск неисправностей" placeholder="Поиск по типу, причине, ID" value={incidentText} onChange={e=>setIncidentText(e.target.value)}
+          className="min-w-0 flex-1 rounded-xl border border-slate-300 dark:border-white/20 bg-transparent px-3 py-2.5 text-sm" />
+        <select aria-label="Статус неисправностей" value={incidentFilter} onChange={e=>setIncidentFilter(e.target.value)}
+          className="rounded-xl border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm">
+          <option value="ALL">Все статусы</option><option value="OPEN">Не устранено</option><option value="RESOLVED">Восстановлено</option>
+        </select>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-white/50">Показаны последние {incidents?.length ?? '—'} записей журнала. Фильтры действуют по загруженным данным. Это только технические неисправности, не официальные предупреждения.</p>
+      {selectedIncident && incidents && !incidents.some(item=>item.id===selectedIncident) && <p className="text-sm">Запись из уведомления не найдена среди загруженных событий.</p>}
+      {incidents && visibleIncidents.length===0 && <p className="rounded-xl border border-slate-200 dark:border-white/10 p-4 text-sm">Нет записей по выбранным условиям.</p>}
+      <div className="space-y-2">
+        {visibleIncidents.map(item=><button key={item.id} type="button" id={item.id===selectedIncident?'mchs-incident-selected':undefined}
+          onClick={()=>setActiveIncident(item)}
+          className={`w-full text-left rounded-xl border p-3 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${item.id===selectedIncident?'border-amber-500 ring-2 ring-amber-400/50 bg-amber-50 dark:bg-amber-400/10':'border-slate-200 dark:border-white/10'}`}>
+          <div className="flex flex-wrap justify-between gap-2 items-start">
+            <strong className="text-sm sm:text-base">{({HEARTBEAT:'Нет heartbeat Android VM',SNAPSHOT:'Ошибка чтения Android SQLite',RETRY:'Просроченная повторная отправка',BACKLOG:'Длительное ожидание в очереди'})[item.kind]||item.kind}</strong>
+            <span className={`rounded-full px-2 py-1 text-xs font-medium ${item.resolvedAt?'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200':'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200'}`}>{item.resolvedAt?'Восстановлено':'Не устранено'}</span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-2">Начало: {fmt(item.openedAt)} · {item.resolvedAt?'Завершение: '+fmt(item.resolvedAt):'Ожидает восстановления'}</p>
+          <p className="text-xs mt-1 text-slate-500 dark:text-white/60">Открыть подробности</p>
+        </button>)}
+      </div>
+      {activeIncident && <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6" role="presentation"
+        onMouseDown={e=>{if(e.target===e.currentTarget)setActiveIncident(null);}}>
+        <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" aria-hidden="true" />
+        <section role="dialog" aria-modal="true" aria-labelledby="mchs-incident-dialog-title"
+          className="relative w-full max-w-xl max-h-[85dvh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-white/15">
+          <div className="flex justify-between items-start gap-3">
+            <h4 id="mchs-incident-dialog-title" className="text-lg font-semibold">Техническая неисправность</h4>
+            <button type="button" onClick={()=>setActiveIncident(null)} aria-label="Закрыть" className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-1.5">Закрыть</button>
+          </div>
+          <div className="mt-4 space-y-3 text-sm">
+            <p><strong>Тип:</strong> {activeIncident.kind}</p>
+            <p><strong>Статус:</strong> {activeIncident.resolvedAt?'Восстановлено':'Не устранено'}</p>
+            <p><strong>Причина:</strong> {activeIncident.reason}</p>
+            <p><strong>Открыто:</strong> {fmt(activeIncident.openedAt)}</p>
+            <p><strong>Закрыто:</strong> {fmt(activeIncident.resolvedAt)}</p>
+            <p className="break-all text-xs opacity-70">ID: {activeIncident.id}</p>
+            <p className="rounded-lg bg-slate-100 dark:bg-white/10 p-3">Это запись мониторинга технической инфраструктуры, а не подтверждённое предупреждение МЧС. Радиооповещение не запускается.</p>
+          </div>
+        </section>
+      </div>}
+    </div>}
     {(view === "overview" || view === "queue") && <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
       {[
         ['Получено всего', queue?.total],
@@ -167,6 +221,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
       {!queue && !error && <p className="text-sm opacity-70">Загрузка очереди…</p>}
       {queue?.items?.length === 0 && <p className="text-sm opacity-70">Записей пока нет.</p>}
       <div className="flex flex-wrap items-center gap-2">
+        <input aria-label="Поиск в очереди" placeholder="Поиск по названию или типу" value={queryText} onChange={e=>setQueryText(e.target.value)} className="w-full sm:w-auto min-w-0 flex-1 rounded-lg border border-slate-300 dark:border-white/20 bg-transparent px-3 py-2 text-sm" />
         <label htmlFor="mchs-queue-filter" className="text-sm font-medium">Показать</label>
         <select id="mchs-queue-filter" value={queueFilter} onChange={e=>setQueueFilter(e.target.value)}
           className="rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900 px-3 py-2 text-sm">
@@ -176,8 +231,8 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
         </select>
         <span className="text-xs text-slate-500 dark:text-white/50">Фильтр по загруженным записям</span>
       </div>
-      {queue?.items?.filter(item=>queueFilter==='ALL'||item.status===queueFilter).length===0 && queue?.items?.length>0 && <p className="text-sm opacity-70">По выбранному фильтру записей нет.</p>}
-      {queue?.items?.filter(item=>queueFilter==='ALL'||item.status===queueFilter).map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+      {visibleQueue.length===0 && queue?.items?.length>0 && <p className="text-sm opacity-70">По выбранному фильтру записей нет.</p>}
+      {visibleQueue.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3">
         <div className="flex flex-wrap justify-between items-start gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-medium break-words">{item.event?.title || 'Без заголовка'}</p>
