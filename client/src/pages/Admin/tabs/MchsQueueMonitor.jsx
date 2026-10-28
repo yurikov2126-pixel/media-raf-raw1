@@ -118,7 +118,7 @@ export default function MchsQueueMonitor({ token, view = 'overview' }) {
           onClick={()=>setActiveIncident(item)}
           className={`w-full text-left rounded-xl border p-3 sm:p-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${item.id===selectedIncident?'border-amber-500 ring-2 ring-amber-400/50 bg-amber-50 dark:bg-amber-400/10':'border-slate-200 dark:border-white/10'}`}>
           <div className="flex flex-wrap justify-between gap-2 items-start">
-            <strong className="text-sm sm:text-base">{({HEARTBEAT:'Нет heartbeat Android VM',SNAPSHOT:'Ошибка чтения Android SQLite',RETRY:'Просроченная повторная отправка',BACKLOG:'Длительное ожидание в очереди'})[item.kind]||item.kind}</strong>
+            <strong className="text-sm sm:text-base">{({HEARTBEAT:'Нет heartbeat Android VM',SNAPSHOT:'Ошибка чтения Android SQLite',RETRY:'Просроченная повторная отправка',BACKLOG:'Длительное ожидание в очереди',TELEMETRY:'Устаревшая телеметрия Android VM'})[item.kind]||item.kind}</strong>
             <span className={`rounded-full px-2 py-1 text-xs font-medium ${item.resolvedAt?'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200':'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200'}`}>{item.resolvedAt?'Восстановлено':'Не устранено'}</span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-2">Начало: {fmt(item.openedAt)} · {item.resolvedAt?'Завершение: '+fmt(item.resolvedAt):'Ожидает восстановления'}</p>

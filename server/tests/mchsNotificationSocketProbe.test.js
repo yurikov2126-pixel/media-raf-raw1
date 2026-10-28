@@ -6,6 +6,7 @@ function fixture(fails=false) {
  const tx={
   $executeRaw:async()=>1,
   safetyMchsHealth:{findUnique:async()=>({lastSeenAt:new Date(now-200000)})},
+  safetyMchsTelemetrySample:{findMany:async()=>[]},
   safetyMchsTechnicalIncident:{
    findMany:async()=>rows.filter(x=>!x.resolvedAt),
    create:async({data})=>{const row={id:'diagnostic-1',...data};rows.push(row);return row;},
