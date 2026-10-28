@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import MchsEventJournal from '../../../components/MchsEventJournal.jsx';
-import MchsNotificationPolicies from './MchsNotificationPolicies.jsx';
 import MchsEventTypeRules from './MchsEventTypeRules.jsx';
 import { api } from '../../../api/client.js';
 
@@ -57,7 +56,6 @@ export default function SafetyMchs({ token }) {
     </section>
     <MchsEventJournal events={data?.events || []} total={data?.eventCount || 0} />
     {data && <MchsEventTypeRules token={token} />}
-    {data && <MchsNotificationPolicies token={token} events={data.events || []} />}
     <section className="rounded-2xl border border-sky-400/40 p-5 space-y-3">
         <h2 className="font-semibold">Диагностические события — только TEST ONLY</h2>
         <p className="text-sm opacity-70">Изолированный журнал. Приём: {data?.diagnosticIngestEnabled ? 'включён' : 'выключен'}. Записей: {data?.diagnosticCount ?? 0}. Эти записи не являются предупреждениями МЧС и не запускают радио.</p>
