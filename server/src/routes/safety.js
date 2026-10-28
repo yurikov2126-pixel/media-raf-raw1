@@ -231,6 +231,45 @@ router.put('/dispatch-mode', requireRole('ADMIN'), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+
+/** Read-only what-would-happen preview: no playback and no dispatch writes. */
+router.get('/dispatch-preview', canView, async (_req, res, next) => {
+  try {
+    const [events, rules, assetRows] = await Promise.all([
+      prisma.safetyMchsEvent.findMany({ orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
+        take: 100, select: { id: true, title: true, body: true, occurredAt: true,
+          receivedAt: true, region: true, sourceEventId: true } }),
+      getTypeRules(),
+      prisma.radioAsset.findMany({ where: { category: 'ALARM', mimeType: { startsWith: 'audio/' } },
+        select: { id: true, name: true } }),
+    ]);
+    const assets = new Map(assetRows.map(asset => [asset.id, asset.name]));
+    const now = Date.now();
+    const seen = new Set();
+    const decisions = events.map(event => {
+      const eventType = classifyMchsObservation(event.title, event.body);
+      const rule = rules[eventType];
+      const occurred = event.occurredAt ? new Date(event.occurredAt).getTime() : NaN;
+      const ageMs = Number.isFinite(occurred) ? now - occurred : null;
+      let reason = null;
+      if (seen.has(event.sourceEventId)) reason = 'DUPLICATE';
+      else if (eventType === 'UNCLASSIFIED') reason = 'UNCLASSIFIED';
+      else if (ageMs === null || ageMs < -120000 || ageMs > 120000) reason = 'STALE_OR_UNKNOWN_TIME';
+      else if (rule?.mode !== 'REVIEW') reason = 'RULE_DISABLED';
+      else if (!rule.audioAssetId || !assets.has(rule.audioAssetId)) reason = 'ALARM_AUDIO_MISSING';
+      else if (!event.region || !/ТУЛЬСК/i.test(event.region)) reason = 'REGION_UNVERIFIED';
+      seen.add(event.sourceEventId);
+      return { eventId: event.id, eventType, occurredAt: event.occurredAt,
+        receivedAt: event.receivedAt, ageMs, status: reason ? 'BLOCKED' : 'READY_FOR_OPERATOR_REVIEW',
+        reason, audioAssetId: reason ? null : rule.audioAssetId,
+        audioName: reason ? null : assets.get(rule.audioAssetId) };
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ mode: 'READ_ONLY_PREVIEW', speakerPlaybackEnabled: false,
+      evaluatedCount: decisions.length, decisions });
+  } catch (error) { next(error); }
+});
+
 router.put('/config', requireRole('ADMIN'), async (req, res, next) => {
   try {
     const config = sanitize(req.body);
