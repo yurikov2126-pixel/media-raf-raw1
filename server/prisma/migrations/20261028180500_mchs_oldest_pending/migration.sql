@@ -1,0 +1,1 @@
+ALTER TABLE "SafetyMchsHealth" ADD COLUMN "oldestPendingAt" TIMESTAMP(3);
