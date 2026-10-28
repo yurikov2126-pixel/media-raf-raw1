@@ -1,1 +1,1 @@
-ALTER TABLE "SafetyMchsHealth" ADD COLUMN "retryPending" INTEGER, ADD COLUMN "oldestPendingAt" TIMESTAMP(3), ADD COLUMN "nextRetryAt" TIMESTAMP(3);
+ALTER TABLE "SafetyMchsHealth" ADD COLUMN "retryPending" INTEGER, ADD COLUMN "nextRetryAt" TIMESTAMP(3);
