@@ -17,15 +17,16 @@ const status = (health,delivery,incidents,queue) => {
  };
 };
 export default function MchsOperationalOverview({token,onOpen}) {
- const [state,setState]=useState({queue:null,delivery:null,incidents:null,error:'',updated:null});
+ const [state,setState]=useState({queue:null,delivery:null,incidents:null,messages:null,error:'',updated:null});
  const refresh=useCallback(async()=>{
   try{
-   const [queue,delivery,journal]=await Promise.all([
+   const [queue,delivery,journal,dashboard]=await Promise.all([
     api('/safety/observation-queue?limit=50',{token}),
     api('/safety/delivery-diagnostics',{token}),
-    api('/safety/technical-incidents',{token})
+    api('/safety/technical-incidents',{token}),
+    api('/safety/dashboard',{token})
    ]);
-   setState({queue,delivery,incidents:journal.items||[],error:'',updated:new Date()});
+   setState({queue,delivery,incidents:journal.items||[],messages:dashboard.events||[],error:'',updated:new Date()});
   }catch(e){setState(x=>({...x,error:e.message||'Ошибка загрузки'}));}
  },[token]);
  useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},30000);return()=>clearInterval(timer);},[refresh]);
@@ -54,11 +55,19 @@ export default function MchsOperationalOverview({token,onOpen}) {
     </button>)}
    </div>
    <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3">
-    <h4 className="font-semibold">Последние наблюдения</h4>
-    {state.queue===null?<p className="text-sm mt-2">Загрузка…</p>:(state.queue.items||[]).length===0?<p className="text-sm mt-2">Записей нет.</p>:
-    state.queue.items.slice(0,3).map(item=><button key={item.id} type="button" onClick={()=>onOpen('queue')} className="block w-full text-left rounded-lg border border-slate-200 dark:border-white/15 px-3 py-2 mt-2 text-sm">
-     <strong className="block break-words">{item.event?.title||'Без заголовка'}</strong><span className="text-xs">{fmt(item.event?.receivedAt)} · {item.status}</span>
-    </button>)}
+    <div className="flex items-center justify-between gap-2">
+      <h4 className="font-semibold">Журнал сообщений МЧС</h4>
+      <button type="button" onClick={()=>onOpen('events')} className="text-xs font-medium text-violet-700 dark:text-violet-300">Весь журнал →</button>
+    </div>
+    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Последние сохранённые сообщения. Подлинность и полнота получения не подтверждены.</p>
+    {state.messages===null?<p className="text-sm mt-2">Загрузка…</p>:state.messages.length===0?<p className="text-sm mt-2">В загруженном журнале нет сообщений.</p>:
+      [...state.messages].sort((a,b)=>new Date(b.receivedAt||0)-new Date(a.receivedAt||0)).slice(0,3).map(item=>
+        <button key={item.id} type="button" onClick={()=>onOpen('events')}
+          className="block w-full text-left rounded-lg border border-slate-200 dark:border-white/15 px-3 py-2 mt-2 text-sm hover:border-violet-400 transition-colors">
+          <strong className="block break-words">{item.title||'Без заголовка'}</strong>
+          {item.body && <span className="block text-xs mt-1 text-slate-600 dark:text-slate-300 break-words line-clamp-2">{item.body}</span>}
+          <span className="block text-xs mt-2 text-slate-600 dark:text-slate-300">{fmt(item.receivedAt)} · Не подтверждено независимо</span>
+        </button>)}
    </div>
   </div>
   <p className="text-xs text-slate-600 dark:text-slate-300">Обновлено: {fmt(state.updated)} · Автообновление раз в 30 секунд при открытой вкладке. Heartbeat не гарантирует получение push; отсутствие записей не означает отсутствие тревог. Автоматический запуск эфира отключён.</p>
