@@ -21,7 +21,7 @@ html:not(.dark) .mchs-admin-workspace :is(input,textarea)::placeholder {
   color: #64748b;
   opacity: 1;
 }
-html:not(.dark) .mchs-admin-workspace button:not([aria-current="page"]):not([aria-pressed="true"]) {
+html:not(.dark) .mchs-admin-workspace button:not([aria-current="page"]):not([aria-pressed="true"]):not([class*="bg-violet-"]):not([class*="bg-indigo-"]) {
   color: #334155;
 }
 html:not(.dark) .mchs-admin-workspace button[aria-current="page"],
