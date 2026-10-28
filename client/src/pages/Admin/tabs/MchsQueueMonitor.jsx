@@ -102,6 +102,8 @@ export default function MchsQueueMonitor({ token }) {
           <p>Чтение Android SQLite: {delivery.vmTelemetry.snapshotOk === true ? 'Успешно' : delivery.vmTelemetry.snapshotOk === false ? 'Ошибка чтения' : 'Нет данных'} · Последний успешный снимок: {fmt(delivery.vmTelemetry.snapshotAt)}</p>
           <p>В локальной очереди: {delivery.vmTelemetry.queuedLocal ?? 'неизвестно'} · Неудачных отправок (счётчик VM): {delivery.vmTelemetry.failedSends ?? 'неизвестно'}</p>
           <p>Последняя успешная отправка с VM: {fmt(delivery.vmTelemetry.lastSentAt)}</p>
+          <p>Ожидают повторной отправки: {delivery.vmTelemetry.retryPending ?? 'неизвестно'} · Следующая попытка: {fmt(delivery.vmTelemetry.nextRetryAt)}</p>
+          {delivery.vmTelemetry.telemetryFresh && delivery.vmTelemetry.retryPending > 0 && <p className="text-amber-700 dark:text-amber-300">Есть неподтверждённые отправки. Проверь журнал VM; это не подтверждение потери уведомления.</p>}
         </>}
       </div>
       <p className="text-xs text-slate-500 dark:text-white/50">Отсутствие новых уведомлений не является неисправностью. Heartbeat подтверждает только контакт Android с API, а не полноту доставки push или подлинность сообщений. Задержка вычисляется по времени внутри уведомления, если оно доступно.</p>
