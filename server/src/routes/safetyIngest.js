@@ -46,13 +46,21 @@ router.post('/event', signedRequest, async (req, res, next) => {
       eventTime = new Date(occurredAt);
       if (!Number.isFinite(eventTime.getTime())) return fail(res, 400, 'INVALID_TIME');
     }
-    const result = await prisma.safetyMchsEvent.upsert({
+    const result = await prisma.$transaction(async tx => {
+      const event = await tx.safetyMchsEvent.upsert({
       where: { source_sourceEventId: { source: 'MCHS_ANDROID', sourceEventId: eventId } },
       create: { source: 'MCHS_ANDROID', sourceEventId: eventId, occurredAt: eventTime,
         title, body, channelId: channelId || null, region: region || null,
         eventType: classifyMchsObservation(title, body), verified: false },
       update: {},
       select: { id: true, receivedAt: true, verified: true }
+      });
+      await tx.safetyMchsQueueItem.upsert({
+        where: { eventId: event.id },
+        create: { eventId: event.id, status: 'OBSERVED' },
+        update: {},
+      });
+      return event;
     });
     res.status(200).json({ accepted: true, eventId, id: result.id, receivedAt: result.receivedAt, verified: false, testOnly: true });
   } catch (error) { next(error); }
