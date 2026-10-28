@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api/client.js';
 
 const ageOf = (event) => event.occurredAt ? Date.now() - new Date(event.occurredAt).getTime() : null;
 const historical = (event) => { const age = ageOf(event); return age === null || !Number.isFinite(age) || age > 30 * 60 * 1000 || age < -120000; };
 const dateText = (value) => value ? new Date(value).toLocaleString('ru-RU') : 'Не указано';
 
-export default function MchsEventJournal({ events = [], total = 0 }) {
+export default function MchsEventJournal({ events = [], total = 0, token }) {
   const [query, setQuery] = useState('');
   const [ageFilter, setAgeFilter] = useState('all');
   const [selected, setSelected] = useState(null);
+  const [trace, setTrace] = useState(null);
+  const [traceError, setTraceError] = useState('');
+  useEffect(() => {
+    if (!selected?.id || !token) return;
+    let active = true;
+    setTrace(null); setTraceError('');
+    api('/safety/message-history/' + encodeURIComponent(selected.id), { token })
+      .then(value => { if(active)setTrace(value); })
+      .catch(error => { if(active)setTraceError(error.message || 'Не удалось получить историю'); });
+    return () => { active = false; };
+  }, [selected?.id, token]);
   const closeRef = useRef(null);
   const openerRef = useRef(null);
   useEffect(() => {
@@ -74,8 +86,32 @@ export default function MchsEventJournal({ events = [], total = 0 }) {
             ['Состояние по времени',historical(selected)?'Историческая или неизвестная дата':'Недавнее наблюдение']
           ].map(([label,value])=><div key={label} className="min-w-0 rounded-lg bg-slate-50 dark:bg-white/5 p-3"><dt className="text-xs text-slate-600 dark:text-slate-300">{label}</dt><dd className="mt-1 font-medium break-words">{value}</dd></div>)}
         </dl>
+        <section aria-label="История обработки" className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+          <h4 className="font-semibold">История обработки сообщения</h4>
+          {!trace && !traceError && <p className="text-sm">Загрузка диагностической истории…</p>}
+          {traceError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{traceError}</p>}
+          {trace && <>
+            {!trace.queues?.length && <p className="text-sm">Для сообщения пока нет записей очереди анализа.</p>}
+            {(trace.queues || []).map(queue => <div key={queue.id} className="space-y-2">
+              <p className="text-sm font-medium">Очередь: {queue.status} · попыток: {queue.attempts}</p>
+              {queue.lastError && <p className="text-sm">Последняя техническая ошибка: {queue.lastError}</p>}
+              {(queue.history || []).length ? <ol className="border-l-2 border-violet-300 dark:border-violet-600 pl-4 space-y-2">
+                {queue.history.map(item => <li key={item.id} className="text-sm"><strong>{item.status}</strong> · {item.reason}<span className="block text-xs text-slate-600 dark:text-slate-300">{dateText(item.createdAt)}</span></li>)}
+              </ol> : <p className="text-sm">Этапы анализа не зарегистрированы.</p>}
+            </div>)}
+            <div className="border-t border-slate-200 dark:border-white/15 pt-3">
+              <h4 className="font-semibold">Решение ответственного</h4>
+              {trace.review ? <div className="text-sm mt-2 space-y-1">
+                <p>Решение: {trace.review.decision === 'ACKNOWLEDGED' ? 'Ознакомлен' : trace.review.decision === 'DISMISSED' ? 'Отклонено' : trace.review.decision}</p>
+                <p>Комментарий: {trace.review.note || 'Не указан'}</p>
+                <p>Время: {dateText(trace.review.reviewedAt)}</p>
+                <p className="text-xs">ID ответственного: {trace.review.reviewedBy || 'Не указан'}</p>
+              </div> : <p className="text-sm mt-2">Решение оператора не зарегистрировано.</p>}
+            </div>
+          </>}
+        </section>
         <div className="text-xs text-slate-600 dark:text-slate-300 break-all">ID: {selected.id}</div>
-        <p className="text-xs text-slate-600 dark:text-slate-300">История обработки и решения оператора доступны только там, где они предоставляются отдельными диагностическими API; это окно не показывает неподтверждённых этапов.</p>
+        <p className="text-xs text-slate-600 dark:text-slate-300">История показывает только сохранённые диагностические действия и не подтверждает официальную тревогу или разрешение на эфир.</p>
       </section>
     </div>}
     {pageCount > 1 && <div className="flex items-center justify-between gap-3 text-sm">

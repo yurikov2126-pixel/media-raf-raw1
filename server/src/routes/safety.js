@@ -400,6 +400,29 @@ router.get('/observation-analyzer/status', canView, async (_req,res,next) => {
 });
 
 /** Read-only durable observation queue; not a command queue. */
+/** Read-only event-specific diagnostic trace; never establishes alert authenticity. */
+router.get('/message-history/:eventId', canView, async (req, res, next) => {
+  try {
+    const event = await prisma.safetyMchsEvent.findUnique({
+      where: { id: req.params.eventId }, select: { id: true, receivedAt: true }
+    });
+    if (!event) return res.status(404).json({error:'EVENT_NOT_FOUND'});
+    const queueItems = await prisma.safetyMchsQueueItem.findMany({
+      where: { eventId: event.id },
+      select: {
+        id:true,status:true,attempts:true,lastError:true,createdAt:true,updatedAt:true,
+        history:{orderBy:[{createdAt:'asc'},{id:'asc'}],take:100,
+          select:{id:true,status:true,reason:true,createdAt:true}}
+      }
+    });
+    const row = await prisma.setting.findUnique({where:{key:REVIEW_KEY}});
+    let review = null;
+    try { const parsed=JSON.parse(row?.value||'{}'); review=parsed?.[event.id]||null; } catch {}
+    res.set('Cache-Control','no-store');
+    res.json({eventId:event.id,receivedAt:event.receivedAt,
+      queues:queueItems,review,officialVerified:false,playbackEnabled:false});
+  } catch(error) { next(error); }
+});
 router.get('/observation-queue', canView, async (req, res, next) => {
   try {
     const limit = Math.max(1, Math.min(100, Number.parseInt(String(req.query.limit || '30'), 10) || 30));
