@@ -1442,6 +1442,7 @@ model SafetyMchsEvent {
   eventType   String   @default("UNCLASSIFIED")
   verified    Boolean  @default(false)
   raw         Json?
+  queueItem   SafetyMchsQueueItem?
   @@unique([source, sourceEventId])
   @@index([receivedAt])
 }
@@ -1488,4 +1489,18 @@ model RadioEditorialEpisode {
   updatedAt   DateTime @updatedAt
   @@index([startAt])
   @@index([status])
+}
+
+
+// Durable observation processing record. It is never a playout command.
+model SafetyMchsQueueItem {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  event       SafetyMchsEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  status      String   @default("OBSERVED")
+  attempts    Int      @default(0)
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([status, createdAt])
 }
