@@ -1458,6 +1458,8 @@ model SafetyMchsHealth {
   telemetryAt  DateTime?
   snapshotOk   Boolean?
   snapshotAt   DateTime?
+  retryPending Int?
+  nextRetryAt DateTime?
   updatedAt    DateTime @updatedAt
 }
 

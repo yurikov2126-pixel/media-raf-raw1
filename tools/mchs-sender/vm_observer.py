@@ -149,7 +149,15 @@ def queue_telemetry(db):
                   MAX(ack_at)
            FROM queue"""
     ).fetchone()
-    metrics = {"queuedLocal": pending, "failedSends": failures}
+    retry_pending, next_retry = db.execute(
+        """SELECT COUNT(*), MIN(CASE WHEN next_retry > 0 THEN next_retry END)
+           FROM queue WHERE ack_at IS NULL AND attempt > 0"""
+    ).fetchone()
+    metrics = {"queuedLocal": pending, "failedSends": failures,
+               "retryPending": retry_pending}
+    if next_retry is not None:
+        metrics["nextRetryAt"] = datetime.fromtimestamp(
+            next_retry, timezone.utc).isoformat().replace("+00:00", "Z")
     if last_ack is not None:
         metrics["lastSentAt"] = datetime.fromtimestamp(
             last_ack, timezone.utc).isoformat().replace("+00:00", "Z")

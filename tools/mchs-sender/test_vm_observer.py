@@ -87,6 +87,25 @@ class TelemetryTests(unittest.TestCase):
                 sent.assert_not_called()
             finally:
                 db.close()
+    def test_retry_telemetry_and_clear_queue(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = module.state_db(Path(directory) / "queue.db")
+            try:
+                db.execute("INSERT INTO queue(event_id,payload_json,attempt,next_retry) VALUES (?,?,?,?)",
+                           ("waiting", "{}", 2, 1800000000))
+                db.commit()
+                metrics = module.queue_telemetry(db)
+                self.assertEqual(metrics["retryPending"], 1)
+                self.assertEqual(metrics["queuedLocal"], 1)
+                self.assertTrue(metrics["nextRetryAt"].endswith("Z"))
+                db.execute("UPDATE queue SET ack_at=1800000001 WHERE event_id='waiting'")
+                db.commit()
+                cleared = module.queue_telemetry(db)
+                self.assertEqual(cleared["retryPending"], 0)
+                self.assertNotIn("nextRetryAt", cleared)
+            finally:
+                db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

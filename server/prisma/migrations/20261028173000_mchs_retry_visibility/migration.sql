@@ -1,0 +1,1 @@
+ALTER TABLE "SafetyMchsHealth" ADD COLUMN "retryPending" INTEGER, ADD COLUMN "nextRetryAt" TIMESTAMP(3);
