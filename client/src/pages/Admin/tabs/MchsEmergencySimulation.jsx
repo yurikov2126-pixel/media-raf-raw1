@@ -14,6 +14,7 @@ export default function MchsEmergencySimulation({token}){
  const previewRef=useRef(null);
  const [previewStatus,setPreviewStatus]=useState('IDLE');
  const [previewError,setPreviewError]=useState('');
+ const [workerLabScenario,setWorkerLabScenario]=useState('resume');
  const [audioReadinessError,setAudioReadinessError]=useState('');
  const [resume,setResume]=useState(null);
  const [resumeError,setResumeError]=useState('');
@@ -50,7 +51,7 @@ export default function MchsEmergencySimulation({token}){
   stopPreview();setPreviewError('');setPreviewStatus('LOADING');
   try{
    const apiRoot=import.meta.env.VITE_API||'http://localhost:4000/api';
-   const response=await fetch(apiRoot+(kind==='worker'?'/safety/worker-lab/handover.wav':kind==='handover'?'/safety/isolated-handover.wav':'/safety/isolated-test-tone.wav'),{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+   const response=await fetch(apiRoot+(kind==='worker'?'/safety/worker-lab/handover.wav?scenario='+encodeURIComponent(workerLabScenario):kind==='handover'?'/safety/isolated-handover.wav':'/safety/isolated-test-tone.wav'),{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
    if(!response.ok){
     const diagnostic=await response.json().catch(()=>null);
     const messages={
@@ -74,7 +75,7 @@ export default function MchsEmergencySimulation({token}){
    await audio.play();
    setPreviewStatus('PLAYING');
   }catch(e){stopPreview();setPreviewError(e.message||'Невозможно запустить тестовый сигнал');}
- },[token,stopPreview]);
+ },[token,stopPreview,workerLabScenario]);
  const scenarios=result?.scenarios|| (result?.source?[result]:[]);
  const active=scenarios.find(s=>s.source===selected);
  useEffect(()=>{if(!active)return;const handle=e=>{if(e.key==='Escape')setSelected(null);};window.addEventListener('keydown',handle);return()=>window.removeEventListener('keydown',handle);},[active]);
@@ -159,6 +160,13 @@ export default function MchsEmergencySimulation({token}){
   <div className="rounded-xl border border-slate-200 dark:border-white/15 p-4 space-y-3">
     <h4 className="font-semibold">Изолированный канал Radio Worker</h4>
     <p className="text-sm">Проверка звука, полученного от Worker отдельно от эфирного MP3-потока.</p>
+    <label className="block text-sm">Учебный сценарий
+      <select aria-label="Сценарий теста Radio Worker" value={workerLabScenario} onChange={e=>setWorkerLabScenario(e.target.value)} className="mt-1 block w-full max-w-sm rounded-lg border border-slate-300 bg-white text-slate-900 p-2 dark:border-white/20 dark:bg-slate-900 dark:text-white">
+       <option value="resume">Прерывание → возврат музыки</option>
+       <option value="stop">Прерывание → полная остановка</option>
+       <option value="repeat">Два последовательных прерывания</option>
+      </select>
+    </label>
     <button type="button" onClick={()=>void playPreview('worker')} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm">Прослушать тест Worker</button>
     <button type="button" onClick={stopPreview} className="rounded-lg border px-4 py-2 text-sm">Остановить</button>
     <p className="text-xs">Только наушники, изолированные от усилителя. Реальное вещание не переключается.</p>

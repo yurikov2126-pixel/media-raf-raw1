@@ -7,6 +7,7 @@
 import 'dotenv/config';
 import {createEmergencyDryRun} from '../src/lib/radioEmergencyDryRun.js';
 import {makeIsolatedHandoverWav} from '../src/lib/mchsIsolatedHandoverWav.js';
+import {makeWorkerLabScenarioWav,WORKER_LAB_SCENARIOS} from '../src/lib/mchsWorkerLabScenarios.js';
 import http from 'node:http';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -1898,8 +1899,12 @@ async function run() {
 const server=http.createServer((req,res)=>{
   if(!authorized(req)) {res.writeHead(403).end();return;}
   // Completely separate offline test PCM. Never enters station encoder or hardware output.
-  if(req.url==='/mchs-lab/handover.wav' && req.method==='GET'){
-    const wav=makeIsolatedHandoverWav();
+  if(req.method==='GET' && req.url?.startsWith('/mchs-lab/handover.wav')){
+    const url=new URL(req.url,'http://localhost');
+    if(url.pathname!=='/mchs-lab/handover.wav'){res.writeHead(404).end();return;}
+    const scenario=url.searchParams.get('scenario')||'resume';
+    if(!WORKER_LAB_SCENARIOS.includes(scenario)){res.writeHead(400).end();return;}
+    const wav=makeWorkerLabScenarioWav(scenario);
     res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':wav.length,
       'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     res.end(wav);return;
