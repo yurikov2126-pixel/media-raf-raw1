@@ -33,7 +33,7 @@ export default function MchsWorkerServerSession({token}){
    <button disabled={busy} onClick={()=>void get().catch(e=>setError(e.message))} className="rounded-lg border px-3 py-2 text-sm">Обновить статус</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
-  <p className="text-xs text-slate-600 dark:text-slate-300">Реакция Worker на команду до первого PCM-тика: {status?.pcmObservation?.revision===status?.revision?status.pcmObservation.workerCommandToPcmTickMs+' мс':'не измерена — обновите статус после команды при запущенном потоке'}. Это только серверная задержка, не время появления звука в наушниках.</p>
+  <p className="text-xs text-slate-600 dark:text-slate-300">Реакция Worker на команду до первого PCM-тика: {status?.pcmObservation && status.pcmObservation.revision===status.revision?status.pcmObservation.workerCommandToPcmTickMs+' мс':'не измерена — обновите статус после команды при запущенном потоке'}. Это только серверная задержка, не время появления звука в наушниках.</p>
   <MchsWorkerSessionMonitor token={token} phase={status?.phase} revision={status?.revision}/>
   <MchsWorkerLivePcmMonitor token={token} phase={status?.phase} revision={status?.revision}/>
   <MchsWorkerFixtureStage token={token}/>
