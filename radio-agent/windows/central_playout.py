@@ -22,6 +22,7 @@ from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
 from mchs_readiness import assess_mchs_readiness
 from mchs_output_preflight import evaluate_isolated_output_preflight
+from mchs_transition_shadow import MchsTransitionShadow
 
 STOP = threading.Event()
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
@@ -37,6 +38,16 @@ def get_status(server, token):
 def permitted(status):
     return status.get('mode')=='PILOT' and status.get('playbackEnabled') is True
 
+
+
+def send_mchs_observer_report(server, token, report):
+    """Best-effort telemetry only; never blocks or controls playback."""
+    payload=json.dumps(report).encode('utf-8')
+    request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-observer-report',
+                    data=payload,headers={'Authorization':'Bearer '+token,
+                    'Content-Type':'application/json'},method='POST')
+    with urlopen(request,timeout=3) as response:
+        return response.status==200
 
 
 def read_mchs_observer(server, token):
@@ -175,6 +186,7 @@ def run(args, token):
     last_mchs_observer_poll=0.0
     mchs_observer_busy=threading.Event()
     last_mchs_observed_revision=None
+    mchs_transition_shadow=MchsTransitionShadow()
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
     output_probe_busy=threading.Event()
@@ -234,10 +246,15 @@ def run(args, token):
                 preflight=evaluate_isolated_output_preflight(
                     observer=ready,pa_cable_disconnected=False,
                     separate_output_confirmed=False,operator_present=False)
+                transition=mchs_transition_shadow.observe(revision,data.get('workerPhase'))
+                report={'revision':revision,**ready,'preflight':preflight,
+                        'transition':transition}
                 print('MCHS_AGENT_OBSERVER',json.dumps({
-                    'revision':revision,**ready,
-                    'preflight':preflight,
-                    'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
+                    **report,'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
+                try:
+                    send_mchs_observer_report(args.server,token,report)
+                except (OSError,ValueError):
+                    print('MCHS_AGENT_OBSERVER_REPORT_UNAVAILABLE',flush=True)
         except HTTPError as error:
             if error.code != 403:
                 print('MCHS_AGENT_OBSERVER_UNAVAILABLE',error.code,flush=True)
