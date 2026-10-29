@@ -189,9 +189,13 @@ router.get('/agent/mchs-integration-observe',deviceAuth,safe(async(req,res)=>{
     req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
    return res.status(403).json({error:'INTEGRATION_OBSERVER_DISABLED'});
  try{
-  const observed=await workerMchsSessionRequest(null);
+  const response=await workerMchsSessionRequest(null);
+  const observed=response.data;
+  if(!observed||!['IDLE','PROGRAM','ALERT'].includes(observed.phase)||
+     !Number.isSafeInteger(observed.revision)||observed.revision<0)
+    return res.status(503).json({error:'LAB_WORKER_INVALID_STATE',mode:'OBSERVE_ONLY'});
   res.json({mode:'OBSERVE_ONLY',stationPlaybackChanged:false,paOutputChanged:false,
-   workerPhase:observed.phase||'UNKNOWN',revision:observed.revision??null,
+   workerPhase:observed.phase,revision:observed.revision,
    pcmObservation:observed.pcmObservation||null,observedAt:new Date().toISOString()});
  }catch{
   res.status(503).json({error:'LAB_WORKER_UNAVAILABLE',mode:'OBSERVE_ONLY'});
