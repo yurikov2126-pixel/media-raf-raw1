@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {api} from '../../../api/client.js';
+import MchsIsolatedMixer from './MchsIsolatedMixer.jsx';
 const labels={AUTO_DJ:'AutoDJ',SCHEDULE:'Эфирная сетка',LIVE:'Прямой эфир',MANUAL_PLAYLIST:'Ручной плейлист',AUTO_PLAYLIST:'Автоматический плейлист'};
 const steps={PREPARE:'Подготовка',ACTIVATE:'Моделирование запуска',STOP:'Моделирование остановки',RECOVER:'План восстановления',RESET:'Завершение'};
 export default function MchsEmergencySimulation({token}){
@@ -140,6 +141,7 @@ export default function MchsEmergencySimulation({token}){
     {previewError&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{previewError}</p>}
     <p className="text-xs text-slate-600 dark:text-slate-300">Это не голосовое сообщение МЧС и не проверка прерывания эфира. Не подключено к Radio Worker, интернет-радио или ESP32. Если браузер использует общий системный выход с усилителем, не запускайте тест до физического отключения усилителя.</p>
   </div>
+  <MchsIsolatedMixer token={token} stopOtherPreview={stopPreview}/>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/15">
     <table className="w-full text-sm text-left">
