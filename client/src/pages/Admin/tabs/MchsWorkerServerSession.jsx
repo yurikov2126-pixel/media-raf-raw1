@@ -1,3 +1,4 @@
+import MchsWorkerLivePcmMonitor from './MchsWorkerLivePcmMonitor.jsx';
 import MchsWorkerSessionMonitor from './MchsWorkerSessionMonitor.jsx';
 import {useCallback,useEffect,useState} from 'react';
 export default function MchsWorkerServerSession({token}){
@@ -32,6 +33,7 @@ export default function MchsWorkerServerSession({token}){
   </div>
   {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
   <MchsWorkerSessionMonitor token={token} phase={status?.phase} revision={status?.revision}/>
+  <MchsWorkerLivePcmMonitor token={token}/>
   <p className="text-xs">Сессия автоматически истекает через 120 секунд без команд. STOP не влияет на настоящее радио.</p>
  </div>;
 }
