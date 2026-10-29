@@ -1,3 +1,4 @@
+import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
 import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
@@ -67,6 +68,35 @@ router.use(auth);
 // Static offline audio handover demonstration; no access to the station mixer.
 // Server-side control plane for the *isolated* Worker lab only; no station PCM output.
 // Read-only live laboratory PCM proxy; never connects to station output.
+// Training files are short, ephemeral and never connected to station playback.
+router.get('/worker-lab/fixtures',canView,async (_req,res)=>{
+ try{const r=await mchsLabFixtureRequest();res.status(r.status).set('Cache-Control','no-store').json(r.data);}
+ catch{res.status(503).json({error:'Worker fixture status unavailable'});}
+});
+router.delete('/worker-lab/fixtures',canView,async (_req,res)=>{
+ try{const r=await mchsLabFixtureRequest({method:'DELETE'});res.status(r.status).end();}
+ catch{res.status(503).json({error:'Worker fixture clear unavailable'});}
+});
+router.post('/worker-lab/fixtures/:kind',canView,async (req,res)=>{
+ if(!['music','trainingVoice'].includes(req.params.kind))return res.status(400).end();
+ if(req.headers['content-type']?.split(';')[0]!=='audio/wav')return res.status(415).end();
+ const size=Number(req.headers['content-length']);
+ if(!Number.isInteger(size)||size<44||size>480044)return res.status(413).end();
+ let bytes=0,parts=[],failed=false;
+ req.on('data',chunk=>{
+  if(failed)return;
+  bytes+=chunk.length;
+  if(bytes>480044){failed=true;parts=[];res.status(413).end();req.resume();return;}
+  parts.push(chunk);
+ });
+ req.on('end',async()=>{
+  if(failed)return;
+  if(bytes!==size)return res.status(400).end();
+  try{const r=await mchsLabFixtureRequest({method:'POST',kind:req.params.kind,data:Buffer.concat(parts)});
+   res.status(r.status).set('Cache-Control','no-store').json(r.data||{error:'Invalid laboratory WAV'});}
+  catch{res.status(503).json({error:'Worker fixture upload unavailable'});}
+ });
+});
 router.get('/worker-lab/session/stream.pcm',canView,(req,res)=>{
  const port=Number(process.env.RADIO_PLAYOUT_PORT||4105);
  const secret=process.env.RADIO_PLAYOUT_SECRET||'';
