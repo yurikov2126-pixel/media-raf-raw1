@@ -22,7 +22,7 @@ router.get('/', auth, async (req, res) => {
                             },
                         },
                     },
-                    messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+                    messages: { where: { NOT: { hiddenBy: { has: req.user.id } } }, orderBy: { createdAt: 'desc' }, take: 1 },
                 },
             },
         },
@@ -189,6 +189,8 @@ router.get('/:id/messages', auth, async (req, res) => {
             where: { id: chat.pinnedMessageId },
             include: { sender: { select: { id: true, fullName: true, username: true } } },
         });
+        if (pinned?.hiddenBy?.includes(req.user.id)) pinned = null;
+        if (pinned) pinned = Object.fromEntries(Object.entries(pinned).filter(([key]) => key !== 'hiddenBy'));
     }
 
     res.json({
