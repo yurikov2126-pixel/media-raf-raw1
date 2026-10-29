@@ -3,10 +3,10 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 const processorSource=`
 class MchsLabSink extends AudioWorkletProcessor {
  constructor(){
-  super();this.queue=[];this.offset=0;this.count=0;this.underruns=0;this.dropped=0;this.started=false;this.frames=0;
+  super();this.queue=[];this.offset=0;this.count=0;this.underruns=0;this.dropped=0;this.started=false;this.frames=0;this.target=1440;this.stableFrames=0;this.lastRecovery=0;
   this.port.onmessage=event=>{
    const m=event.data;
-   if(m?.reset){this.queue=[];this.offset=0;this.count=0;this.started=false;return;}
+   if(m?.reset){this.queue=[];this.offset=0;this.count=0;this.started=false;this.stableFrames=0;if(m.id)this.port.postMessage({resetAck:m.id});return;}
    if(m?.samples){
     const samples=m.samples;
     // Drop old samples, not recent alerts, if the browser stalls.
@@ -19,17 +19,18 @@ class MchsLabSink extends AudioWorkletProcessor {
  }
  process(_inputs,outputs){
   const out=outputs[0]?.[0];if(!out)return true;
-  if(!this.started&&this.count>=1440)this.started=true;
+  if(!this.started&&this.count>=this.target){this.started=true;this.stableFrames=0;}
   for(let i=0;i<out.length;i++){
    let value=0;
    if(this.started&&this.queue.length){
     const head=this.queue[0];value=head[this.offset++]||0;this.count--;
     if(this.offset===head.length){this.queue.shift();this.offset=0;}
-   }else if(this.started){this.underruns++;this.started=false;}
+   }else if(this.started){this.underruns++;this.started=false;this.stableFrames=0;this.target=Math.min(4320,this.target+480);}
    out[i]=value;
   }
+  if(this.started){this.stableFrames+=out.length;if(this.stableFrames>=240000){this.target=Math.max(1440,this.target-240);this.stableFrames=0;}}
   this.frames+=out.length;
-  if(this.frames>=24000){this.frames=0;this.port.postMessage({metrics:true,bufferMs:Math.round(this.count*1000/sampleRate),underruns:this.underruns,dropped:this.dropped});}
+  if(this.frames>=24000){this.frames=0;this.port.postMessage({metrics:true,bufferMs:Math.round(this.count*1000/sampleRate),underruns:this.underruns,dropped:this.dropped,targetMs:Math.round(this.target*1000/sampleRate)});}
   return true;
  }
 }
@@ -39,7 +40,7 @@ registerProcessor('mchs-lab-sink',MchsLabSink);
 export default function MchsWorkerLivePcmMonitor({token,phase,revision}){
  const current=useRef(null);
  const [active,setActive]=useState(false),[error,setError]=useState('');
- const [stats,setStats]=useState({bufferMs:0,underruns:0,dropped:0,reconnects:0});
+ const [stats,setStats]=useState({bufferMs:0,underruns:0,dropped:0,reconnects:0,targetMs:60,resetAckMs:null});
  const endpoint=(import.meta.env.VITE_API||'http://localhost:4000/api')+'/safety/worker-lab/session/stream.pcm';
  const dispose=useCallback(()=>{
   const engine=current.current;current.current=null;
@@ -57,7 +58,7 @@ export default function MchsWorkerLivePcmMonitor({token,phase,revision}){
  },[]);
  // Commands in this control panel invalidate queued audio immediately. Never let old
  // programme samples continue following a confirmed STOP/INTERRUPT.
- useEffect(()=>{current.current?.node.port.postMessage({reset:true});},[phase,revision]);
+ useEffect(()=>{const engine=current.current;if(engine){const id=Date.now();engine.resetSentAt=id;engine.node.port.postMessage({reset:true,id});}},[phase,revision]);
  const start=useCallback(async()=>{
   if(current.current)return;
   setError('');setStats({bufferMs:0,underruns:0,dropped:0,reconnects:0});
@@ -75,8 +76,8 @@ export default function MchsWorkerLivePcmMonitor({token,phase,revision}){
    const controller=new AbortController();
    const engine={context,node,moduleUrl,controller};
    current.current=engine;setActive(true);
-   node.port.onmessage=e=>{if(e.data?.metrics&&current.current===engine)
-    setStats(prev=>({...prev,bufferMs:e.data.bufferMs,underruns:e.data.underruns,dropped:e.data.dropped}));};
+   node.port.onmessage=e=>{if(e.data?.resetAck&&current.current===engine&&e.data.resetAck===engine.resetSentAt)setStats(prev=>({...prev,resetAckMs:Date.now()-engine.resetSentAt}));if(e.data?.metrics&&current.current===engine)
+    setStats(prev=>({...prev,bufferMs:e.data.bufferMs,underruns:e.data.underruns,dropped:e.data.dropped,targetMs:e.data.targetMs}));};
    let attempts=0;
    while(current.current===engine&&!controller.signal.aborted){
     try{
@@ -122,13 +123,13 @@ export default function MchsWorkerLivePcmMonitor({token,phase,revision}){
  },[endpoint,token,dispose]);
  return <div className="rounded-xl border border-slate-200 dark:border-white/20 p-3 space-y-2">
   <h5 className="font-semibold text-sm">Непрерывный лабораторный PCM — наушники</h5>
-  <p className="text-xs text-slate-600 dark:text-slate-300">Экспериментальный AudioWorklet-монитор. Ограничение буфера 300 мс, короткий стартовый запас 60 мс и ограниченное восстановление соединения. Не использовать для настоящих оповещений.</p>
+  <p className="text-xs text-slate-600 dark:text-slate-300">Экспериментальный AudioWorklet-монитор. Ограничение буфера 300 мс, адаптивный стартовый запас 60–180 мс и ограниченное восстановление соединения. Время подтверждения очистки буфера — локальная диагностика браузера, не полная задержка переключения от Worker до звука. Не использовать для настоящих оповещений.</p>
   <div className="flex flex-wrap gap-2">
    <button type="button" disabled={active} onClick={()=>void start()} className="bg-violet-600 text-white rounded-lg px-3 py-2 text-sm disabled:opacity-40">Слушать поток PCM</button>
    <button type="button" disabled={!active} onClick={dispose} className="rounded-lg border border-red-500 px-3 py-2 text-sm disabled:opacity-40">Остановить поток</button>
   </div>
   <p role="status" className="text-xs">{active?'PCM-монитор активен':'PCM-монитор отключён'}</p>
-  {active&&<p className="text-xs text-slate-600 dark:text-slate-300">Буфер: {stats.bufferMs} мс · Недостаток данных: {stats.underruns} · Сброшено чанков: {stats.dropped} · Переподключений: {stats.reconnects}</p>}
+  {active&&<p className="text-xs text-slate-600 dark:text-slate-300">Буфер: {stats.bufferMs} мс · Цель: {stats.targetMs} мс · События нехватки данных: {stats.underruns} · Сброшено чанков: {stats.dropped} · Переподключений: {stats.reconnects} · Подтверждение очистки буфера: {stats.resetAckMs??'—'} мс</p>}
   {error&&<p role="alert" className="text-xs text-red-600 dark:text-red-300">{error}</p>}
  </div>;
 }
