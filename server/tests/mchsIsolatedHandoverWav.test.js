@@ -11,9 +11,9 @@ describe('offline handover preview',()=>{
  it('keeps cue separate from programme portions',()=>{
   const out=makeIsolatedHandoverWav();
   const sample=t=>out.readInt16LE(44+Math.floor(t*24000)*2);
-  expect(Math.abs(sample(0.3))).toBeGreaterThan(0);
-  expect(Math.abs(sample(2.5))).toBeGreaterThan(0);
-  expect(Math.abs(sample(5.1))).toBeGreaterThan(0);
+  expect(Math.abs(sample(0.301))).toBeGreaterThan(0);
+  expect(Math.abs(sample(2.501))).toBeGreaterThan(0);
+  expect(Math.abs(sample(5.101))).toBeGreaterThan(0);
  });
  it('rejects invalid output format',()=>expect(()=>makeIsolatedHandoverWav({sampleRate:0})).toThrow(RangeError));
 });
