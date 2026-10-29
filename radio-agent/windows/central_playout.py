@@ -25,11 +25,15 @@ from mchs_output_preflight import evaluate_isolated_output_preflight
 from mchs_transition_shadow import MchsTransitionShadow
 from mchs_isolated_output_pilot import LocalMonitor
 from mchs_trial_watchdog import trial_stop_reason
+from mchs_lab_trigger import next_lab_trigger
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
 MCHS_AUDIO_STOP = threading.Event()
 MCHS_AUDIO_ARMED = threading.Event()
+MCHS_LAB_ONE_SHOT = threading.Event()
+MCHS_LAB_ONE_SHOT_EXPIRES = {'at': 0.0}
+MCHS_LAB_ONE_SHOT_LOCK = threading.Lock()
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
 
@@ -263,6 +267,17 @@ def run(args, token):
             report={'revision':revision,**ready,'preflight':preflight,
                     'transition':transition}
             if transition is not None:
+                with MCHS_LAB_ONE_SHOT_LOCK:
+                    should_trigger=next_lab_trigger(
+                        transition,armed=MCHS_LAB_ONE_SHOT.is_set(),
+                        expires_at=MCHS_LAB_ONE_SHOT_EXPIRES['at'],now=moment)
+                    if should_trigger:
+                        MCHS_LAB_ONE_SHOT.clear()  # exactly once, before dispatch
+                if should_trigger and not MCHS_AUDIO_ARMED.is_set() and not MCHS_AUDIO_START.is_set() and not STOP.is_set():
+                    MCHS_AUDIO_STOP.clear()
+                    MCHS_AUDIO_ARMED.set()
+                    MCHS_AUDIO_START.set()
+                    print('MCHS_LAB_ONE_SHOT_TRIGGERED',revision,flush=True)
                 last_mchs_observed_revision=revision
                 print('MCHS_AGENT_OBSERVER',json.dumps({
                     **report,'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
@@ -453,6 +468,7 @@ def run(args, token):
         threading.Thread(target=async_playback_report,args=(args.server,token,
             {'playback':'STOPPED','outputDevice':'VLC (устройство вывода не подтверждено)',
              'lastPacketAgeMs':None,'error':''}),daemon=True).start()
+        MCHS_LAB_ONE_SHOT.clear()
         MCHS_AUDIO_ARMED.clear()
         MCHS_AUDIO_START.clear()
         MCHS_AUDIO_STOP.clear()
