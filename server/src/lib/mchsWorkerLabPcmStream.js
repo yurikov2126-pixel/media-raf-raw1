@@ -1,7 +1,9 @@
+import {createMchsFixturePcmRenderer} from './mchsFixturePcmRenderer.js';
 /** Isolated 24kHz mono PCM16 stream. NEVER send to station encoder. */
-export function createMchsLabPcmStream(res,session,{maxMs=60000}={}){
+export function createMchsLabPcmStream(res,session,{maxMs=60000,fixtures=null}={}){
  const rate=24000,frames=480;
  let phase='IDLE',sample=0,closed=false,elapsed=0;
+ const fixtureRenderer=fixtures?createMchsFixturePcmRenderer(fixtures):null;
  res.writeHead(200,{'Content-Type':'application/octet-stream','Cache-Control':'no-store, no-transform',
    'X-Content-Type-Options':'nosniff','X-Lab-Format':'s16le;rate=24000;channels=1','X-Accel-Buffering':'no'});
  const end=()=>{if(closed)return;closed=true;clearInterval(timer);if(!res.writableEnded)res.end();};
@@ -9,9 +11,9 @@ export function createMchsLabPcmStream(res,session,{maxMs=60000}={}){
   if(closed||res.destroyed)return end();
   elapsed+=20;if(elapsed>maxMs)return end();
   const state=session.status();
-  const buffer=Buffer.alloc(frames*2);
+  const buffer=fixtureRenderer?fixtureRenderer.render(state):Buffer.alloc(frames*2);
   if(state.phase!==phase){phase=state.phase;sample=0;}
-  for(let i=0;i<frames;i++){
+  if(!fixtureRenderer)for(let i=0;i<frames;i++){
    const t=sample/rate;
    const fade=Math.min(1,sample/240);
    const v=phase==='PROGRAM'?(Math.sin(2*Math.PI*220*t)*0.09+Math.sin(2*Math.PI*330*t)*0.035):
