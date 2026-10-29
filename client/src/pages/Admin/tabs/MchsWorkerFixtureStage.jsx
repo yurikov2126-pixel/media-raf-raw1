@@ -52,7 +52,7 @@ export default function MchsWorkerFixtureStage({token}){
  };
  return <div className="rounded-xl border border-slate-300 dark:border-white/20 p-4 space-y-3">
   <h4 className="font-semibold">Подготовка серверных учебных записей — изолированная память Worker</h4>
-  <p className="text-sm text-slate-600 dark:text-slate-300">Выберите короткие учебные отрывки до 10 секунд: они преобразуются в PCM16 24 кГц mono и временно передаются Worker. На этом этапе они НЕ воспроизводятся серверной сессией и НЕ подключены к радиоэфиру. Не используйте реальный сигнал тревоги или персональные записи.</p>
+  <p className="text-sm text-slate-600 dark:text-slate-300">Выберите короткие учебные отрывки до 10 секунд: они преобразуются в PCM16 24 кГц mono и временно передаются Worker. После подготовки файлы используются исключительно непрерывным лабораторным PCM-монитором. Музыка зацикливается, учебный голос воспроизводится один раз, затем наступает тишина до RESUME. К настоящему радиоэфиру файлы НЕ подключены. Не используйте реальный сигнал тревоги или персональные записи.</p>
   {['music','trainingVoice'].map(kind=><div key={kind} className="flex flex-wrap gap-2 items-center">
    <label className="text-sm">{kind==='music'?'Музыкальный отрывок':'Учебный голос'}
     <input className="block text-sm" type="file" accept="audio/*" disabled={busy} onChange={e=>setFiles(old=>({...old,[kind]:e.target.files?.[0]||null}))}/>
@@ -65,6 +65,6 @@ export default function MchsWorkerFixtureStage({token}){
    <button type="button" onClick={()=>void clear()} disabled={busy} className="rounded-lg border border-red-500 px-3 py-2 text-sm">Очистить файлы Worker</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-600">{error}</p>}
-  <p className="text-xs">Данные хранятся только в оперативной памяти Worker и исчезают при его перезапуске.</p>
+  <p className="text-xs">Данные хранятся только в оперативной памяти Worker и исчезают при перезапуске. Для проверки откройте «Непрерывный лабораторный PCM», запустите прослушивание, затем START → INTERRUPT → RESUME → STOP. Не включайте оба монитора одновременно.</p>
  </div>;
 }
