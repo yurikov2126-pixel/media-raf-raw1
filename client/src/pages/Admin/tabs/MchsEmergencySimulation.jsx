@@ -44,14 +44,14 @@ export default function MchsEmergencySimulation({token}){
   setPreviewStatus('STOPPED');
  },[]);
  useEffect(()=>()=>{const current=previewRef.current;if(current){current.audio.pause();URL.revokeObjectURL(current.url);previewRef.current=null;}},[]);
- const playPreview=useCallback(async()=>{
+ const playPreview=useCallback(async(kind='tone')=>{
   stopPreview();setPreviewError('');setPreviewStatus('LOADING');
   try{
    const apiRoot=import.meta.env.VITE_API||'http://localhost:4000/api';
-   const response=await fetch(apiRoot+'/safety/isolated-test-tone.wav',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+   const response=await fetch(apiRoot+(kind==='handover'?'/safety/isolated-handover.wav':'/safety/isolated-test-tone.wav'),{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
    if(!response.ok)throw new Error('Сервер не выдал тестовый звук ('+response.status+')');
    const blob=await response.blob();
-   if(blob.size>500000)throw new Error('Тестовый файл превышает допустимый размер');
+   if(blob.size>800000)throw new Error('Тестовый файл превышает допустимый размер');
    const url=URL.createObjectURL(blob),audio=new Audio(url);
    previewRef.current={audio,url};
    audio.onended=()=>{if(previewRef.current?.audio===audio)stopPreview();};
@@ -128,8 +128,13 @@ export default function MchsEmergencySimulation({token}){
     <h4 className="font-semibold">Первый тест реального звука — только на этом устройстве</h4>
     <p className="text-sm text-slate-600 dark:text-slate-300">Короткий оригинальный четырёхтональный сигнал WAV. Звук будет воспроизводиться локально в этом браузере через выбранное на устройстве аудиоустройство. Перед запуском проверьте громкость и физически отключите выход к усилителю колледжа.</p>
     <div className="flex flex-wrap gap-2">
-      <button type="button" disabled={previewStatus==='LOADING'} onClick={()=>void playPreview()} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm disabled:opacity-50">{previewStatus==='LOADING'?'Загрузка…':'Воспроизвести тестовый сигнал'}</button>
+      <button type="button" disabled={previewStatus==='LOADING'} onClick={()=>void playPreview('tone')} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm disabled:opacity-50">{previewStatus==='LOADING'?'Загрузка…':'Воспроизвести тестовый сигнал'}</button>
       <button type="button" onClick={stopPreview} className="rounded-lg border border-slate-300 dark:border-white/20 px-4 py-2 text-sm">Остановить</button>
+    </div>
+    <div className="rounded-lg border border-slate-200 dark:border-white/15 p-3 space-y-2">
+      <strong className="text-sm">Изолированная демонстрация перехода «музыка → сигнал → музыка»</strong>
+      <p className="text-xs text-slate-600 dark:text-slate-300">Шесть секунд синтезированного аудио: 0–2 с фоновый тон, 2–4 с сигнал прерывания, 4–6 с возобновление фона. Это заранее подготовленный WAV, а не переключение настоящего Radio Worker.</p>
+      <button type="button" disabled={previewStatus==='LOADING'} onClick={()=>void playPreview('handover')} className="rounded-lg bg-violet-600 text-white px-3 py-2 text-sm disabled:opacity-50">Прослушать тест перехода</button>
     </div>
     <p className="text-xs">Состояние: {({IDLE:'не запускался',LOADING:'загрузка',PLAYING:'локальное воспроизведение',STOPPED:'остановлен'})[previewStatus]}</p>
     {previewError&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{previewError}</p>}
