@@ -36,6 +36,14 @@ def permitted(status):
     return status.get('mode')=='PILOT' and status.get('playbackEnabled') is True
 
 
+
+def read_mchs_observer(server, token):
+    """Read-only lab state. This function must never touch VLC or power control."""
+    request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-integration-observe',
+                    headers={'Authorization':'Bearer '+token})
+    with urlopen(request,timeout=3) as response:
+        return json.load(response)
+
 def get_probe(server, token):
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/stream',
                     headers={'Authorization':'Bearer '+token})
@@ -162,6 +170,9 @@ def run(args, token):
     esp32_secret=getattr(args,'esp32_secret',os.environ.get('RADIO_ESP32_SECRET','')).strip()
     last_esp32=0.0
     last_audio_report=0.0
+    last_mchs_observer_poll=0.0
+    mchs_observer_busy=threading.Event()
+    last_mchs_observed_revision=None
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
     output_probe_busy=threading.Event()
@@ -202,6 +213,24 @@ def run(args, token):
         finally:
             probe_running.clear()
 
+    def check_mchs_observer():
+        nonlocal last_mchs_observed_revision
+        try:
+            data=read_mchs_observer(args.server,token)
+            revision=data.get('revision')
+            if data.get('mode')=='OBSERVE_ONLY' and revision!=last_mchs_observed_revision:
+                last_mchs_observed_revision=revision
+                print('MCHS_AGENT_OBSERVER',json.dumps({
+                    'revision':revision,'workerPhase':data.get('workerPhase'),
+                    'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
+        except HTTPError as error:
+            if error.code != 403:
+                print('MCHS_AGENT_OBSERVER_UNAVAILABLE',error.code,flush=True)
+        except (OSError,ValueError,KeyError):
+            print('MCHS_AGENT_OBSERVER_UNAVAILABLE',flush=True)
+        finally:
+            mchs_observer_busy.clear()
+
     print('WINDOWS HEADPHONES PILOT; NO AMP/ESP32. Stop with Ctrl+C.',flush=True)
     try:
         while not STOP.is_set():
@@ -217,6 +246,10 @@ def run(args, token):
                 last_output_probe=now
                 output_probe_busy.set()
                 threading.Thread(target=probe_output,daemon=True).start()
+            if now-last_mchs_observer_poll>=5 and not mchs_observer_busy.is_set():
+                last_mchs_observer_poll=now
+                mchs_observer_busy.set()
+                threading.Thread(target=check_mchs_observer,daemon=True).start()
             if now-last_audio_report>=8:
                 last_audio_report=now
                 report=playback_report(primary,fallback,relay,now)
