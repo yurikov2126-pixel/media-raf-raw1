@@ -39,6 +39,16 @@ def permitted(status):
 
 
 
+def send_mchs_observer_report(server, token, report):
+    """Best-effort telemetry only; never blocks or controls playback."""
+    payload=json.dumps(report).encode('utf-8')
+    request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-observer-report',
+                    data=payload,headers={'Authorization':'Bearer '+token,
+                    'Content-Type':'application/json'},method='POST')
+    with urlopen(request,timeout=3) as response:
+        return response.status==200
+
+
 def read_mchs_observer(server, token):
     """Read-only lab state. This function must never touch VLC or power control."""
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-integration-observe',
@@ -234,10 +244,13 @@ def run(args, token):
                 preflight=evaluate_isolated_output_preflight(
                     observer=ready,pa_cable_disconnected=False,
                     separate_output_confirmed=False,operator_present=False)
+                report={'revision':revision,**ready,'preflight':preflight}
                 print('MCHS_AGENT_OBSERVER',json.dumps({
-                    'revision':revision,**ready,
-                    'preflight':preflight,
-                    'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
+                    **report,'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
+                try:
+                    send_mchs_observer_report(args.server,token,report)
+                except (OSError,ValueError):
+                    print('MCHS_AGENT_OBSERVER_REPORT_UNAVAILABLE',flush=True)
         except HTTPError as error:
             if error.code != 403:
                 print('MCHS_AGENT_OBSERVER_UNAVAILABLE',error.code,flush=True)
