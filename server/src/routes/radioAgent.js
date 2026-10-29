@@ -1,4 +1,4 @@
-import {workerLabSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
+import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
 import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
@@ -189,7 +189,7 @@ router.get('/agent/mchs-integration-observe',deviceAuth,safe(async(req,res)=>{
     req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
    return res.status(403).json({error:'INTEGRATION_OBSERVER_DISABLED'});
  try{
-  const observed=await workerLabSessionRequest(null);
+  const observed=await workerMchsSessionRequest(null);
   res.json({mode:'OBSERVE_ONLY',stationPlaybackChanged:false,paOutputChanged:false,
    workerPhase:observed.phase||'UNKNOWN',revision:observed.revision??null,
    pcmObservation:observed.pcmObservation||null,observedAt:new Date().toISOString()});
