@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from tkinter import filedialog, messagebox, ttk
 
-from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED
+from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK
 from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat, restart_esp32, upload_firmware
 from esp32_telemetry import report_status
@@ -192,6 +192,8 @@ class RadioAgentApp(tk.Tk):
                    command=self.start_mchs_audio_trial).pack(side="left")
         ttk.Button(trial_bar,text="СТОП МЧС / вернуть радио",
                    command=self.stop_mchs_audio_trial).pack(side="left",padx=8)
+        ttk.Button(air,text="Разрешить ОДНО учебное событие МЧС (60 секунд)",
+                   command=self.arm_mchs_lab_one_shot).pack(anchor="w",pady=(0,7))
         ttk.Label(air,text="Только с физически отключённым кабелем к AA-300. Макс. 30 секунд.",
                   style="Main.TLabel").pack(anchor="w",pady=(0,7))
         ttk.Label(air, text="Журнал событий", style="Main.TLabel").pack(anchor="w")
@@ -607,6 +609,25 @@ class RadioAgentApp(tk.Tk):
         os.startfile(str(self.pending_update))
         self.destroy()
 
+    def arm_mchs_lab_one_shot(self):
+        if not (self.worker and self.worker.is_alive()):
+            messagebox.showwarning("МЧС", "Сначала запустите Windows Agent.")
+            return
+        if MCHS_AUDIO_ARMED.is_set():
+            messagebox.showwarning("МЧС", "Учебный звук уже активирован.")
+            return
+        approved=messagebox.askyesno(
+            "Разрешить одно учебное событие",
+            "Физически отсоединён кабель к AA-300, нет иных путей в PA, "
+            "оператор присутствует. Разрешить только ОДИН переход PROGRAM → ALERT "
+            "в течение 60 секунд? Повторные и реальные тревоги не активируются.",
+            icon="warning")
+        if approved:
+            with MCHS_LAB_ONE_SHOT_LOCK:
+                MCHS_LAB_ONE_SHOT_EXPIRES['at']=time.monotonic()+60
+                MCHS_LAB_ONE_SHOT.set()
+            self.messages.put(("log","MCHS_LAB_ONE_SHOT_ARMED_60_SECONDS"))
+
     def start_mchs_audio_trial(self):
         if not (self.worker and self.worker.is_alive()):
             messagebox.showwarning("МЧС", "Сначала запустите штатный Windows Agent.")
@@ -626,6 +647,7 @@ class RadioAgentApp(tk.Tk):
             self.messages.put(("log","MCHS_AUDIO_TRIAL_REQUESTED_BY_LOCAL_OPERATOR"))
 
     def stop_mchs_audio_trial(self):
+        MCHS_LAB_ONE_SHOT.clear()
         MCHS_AUDIO_ARMED.clear()
         MCHS_AUDIO_STOP.set()
         self.messages.put(("log","MCHS_AUDIO_TRIAL_STOP_REQUESTED"))
