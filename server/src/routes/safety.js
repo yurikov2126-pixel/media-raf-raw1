@@ -62,9 +62,11 @@ router.use(auth);
 // Conservative production preflight: never accepts a client claim that hardware is isolated.
 // Download-only synthetic chime; does not touch Radio Worker or PA hardware.
 // Static offline audio handover demonstration; no access to the station mixer.
-router.get('/worker-lab/handover.wav',canView,async (_req,res)=>{
+router.get('/worker-lab/handover.wav',canView,async (req,res)=>{
+ const scenario=typeof req.query.scenario==='string'?req.query.scenario:'resume';
+ if(!['resume','stop','repeat'].includes(scenario))return res.status(400).json({error:'Invalid lab scenario'});
  try{
-  const wav=await fetchWorkerMchsLabWav();
+  const wav=await fetchWorkerMchsLabWav({scenario});
   res.set({'Content-Type':'audio/wav','Content-Length':String(wav.length),'Cache-Control':'no-store'});
   res.end(wav);
  }catch(err){
