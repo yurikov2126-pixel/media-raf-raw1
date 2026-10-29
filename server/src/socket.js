@@ -182,7 +182,7 @@ export function initSocket(io) {
             try {
                 const msg = await prisma.message.findUnique({ where: { id: messageId } });
                 if (!msg) return cb?.({ error: 'Сообщение не найдено' });
-                if (scope !== 'me' && msg.senderId !== userId) return cb?.({ error: 'Нет прав' });
+                if (msg.senderId !== userId) return cb?.({ error: 'Нет прав' });
                 const updated = await prisma.message.update({
                     where: { id: messageId },
                     data: { content, editedAt: new Date() },
