@@ -5,6 +5,7 @@ import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
 import {workerRequest} from '../lib/radioLiveOpusGateway.js';
 import {planRadioEmergencyResume} from '../lib/radioEmergencyResumePlan.js';
+import {assessEmergencyAudioTestReadiness} from '../lib/mchsAudioTestReadiness.js';
 import {runEmergencySimulationSuite,runEmergencySimulationScenario} from '../lib/mchsEmergencySimulationSuite.js';
 import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -55,6 +56,29 @@ router.use(auth);
 // No actual control commands are accepted here. Pure in-process diagnostics only.
 // Read-only worker health; distinct from simulator success and physical output verification.
 // Real schedule snapshot + worker status, READ ONLY. No emergency commands, no playout.
+// Conservative production preflight: never accepts a client claim that hardware is isolated.
+router.get('/audio-test-readiness', canView, async (_req,res,next) => {
+  try {
+    const now=new Date();
+    const [workerResult,slots]=await Promise.all([
+      workerRequest('GET','/health').then(value=>({ok:true,value})).catch(()=>({ok:false,value:null})),
+      prisma.radioScheduleSlot.findMany({
+        where:{startAt:{lte:now},endAt:{gt:now},playlist:{status:'APPROVED'}},
+        include:{playlist:{include:{items:{orderBy:{position:'asc'},include:{asset:{
+          select:{id:true,name:true,durationMs:true}
+        }}}}}},orderBy:{startAt:'asc'},take:5
+      })
+    ]);
+    const worker=workerResult.value;
+    const verdict=assessEmergencyAudioTestReadiness({
+      workerReachable:workerResult.ok,workerSource:worker?.mode||'UNKNOWN',
+      workerError:worker?.lastError||null,nowMs:now.getTime(),slots
+      // No server-side evidence yet for isolation, stop, rollback or supervised tests.
+    });
+    res.set('Cache-Control','no-store');
+    res.json({checkedAt:now.toISOString(),source:worker?.mode||'UNKNOWN',...verdict});
+  }catch(error){next(error);}
+});
 router.get('/radio-resume-diagnostic', canView, async (_req,res,next) => {
   try {
     const at=new Date();
