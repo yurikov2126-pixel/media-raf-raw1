@@ -1,5 +1,5 @@
 /** Isolated MCHS lab control plane; never touches station audio or hardware. */
-export function createWorkerMchsLabSession({now=()=>Date.now(),ttlMs=120000}={}){
+export function createWorkerMchsLabSession({now=()=>performance.now(),ttlMs=120000}={}){
  let phase='IDLE',updated=now(),revision=0,commandAt=null,observedRevision=-1,observation=null;
  const snapshot=()=>({
   phase,revision,expiresInMs:phase==='IDLE'?0:Math.max(0,ttlMs-(now()-updated)),
