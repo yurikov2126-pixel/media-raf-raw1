@@ -268,11 +268,21 @@ def run(args, token):
                     'transition':transition}
             if transition is not None:
                 with MCHS_LAB_ONE_SHOT_LOCK:
+                    armed=MCHS_LAB_ONE_SHOT.is_set()
+                    expires_at=MCHS_LAB_ONE_SHOT_EXPIRES['at']
                     should_trigger=next_lab_trigger(
-                        transition,armed=MCHS_LAB_ONE_SHOT.is_set(),
-                        expires_at=MCHS_LAB_ONE_SHOT_EXPIRES['at'],now=moment)
+                        transition,armed=armed,
+                        expires_at=expires_at,now=moment)
                     if should_trigger:
                         MCHS_LAB_ONE_SHOT.clear()  # exactly once, before dispatch
+                if armed:
+                    print('MCHS_LAB_ONE_SHOT_OBSERVED',json.dumps({
+                        'revision':revision,'phase':data.get('workerPhase'),
+                        'transition':transition.get('transitionState'),
+                        'previousPhase':transition.get('previousPhase'),
+                        'missedRevisions':transition.get('missedRevisions'),
+                        'secondsRemaining':max(0,round(expires_at-moment)),
+                        'eligible':should_trigger}),flush=True)
                 if should_trigger and not MCHS_AUDIO_ARMED.is_set() and not MCHS_AUDIO_START.is_set() and not STOP.is_set():
                     MCHS_AUDIO_STOP.clear()
                     MCHS_AUDIO_ARMED.set()
