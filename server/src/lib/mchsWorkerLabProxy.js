@@ -1,11 +1,12 @@
 import http from 'node:http';
 
 /** Read-only binary fetch for the isolated Worker lab only. */
-export function fetchWorkerMchsLabWav({port=Number(process.env.RADIO_PLAYOUT_PORT||4105),secret=process.env.RADIO_PLAYOUT_SECRET||''}={}){
+export function fetchWorkerMchsLabWav({port=Number(process.env.RADIO_PLAYOUT_PORT||4105),secret=process.env.RADIO_PLAYOUT_SECRET||'',scenario='resume'}={}){
+ if(!['resume','stop','repeat'].includes(scenario))return Promise.reject(new Error('INVALID_LAB_SCENARIO'));
  if(!Number.isInteger(port)||port<1||port>65535||secret.length<32)
    return Promise.reject(new Error('WORKER_NOT_CONFIGURED'));
  return new Promise((resolve,reject)=>{
-  const req=http.get({hostname:'127.0.0.1',port,path:'/mchs-lab/handover.wav',timeout:3500,
+  const req=http.get({hostname:'127.0.0.1',port,path:'/mchs-lab/handover.wav?scenario='+scenario,timeout:3500,
    headers:{'x-radio-worker-secret':secret}},res=>{
    if(res.statusCode!==200){res.resume();reject(new Error('WORKER_HTTP_'+res.statusCode));return;}
    const chunks=[];let bytes=0;
