@@ -50,7 +50,7 @@ export default function MchsEmergencySimulation({token}){
   stopPreview();setPreviewError('');setPreviewStatus('LOADING');
   try{
    const apiRoot=import.meta.env.VITE_API||'http://localhost:4000/api';
-   const response=await fetch(apiRoot+(kind==='handover'?'/safety/isolated-handover.wav':'/safety/isolated-test-tone.wav'),{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+   const response=await fetch(apiRoot+(kind==='worker'?'/safety/worker-lab/handover.wav':kind==='handover'?'/safety/isolated-handover.wav':'/safety/isolated-test-tone.wav'),{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
    if(!response.ok)throw new Error('Сервер не выдал тестовый звук ('+response.status+')');
    const blob=await response.blob();
    if(blob.size>800000)throw new Error('Тестовый файл превышает допустимый размер');
@@ -143,6 +143,13 @@ export default function MchsEmergencySimulation({token}){
     <p className="text-xs text-slate-600 dark:text-slate-300">Это не голосовое сообщение МЧС и не проверка прерывания эфира. Не подключено к Radio Worker, интернет-радио или ESP32. Если браузер использует общий системный выход с усилителем, не запускайте тест до физического отключения усилителя.</p>
   </div>
   <MchsIsolatedMixer token={token} stopOtherPreview={stopPreview}/>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-4 space-y-3">
+    <h4 className="font-semibold">Изолированный канал Radio Worker</h4>
+    <p className="text-sm">Проверка звука, полученного от Worker отдельно от эфирного MP3-потока.</p>
+    <button type="button" onClick={()=>void playPreview('worker')} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm">Прослушать тест Worker</button>
+    <button type="button" onClick={stopPreview} className="rounded-lg border px-4 py-2 text-sm">Остановить</button>
+    <p className="text-xs">Только наушники, изолированные от усилителя. Реальное вещание не переключается.</p>
+  </div>
   <MchsFileAudioTest stopOtherPreview={stopPreview}/>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/15">
