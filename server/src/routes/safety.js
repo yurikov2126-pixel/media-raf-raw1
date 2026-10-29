@@ -1,3 +1,4 @@
+import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
@@ -64,6 +65,13 @@ router.use(auth);
 // Download-only synthetic chime; does not touch Radio Worker or PA hardware.
 // Static offline audio handover demonstration; no access to the station mixer.
 // Server-side control plane for the *isolated* Worker lab only; no station PCM output.
+router.get('/worker-lab/session/audio.wav',canView,async (_req,res)=>{
+ try{
+  const {wav,phase}=await fetchMchsWorkerLabChunk();
+  res.set({'Content-Type':'audio/wav','Content-Length':String(wav.length),'Cache-Control':'no-store',
+    'X-Content-Type-Options':'nosniff','X-Lab-Phase':phase}).end(wav);
+ }catch{res.status(503).set('Cache-Control','no-store').json({error:'Lab audio unavailable'});}
+});
 router.get('/worker-lab/session',canView,async (_req,res)=>{
  try{const result=await workerMchsSessionRequest();res.set('Cache-Control','no-store').json(result.data);}
  catch{res.status(503).json({error:'Worker lab session unavailable'});}
