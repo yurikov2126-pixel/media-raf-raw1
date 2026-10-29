@@ -181,7 +181,8 @@ export function initSocket(io) {
         socket.on('message:edit', async ({ messageId, content }, cb) => {
             try {
                 const msg = await prisma.message.findUnique({ where: { id: messageId } });
-                if (!msg || msg.senderId !== userId) return cb?.({ error: 'Нет прав' });
+                if (!msg) return cb?.({ error: 'Сообщение не найдено' });
+                if (scope !== 'me' && msg.senderId !== userId) return cb?.({ error: 'Нет прав' });
                 const updated = await prisma.message.update({
                     where: { id: messageId },
                     data: { content, editedAt: new Date() },
@@ -196,10 +197,23 @@ export function initSocket(io) {
             } catch (e) { console.error('message:edit', e); cb?.({ error: 'Ошибка' }); }
         });
 
-        socket.on('message:delete', async ({ messageId }, cb) => {
+        socket.on('message:delete', async ({ messageId, scope = 'all' }, cb) => {
             try {
                 const msg = await prisma.message.findUnique({ where: { id: messageId } });
                 if (!msg || msg.senderId !== userId) return cb?.({ error: 'Нет прав' });
+                if (scope !== 'me' && scope !== 'all') return cb?.({ error: 'Некорректный режим удаления' });
+                const membership = await prisma.chatMember.findUnique({
+                    where: { chatId_userId: { chatId: msg.chatId, userId } },
+                });
+                if (!membership) return cb?.({ error: 'Нет доступа' });
+                if (scope === 'me') {
+                    await prisma.message.update({
+                        where: { id: messageId },
+                        data: { hiddenBy: { push: userId } },
+                    });
+                    io.to(`user:${userId}`).emit('message:deleted', { messageId, scope: 'me' });
+                    return cb?.({ ok: true });
+                }
                 await prisma.message.update({
                     where: { id: messageId },
                     data: { deletedAt: new Date(), content: '' },
