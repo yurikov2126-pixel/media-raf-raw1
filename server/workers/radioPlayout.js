@@ -9,6 +9,7 @@ import {createEmergencyDryRun} from '../src/lib/radioEmergencyDryRun.js';
 import {makeIsolatedHandoverWav} from '../src/lib/mchsIsolatedHandoverWav.js';
 import {makeWorkerLabScenarioWav,WORKER_LAB_SCENARIOS} from '../src/lib/mchsWorkerLabScenarios.js';
 import {createWorkerMchsLabSession} from '../src/lib/mchsWorkerLabSession.js';
+import {createMchsLabPcmStream} from '../src/lib/mchsWorkerLabPcmStream.js';
 import {makeMchsLabSessionChunk} from '../src/lib/mchsWorkerLabSessionAudio.js';
 import http from 'node:http';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
@@ -1900,6 +1901,10 @@ async function run() {
 
 const mchsWorkerLabSession=createWorkerMchsLabSession();
 const server=http.createServer((req,res)=>{
+  if(req.url==='/mchs-lab/session/stream.pcm' && req.method==='GET'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    createMchsLabPcmStream(res,mchsWorkerLabSession);return;
+  }
   if(req.url==='/mchs-lab/session/audio.wav' && req.method==='GET'){
     if(!authorized(req)){res.writeHead(403).end();return;}
     const state=mchsWorkerLabSession.status();
