@@ -1912,7 +1912,7 @@ const server=http.createServer((req,res)=>{
     if(!authorized(req)){res.writeHead(403).end();return;}
     mchsLabFixtures.clear();res.writeHead(204).end();return;
   }
-  if(req.method==='POST' && /^\\/mchs-lab\\/fixtures\\/(music|trainingVoice)$/.test(req.url||'')){
+  if(req.method==='POST' && ['/mchs-lab/fixtures/music','/mchs-lab/fixtures/trainingVoice'].includes(req.url||'')){
     if(!authorized(req)){res.writeHead(403).end();return;}
     const kind=req.url.split('/').pop();
     let size=0,chunks=[],failed=false;
