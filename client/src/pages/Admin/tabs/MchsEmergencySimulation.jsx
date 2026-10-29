@@ -21,7 +21,11 @@ export default function MchsEmergencySimulation({token}){
   try{setAgentObservationError('');setAgentObservation(await api('/radio-agent/mchs-observer-status',{token}));}
   catch(e){setAgentObservation(null);setAgentObservationError(e.message||'Нет связи с диагностикой Agent');}
  },[token]);
- useEffect(()=>{void refreshAgentObservation();},[refreshAgentObservation]);
+ useEffect(()=>{
+  void refreshAgentObservation();
+  const timer=setInterval(()=>{if(document.visibilityState==='visible')void refreshAgentObservation();},5000);
+  return ()=>clearInterval(timer);
+ },[refreshAgentObservation]);
  const load=useCallback(async()=>{
   setLoading(true);setError('');
   try{setResult(await api('/safety/emergency-simulation'+(source?'?source='+encodeURIComponent(source):''),{token}));}
