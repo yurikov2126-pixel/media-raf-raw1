@@ -327,6 +327,8 @@ def run(args, token):
                   not MCHS_AUDIO_ARMED.is_set() or denied or
                   now-last_authorized>args.offline_grace)):
                 MCHS_AUDIO_STOP.clear()
+                if trial_relay is not None:
+                    trial_relay.closing.set()
                 stop_vlc(trial_vlc)
                 trial_vlc=None
                 if trial_relay is not None:
@@ -442,6 +444,8 @@ def run(args, token):
         MCHS_AUDIO_ARMED.clear()
         MCHS_AUDIO_START.clear()
         MCHS_AUDIO_STOP.clear()
+        if trial_relay is not None:
+            trial_relay.closing.set()
         stop_vlc(trial_vlc)
         if trial_relay is not None:
             trial_relay.shutdown()
