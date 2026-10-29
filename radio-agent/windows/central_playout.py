@@ -21,6 +21,7 @@ from esp32_local import send_heartbeat
 from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
 from mchs_readiness import assess_mchs_readiness
+from mchs_output_preflight import evaluate_isolated_output_preflight
 
 STOP = threading.Event()
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
@@ -230,8 +231,12 @@ def run(args, token):
                     last_packet_age_ms=age_ms,output_state=output_probe.get('state','UNKNOWN'),
                     authorized=not denied and moment-last_authorized<=args.offline_grace,
                     worker_phase=data.get('workerPhase'))
+                preflight=evaluate_isolated_output_preflight(
+                    observer=ready,pa_cable_disconnected=False,
+                    separate_output_confirmed=False,operator_present=False)
                 print('MCHS_AGENT_OBSERVER',json.dumps({
                     'revision':revision,**ready,
+                    'preflight':preflight,
                     'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
         except HTTPError as error:
             if error.code != 403:
