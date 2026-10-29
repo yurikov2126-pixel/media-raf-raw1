@@ -6,6 +6,7 @@
  */
 import 'dotenv/config';
 import {createEmergencyDryRun} from '../src/lib/radioEmergencyDryRun.js';
+import {makeIsolatedHandoverWav} from '../src/lib/mchsIsolatedHandoverWav.js';
 import http from 'node:http';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -1896,6 +1897,13 @@ async function run() {
 
 const server=http.createServer((req,res)=>{
   if(!authorized(req)) {res.writeHead(403).end();return;}
+  // Completely separate offline test PCM. Never enters station encoder or hardware output.
+  if(req.url==='/mchs-lab/handover.wav' && req.method==='GET'){
+    const wav=makeIsolatedHandoverWav();
+    res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':wav.length,
+      'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+    res.end(wav);return;
+  }
   if(req.url==='/live-pcm/session' && req.method==='POST'){
     if(!LIVE_PCM_INTAKE_ENABLED){res.writeHead(404).end();return;}
     const owner=String(req.headers['x-radio-session-owner']||'').trim();
