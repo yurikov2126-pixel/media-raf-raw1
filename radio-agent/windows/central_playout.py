@@ -232,29 +232,33 @@ def run(args, token):
         try:
             data=read_mchs_observer(args.server,token)
             revision=data.get('revision')
-            if data.get('mode')=='OBSERVE_ONLY' and revision!=last_mchs_observed_revision:
+            if data.get('mode')!='OBSERVE_ONLY' or not isinstance(revision,int) or isinstance(revision,bool):
+                return
+            moment=time.monotonic()
+            primary_alive=primary is not None and primary.poll() is None
+            reserve_alive=fallback is not None and fallback.poll() is None
+            age_ms=(moment-relay.last_data)*1000 if relay.last_data else None
+            ready=assess_mchs_readiness(
+                primary_alive=primary_alive,reserve_alive=reserve_alive,
+                last_packet_age_ms=age_ms,output_state=output_probe.get('state','UNKNOWN'),
+                authorized=not denied and moment-last_authorized<=args.offline_grace,
+                worker_phase=data.get('workerPhase'))
+            preflight=evaluate_isolated_output_preflight(
+                observer=ready,pa_cable_disconnected=False,
+                separate_output_confirmed=False,operator_present=False)
+            transition=mchs_transition_shadow.observe(revision,data.get('workerPhase'))
+            report={'revision':revision,**ready,'preflight':preflight,
+                    'transition':transition}
+            if transition is not None:
                 last_mchs_observed_revision=revision
-                moment=time.monotonic()
-                primary_alive=primary is not None and primary.poll() is None
-                reserve_alive=fallback is not None and fallback.poll() is None
-                age_ms=(moment-relay.last_data)*1000 if relay.last_data else None
-                ready=assess_mchs_readiness(
-                    primary_alive=primary_alive,reserve_alive=reserve_alive,
-                    last_packet_age_ms=age_ms,output_state=output_probe.get('state','UNKNOWN'),
-                    authorized=not denied and moment-last_authorized<=args.offline_grace,
-                    worker_phase=data.get('workerPhase'))
-                preflight=evaluate_isolated_output_preflight(
-                    observer=ready,pa_cable_disconnected=False,
-                    separate_output_confirmed=False,operator_present=False)
-                transition=mchs_transition_shadow.observe(revision,data.get('workerPhase'))
-                report={'revision':revision,**ready,'preflight':preflight,
-                        'transition':transition}
                 print('MCHS_AGENT_OBSERVER',json.dumps({
                     **report,'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
-                try:
-                    send_mchs_observer_report(args.server,token,report)
-                except (OSError,ValueError):
-                    print('MCHS_AGENT_OBSERVER_REPORT_UNAVAILABLE',flush=True)
+            # Heartbeats refresh dashboard freshness even if revision is unchanged.
+            # No audio, power or ESP32 action is performed by the observer.
+            try:
+                send_mchs_observer_report(args.server,token,report)
+            except (OSError,ValueError):
+                print('MCHS_AGENT_OBSERVER_REPORT_UNAVAILABLE',flush=True)
         except HTTPError as error:
             if error.code != 403:
                 print('MCHS_AGENT_OBSERVER_UNAVAILABLE',error.code,flush=True)
@@ -278,7 +282,7 @@ def run(args, token):
                 last_output_probe=now
                 output_probe_busy.set()
                 threading.Thread(target=probe_output,daemon=True).start()
-            if now-last_mchs_observer_poll>=5 and not mchs_observer_busy.is_set():
+            if now-last_mchs_observer_poll>=3 and not mchs_observer_busy.is_set():
                 last_mchs_observer_poll=now
                 mchs_observer_busy.set()
                 threading.Thread(target=check_mchs_observer,daemon=True).start()
