@@ -20,6 +20,7 @@ from sync_agent import sync
 from esp32_local import send_heartbeat
 from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
+from mchs_readiness import assess_mchs_readiness
 
 STOP = threading.Event()
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
@@ -220,8 +221,17 @@ def run(args, token):
             revision=data.get('revision')
             if data.get('mode')=='OBSERVE_ONLY' and revision!=last_mchs_observed_revision:
                 last_mchs_observed_revision=revision
+                moment=time.monotonic()
+                primary_alive=primary is not None and primary.poll() is None
+                reserve_alive=fallback is not None and fallback.poll() is None
+                age_ms=(moment-relay.last_data)*1000 if relay.last_data else None
+                ready=assess_mchs_readiness(
+                    primary_alive=primary_alive,reserve_alive=reserve_alive,
+                    last_packet_age_ms=age_ms,output_state=output_probe.get('state','UNKNOWN'),
+                    authorized=not denied and moment-last_authorized<=args.offline_grace,
+                    worker_phase=data.get('workerPhase'))
                 print('MCHS_AGENT_OBSERVER',json.dumps({
-                    'revision':revision,'workerPhase':data.get('workerPhase'),
+                    'revision':revision,**ready,
                     'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
         except HTTPError as error:
             if error.code != 403:
