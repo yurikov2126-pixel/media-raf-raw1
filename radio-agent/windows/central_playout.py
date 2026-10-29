@@ -26,12 +26,14 @@ from mchs_transition_shadow import MchsTransitionShadow
 from mchs_isolated_output_pilot import LocalMonitor
 from mchs_trial_watchdog import trial_stop_reason
 from mchs_lab_trigger import next_lab_trigger
+from mchs_lab_resume import should_stop_auto_lab
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
 MCHS_AUDIO_STOP = threading.Event()
 MCHS_AUDIO_ARMED = threading.Event()
 MCHS_LAB_ONE_SHOT = threading.Event()
+MCHS_LAB_AUTO_ACTIVE = threading.Event()
 MCHS_LAB_ONE_SHOT_EXPIRES = {'at': 0.0}
 MCHS_LAB_ONE_SHOT_LOCK = threading.Lock()
 MCHS_LAB_OBSERVED = {'phase':None,'revision':None,'at':0.0,'ready':False}
@@ -272,6 +274,11 @@ def run(args, token):
             report={'revision':revision,**ready,'preflight':preflight,
                     'transition':transition}
             if transition is not None:
+                if should_stop_auto_lab(transition,auto_active=MCHS_LAB_AUTO_ACTIVE.is_set()):
+                    MCHS_LAB_AUTO_ACTIVE.clear()
+                    MCHS_AUDIO_ARMED.clear()
+                    MCHS_AUDIO_STOP.set()
+                    print('MCHS_LAB_AUTO_STOP_ON_RESUME',revision,data.get('workerPhase'),flush=True)
                 with MCHS_LAB_ONE_SHOT_LOCK:
                     should_trigger=next_lab_trigger(
                         transition,armed=MCHS_LAB_ONE_SHOT.is_set(),
@@ -281,6 +288,7 @@ def run(args, token):
                 if should_trigger and not MCHS_AUDIO_ARMED.is_set() and not MCHS_AUDIO_START.is_set() and not STOP.is_set():
                     MCHS_AUDIO_STOP.clear()
                     MCHS_AUDIO_ARMED.set()
+                    MCHS_LAB_AUTO_ACTIVE.set()
                     MCHS_AUDIO_START.set()
                     print('MCHS_LAB_ONE_SHOT_TRIGGERED',revision,flush=True)
                 last_mchs_observed_revision=revision
@@ -367,6 +375,7 @@ def run(args, token):
                     trial_relay.shutdown()
                     trial_relay.server_close()
                     trial_relay=None
+                MCHS_LAB_AUTO_ACTIVE.clear()
                 MCHS_AUDIO_ARMED.clear()
                 MCHS_AUDIO_START.clear()
                 network_ok=False  # trigger fresh normal stream probe/reconnect
