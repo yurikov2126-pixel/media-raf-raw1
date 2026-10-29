@@ -212,8 +212,18 @@ router.post('/agent/mchs-observer-report',deviceAuth,safe(async(req,res)=>{
     p.hardwareSwitchAuthorized!==false||p.physicalIsolationVerifiedBySoftware!==false||
     d.audioInterruptionVerified!==false||d.paOutputVerified!==false)
    return res.status(400).json({error:'INVALID_OBSERVER_REPORT'});
+ const t=d.transition;
+ if(t!==null&&t!==undefined&&
+    (t.mode!=='OBSERVE_ONLY'||!['BASELINE','EXPECTED','MISSED_REVISIONS','UNEXPECTED'].includes(t.transitionState)||
+     !Number.isSafeInteger(t.observedRevision)||t.observedRevision!==d.revision||
+     !Number.isSafeInteger(t.missedRevisions)||t.missedRevisions<0||
+     !['IDLE','PROGRAM','ALERT'].includes(t.currentPhase)||t.currentPhase!==d.workerPhase||
+     (t.previousPhase!==null&&!['IDLE','PROGRAM','ALERT'].includes(t.previousPhase))))
+   return res.status(400).json({error:'INVALID_OBSERVER_TRANSITION'});
  const report={mode:'OBSERVE_ONLY',workerPhase:d.workerPhase,revision:d.revision,code:d.code,
    primaryAlive:d.primaryAlive,reserveAlive:d.reserveAlive,
+   transition:t?{transitionState:t.transitionState,previousPhase:t.previousPhase,
+     currentPhase:t.currentPhase,missedRevisions:t.missedRevisions,observedRevision:t.observedRevision}:null,
    readyForControlledAudioTrial:false,audioInterruptionVerified:false,paOutputVerified:false,
    receivedAt:new Date().toISOString()};
  const key='mchs_agent_observer_v1_'+req.radioDevice.id;

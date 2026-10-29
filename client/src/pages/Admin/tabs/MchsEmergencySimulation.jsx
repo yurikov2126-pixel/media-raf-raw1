@@ -121,6 +121,7 @@ export default function MchsEmergencySimulation({token}){
     {agentObservation?.report&&<div className="text-sm space-y-1">
       <p>Состояние лаборатории: {agentObservation.report.workerPhase} · ревизия {agentObservation.report.revision}</p>
       <p>Готовность Agent: {agentObservation.report.code}</p>
+      {agentObservation.report.transition&&<p>Переход: {agentObservation.report.transition.transitionState} · пропущено ревизий: {agentObservation.report.transition.missedRevisions}</p>}
       <p>Основной процесс: {agentObservation.report.primaryAlive?'запущен':'не подтверждён'} · резерв: {agentObservation.report.reserveAlive?'запущен':'не запущен'}</p>
       <p className="text-xs text-slate-600 dark:text-slate-300">Наблюдение получено: {agentObservation.report.receivedAt}. Физическое прерывание звука и PA не проверены.</p>
     </div>}
