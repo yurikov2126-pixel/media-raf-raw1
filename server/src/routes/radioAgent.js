@@ -1,3 +1,4 @@
+import http from 'node:http';
 import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
 import {validateAudioReport,audioHealth} from '../lib/radioAgentAudioHealth.js';
@@ -178,6 +179,30 @@ router.post('/devices', ...admin, safe(async(req,res) => {
   const device = await prisma.radioDevice.create({ data: { name, tokenHash: digest(token) } });
   res.status(201).json({ device: { id: device.id, name: device.name }, token });
 }));
+// Opt-in laboratory-only stream for ONE explicitly bound device. No station MP3 or ESP32.
+router.get('/agent/mchs-lab-pcm',deviceAuth,(req,res)=>{
+ const enabled=process.env.MCHS_AGENT_LAB_STREAM_ENABLED==='true';
+ const bound=String(process.env.MCHS_AGENT_LAB_DEVICE_ID||'');
+ if(!enabled||!bound||req.radioDevice.id!==bound||!req.radioDevice.playbackAllowed)
+   return res.status(403).json({error:'Лабораторный выход не разрешён для этого устройства'});
+ const port=Number(process.env.RADIO_PLAYOUT_PORT||4105),secret=process.env.RADIO_PLAYOUT_SECRET||'';
+ if(!Number.isInteger(port)||port<1||port>65535||secret.length<32)
+   return res.status(503).json({error:'Worker не настроен'});
+ let disconnected=false;
+ const upstream=http.get({hostname:'127.0.0.1',port,path:'/mchs-lab/session/stream.pcm',
+  headers:{'x-radio-worker-secret':secret},timeout:4000},source=>{
+   if(source.statusCode!==200){source.resume();return res.status(503).end();}
+   upstream.setTimeout(0);
+   res.set({'Content-Type':'application/octet-stream','Cache-Control':'no-store, no-transform',
+    'X-Content-Type-Options':'nosniff','X-Accel-Buffering':'no',
+    'X-Lab-Format':'s16le;rate=24000;channels=1'});
+   source.pipe(res);
+   source.on('error',()=>res.destroy());
+ });
+ upstream.on('timeout',()=>upstream.destroy(new Error('WORKER_TIMEOUT')));
+ upstream.on('error',()=>{if(!disconnected){if(!res.headersSent)res.status(503).end();else res.destroy();}});
+ res.on('close',()=>{disconnected=true;upstream.destroy();});
+});
 router.post('/agent/audio-telemetry',deviceAuth,safe(async(req,res)=>{
  const report=validateAudioReport(req.body);
  if(!report)return res.status(400).json({error:'Некорректное состояние аудиоустройства'});
