@@ -3,6 +3,7 @@ import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
 import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
 import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
+import {makeEmergencyTestWav} from '../lib/mchsIsolatedAudioPreview.js';
 import {workerRequest} from '../lib/radioLiveOpusGateway.js';
 import {planRadioEmergencyResume} from '../lib/radioEmergencyResumePlan.js';
 import {assessEmergencyAudioTestReadiness} from '../lib/mchsAudioTestReadiness.js';
@@ -57,6 +58,14 @@ router.use(auth);
 // Read-only worker health; distinct from simulator success and physical output verification.
 // Real schedule snapshot + worker status, READ ONLY. No emergency commands, no playout.
 // Conservative production preflight: never accepts a client claim that hardware is isolated.
+// Download-only synthetic chime; does not touch Radio Worker or PA hardware.
+router.get('/isolated-test-tone.wav', canView, (_req,res) => {
+  const data=makeEmergencyTestWav();
+  res.set({'Content-Type':'audio/wav','Content-Length':String(data.length),
+    'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+    'Content-Disposition':'attachment; filename="mchs-isolated-test.wav"'});
+  res.end(data);
+});
 router.get('/audio-test-readiness', canView, async (_req,res,next) => {
   try {
     const now=new Date();
