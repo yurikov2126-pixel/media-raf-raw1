@@ -53,3 +53,10 @@ def assess_output_inventory(inventory):
         'physicalIsolationVerified': False,
         'playbackAuthorized': False,
     }
+
+
+if __name__ == '__main__':
+    import json
+    print(json.dumps({'inventory': list_wave_outputs(),
+                      'safety': assess_output_inventory(list_wave_outputs())},
+                     ensure_ascii=False, indent=2))
