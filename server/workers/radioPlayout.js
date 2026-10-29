@@ -1,5 +1,5 @@
-import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
 #!/usr/bin/env node
+import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
 /**
  * Opt-in station playout worker: one persistent MP3 encoder, shared live output.
  * Binds loopback only; authenticated Express API proxy is the sole public entry.
