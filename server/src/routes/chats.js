@@ -22,7 +22,7 @@ router.get('/', auth, async (req, res) => {
                             },
                         },
                     },
-                    messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+                    messages: { where: { NOT: { hiddenBy: { has: req.user.id } } }, orderBy: { createdAt: 'desc' }, take: 1 },
                 },
             },
         },
@@ -137,7 +137,7 @@ router.get('/:id/messages', auth, async (req, res) => {
         ] };
     }
     const page = await prisma.message.findMany({
-        where: { chatId: req.params.id, ...(olderThan || {}) },
+        where: { chatId: req.params.id, NOT: { hiddenBy: { has: req.user.id } }, ...(olderThan || {}) },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 201,
         include: {
@@ -154,7 +154,7 @@ router.get('/:id/messages', auth, async (req, res) => {
     if (typeof req.query.focus === 'string' && req.query.focus.length < 128 &&
         !messages.some(m => m.id === req.query.focus)) {
         const target = await prisma.message.findFirst({
-            where: { id: req.query.focus, chatId: req.params.id },
+            where: { id: req.query.focus, chatId: req.params.id, NOT: { hiddenBy: { has: req.user.id } } },
             include: {
                 sender: { select: { id: true, fullName: true, username: true, avatar: true } },
                 replyTo: { include: { sender: { select: { id: true, fullName: true } } } },
@@ -189,10 +189,12 @@ router.get('/:id/messages', auth, async (req, res) => {
             where: { id: chat.pinnedMessageId },
             include: { sender: { select: { id: true, fullName: true, username: true } } },
         });
+        if (pinned?.hiddenBy?.includes(req.user.id)) pinned = null;
+        if (pinned) pinned = Object.fromEntries(Object.entries(pinned).filter(([key]) => key !== 'hiddenBy'));
     }
 
     res.json({
-        messages,
+        messages: messages.map(({ hiddenBy, ...message }) => message),
         hasMore,
         pinned,
         myRole: member.role,
@@ -211,6 +213,7 @@ router.get('/:id/media', auth, async (req, res) => {
     const where = {
         chatId: req.params.id,
         deletedAt: null,
+        NOT: { hiddenBy: { has: req.user.id } },
         type: type ? type : { in: ['image', 'video', 'file', 'voice'] },
     };
 
@@ -295,9 +298,19 @@ router.delete('/:id', auth, async (req, res) => {
         const chat = await prisma.chat.findUnique({ where: { id: chatId } });
         if (!chat) return res.status(404).json({ error: 'Чат не найден' });
 
+        const scope = req.query.scope === 'all' ? 'all' : 'me';
+        if (chat.type === 'DIRECT' && scope === 'all') {
+            const recipients = await prisma.chatMember.findMany({ where: { chatId }, select: { userId: true } });
+            await prisma.$transaction(tx => hardDeleteChat(tx, chatId));
+            if (io) {
+                io.to(`chat:${chatId}`).emit('chat:deleted', { chatId, whole: true });
+                for (const recipient of recipients) io.to(`user:${recipient.userId}`).emit('chat:deleted', { chatId, whole: true });
+            }
+            return res.json({ ok: true, mode: 'whole' });
+        }
         const isGroupAdmin = chat.type === 'GROUP' && member.role === 'admin';
 
-        if (isGroupAdmin) {
+        if (isGroupAdmin && scope === 'all') {
             await prisma.$transaction((tx) => hardDeleteChat(tx, chatId));
             if (io) io.to(`chat:${chatId}`).emit('chat:deleted', { chatId, whole: true });
             return res.json({ ok: true, mode: 'whole' });

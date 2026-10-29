@@ -186,6 +186,7 @@ model Message {
   forwardedFrom String?
   editedAt      DateTime?
   deletedAt     DateTime?
+  hiddenBy      String[]  @default([])
   createdAt     DateTime  @default(now())
 
   chat      Chat       @relation(fields: [chatId], references: [id], onDelete: Cascade)
