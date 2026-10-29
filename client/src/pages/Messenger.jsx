@@ -1133,7 +1133,7 @@ export default function Messenger() {
             <div role="dialog" aria-modal="true" aria-label="Выберите способ удаления" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/15 bg-white p-5 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white">
                 <h2 className="text-lg font-bold">Удаление {deleteChoice.kind==='message'?'сообщения':'чата'}</h2>
                 <p className="text-sm opacity-70">У кого удалить {deleteChoice.kind==='message'?'сообщение':'переписку'}?</p>
-                <button type="button" className="w-full rounded-xl border border-current/20 p-3 text-left" onClick={()=>performDelete('me')}>Удалить только у меня</button>
+                <button type="button" className="w-full rounded-xl border border-current/20 p-3 text-left" onClick={()=>performDelete('me')}>{deleteChoice.kind==='chat'&&deleteChoice.chat.type==='GROUP'?'Покинуть группу':'Удалить только у меня'}</button>
                 {(deleteChoice.kind==='message' ? deleteChoice.message.sender?.id===user.id : deleteChoice.chat.type==='DIRECT' || deleteChoice.chat.myRole==='admin')&&<button type="button" className="w-full rounded-xl border border-rose-500/40 p-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>performDelete('all')}>Удалить у всех</button>}
                 <button type="button" className="w-full rounded-xl px-3 py-2 text-sm opacity-70" onClick={()=>setDeleteChoice(null)}>Отмена</button>
             </div>
