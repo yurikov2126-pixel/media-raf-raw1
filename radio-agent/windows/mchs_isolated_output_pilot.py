@@ -13,6 +13,7 @@ import struct
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 MAX_PCM_BYTES = 24000 * 2 * 60
 STOP = threading.Event()
@@ -35,6 +36,7 @@ class LocalMonitor(ThreadingHTTPServer):
         self.server_url = server_url.rstrip("/")
         self.token = token
         self.closing = threading.Event()
+        self.active = threading.Event()
         super().__init__(("127.0.0.1", 0), Handler)
 
 
@@ -46,6 +48,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/lab.wav":
             self.send_error(404)
             return
+        if self.server.active.is_set():
+            self.send_error(409)
+            return
+        self.server.active.set()
         request = Request(
             self.server.server_url + "/api/radio-agent/agent/mchs-lab-pcm",
             headers={"Authorization": "Bearer " + self.server.token},
@@ -53,12 +59,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with urlopen(request, timeout=8) as upstream:
                 if upstream.status != 200 or upstream.headers.get("X-Lab-Format") != "s16le;rate=24000;channels=1":
+                    print("LAB_STREAM_WRONG_FORMAT_OR_STATUS", upstream.status, flush=True)
                     self.send_error(502)
                     return
                 self.send_response(200)
                 self.send_header("Content-Type", "audio/wav")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                print("LAB_STREAM_CONNECTED", flush=True)
                 self.wfile.write(wav_header())
                 total = 0
                 while not STOP.is_set() and total < MAX_PCM_BYTES:
@@ -67,12 +75,21 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     self.wfile.write(block)
                     total += len(block)
-        except (OSError, ValueError) as error:
-            # Never log headers, token or URL. A locally requested STOP is not a network failure.
+        except HTTPError as error:
+            # Operator can distinguish a 403 device/flag issue from unavailable PCM.
+            if not self.server.closing.is_set():
+                print("LAB_STREAM_HTTP_ERROR", error.code, flush=True)
+            try:
+                self.send_error(502)
+            except OSError:
+                pass
+        except (OSError, ValueError, URLError) as error:
             if self.server.closing.is_set() or STOP.is_set():
                 print("LAB_STREAM_CLOSED_BY_OPERATOR", flush=True)
             else:
-                print("LAB_STREAM_DISCONNECTED", type(error).__name__, flush=True)
+                print("LAB_STREAM_TRANSPORT_ERROR", type(error).__name__, flush=True)
+        finally:
+            self.server.active.clear()
 
 
 def main():
