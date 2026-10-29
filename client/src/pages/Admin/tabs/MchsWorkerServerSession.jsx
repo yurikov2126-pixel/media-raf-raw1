@@ -1,3 +1,4 @@
+import MchsWorkerSessionMonitor from './MchsWorkerSessionMonitor.jsx';
 import {useCallback,useEffect,useState} from 'react';
 export default function MchsWorkerServerSession({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -30,6 +31,7 @@ export default function MchsWorkerServerSession({token}){
    <button disabled={busy} onClick={()=>void get().catch(e=>setError(e.message))} className="rounded-lg border px-3 py-2 text-sm">Обновить статус</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
+  <MchsWorkerSessionMonitor token={token}/>
   <p className="text-xs">Сессия автоматически истекает через 120 секунд без команд. STOP не влияет на настоящее радио.</p>
  </div>;
 }

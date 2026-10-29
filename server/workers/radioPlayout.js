@@ -9,6 +9,7 @@ import {createEmergencyDryRun} from '../src/lib/radioEmergencyDryRun.js';
 import {makeIsolatedHandoverWav} from '../src/lib/mchsIsolatedHandoverWav.js';
 import {makeWorkerLabScenarioWav,WORKER_LAB_SCENARIOS} from '../src/lib/mchsWorkerLabScenarios.js';
 import {createWorkerMchsLabSession} from '../src/lib/mchsWorkerLabSession.js';
+import {makeMchsLabSessionChunk} from '../src/lib/mchsWorkerLabSessionAudio.js';
 import http from 'node:http';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -1899,6 +1900,14 @@ async function run() {
 
 const mchsWorkerLabSession=createWorkerMchsLabSession();
 const server=http.createServer((req,res)=>{
+  if(req.url==='/mchs-lab/session/audio.wav' && req.method==='GET'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    const state=mchsWorkerLabSession.status();
+    const wav=makeMchsLabSessionChunk(state.phase);
+    res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':wav.length,
+      'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Lab-Phase':state.phase});
+    res.end(wav);return;
+  }
   if(req.url==='/mchs-lab/session' && req.method==='GET'){
     if(!authorized(req)){res.writeHead(403).end();return;}
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
