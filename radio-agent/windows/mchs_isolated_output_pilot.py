@@ -34,6 +34,7 @@ class LocalMonitor(ThreadingHTTPServer):
     def __init__(self, server_url, token):
         self.server_url = server_url.rstrip("/")
         self.token = token
+        self.closing = threading.Event()
         super().__init__(("127.0.0.1", 0), Handler)
 
 
@@ -66,9 +67,12 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     self.wfile.write(block)
                     total += len(block)
-        except (OSError, ValueError):
-            # No credentials or network details in logs.
-            print("LAB_STREAM_DISCONNECTED", flush=True)
+        except (OSError, ValueError) as error:
+            # Never log headers, token or URL. A locally requested STOP is not a network failure.
+            if self.server.closing.is_set() or STOP.is_set():
+                print("LAB_STREAM_CLOSED_BY_OPERATOR", flush=True)
+            else:
+                print("LAB_STREAM_DISCONNECTED", type(error).__name__, flush=True)
 
 
 def main():

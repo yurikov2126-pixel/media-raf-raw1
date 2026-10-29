@@ -77,6 +77,7 @@ class Relay(ThreadingHTTPServer):
         self.token=token
         self.last_data=0.0
         self.failed=threading.Event()
+        self.intentional_disconnect=threading.Event()
         super().__init__(('127.0.0.1',0),RelayHandler)
 
 
@@ -105,9 +106,13 @@ class RelayHandler(BaseHTTPRequestHandler):
                     self.wfile.write(block)
                     self.server.last_data=time.monotonic()
         except (OSError,HTTPError,URLError,RuntimeError) as error:
-            print('RELAY_FAILED',type(error).__name__,flush=True)
+            if self.server.intentional_disconnect.is_set() or STOP.is_set():
+                print('RELAY_CLOSED_FOR_HANDOVER',flush=True)
+            else:
+                print('RELAY_FAILED',type(error).__name__,flush=True)
         finally:
-            self.server.failed.set()
+            if not self.server.intentional_disconnect.is_set():
+                self.server.failed.set()
 
 
 def start_vlc(executable, log, *args):
@@ -322,6 +327,8 @@ def run(args, token):
                   not MCHS_AUDIO_ARMED.is_set() or denied or
                   now-last_authorized>args.offline_grace)):
                 MCHS_AUDIO_STOP.clear()
+                if trial_relay is not None:
+                    trial_relay.closing.set()
                 stop_vlc(trial_vlc)
                 trial_vlc=None
                 if trial_relay is not None:
@@ -331,12 +338,14 @@ def run(args, token):
                 MCHS_AUDIO_ARMED.clear()
                 MCHS_AUDIO_START.clear()
                 network_ok=False  # trigger fresh normal stream probe/reconnect
+                last_probe=0.0
                 print('MCHS_AUDIO_TRIAL_STOPPED_RETURN_TO_PROGRAM',flush=True)
             if MCHS_AUDIO_START.is_set():
                 MCHS_AUDIO_START.clear()
                 if trial_vlc is None and MCHS_AUDIO_ARMED.is_set() and not denied and network_ok and now-last_authorized<15:
                     try:
                         # Close both audible decks before opening the training audio.
+                        relay.intentional_disconnect.set()
                         stop_vlc(primary)
                         stop_vlc(fallback)
                         primary=None
@@ -396,6 +405,7 @@ def run(args, token):
                 fallback=None
                 fallback_key=None
                 relay.failed.clear()
+                relay.intentional_disconnect.clear()
                 relay.last_data=time.monotonic()
                 url='http://127.0.0.1:%d/listen'%relay.server_address[1]
                 primary=start_vlc(args.vlc,logfile,'--network-caching=300',url)
@@ -434,10 +444,13 @@ def run(args, token):
         MCHS_AUDIO_ARMED.clear()
         MCHS_AUDIO_START.clear()
         MCHS_AUDIO_STOP.clear()
+        if trial_relay is not None:
+            trial_relay.closing.set()
         stop_vlc(trial_vlc)
         if trial_relay is not None:
             trial_relay.shutdown()
             trial_relay.server_close()
+        relay.intentional_disconnect.set()
         stop_vlc(primary)
         stop_vlc(fallback)
         relay.shutdown()
