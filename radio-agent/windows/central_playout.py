@@ -23,8 +23,12 @@ from audio_output_probe import inspect_outputs
 from mchs_readiness import assess_mchs_readiness
 from mchs_output_preflight import evaluate_isolated_output_preflight
 from mchs_transition_shadow import MchsTransitionShadow
+from mchs_isolated_output_pilot import LocalMonitor
 
 STOP = threading.Event()
+MCHS_AUDIO_START = threading.Event()
+MCHS_AUDIO_STOP = threading.Event()
+MCHS_AUDIO_ARMED = threading.Event()
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
 
@@ -187,6 +191,9 @@ def run(args, token):
     mchs_observer_busy=threading.Event()
     last_mchs_observed_revision=None
     mchs_transition_shadow=MchsTransitionShadow()
+    trial_vlc=None
+    trial_relay=None
+    trial_deadline=0.0
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
     output_probe_busy=threading.Event()
@@ -308,6 +315,50 @@ def run(args, token):
                 if results:
                     snapshot=results[-1]
                     results.clear()
+            # Operator-only local trial on the SAME Windows output, with the PA
+            # audio cable physically disconnected. No network action can arm this.
+            if MCHS_AUDIO_STOP.is_set() or (trial_vlc is not None and
+                 (now>=trial_deadline or trial_vlc.poll() is not None or
+                  not MCHS_AUDIO_ARMED.is_set() or denied or
+                  now-last_authorized>args.offline_grace)):
+                MCHS_AUDIO_STOP.clear()
+                stop_vlc(trial_vlc)
+                trial_vlc=None
+                if trial_relay is not None:
+                    trial_relay.shutdown()
+                    trial_relay.server_close()
+                    trial_relay=None
+                MCHS_AUDIO_ARMED.clear()
+                MCHS_AUDIO_START.clear()
+                network_ok=False  # trigger fresh normal stream probe/reconnect
+                print('MCHS_AUDIO_TRIAL_STOPPED_RETURN_TO_PROGRAM',flush=True)
+            if MCHS_AUDIO_START.is_set():
+                MCHS_AUDIO_START.clear()
+                if trial_vlc is None and MCHS_AUDIO_ARMED.is_set() and not denied and network_ok and now-last_authorized<15:
+                    try:
+                        # Close both audible decks before opening the training audio.
+                        stop_vlc(primary)
+                        stop_vlc(fallback)
+                        primary=None
+                        fallback=None
+                        fallback_key=None
+                        relay.failed.set()
+                        trial_relay=LocalMonitor(args.server,token)
+                        threading.Thread(target=trial_relay.serve_forever,daemon=True).start()
+                        lab_url='http://127.0.0.1:%d/lab.wav'%trial_relay.server_address[1]
+                        trial_vlc=start_vlc(args.vlc,logfile,'--network-caching=120',lab_url)
+                        trial_deadline=now+30
+                        print('MCHS_AUDIO_TRIAL_STARTED_MAX_30_SECONDS',flush=True)
+                    except (OSError,ValueError):
+                        MCHS_AUDIO_STOP.set()
+                        print('MCHS_AUDIO_TRIAL_FAILED',flush=True)
+                else:
+                    MCHS_AUDIO_ARMED.clear()
+                    print('MCHS_AUDIO_TRIAL_REJECTED',flush=True)
+            if trial_vlc is not None:
+                PLAYBACK_STATE['mode']='MCHS_LAB_TRIAL'
+                STOP.wait(0.2)
+                continue
             if denied:
                 print('PLAYBACK_PERMISSION_DENIED',flush=True)
                 break
@@ -380,6 +431,13 @@ def run(args, token):
         threading.Thread(target=async_playback_report,args=(args.server,token,
             {'playback':'STOPPED','outputDevice':'VLC (устройство вывода не подтверждено)',
              'lastPacketAgeMs':None,'error':''}),daemon=True).start()
+        MCHS_AUDIO_ARMED.clear()
+        MCHS_AUDIO_START.clear()
+        MCHS_AUDIO_STOP.clear()
+        stop_vlc(trial_vlc)
+        if trial_relay is not None:
+            trial_relay.shutdown()
+            trial_relay.server_close()
         stop_vlc(primary)
         stop_vlc(fallback)
         relay.shutdown()

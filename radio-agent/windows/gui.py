@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from tkinter import filedialog, messagebox, ttk
 
-from central_playout import STOP, run, PLAYBACK_STATE
+from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED
 from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat, restart_esp32, upload_firmware
 from esp32_telemetry import report_status
@@ -186,6 +186,14 @@ class RadioAgentApp(tk.Tk):
         self.start_btn.pack(side="left")
         self.stop_btn = ttk.Button(bar, text="■ Остановить эфир", command=self.stop, state="disabled",style="Stop.TButton")
         self.stop_btn.pack(side="left", padx=10)
+        trial_bar=ttk.Frame(air,style="Main.TFrame")
+        trial_bar.pack(fill="x",pady=(0,9))
+        ttk.Button(trial_bar,text="Учебный звук МЧС (кабель PA отключён)",
+                   command=self.start_mchs_audio_trial).pack(side="left")
+        ttk.Button(trial_bar,text="СТОП МЧС / вернуть радио",
+                   command=self.stop_mchs_audio_trial).pack(side="left",padx=8)
+        ttk.Label(air,text="Только с физически отключённым кабелем к AA-300. Макс. 30 секунд.",
+                  style="Main.TLabel").pack(anchor="w",pady=(0,7))
         ttk.Label(air, text="Журнал событий", style="Main.TLabel").pack(anchor="w")
         self.log = tk.Text(air, height=13, bg="#182443", fg="#f1f5f9",
                            insertbackground="white", relief="flat", state="disabled",
@@ -599,7 +607,31 @@ class RadioAgentApp(tk.Tk):
         os.startfile(str(self.pending_update))
         self.destroy()
 
+    def start_mchs_audio_trial(self):
+        if not (self.worker and self.worker.is_alive()):
+            messagebox.showwarning("МЧС", "Сначала запустите штатный Windows Agent.")
+            return
+        if MCHS_AUDIO_ARMED.is_set():
+            return
+        confirmed=messagebox.askyesno(
+            "Учебный аудиотест МЧС",
+            "Подтвердите: кабель от радиокомпьютера к AA-300 ФИЗИЧЕСКИ ОТСОЕДИНЁН, "
+            "альтернативные подключения к PA исключены, ответственное лицо присутствует. "
+            "На срок до 30 секунд штатный звук будет заменён учебным. Продолжить?",
+            icon="warning")
+        if confirmed:
+            MCHS_AUDIO_STOP.clear()
+            MCHS_AUDIO_ARMED.set()
+            MCHS_AUDIO_START.set()
+            self.messages.put(("log","MCHS_AUDIO_TRIAL_REQUESTED_BY_LOCAL_OPERATOR"))
+
+    def stop_mchs_audio_trial(self):
+        MCHS_AUDIO_ARMED.clear()
+        MCHS_AUDIO_STOP.set()
+        self.messages.put(("log","MCHS_AUDIO_TRIAL_STOP_REQUESTED"))
+
     def stop(self):
+        self.stop_mchs_audio_trial()
         STOP.set()
         self.status.set("Остановка…")
         self.broadcast_status.set("● Эфир останавливается")
