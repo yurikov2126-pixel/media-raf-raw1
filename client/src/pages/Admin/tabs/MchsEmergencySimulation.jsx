@@ -15,6 +15,13 @@ export default function MchsEmergencySimulation({token}){
  const [resumeError,setResumeError]=useState('');
  const [workerLoading,setWorkerLoading]=useState(false);
  const [selected,setSelected]=useState(null);
+ const [agentObservation,setAgentObservation]=useState(null);
+ const [agentObservationError,setAgentObservationError]=useState('');
+ const refreshAgentObservation=useCallback(async()=>{
+  try{setAgentObservationError('');setAgentObservation(await api('/radio-agent/mchs-observer-status',{token}));}
+  catch(e){setAgentObservation(null);setAgentObservationError(e.message||'Нет связи с диагностикой Agent');}
+ },[token]);
+ useEffect(()=>{void refreshAgentObservation();},[refreshAgentObservation]);
  const load=useCallback(async()=>{
   setLoading(true);setError('');
   try{setResult(await api('/safety/emergency-simulation'+(source?'?source='+encodeURIComponent(source):''),{token}));}
@@ -104,6 +111,21 @@ export default function MchsEmergencySimulation({token}){
     <h4 className="font-semibold">Интеграционная диагностика Windows Agent</h4>
     <p className="text-sm">Основной Windows Radio Agent продолжает штатное воспроизведение. При разрешённом серверном наблюдении он регистрирует ревизии учебной сессии и пишет MCHS_AGENT_OBSERVER в журнал. Учебный звук в основной выход не подаётся.</p>
     <p className="text-xs text-slate-600 dark:text-slate-300">Устаревшие браузерные WAV и отдельные микшеры убраны. OBSERVE_ONLY — наблюдение, а не тест реального прерывания звука.</p>
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+    <div className="flex items-center justify-between gap-2">
+      <h4 className="font-semibold">Windows Agent — наблюдение в реальном времени</h4>
+      <button type="button" onClick={()=>void refreshAgentObservation()} className="rounded-lg border px-3 py-2 text-sm">Обновить</button>
+    </div>
+    <p className="text-sm">Статус телеметрии: {agentObservation?.status||'нет данных'}</p>
+    {agentObservation?.report&&<div className="text-sm space-y-1">
+      <p>Состояние лаборатории: {agentObservation.report.workerPhase} · ревизия {agentObservation.report.revision}</p>
+      <p>Готовность Agent: {agentObservation.report.code}</p>
+      <p>Основной процесс: {agentObservation.report.primaryAlive?'запущен':'не подтверждён'} · резерв: {agentObservation.report.reserveAlive?'запущен':'не запущен'}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-300">Наблюдение получено: {agentObservation.report.receivedAt}. Физическое прерывание звука и PA не проверены.</p>
+    </div>}
+    {agentObservationError&&<p role="alert" className="text-sm text-red-600">{agentObservationError}</p>}
+    <p className="text-xs text-slate-600 dark:text-slate-300">Если данные устарели или доступ отключён, статус не считается подтверждённым. Эта панель не управляет вещанием.</p>
   </div>
   <MchsWorkerServerSession token={token}/>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
