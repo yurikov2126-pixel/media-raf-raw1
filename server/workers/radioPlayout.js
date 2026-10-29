@@ -8,6 +8,7 @@ import 'dotenv/config';
 import {createEmergencyDryRun} from '../src/lib/radioEmergencyDryRun.js';
 import {makeIsolatedHandoverWav} from '../src/lib/mchsIsolatedHandoverWav.js';
 import {makeWorkerLabScenarioWav,WORKER_LAB_SCENARIOS} from '../src/lib/mchsWorkerLabScenarios.js';
+import {createWorkerMchsLabSession} from '../src/lib/mchsWorkerLabSession.js';
 import http from 'node:http';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -1896,7 +1897,26 @@ async function run() {
   }
 }
 
+const mchsWorkerLabSession=createWorkerMchsLabSession();
 const server=http.createServer((req,res)=>{
+  if(req.url==='/mchs-lab/session' && req.method==='GET'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify(mchsWorkerLabSession.status()));return;
+  }
+  if(req.url==='/mchs-lab/session' && req.method==='POST'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    let bytes=0,body='';
+    req.on('data',chunk=>{bytes+=chunk.length;if(bytes>1024){req.destroy();return;}body+=chunk;});
+    req.on('end',()=>{
+      let action;
+      try{action=JSON.parse(body).action;}catch{}
+      if(!['START','INTERRUPT','RESUME','STOP'].includes(action)){res.writeHead(400).end();return;}
+      const result=mchsWorkerLabSession.command(action);
+      res.writeHead(result.ok?200:409,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify(result));
+    });return;
+  }
   if(!authorized(req)) {res.writeHead(403).end();return;}
   // Completely separate offline test PCM. Never enters station encoder or hardware output.
   if(req.method==='GET' && req.url?.startsWith('/mchs-lab/handover.wav')){

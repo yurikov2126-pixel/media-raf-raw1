@@ -1,3 +1,4 @@
+import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
@@ -62,6 +63,17 @@ router.use(auth);
 // Conservative production preflight: never accepts a client claim that hardware is isolated.
 // Download-only synthetic chime; does not touch Radio Worker or PA hardware.
 // Static offline audio handover demonstration; no access to the station mixer.
+// Server-side control plane for the *isolated* Worker lab only; no station PCM output.
+router.get('/worker-lab/session',canView,async (_req,res)=>{
+ try{const result=await workerMchsSessionRequest();res.set('Cache-Control','no-store').json(result.data);}
+ catch{res.status(503).json({error:'Worker lab session unavailable'});}
+});
+router.post('/worker-lab/session',canView,async (req,res)=>{
+ const action=req.body?.action;
+ if(!['START','INTERRUPT','RESUME','STOP'].includes(action))return res.status(400).json({error:'Invalid action'});
+ try{const result=await workerMchsSessionRequest(action);res.set('Cache-Control','no-store').status(result.httpStatus).json(result.data);}
+ catch{res.status(503).json({error:'Worker lab session unavailable'});}
+});
 router.get('/worker-lab/handover.wav',canView,async (req,res)=>{
  const scenario=typeof req.query.scenario==='string'?req.query.scenario:'resume';
  if(!['resume','stop','repeat'].includes(scenario))return res.status(400).json({error:'Invalid lab scenario'});
