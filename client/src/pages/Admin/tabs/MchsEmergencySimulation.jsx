@@ -51,7 +51,20 @@ export default function MchsEmergencySimulation({token}){
   try{
    const apiRoot=import.meta.env.VITE_API||'http://localhost:4000/api';
    const response=await fetch(apiRoot+(kind==='worker'?'/safety/worker-lab/handover.wav':kind==='handover'?'/safety/isolated-handover.wav':'/safety/isolated-test-tone.wav'),{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
-   if(!response.ok)throw new Error('Сервер не выдал тестовый звук ('+response.status+')');
+   if(!response.ok){
+    const diagnostic=await response.json().catch(()=>null);
+    const messages={
+     WORKER_NOT_CONFIGURED:'API не настроен для соединения с Radio Worker: проверьте порт и секрет в окружении API.',
+     WORKER_AUTH_FAILED:'Radio Worker отклонил секрет API. Проверьте совпадение RADIO_PLAYOUT_SECRET в обоих сервисах.',
+     WORKER_ROUTE_MISSING:'Radio Worker отвечает, но тестовый маршрут отсутствует. Проверьте перезапуск Worker после обновления.',
+     WORKER_TIMEOUT:'Radio Worker не ответил вовремя. Проверьте состояние сервиса и его журнал.',
+     WORKER_UNREACHABLE:'API не может подключиться к Radio Worker. Проверьте работу сервиса и локальный порт.',
+     WORKER_INVALID_AUDIO:'Radio Worker вернул некорректный или слишком большой WAV.',
+     WORKER_REQUEST_FAILED:'Ошибка запроса к Radio Worker. Проверьте журналы API и Worker.'
+    };
+    const code=diagnostic?.code;
+    throw new Error((code&&messages[code])||('Сервер не выдал тестовый звук ('+response.status+')'));
+   }
    const blob=await response.blob();
    if(blob.size>800000)throw new Error('Тестовый файл превышает допустимый размер');
    const url=URL.createObjectURL(blob),audio=new Audio(url);
