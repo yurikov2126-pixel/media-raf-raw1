@@ -37,6 +37,9 @@ class LocalMonitor(ThreadingHTTPServer):
         self.token = token
         self.closing = threading.Event()
         self.active = threading.Event()
+        self.connected_at = None
+        self.last_pcm_at = None
+        self.metrics_lock = threading.Lock()
         super().__init__(("127.0.0.1", 0), Handler)
 
 
@@ -66,6 +69,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "audio/wav")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                with self.server.metrics_lock:
+                    self.server.connected_at = time.monotonic()
+                    self.server.last_pcm_at = self.server.connected_at
                 print("LAB_STREAM_CONNECTED", flush=True)
                 self.wfile.write(wav_header())
                 total = 0
@@ -74,6 +80,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not block:
                         break
                     self.wfile.write(block)
+                    with self.server.metrics_lock:
+                        self.server.last_pcm_at = time.monotonic()
                     total += len(block)
         except HTTPError as error:
             # Operator can distinguish a 403 device/flag issue from unavailable PCM.
