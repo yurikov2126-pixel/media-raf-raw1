@@ -24,6 +24,7 @@ from mchs_readiness import assess_mchs_readiness
 from mchs_output_preflight import evaluate_isolated_output_preflight
 from mchs_transition_shadow import MchsTransitionShadow
 from mchs_isolated_output_pilot import LocalMonitor
+from mchs_trial_watchdog import trial_stop_reason
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -198,7 +199,7 @@ def run(args, token):
     mchs_transition_shadow=MchsTransitionShadow()
     trial_vlc=None
     trial_relay=None
-    trial_deadline=0.0
+    trial_started_at=0.0
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
     output_probe_busy=threading.Event()
@@ -322,10 +323,21 @@ def run(args, token):
                     results.clear()
             # Operator-only local trial on the SAME Windows output, with the PA
             # audio cable physically disconnected. No network action can arm this.
-            if MCHS_AUDIO_STOP.is_set() or (trial_vlc is not None and
-                 (now>=trial_deadline or trial_vlc.poll() is not None or
-                  not MCHS_AUDIO_ARMED.is_set() or denied or
-                  now-last_authorized>args.offline_grace)):
+            trial_reason=None
+            if trial_vlc is not None:
+                with trial_relay.metrics_lock:
+                    connected_at=trial_relay.connected_at
+                    last_pcm_at=trial_relay.last_pcm_at
+                trial_reason=trial_stop_reason(
+                    now=now,started_at=trial_started_at,
+                    connected_at=connected_at,last_pcm_at=last_pcm_at,
+                    stop_requested=MCHS_AUDIO_STOP.is_set(),
+                    armed=MCHS_AUDIO_ARMED.is_set(),
+                    authorized=not denied and now-last_authorized<=args.offline_grace,
+                    vlc_running=trial_vlc.poll() is None)
+            if trial_reason is not None or MCHS_AUDIO_STOP.is_set():
+                if trial_reason:
+                    print('MCHS_AUDIO_TRIAL_STOP_REASON',trial_reason,flush=True)
                 MCHS_AUDIO_STOP.clear()
                 if trial_relay is not None:
                     trial_relay.closing.set()
@@ -356,7 +368,7 @@ def run(args, token):
                         threading.Thread(target=trial_relay.serve_forever,daemon=True).start()
                         lab_url='http://127.0.0.1:%d/lab.wav'%trial_relay.server_address[1]
                         trial_vlc=start_vlc(args.vlc,logfile,'--network-caching=120',lab_url)
-                        trial_deadline=now+30
+                        trial_started_at=now
                         print('MCHS_AUDIO_TRIAL_STARTED_MAX_30_SECONDS',flush=True)
                     except (OSError,ValueError):
                         MCHS_AUDIO_STOP.set()
