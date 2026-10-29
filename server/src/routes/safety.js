@@ -67,8 +67,18 @@ router.get('/worker-lab/handover.wav',canView,async (_req,res)=>{
   const wav=await fetchWorkerMchsLabWav();
   res.set({'Content-Type':'audio/wav','Content-Length':String(wav.length),'Cache-Control':'no-store'});
   res.end(wav);
- }catch{
-  res.status(503).json({error:'Worker lab unavailable'});
+ }catch(err){
+  // Diagnostic categories only: never expose worker secrets, ports or internal addresses.
+  const reason=err?.message||'';
+  const code=reason==='WORKER_NOT_CONFIGURED'?'WORKER_NOT_CONFIGURED':
+    reason==='WORKER_HTTP_403'?'WORKER_AUTH_FAILED':
+    reason==='WORKER_HTTP_404'?'WORKER_ROUTE_MISSING':
+    reason==='WORKER_TIMEOUT'||reason==='ETIMEDOUT'?'WORKER_TIMEOUT':
+    reason==='ECONNREFUSED'||reason==='ECONNRESET'||reason==='EHOSTUNREACH'?'WORKER_UNREACHABLE':
+    reason==='LAB_WAV_TOO_LARGE'||reason==='INVALID_WORKER_AUDIO'?'WORKER_INVALID_AUDIO':
+    'WORKER_REQUEST_FAILED';
+  console.warn('MCHS_WORKER_LAB_FAILURE',code);
+  res.set('Cache-Control','no-store').status(503).json({error:'Worker lab unavailable',code});
  }
 });
 router.get('/isolated-handover.wav',canView,(_req,res)=>{
