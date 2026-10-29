@@ -6,6 +6,7 @@ import AttachmentEditorV2 from '../components/messenger/AttachmentEditorV2.jsx';
 import { uploadFileWithProgress } from '../api/client.js';
 import { sendAttachmentBatch } from '../lib/sendAttachmentBatch.js';
 import { useEffect, useMemo, useRef, useLayoutEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, uploadFile, resolveUrl } from '../api/client.js';
 import { useAuth } from '../store/auth.jsx';
@@ -548,7 +549,8 @@ export default function Messenger() {
             reloadChats();
         };
         const onEdited = (m) => setMessages((p) => p.map((x) => (x.id === m.id ? m : x)));
-        const onDeleted = ({ messageId }) => {
+        const onDeleted = ({ messageId, scope }) => {
+            if (scope === 'me') { setMessages(p => p.filter(x => x.id !== messageId)); return; }
             setMessages((p) => p.map((x) => x.id === messageId
                 ? { ...x, deletedAt: new Date().toISOString(), content: '' } : x));
             setPinned((cur) => (cur?.id === messageId ? null : cur));
@@ -1028,18 +1030,22 @@ export default function Messenger() {
         } catch (e) { alert(e.message); }
     };
 
-    const deleteChat = async (chat) => {
-        if (!chat) return;
-        const isGroup = chat.type === 'GROUP';
-        const isAdmin = chat.myRole === 'admin' || chat.members?.find((m) => m.id === user.id)?.role === 'admin';
-        let confirmText;
-        if (isGroup && isAdmin) confirmText = `Удалить группу «${chat.title}» для всех?`;
-        else if (isGroup) confirmText = `Покинуть группу «${chat.title}»?`;
-        else confirmText = `Удалить чат? Он исчезнет только у вас.`;
-        if (!confirm(confirmText)) return;
+    const [deleteChoice, setDeleteChoice] = useState(null);
+    const deleteChat = (chat) => { if (chat) setDeleteChoice({ kind: 'chat', chat }); };
+    const performDelete = async (scope) => {
+        const choice = deleteChoice;
+        setDeleteChoice(null);
+        if (!choice) return;
+        if (choice.kind === 'message') {
+            socket.emit('message:delete', { messageId: choice.message.id, scope }, (answer) => {
+                if (answer?.error) alert(answer.error);
+            });
+            return;
+        }
+        const chat = choice.chat;
         try {
-            await api(`/chats/${chat.id}`, { method: 'DELETE', token });
-            setChats((prev) => prev.filter((c) => c.id !== chat.id));
+            await api(`/chats/${chat.id}?scope=${scope}`, { method: 'DELETE', token });
+            setChats(prev => prev.filter(c => c.id !== chat.id));
             if (chatId === chat.id) nav('/app/chats');
         } catch (e) { alert(e.message); }
     };
@@ -1061,7 +1067,7 @@ export default function Messenger() {
             { id: 'pin', label: '📌 Закрепить', only: !m.deletedAt && canPin },
             { id: 'report', label: '🚩 Пожаловаться', only: !isOwn && !m.deletedAt, danger: true },
             { id: 'edit', label: '✏️ Изменить', only: isOwn && m.type === 'text' && !m.deletedAt },
-            { id: 'delete', label: '🗑️ Удалить', only: isOwn && !m.deletedAt, danger: true },
+            { id: 'delete', label: '🗑️ Удалить', only: !m.deletedAt, danger: true },
         ].filter((a) => a.only === undefined || a.only);
 
         const handler = (id) => {
@@ -1077,8 +1083,7 @@ export default function Messenger() {
                 case 'report': setReportTarget({ type: 'message', id: m.id }); break;
                 case 'edit': setEditing(m); setText(m.content); break;
                 case 'delete':
-                    if (confirm('Удалить сообщение?'))
-                        socket.emit('message:delete', { messageId: m.id });
+                    setDeleteChoice({ kind: 'message', message: m });
                     break;
             }
         };
@@ -1123,6 +1128,16 @@ export default function Messenger() {
     };
 
     return (
+        <>
+        {deleteChoice && createPortal(<div role="presentation" className="fixed inset-0 z-[250] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onMouseDown={e=>{if(e.target===e.currentTarget)setDeleteChoice(null)}}>
+            <div role="dialog" aria-modal="true" aria-label="Выберите способ удаления" className="w-full max-w-sm space-y-3 rounded-2xl border border-current/15 bg-white p-5 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white">
+                <h2 className="text-lg font-bold">Удаление {deleteChoice.kind==='message'?'сообщения':'чата'}</h2>
+                <p className="text-sm opacity-70">У кого удалить {deleteChoice.kind==='message'?'сообщение':'переписку'}?</p>
+                <button type="button" className="w-full rounded-xl border border-current/20 p-3 text-left" onClick={()=>performDelete('me')}>Удалить только у меня</button>
+                {(deleteChoice.kind==='message' ? deleteChoice.message.sender?.id===user.id : deleteChoice.chat.type==='DIRECT' || deleteChoice.chat.myRole==='admin')&&<button type="button" className="w-full rounded-xl border border-rose-500/40 p-3 text-left text-rose-600 dark:text-rose-300" onClick={()=>performDelete('all')}>Удалить у всех</button>}
+                <button type="button" className="w-full rounded-xl px-3 py-2 text-sm opacity-70" onClick={()=>setDeleteChoice(null)}>Отмена</button>
+            </div>
+        </div>,document.body)}
         <div
             className={`${isChatRoom ? 'fixed inset-0 md:left-64 z-40 flex min-w-0 max-w-full overflow-hidden overscroll-none bg-ink-900' : 'flex'} ${isMessengerV2 ? 'mrr-messenger-v2' : ''} ${isMessengerV2 && isChatRoom ? 'mrr-v2-chat-room' : ''} ${visibleViewport?.keyboard ? 'mrr-v2-keyboard-open' : ''}`}
             style={isChatRoom ? {
@@ -1833,5 +1848,6 @@ export default function Messenger() {
                 />
             )}
         </div>
+        </>
     );
 }
