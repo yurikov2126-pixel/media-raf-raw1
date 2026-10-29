@@ -9,9 +9,8 @@ import os
 import subprocess
 import threading
 import time
-import wave
+import struct
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from io import BytesIO
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -20,13 +19,13 @@ STOP = threading.Event()
 
 
 def wav_header():
-    stream = BytesIO()
-    with wave.open(stream, "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(24000)
-        wav.setnframes(MAX_PCM_BYTES // 2)
-    return stream.getvalue()[:44]
+    """RIFF header for a bounded 60-second 24kHz mono PCM16 audio stream."""
+    data_size = MAX_PCM_BYTES
+    return (
+        b"RIFF" + struct.pack("<I", 36 + data_size) +
+        b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, 24000, 48000, 2, 16) +
+        b"data" + struct.pack("<I", data_size)
+    )
 
 
 class LocalMonitor(ThreadingHTTPServer):
