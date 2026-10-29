@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Isolated MCHS lab control plane; never touches station audio or hardware. */
 export function createWorkerMchsLabSession({now=()=>performance.now(),ttlMs=120000}={}){
  let phase='IDLE',updated=now(),revision=0,commandAt=null,observedRevision=-1,observation=null;
