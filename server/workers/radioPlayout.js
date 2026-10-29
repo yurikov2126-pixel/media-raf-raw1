@@ -1933,7 +1933,7 @@ const server=http.createServer((req,res)=>{
   }
   if(req.url==='/mchs-lab/session/stream.pcm' && req.method==='GET'){
     if(!authorized(req)){res.writeHead(403).end();return;}
-    createMchsLabPcmStream(res,mchsWorkerLabSession);return;
+    createMchsLabPcmStream(res,mchsWorkerLabSession,{fixtures:mchsLabFixtures});return;
   }
   if(req.url==='/mchs-lab/session/audio.wav' && req.method==='GET'){
     if(!authorized(req)){res.writeHead(403).end();return;}

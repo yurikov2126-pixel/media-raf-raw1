@@ -3,6 +3,7 @@
  */
 export function createMchsLabFixtureStore(){
  const fixtures=new Map();
+ let version=0;
  function validate(buffer){
   if(!Buffer.isBuffer(buffer)||buffer.length<44||buffer.length>480044)throw new Error('INVALID_SIZE');
   if(buffer.toString('ascii',0,4)!=='RIFF'||buffer.toString('ascii',8,12)!=='WAVE'||
@@ -17,10 +18,13 @@ export function createMchsLabFixtureStore(){
  return {
   put(kind,bytes){
    if(!['music','trainingVoice'].includes(kind))throw new Error('INVALID_KIND');
-   validate(bytes);fixtures.set(kind,Buffer.from(bytes));
+   validate(bytes);fixtures.set(kind,Buffer.from(bytes));version++;
    return {kind,size:bytes.length,seconds:(bytes.length-44)/48000,stored:'MEMORY_ONLY',connectedToStation:false};
   },
   status(){return Object.fromEntries(['music','trainingVoice'].map(k=>[k,fixtures.has(k)?{size:fixtures.get(k).length,seconds:(fixtures.get(k).length-44)/48000}:null]));},
-  clear(){fixtures.clear();}
+  // Buffers are private immutable snapshots; consumers must never mutate returned data.
+  get(kind){return fixtures.get(kind)||null;},
+  version(){return version;},
+  clear(){fixtures.clear();version++;}
  };
 }
