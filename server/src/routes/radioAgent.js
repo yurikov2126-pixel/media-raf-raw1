@@ -1,3 +1,4 @@
+import {workerLabSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
 import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
@@ -180,6 +181,22 @@ router.post('/devices', ...admin, safe(async(req,res) => {
   res.status(201).json({ device: { id: device.id, name: device.name }, token });
 }));
 // Opt-in laboratory-only stream for ONE explicitly bound device. No station MP3 or ESP32.
+// Passive integration probe for a running Windows Agent: NEVER switches audio.
+router.get('/agent/mchs-integration-observe',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(process.env.MCHS_AGENT_LAB_STREAM_ENABLED!=='true'||
+    !process.env.MCHS_AGENT_LAB_DEVICE_ID||
+    req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+   return res.status(403).json({error:'INTEGRATION_OBSERVER_DISABLED'});
+ try{
+  const observed=await workerLabSessionRequest(null);
+  res.json({mode:'OBSERVE_ONLY',stationPlaybackChanged:false,paOutputChanged:false,
+   workerPhase:observed.phase||'UNKNOWN',revision:observed.revision??null,
+   pcmObservation:observed.pcmObservation||null,observedAt:new Date().toISOString()});
+ }catch{
+  res.status(503).json({error:'LAB_WORKER_UNAVAILABLE',mode:'OBSERVE_ONLY'});
+ }
+}));
 router.get('/agent/mchs-lab-pcm',deviceAuth,(req,res)=>{
  const enabled=process.env.MCHS_AGENT_LAB_STREAM_ENABLED==='true';
  const bound=String(process.env.MCHS_AGENT_LAB_DEVICE_ID||'');
