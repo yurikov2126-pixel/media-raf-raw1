@@ -298,15 +298,17 @@ router.delete('/:id', auth, async (req, res) => {
 
         const scope = req.query.scope === 'all' ? 'all' : 'me';
         if (chat.type === 'DIRECT' && scope === 'all') {
+            const recipients = await prisma.chatMember.findMany({ where: { chatId }, select: { userId: true } });
             await prisma.$transaction(tx => hardDeleteChat(tx, chatId));
             if (io) {
                 io.to(`chat:${chatId}`).emit('chat:deleted', { chatId, whole: true });
+                for (const recipient of recipients) io.to(`user:${recipient.userId}`).emit('chat:deleted', { chatId, whole: true });
             }
             return res.json({ ok: true, mode: 'whole' });
         }
         const isGroupAdmin = chat.type === 'GROUP' && member.role === 'admin';
 
-        if (isGroupAdmin) {
+        if (isGroupAdmin && scope === 'all') {
             await prisma.$transaction((tx) => hardDeleteChat(tx, chatId));
             if (io) io.to(`chat:${chatId}`).emit('chat:deleted', { chatId, whole: true });
             return res.json({ ok: true, mode: 'whole' });
