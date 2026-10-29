@@ -192,7 +192,7 @@ router.get('/:id/messages', auth, async (req, res) => {
     }
 
     res.json({
-        messages,
+        messages: messages.map(({ hiddenBy, ...message }) => message),
         hasMore,
         pinned,
         myRole: member.role,
