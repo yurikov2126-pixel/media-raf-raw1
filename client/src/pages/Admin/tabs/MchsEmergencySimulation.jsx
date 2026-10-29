@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {api} from '../../../api/client.js';
 const labels={AUTO_DJ:'AutoDJ',SCHEDULE:'Эфирная сетка',LIVE:'Прямой эфир',MANUAL_PLAYLIST:'Ручной плейлист',AUTO_PLAYLIST:'Автоматический плейлист'};
 const steps={PREPARE:'Подготовка',ACTIVATE:'Моделирование запуска',STOP:'Моделирование остановки',RECOVER:'План восстановления',RESET:'Завершение'};
@@ -9,6 +9,9 @@ export default function MchsEmergencySimulation({token}){
  const [error,setError]=useState('');
  const [worker,setWorker]=useState(null);
  const [audioReadiness,setAudioReadiness]=useState(null);
+ const previewRef=useRef(null);
+ const [previewStatus,setPreviewStatus]=useState('IDLE');
+ const [previewError,setPreviewError]=useState('');
  const [audioReadinessError,setAudioReadinessError]=useState('');
  const [resume,setResume]=useState(null);
  const [resumeError,setResumeError]=useState('');
@@ -35,6 +38,28 @@ export default function MchsEmergencySimulation({token}){
   catch(e){setAudioReadiness(null);setAudioReadinessError(e.message||'Проверка готовности недоступна');}
  },[token]);
  useEffect(()=>{void refreshAudioReadiness();},[refreshAudioReadiness]);
+ const stopPreview=useCallback(()=>{
+  const current=previewRef.current;
+  if(current){current.audio.pause();current.audio.currentTime=0;URL.revokeObjectURL(current.url);previewRef.current=null;}
+  setPreviewStatus('STOPPED');
+ },[]);
+ useEffect(()=>()=>{const current=previewRef.current;if(current){current.audio.pause();URL.revokeObjectURL(current.url);previewRef.current=null;}},[]);
+ const playPreview=useCallback(async()=>{
+  stopPreview();setPreviewError('');setPreviewStatus('LOADING');
+  try{
+   const apiRoot=import.meta.env.VITE_API||'http://localhost:4000/api';
+   const response=await fetch(apiRoot+'/safety/isolated-test-tone.wav',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+   if(!response.ok)throw new Error('Сервер не выдал тестовый звук ('+response.status+')');
+   const blob=await response.blob();
+   if(blob.size>500000)throw new Error('Тестовый файл превышает допустимый размер');
+   const url=URL.createObjectURL(blob),audio=new Audio(url);
+   previewRef.current={audio,url};
+   audio.onended=()=>{if(previewRef.current?.audio===audio)stopPreview();};
+   audio.onerror=()=>{if(previewRef.current?.audio===audio){stopPreview();setPreviewError('Браузер не смог воспроизвести WAV');}};
+   await audio.play();
+   setPreviewStatus('PLAYING');
+  }catch(e){stopPreview();setPreviewError(e.message||'Невозможно запустить тестовый сигнал');}
+ },[token,stopPreview]);
  const scenarios=result?.scenarios|| (result?.source?[result]:[]);
  const active=scenarios.find(s=>s.source===selected);
  useEffect(()=>{if(!active)return;const handle=e=>{if(e.key==='Escape')setSelected(null);};window.addEventListener('keydown',handle);return()=>window.removeEventListener('keydown',handle);},[active]);
@@ -98,6 +123,17 @@ export default function MchsEmergencySimulation({token}){
       </div>)}
     </div>
     <p className="text-xs text-slate-600 dark:text-slate-300">Неотмеченные условия нельзя подтвердить кнопкой в интерфейсе. Сначала необходимы независимая проверка звукового файла, изоляции выходов, аварийной остановки, восстановления и присутствия ответственного. Этот экран не запускает звук.</p>
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+    <h4 className="font-semibold">Первый тест реального звука — только на этом устройстве</h4>
+    <p className="text-sm text-slate-600 dark:text-slate-300">Короткий оригинальный четырёхтональный сигнал WAV. Звук будет воспроизводиться локально в этом браузере через выбранное на устройстве аудиоустройство. Перед запуском проверьте громкость и физически отключите выход к усилителю колледжа.</p>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" disabled={previewStatus==='LOADING'} onClick={()=>void playPreview()} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm disabled:opacity-50">{previewStatus==='LOADING'?'Загрузка…':'Воспроизвести тестовый сигнал'}</button>
+      <button type="button" onClick={stopPreview} className="rounded-lg border border-slate-300 dark:border-white/20 px-4 py-2 text-sm">Остановить</button>
+    </div>
+    <p className="text-xs">Состояние: {({IDLE:'не запускался',LOADING:'загрузка',PLAYING:'локальное воспроизведение',STOPPED:'остановлен'})[previewStatus]}</p>
+    {previewError&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{previewError}</p>}
+    <p className="text-xs text-slate-600 dark:text-slate-300">Это не голосовое сообщение МЧС и не проверка прерывания эфира. Не подключено к Radio Worker, интернет-радио или ESP32. Если браузер использует общий системный выход с усилителем, не запускайте тест до физического отключения усилителя.</p>
   </div>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/15">
