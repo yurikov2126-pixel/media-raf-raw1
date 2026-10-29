@@ -4,6 +4,7 @@ import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
 import { getIo } from '../lib/notify.js';
 import { Router } from 'express';
 import {makeEmergencyTestWav} from '../lib/mchsIsolatedAudioPreview.js';
+import {makeIsolatedHandoverWav} from '../lib/mchsIsolatedHandoverWav.js';
 import {workerRequest} from '../lib/radioLiveOpusGateway.js';
 import {planRadioEmergencyResume} from '../lib/radioEmergencyResumePlan.js';
 import {assessEmergencyAudioTestReadiness} from '../lib/mchsAudioTestReadiness.js';
@@ -59,6 +60,14 @@ router.use(auth);
 // Real schedule snapshot + worker status, READ ONLY. No emergency commands, no playout.
 // Conservative production preflight: never accepts a client claim that hardware is isolated.
 // Download-only synthetic chime; does not touch Radio Worker or PA hardware.
+// Static offline audio handover demonstration; no access to the station mixer.
+router.get('/isolated-handover.wav',canView,(_req,res)=>{
+ const wav=makeIsolatedHandoverWav();
+ res.set({'Content-Type':'audio/wav','Content-Length':String(wav.length),
+ 'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+ 'Content-Disposition':'attachment; filename="mchs-isolated-handover.wav"'});
+ res.end(wav);
+});
 router.get('/isolated-test-tone.wav', canView, (_req,res) => {
   const data=makeEmergencyTestWav();
   res.set({'Content-Type':'audio/wav','Content-Length':String(data.length),
