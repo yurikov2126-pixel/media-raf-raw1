@@ -11,6 +11,8 @@ export function createMchsLabPcmStream(res,session,{maxMs=60000,fixtures=null}={
   if(closed||res.destroyed)return end();
   elapsed+=20;if(elapsed>maxMs)return end();
   const state=session.status();
+  // Observe the tick before constructing PCM; this is Worker-side timing only.
+  session.observePcmTick?.(state.revision);
   const buffer=fixtureRenderer?fixtureRenderer.render(state):Buffer.alloc(frames*2);
   if(state.phase!==phase){phase=state.phase;sample=0;}
   if(!fixtureRenderer)for(let i=0;i<frames;i++){
