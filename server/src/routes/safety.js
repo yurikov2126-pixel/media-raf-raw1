@@ -1,3 +1,4 @@
+import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
 import { assessMchsRetryBacklog } from '../lib/mchsRetryBacklog.js';
@@ -61,6 +62,15 @@ router.use(auth);
 // Conservative production preflight: never accepts a client claim that hardware is isolated.
 // Download-only synthetic chime; does not touch Radio Worker or PA hardware.
 // Static offline audio handover demonstration; no access to the station mixer.
+router.get('/worker-lab/handover.wav',canView,async (_req,res)=>{
+ try{
+  const wav=await fetchWorkerMchsLabWav();
+  res.set({'Content-Type':'audio/wav','Content-Length':String(wav.length),'Cache-Control':'no-store'});
+  res.end(wav);
+ }catch{
+  res.status(503).json({error:'Worker lab unavailable'});
+ }
+});
 router.get('/isolated-handover.wav',canView,(_req,res)=>{
  const wav=makeIsolatedHandoverWav();
  res.set({'Content-Type':'audio/wav','Content-Length':String(wav.length),
