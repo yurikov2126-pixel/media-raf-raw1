@@ -34,6 +34,7 @@ MCHS_AUDIO_ARMED = threading.Event()
 MCHS_LAB_ONE_SHOT = threading.Event()
 MCHS_LAB_ONE_SHOT_EXPIRES = {'at': 0.0}
 MCHS_LAB_ONE_SHOT_LOCK = threading.Lock()
+MCHS_LAB_OBSERVED = {'phase':None,'revision':None,'at':0.0,'ready':False}
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
 
@@ -250,7 +251,11 @@ def run(args, token):
             data=read_mchs_observer(args.server,token)
             revision=data.get('revision')
             if data.get('mode')!='OBSERVE_ONLY' or not isinstance(revision,int) or isinstance(revision,bool):
+                print('MCHS_LAB_OBSERVER_INVALID',str(data.get('mode')),str(data.get('workerPhase')),type(revision).__name__,flush=True)
                 return
+            with MCHS_LAB_ONE_SHOT_LOCK:
+                MCHS_LAB_OBSERVED.update(phase=data.get('workerPhase'),revision=revision,
+                                         at=time.monotonic(),ready=True)
             moment=time.monotonic()
             primary_alive=primary is not None and primary.poll() is None
             reserve_alive=fallback is not None and fallback.poll() is None
