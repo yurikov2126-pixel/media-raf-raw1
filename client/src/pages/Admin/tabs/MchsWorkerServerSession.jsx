@@ -21,7 +21,7 @@ export default function MchsWorkerServerSession({token}){
  };
  return <div className="rounded-xl border border-slate-300 dark:border-white/20 p-4 space-y-3">
   <h4 className="font-semibold">Серверная сессия PCM — лабораторный контроль</h4>
-  <p className="text-sm text-slate-600 dark:text-slate-300">Это проверка серверных состояний Worker, пока без передачи звука сессии в браузер и без подключения к эфиру. Звук слушайте в предыдущей интерактивной лаборатории.</p>
+  <p className="text-sm text-slate-600 dark:text-slate-300">Лабораторная серверная сессия управляет учебным PCM, который можно прослушать в мониторе ниже. Она не подключена к радиоэфиру или усилителю.</p>
   <p role="status" className="text-sm">Состояние Worker: {status?.phase||'неизвестно'} · Ревизия: {status?.revision??'—'}</p>
   <div className="flex flex-wrap gap-2">
    <button disabled={busy||status?.phase!=='IDLE'} onClick={()=>void command('START')} className="rounded-lg bg-violet-600 px-3 py-2 text-white text-sm disabled:opacity-40">START</button>
@@ -31,7 +31,7 @@ export default function MchsWorkerServerSession({token}){
    <button disabled={busy} onClick={()=>void get().catch(e=>setError(e.message))} className="rounded-lg border px-3 py-2 text-sm">Обновить статус</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
-  <MchsWorkerSessionMonitor token={token}/>
+  <MchsWorkerSessionMonitor token={token} phase={status?.phase} revision={status?.revision}/>
   <p className="text-xs">Сессия автоматически истекает через 120 секунд без команд. STOP не влияет на настоящее радио.</p>
  </div>;
 }
