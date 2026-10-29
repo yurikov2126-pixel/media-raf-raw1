@@ -550,7 +550,7 @@ export default function Messenger() {
         };
         const onEdited = (m) => setMessages((p) => p.map((x) => (x.id === m.id ? m : x)));
         const onDeleted = ({ messageId, scope }) => {
-            if (scope === 'me') { setMessages(p => p.filter(x => x.id !== messageId)); return; }
+            if (scope === 'me') { setMessages(p => p.filter(x => x.id !== messageId)); setPinned(cur => cur?.id === messageId ? null : cur); return; }
             setMessages((p) => p.map((x) => x.id === messageId
                 ? { ...x, deletedAt: new Date().toISOString(), content: '' } : x));
             setPinned((cur) => (cur?.id === messageId ? null : cur));
