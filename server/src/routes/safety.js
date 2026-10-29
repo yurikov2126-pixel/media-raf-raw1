@@ -1,3 +1,4 @@
+import http from 'node:http';
 import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
@@ -65,6 +66,25 @@ router.use(auth);
 // Download-only synthetic chime; does not touch Radio Worker or PA hardware.
 // Static offline audio handover demonstration; no access to the station mixer.
 // Server-side control plane for the *isolated* Worker lab only; no station PCM output.
+// Read-only live laboratory PCM proxy; never connects to station output.
+router.get('/worker-lab/session/stream.pcm',canView,(req,res)=>{
+ const port=Number(process.env.RADIO_PLAYOUT_PORT||4105);
+ const secret=process.env.RADIO_PLAYOUT_SECRET||'';
+ if(!Number.isInteger(port)||port<1||port>65535||secret.length<32)return res.status(503).json({error:'Worker unavailable'});
+ const upstream=http.get({hostname:'127.0.0.1',port,path:'/mchs-lab/session/stream.pcm',
+  headers:{'x-radio-worker-secret':secret},timeout:4000},source=>{
+  if(source.statusCode!==200){source.resume();res.status(503).end();return;}
+  upstream.setTimeout(0);
+  res.set({'Content-Type':'application/octet-stream','Cache-Control':'no-store, no-transform',
+   'X-Content-Type-Options':'nosniff','X-Accel-Buffering':'no','X-Lab-Format':'s16le;rate=24000;channels=1'});
+  source.pipe(res);
+  source.on('error',()=>res.destroy());
+ });
+ upstream.on('timeout',()=>upstream.destroy(new Error('WORKER_TIMEOUT')));
+ upstream.on('error',()=>{if(!res.headersSent)res.status(503).end();else res.destroy();});
+ req.on('close',()=>upstream.destroy());
+ res.on('close',()=>upstream.destroy());
+});
 router.get('/worker-lab/session/audio.wav',canView,async (_req,res)=>{
  try{
   const {wav,phase}=await fetchMchsWorkerLabChunk();
