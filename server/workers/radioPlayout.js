@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
 /**
  * Opt-in station playout worker: one persistent MP3 encoder, shared live output.
  * Binds loopback only; authenticated Express API proxy is the sole public entry.
@@ -1900,7 +1901,36 @@ async function run() {
 }
 
 const mchsWorkerLabSession=createWorkerMchsLabSession();
+const mchsLabFixtures=createMchsLabFixtureStore();
 const server=http.createServer((req,res)=>{
+  if(req.url==='/mchs-lab/fixtures' && req.method==='GET'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify(mchsLabFixtures.status()));return;
+  }
+  if(req.url==='/mchs-lab/fixtures' && req.method==='DELETE'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    mchsLabFixtures.clear();res.writeHead(204).end();return;
+  }
+  if(req.method==='POST' && ['/mchs-lab/fixtures/music','/mchs-lab/fixtures/trainingVoice'].includes(req.url||'')){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    const kind=req.url.split('/').pop();
+    let size=0,chunks=[],failed=false;
+    req.on('data',chunk=>{
+      if(failed)return;
+      size+=chunk.length;
+      if(size>480044){failed=true;chunks=[];res.writeHead(413).end();req.resume();return;}
+      chunks.push(chunk);
+    });
+    req.on('end',()=>{
+      if(failed)return;
+      try{
+        const result=mchsLabFixtures.put(kind,Buffer.concat(chunks));
+        res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+        res.end(JSON.stringify(result));
+      }catch{res.writeHead(422).end();}
+    });return;
+  }
   if(req.url==='/mchs-lab/session/stream.pcm' && req.method==='GET'){
     if(!authorized(req)){res.writeHead(403).end();return;}
     createMchsLabPcmStream(res,mchsWorkerLabSession);return;
