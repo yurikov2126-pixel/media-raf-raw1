@@ -2,6 +2,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {api} from '../../../api/client.js';
 import MchsIsolatedMixer from './MchsIsolatedMixer.jsx';
 import MchsFileAudioTest from './MchsFileAudioTest.jsx';
+import MchsWorkerInteractiveLab from './MchsWorkerInteractiveLab.jsx';
 const labels={AUTO_DJ:'AutoDJ',SCHEDULE:'Эфирная сетка',LIVE:'Прямой эфир',MANUAL_PLAYLIST:'Ручной плейлист',AUTO_PLAYLIST:'Автоматический плейлист'};
 const steps={PREPARE:'Подготовка',ACTIVATE:'Моделирование запуска',STOP:'Моделирование остановки',RECOVER:'План восстановления',RESET:'Завершение'};
 export default function MchsEmergencySimulation({token}){
@@ -171,6 +172,7 @@ export default function MchsEmergencySimulation({token}){
     <button type="button" onClick={stopPreview} className="rounded-lg border px-4 py-2 text-sm">Остановить</button>
     <p className="text-xs">Только наушники, изолированные от усилителя. Реальное вещание не переключается.</p>
   </div>
+  <MchsWorkerInteractiveLab token={token} stopOtherPreview={stopPreview}/>
   <MchsFileAudioTest stopOtherPreview={stopPreview}/>
   {error&&<p role="alert" className="text-red-700 dark:text-red-300 text-sm">{error}</p>}
   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/15">
