@@ -9,7 +9,8 @@ def assess_lab_chain(*, observer_fresh, worker_phase, authorized,
         'observer': 'OBSERVED' if observer_fresh else 'STALE',
         'worker': 'OBSERVED' if worker_phase in ('IDLE','PROGRAM','ALERT') else 'UNKNOWN',
         'authorization': 'OBSERVED' if authorized else 'STALE',
-        'program_source': 'OBSERVED' if primary_alive or reserve_alive else 'MISSING',
+        'program_source': ('INTENTIONALLY_SUSPENDED' if trial_active else
+                           'OBSERVED' if primary_alive or reserve_alive else 'MISSING'),
         'output_endpoint': 'OBSERVED' if output_state == 'AVAILABLE' else 'UNVERIFIED',
         'lab_pcm': ('NOT_TESTING' if not trial_active else
                     'UNCONNECTED' if not lab_connected else
@@ -19,7 +20,9 @@ def assess_lab_chain(*, observer_fresh, worker_phase, authorized,
         'mode': 'DIAGNOSTIC_ONLY',
         'checks': checks,
         'labObservationComplete': all(checks[k] == 'OBSERVED' for k in
-            ('observer','worker','authorization','program_source','output_endpoint'))
+            ('observer','worker','authorization','output_endpoint'))
+            and (checks['program_source'] == 'INTENTIONALLY_SUSPENDED' if trial_active
+                 else checks['program_source'] == 'OBSERVED')
             and (not trial_active or checks['lab_pcm'] == 'OBSERVED'),
         'audibleOutputVerified': False,
         'physicalPAPathVerified': False,
