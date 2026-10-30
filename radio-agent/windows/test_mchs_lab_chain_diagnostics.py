@@ -34,7 +34,7 @@ class ChainDiagnosticsTests(unittest.TestCase):
     def test_observer_timeout(self):
         self.assertFalse(self.status(observer_fresh=False)['labObservationComplete'])
     def test_missing_program(self):
-        self.assertEqual(self.status(primary_alive=False,reserve_alive=False)['checks']['program_source'],'MISSING')
+        self.assertEqual(self.status(primary_alive=False,reserve_alive=False,trial_active=False)['checks']['program_source'],'MISSING')
     def test_not_testing(self):
         self.assertEqual(self.status(trial_active=False)['checks']['lab_pcm'],'NOT_TESTING')
     def test_output_unknown(self):
