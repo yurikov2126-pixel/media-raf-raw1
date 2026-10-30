@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError, URLError
+import socket
 from updater import check_latest, UpdateCheckError
 from updater import select_update, version_tuple
 
@@ -24,6 +25,25 @@ class UpdateTests(unittest.TestCase):
         with patch("updater.urlopen",side_effect=URLError("offline")):
             with self.assertRaisesRegex(UpdateCheckError,"api.github.com"):
                 check_latest("0.2.0")
+
+    def test_dns_failure_is_specific_and_retried_once(self):
+        with patch("updater.time.sleep"), patch("updater.urlopen",side_effect=URLError(socket.gaierror(11001,"host not found"))) as opener:
+            with self.assertRaisesRegex(UpdateCheckError,"DNS"):
+                check_latest("0.5.7")
+            self.assertEqual(opener.call_count,2)
+
+    def test_transient_failure_recovers(self):
+        from io import BytesIO
+        with patch("updater.time.sleep"), patch("updater.urlopen",side_effect=[
+            URLError(socket.timeout("timed out")), BytesIO(b"[]")]) as opener:
+            self.assertIsNone(check_latest("0.5.7"))
+            self.assertEqual(opener.call_count,2)
+
+    def test_tls_failure_is_specific(self):
+        import ssl
+        with patch("updater.time.sleep"), patch("updater.urlopen",side_effect=URLError(ssl.SSLError("tls"))):
+            with self.assertRaisesRegex(UpdateCheckError,"TLS"):
+                check_latest("0.5.7")
 
     def test_rate_limit_is_readable(self):
         with patch("updater.urlopen",side_effect=HTTPError("https://api.github.com",403,"limit",{},None)):
