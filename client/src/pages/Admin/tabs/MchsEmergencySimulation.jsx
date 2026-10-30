@@ -4,15 +4,17 @@ import MchsWorkerServerSession from './MchsWorkerServerSession.jsx';
 
 export default function MchsEmergencySimulation({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
  const refresh=async()=>{
   try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
   catch(e){setError(e.message||'Нет связи с Radio Worker');}
  };
+ useEffect(()=>{api('/safety/mchs-training-stream/assets',{token}).then(data=>setAssets(data.assets||[])).catch(()=>setError('Не удалось загрузить категорию ALARM'));},[token]);
  useEffect(()=>{void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},3000);return()=>clearInterval(timer);},[token]);
  const command=async action=>{
   if(action==='START'&&!window.confirm('Запустить учебное сообщение в ОСНОВНОМ радиопотоке? Звук получат интернет-слушатели и подключённые громкоговорители. Подтвердите, что аудитория предупреждена, запись явно учебная, громкость безопасная и доступна физическая остановка усилителя.'))return;
   setBusy(true);setError('');
-  try{setStatus(await api('/safety/mchs-training-stream',{token,method:'POST',body:{action}}));}
+  try{setStatus(await api('/safety/mchs-training-stream',{token,method:'POST',body:{action,assetId:action==='START'?assetId:null}}));}
   catch(e){setError(e.message||'Команда не выполнена');}
   finally{setBusy(false);}
  };
@@ -23,9 +25,12 @@ export default function MchsEmergencySimulation({token}){
   </div>
   <div className="rounded-xl border border-amber-300/50 p-3 space-y-3">
    <p className="text-sm font-medium">Основной поток: {status?.active?'Учебная запись':'Обычная программа'} · {status?.enabled?'Режим включён на сервере':'Режим выключен на сервере'}</p>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Не более 10 секунд. Перед проверкой загрузите на сервер учебную запись PCM 48 кГц / stereo / s16le и включите отдельный флаг. Ни START, ни STOP не управляют ESP32 или усилителем.</p>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Не более 10 секунд. Выберите уже загруженную запись ALARM. Сервер декодирует её автоматически; отдельно готовить PCM не требуется. Для первого теста используйте явно учебную запись, а не настоящий сигнал тревоги. Ни START, ни STOP не управляют ESP32 или усилителем.</p>
+   <label className="block text-sm">Аудиозапись из категории ALARM
+    <select className="mt-1 w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 dark:bg-slate-900 dark:text-white" value={assetId} onChange={e=>setAssetId(e.target.value)}><option value="">Выберите запись</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select>
+   </label>
    <div className="flex flex-wrap gap-2">
-    <button type="button" disabled={busy||!status?.enabled||status?.active} onClick={()=>void command('START')} className="rounded-lg bg-amber-600 px-3 py-2 text-white disabled:opacity-40">Включить учебную запись в эфир</button>
+    <button type="button" disabled={busy||!assetId||!status?.enabled||status?.active} onClick={()=>void command('START')} className="rounded-lg bg-amber-600 px-3 py-2 text-white disabled:opacity-40">Включить учебную запись в эфир</button>
     <button type="button" disabled={busy} onClick={()=>void command('STOP')} className="rounded-lg bg-red-700 px-3 py-2 text-white disabled:opacity-50">СТОП / вернуть программу</button>
     <button type="button" onClick={()=>void refresh()} className="rounded-lg border px-3 py-2">Обновить</button>
    </div>
