@@ -405,7 +405,7 @@ def run(args, token):
                     connected_at=connected_at,last_pcm_at=last_pcm_at,
                     stop_requested=MCHS_AUDIO_STOP.is_set(),
                     armed=MCHS_AUDIO_ARMED.is_set(),
-                    authorized=not denied and now-last_authorized<=args.offline_grace,
+                    authorized=not denied and now-last_authorized<=15,
                     vlc_running=trial_vlc.poll() is None)
             if trial_reason is not None or MCHS_AUDIO_STOP.is_set():
                 if trial_reason:
