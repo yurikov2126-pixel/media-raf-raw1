@@ -13,7 +13,6 @@ import {createWorkerMchsLabSession} from '../src/lib/mchsWorkerLabSession.js';
 import {createMchsLabPcmStream} from '../src/lib/mchsWorkerLabPcmStream.js';
 import {makeMchsLabSessionChunk} from '../src/lib/mchsWorkerLabSessionAudio.js';
 import http from 'node:http';
-import {readFileSync} from 'node:fs';
 import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -328,8 +327,25 @@ const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUF
 // OFF by default. The operator must provision a short, unmistakably educational
 // 48kHz stereo PCM16LE recording on the server and explicitly enable this mode.
 const trainingEnabled=process.env.RADIO_MCHS_TRAINING_STREAM_ENABLED==='true';
-const trainingPcm=trainingEnabled?readFileSync(process.env.RADIO_MCHS_TRAINING_PCM_FILE||''):null;
-const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled,pcm:trainingPcm});
+const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled});
+let trainingAssetId=null;
+async function loadTrainingAlarm(assetId){
+  if(typeof assetId!=='string'||!/^[-a-zA-Z0-9_]{1,120}$/.test(assetId))throw new Error('INVALID_ASSET_ID');
+  const asset=await prisma.radioAsset.findUnique({where:{id:assetId},select:{storageKey:true,category:true,mimeType:true}});
+  if(asset?.category!=='ALARM'||!asset.mimeType?.startsWith('audio/')||!asset.storageKey)throw new Error('NOT_ALARM_AUDIO');
+  const file=path.resolve(assetsRoot,asset.storageKey);
+  if(!file.startsWith(assetsRoot+path.sep))throw new Error('INVALID_STORAGE_KEY');
+  const chunks=[];let size=0;
+  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-i',file,'-t','10','-f','s16le','-ar','48000','-ac','2','pipe:1'],{stdio:['ignore','pipe','ignore']});
+  const pcm=await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>child.kill('SIGKILL'),15000);
+    let excessive=false;
+    child.stdout.on('data',chunk=>{size+=chunk.length;if(size>1920000){excessive=true;child.kill('SIGKILL');return;}chunks.push(chunk);});
+    child.on('error',reject);
+    child.on('close',code=>{clearTimeout(timer);if(code!==0||excessive||size===0||size%4)return reject(new Error('PCM_DECODE_FAILED'));resolve(Buffer.concat(chunks));});
+  });
+  return pcm;
+}
 function startEncoder() {
   encoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin',
     '-f','s16le','-ar','48000','-ac','2','-i','pipe:0',
@@ -1917,13 +1933,19 @@ const server=http.createServer((req,res)=>{
     if(!authorized(req)){res.writeHead(403).end();return;}
     if(req.method==='GET'){
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-      res.end(JSON.stringify(trainingOverlay.snapshot()));return;
+      res.end(JSON.stringify({...trainingOverlay.snapshot(),assetId:trainingOverlay.snapshot().active?trainingAssetId:null}));return;
     }
-    let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>256)req.destroy();});
-    req.on('end',()=>{
-      let action;try{action=JSON.parse(raw).action;}catch{}
+    let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
+    req.on('end',async()=>{
+      let action,assetId;try{({action,assetId}=JSON.parse(raw));}catch{}
       if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
-      const result=action==='STOP'?trainingOverlay.stop():trainingOverlay.start();
+      let result;
+      if(action==='STOP'){result=trainingOverlay.stop();trainingAssetId=null;}
+      else {
+        if(!trainingEnabled||trainingOverlay.snapshot().active){result={ok:false,reason:'DISABLED_OR_ACTIVE',...trainingOverlay.snapshot()};}
+        else try{const pcm=await loadTrainingAlarm(assetId);result=trainingOverlay.startWith(pcm);if(result.ok)trainingAssetId=assetId;}
+        catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
+      }
       if(result.ok&&action==='START')stopDecoder();
       console.info('MCHS_TRAINING_STREAM',JSON.stringify({action,ok:result.ok,revision:result.revision,reason:result.reason||null}));
       res.writeHead(result.ok?200:409,{'Content-Type':'application/json','Cache-Control':'no-store'});
