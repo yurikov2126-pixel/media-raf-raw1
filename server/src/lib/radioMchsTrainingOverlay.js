@@ -5,7 +5,7 @@
 export const PCM_BYTES_PER_SECOND=48000*2*2;
 export const MAX_TRAINING_SECONDS=10;
 export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={}){
- if(enabled && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
+ if(enabled && pcm!==undefined && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
      pcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS))
   throw new TypeError('INVALID_TRAINING_PCM');
  let active=false,at=0,position=0,revision=0,source=pcm;
