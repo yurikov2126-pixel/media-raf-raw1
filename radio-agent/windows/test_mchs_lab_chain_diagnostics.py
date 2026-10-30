@@ -14,6 +14,18 @@ class ChainDiagnosticsTests(unittest.TestCase):
         self.assertFalse(d['realEmergencyReady'])
         self.assertFalse(d['audibleOutputVerified'])
         self.assertFalse(d['physicalPAPathVerified'])
+    def test_program_intentionally_suspended_during_lab(self):
+        d=self.status(primary_alive=False,reserve_alive=False,trial_active=True)
+        self.assertEqual(d['checks']['program_source'],'INTENTIONALLY_SUSPENDED')
+        self.assertFalse(d['realEmergencyReady'])
+        self.assertFalse(d['physicalPAPathVerified'])
+        self.assertTrue(d['labObservationComplete'])
+
+    def test_no_program_without_trial_is_missing(self):
+        d=self.status(primary_alive=False,reserve_alive=False,trial_active=False)
+        self.assertEqual(d['checks']['program_source'],'MISSING')
+        self.assertFalse(d['labObservationComplete'])
+
     def test_stale_pcm(self):
         self.assertEqual(self.status(pcm_age_seconds=6)['checks']['lab_pcm'],'STALE')
         self.assertFalse(self.status(pcm_age_seconds=6)['labObservationComplete'])
