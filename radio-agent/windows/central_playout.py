@@ -27,6 +27,7 @@ from mchs_isolated_output_pilot import LocalMonitor
 from mchs_trial_watchdog import trial_stop_reason
 from mchs_lab_trigger import next_lab_trigger
 from mchs_lab_resume import should_stop_auto_lab
+from mchs_lab_observer_failsafe import observer_failsafe
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -349,6 +350,24 @@ def run(args, token):
                 if results:
                     snapshot=results[-1]
                     results.clear()
+            # Fail closed if laboratory observer stops reporting fresh state.
+            with MCHS_LAB_ONE_SHOT_LOCK:
+                failsafe=observer_failsafe(
+                    now=now,last_seen_at=MCHS_LAB_OBSERVED['at'],
+                    automatic_trial_active=MCHS_LAB_AUTO_ACTIVE.is_set(),
+                    one_shot_armed=MCHS_LAB_ONE_SHOT.is_set(),
+                    expires_at=MCHS_LAB_ONE_SHOT_EXPIRES['at'])
+                if failsafe['cancel_arm']:
+                    MCHS_LAB_ONE_SHOT.clear()
+                    print('MCHS_LAB_ONE_SHOT_CANCELLED',
+                          'OBSERVER_STALE' if failsafe['observer_stale'] else 'ARM_EXPIRED',
+                          flush=True)
+            if failsafe['stop_trial']:
+                MCHS_LAB_AUTO_ACTIVE.clear()
+                MCHS_AUDIO_ARMED.clear()
+                MCHS_AUDIO_STOP.set()
+                print('MCHS_LAB_AUTO_STOP_OBSERVER_STALE',flush=True)
+
             # Operator-only local trial on the SAME Windows output, with the PA
             # audio cable physically disconnected. No network action can arm this.
             trial_reason=None
