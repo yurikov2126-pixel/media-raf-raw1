@@ -15,6 +15,10 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(self.reason(armed=False),'OPERATOR_STOP')
     def test_authorization(self):
         self.assertEqual(self.reason(authorized=False),'AUTHORIZATION_LOST')
+    def test_authorization_expired_during_active_pcm(self):
+        self.assertEqual(self.reason(authorized=False,connected_at=91.,last_pcm_at=99.),'AUTHORIZATION_LOST')
+    def test_operator_stop_takes_priority_over_authorization_loss(self):
+        self.assertEqual(self.reason(authorized=False,stop_requested=True),'OPERATOR_STOP')
     def test_duration(self):
         self.assertEqual(self.reason(now=120.),'MAX_DURATION')
     def test_vlc_exit(self):
