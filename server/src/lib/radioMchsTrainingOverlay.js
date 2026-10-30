@@ -5,18 +5,24 @@
 export const PCM_BYTES_PER_SECOND=48000*2*2;
 export const MAX_TRAINING_SECONDS=10;
 export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={}){
- if(enabled && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
+ if(enabled && pcm!==undefined && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
      pcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS))
   throw new TypeError('INVALID_TRAINING_PCM');
- let active=false,at=0,position=0,revision=0;
+ let active=false,at=0,position=0,revision=0,source=pcm;
  const stop=()=>{if(active){active=false;revision++;}return snapshot();};
  function snapshot(){
   if(active && now()-at>=MAX_TRAINING_SECONDS*1000)stop();
-  return {enabled,active,revision,maxSeconds:MAX_TRAINING_SECONDS,remainingBytes:active?Math.max(0,pcm.length-position):0,
+  return {enabled,active,revision,maxSeconds:MAX_TRAINING_SECONDS,remainingBytes:active?Math.max(0,source.length-position):0,
    output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};
  }
  return {
   snapshot,
+  startWith(sourcePcm){
+   if(!enabled)return {ok:false,reason:'DISABLED',...snapshot()};
+   if(!Buffer.isBuffer(sourcePcm)||!sourcePcm.length||sourcePcm.length%4||sourcePcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS)return {ok:false,reason:'INVALID_PCM',...snapshot()};
+   source=sourcePcm;
+   return this.start();
+  },
   start(){
    if(!enabled)return {ok:false,reason:'DISABLED',...snapshot()};
    if(active)return {ok:false,reason:'ALREADY_ACTIVE',...snapshot()};
@@ -28,10 +34,10 @@ export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={})
    if(!Buffer.isBuffer(frame)||frame.length%4!==0)throw new TypeError('INVALID_PCM_FRAME');
    if(!snapshot().active)return frame;
    const result=Buffer.alloc(frame.length);
-   const n=Math.min(frame.length,pcm.length-position);
-   pcm.copy(result,0,position,position+n);
+   const n=Math.min(frame.length,source.length-position);
+   source.copy(result,0,position,position+n);
    position+=n;
-   if(position===pcm.length)stop();
+   if(position===source.length)stop();
    return result;
   }
  };

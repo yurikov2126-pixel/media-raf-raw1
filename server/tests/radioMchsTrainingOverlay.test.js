@@ -20,6 +20,12 @@ test('training PCM temporarily replaces identical-sized station frames then resu
  assert.equal(x.snapshot().active,false);
  assert.equal(x.replace(normal),normal);
 });
+test('selected ALARM source is bounded to 10 seconds',()=>{
+ const x=createTrainingOverlay({enabled:true});
+ assert.equal(x.startWith(Buffer.alloc(1920,8)).ok,true);
+ assert.equal(x.replace(Buffer.alloc(1920,2))[0],8);
+ assert.equal(x.snapshot().active,false);
+});
 test('operator STOP restores normal program on next frame',()=>{
  const x=createTrainingOverlay({enabled:true,pcm:Buffer.alloc(38400,9)});
  x.start();
