@@ -1,6 +1,6 @@
 import http from 'node:http';
 /** Authentication stays in safety router; worker accepts only a private shared secret. */
-export function trainingStreamRequest(action=null){
+export function trainingStreamRequest(action=null,assetId=null){
  const port=Number(process.env.RADIO_PLAYOUT_PORT||4105);
  const secret=process.env.RADIO_PLAYOUT_SECRET||'';
  if(!Number.isInteger(port)||port<1||port>65535||secret.length<32)
@@ -8,7 +8,7 @@ export function trainingStreamRequest(action=null){
  if(action!==null&&!['START','STOP'].includes(action))
   return Promise.reject(new Error('INVALID_ACTION'));
  return new Promise((resolve,reject)=>{
-  const payload=action===null?null:JSON.stringify({action});
+  const payload=action===null?null:JSON.stringify({action,assetId});
   const req=http.request({hostname:'127.0.0.1',port,path:'/mchs-training-stream',
     method:payload?'POST':'GET',timeout:3500,
     headers:{'x-radio-worker-secret':secret,...(payload?{'Content-Type':'application/json',
