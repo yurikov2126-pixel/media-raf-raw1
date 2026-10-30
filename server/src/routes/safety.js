@@ -61,6 +61,10 @@ async function load() {
   } catch { return defaults; }
 }
 router.use(auth);
+router.get('/mchs-training-stream/assets',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{const assets=await prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true,name:true,durationMs:true},orderBy:{createdAt:'desc'},take:200});res.set('Cache-Control','no-store').json({assets});}
+ catch(error){next(error);}
+});
 router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
  try{const r=await trainingStreamRequest();res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
  catch{res.status(503).json({error:'TRAINING_WORKER_UNAVAILABLE'});}
@@ -68,7 +72,7 @@ router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
 router.post('/mchs-training-stream',requireRole('ADMIN'),async (req,res)=>{
  const action=req.body?.action;
  if(!['START','STOP'].includes(action))return res.status(400).json({error:'INVALID_ACTION'});
- try{const r=await trainingStreamRequest(action);res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
+ try{const r=await trainingStreamRequest(action,req.body?.assetId);res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
  catch{res.status(503).json({error:'TRAINING_WORKER_UNAVAILABLE'});}
 });
 
