@@ -21,6 +21,7 @@ from esp32_local import send_heartbeat
 from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
 from mchs_readiness import assess_mchs_readiness
+from mchs_lab_chain_diagnostics import assess_lab_chain
 from mchs_output_preflight import evaluate_isolated_output_preflight
 from mchs_transition_shadow import MchsTransitionShadow
 from mchs_isolated_output_pilot import LocalMonitor
@@ -271,6 +272,26 @@ def run(args, token):
             preflight=evaluate_isolated_output_preflight(
                 observer=ready,pa_cable_disconnected=False,
                 separate_output_confirmed=False,operator_present=False)
+            with MCHS_LAB_ONE_SHOT_LOCK:
+                last_observed_at=MCHS_LAB_OBSERVED['at']
+            with_state=trial_relay if trial_relay is not None else None
+            if with_state is not None:
+                with with_state.metrics_lock:
+                    lab_connected=with_state.connected_at is not None
+                    last_pcm_at=with_state.last_pcm_at
+            else:
+                lab_connected=False
+                last_pcm_at=None
+            chain=assess_lab_chain(
+                observer_fresh=last_observed_at>0 and moment-last_observed_at<10,
+                worker_phase=data.get('workerPhase'),
+                authorized=not denied and moment-last_authorized<=args.offline_grace,
+                primary_alive=primary_alive,reserve_alive=reserve_alive,
+                output_state=output_probe.get('state','UNKNOWN'),
+                lab_connected=lab_connected,
+                pcm_age_seconds=moment-last_pcm_at if last_pcm_at is not None else None,
+                trial_active=trial_vlc is not None)
+            print('MCHS_LAB_CHAIN_DIAGNOSTIC',json.dumps(chain),flush=True)
             transition=mchs_transition_shadow.observe(revision,data.get('workerPhase'))
             report={'revision':revision,**ready,'preflight':preflight,
                     'transition':transition}
