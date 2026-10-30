@@ -22,6 +22,7 @@ from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
 from mchs_readiness import assess_mchs_readiness
 from mchs_lab_chain_diagnostics import assess_lab_chain
+from mchs_lab_chain_transition import LabChainTransition
 from mchs_output_preflight import evaluate_isolated_output_preflight
 from mchs_transition_shadow import MchsTransitionShadow
 from mchs_isolated_output_pilot import LocalMonitor
@@ -206,6 +207,7 @@ def run(args, token):
     mchs_observer_busy=threading.Event()
     last_mchs_observed_revision=None
     mchs_transition_shadow=MchsTransitionShadow()
+    mchs_lab_chain_transition=LabChainTransition()
     trial_vlc=None
     trial_relay=None
     trial_started_at=0.0
@@ -291,7 +293,9 @@ def run(args, token):
                 lab_connected=lab_connected,
                 pcm_age_seconds=moment-last_pcm_at if last_pcm_at is not None else None,
                 trial_active=trial_vlc is not None)
-            print('MCHS_LAB_CHAIN_DIAGNOSTIC',json.dumps(chain),flush=True)
+            chain_event=mchs_lab_chain_transition.observe(chain)
+            if chain_event is not None:
+                print('MCHS_LAB_CHAIN_CHANGE',json.dumps(chain_event),flush=True)
             transition=mchs_transition_shadow.observe(revision,data.get('workerPhase'))
             report={'revision':revision,**ready,'preflight':preflight,
                     'transition':transition}
