@@ -19,6 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK, MCHS_LAB_OBSERVED
 from updater import check_latest, stage_update, UpdateCheckError
+from local_speaker_check import LocalSpeakerCheck
 from esp32_local import send_heartbeat, restart_esp32, upload_firmware
 from esp32_telemetry import report_status
 from esp32_power import signed_power,fetch_intent
@@ -194,6 +195,17 @@ class RadioAgentApp(tk.Tk):
                    command=self.stop_mchs_audio_trial).pack(side="left",padx=8)
         ttk.Button(air,text="Разрешить ОДНО учебное событие МЧС (60 секунд)",
                    command=self.arm_mchs_lab_one_shot).pack(anchor="w",pady=(0,7))
+        ttk.Separator(air,orient="horizontal").pack(fill="x",pady=(8,8))
+        ttk.Label(air,text="Локальная проверка громкоговорителей — НЕ сигнал МЧС",
+                  style="Main.TLabel").pack(anchor="w")
+        check_bar=ttk.Frame(air,style="Main.TFrame")
+        check_bar.pack(fill="x",pady=(5,5))
+        ttk.Button(check_bar,text="Воспроизвести учебную фразу (до 10 сек.)",
+                   command=self.start_local_speaker_check).pack(side="left")
+        ttk.Button(check_bar,text="СТОП проверки",
+                   command=self.stop_local_speaker_check).pack(side="left",padx=8)
+        ttk.Label(air,text="Только после остановки эфира; отдельная голосовая проверка, не тревога и не испытание прерывания.",
+                  style="Main.TLabel").pack(anchor="w",pady=(0,7))
         ttk.Label(air,text="Только с физически отключённым кабелем к AA-300. Макс. 30 секунд.",
                   style="Main.TLabel").pack(anchor="w",pady=(0,7))
         ttk.Label(air, text="Журнал событий", style="Main.TLabel").pack(anchor="w")
@@ -609,6 +621,37 @@ class RadioAgentApp(tk.Tk):
         os.startfile(str(self.pending_update))
         self.destroy()
 
+    def start_local_speaker_check(self):
+        if self.worker and self.worker.is_alive():
+            messagebox.showwarning("Проверка громкоговорителей",
+                                   "Сначала остановите Windows Agent и убедитесь, что обычный эфир не воспроизводится.")
+            return
+        if MCHS_AUDIO_ARMED.is_set():
+            return
+        if not hasattr(self, "local_speaker_check"):
+            self.local_speaker_check=LocalSpeakerCheck()
+        if self.local_speaker_check.active:
+            return
+        confirmed=messagebox.askyesno(
+            "Локальная учебная проверка",
+            "Вы проверили, что сейчас можно безопасно включить громкоговорители, "
+            "слушатели предупреждены, громкость установлена на минимально необходимый уровень, "
+            "оператор находится рядом с физическим выключателем AA-300. "
+            "Будет произнесена только фраза «Это учебная проверка, не тревога». "
+            "Максимум 10 секунд. Запустить?",
+            icon="warning")
+        if confirmed:
+            try:
+                self.local_speaker_check.start()
+                self.messages.put(("log","PA_LOCAL_SPEAKER_CHECK_STARTED_MAX_10_SECONDS"))
+            except OSError as error:
+                self.messages.put(("log","PA_LOCAL_SPEAKER_CHECK_FAILED "+type(error).__name__))
+
+    def stop_local_speaker_check(self):
+        if hasattr(self,"local_speaker_check"):
+            self.local_speaker_check.stop()
+            self.messages.put(("log","PA_LOCAL_SPEAKER_CHECK_STOPPED"))
+
     def arm_mchs_lab_one_shot(self):
         if not (self.worker and self.worker.is_alive()):
             messagebox.showwarning("МЧС", "Сначала запустите Windows Agent.")
@@ -664,6 +707,7 @@ class RadioAgentApp(tk.Tk):
         self.messages.put(("log","MCHS_AUDIO_TRIAL_STOP_REQUESTED"))
 
     def stop(self):
+        self.stop_local_speaker_check()
         self.stop_mchs_audio_trial()
         STOP.set()
         self.status.set("Остановка…")
@@ -671,6 +715,7 @@ class RadioAgentApp(tk.Tk):
         self.stop_btn.configure(state="disabled")
 
     def close(self):
+        self.stop_local_speaker_check()
         self.save_preferences(silent=True)
         if self.worker and self.worker.is_alive():
             self.stop()
