@@ -2,6 +2,7 @@ import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
 import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
+import {trainingStreamRequest} from '../lib/mchsTrainingStreamProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
@@ -60,6 +61,17 @@ async function load() {
   } catch { return defaults; }
 }
 router.use(auth);
+router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
+ try{const r=await trainingStreamRequest();res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
+ catch{res.status(503).json({error:'TRAINING_WORKER_UNAVAILABLE'});}
+});
+router.post('/mchs-training-stream',requireRole('ADMIN'),async (req,res)=>{
+ const action=req.body?.action;
+ if(!['START','STOP'].includes(action))return res.status(400).json({error:'INVALID_ACTION'});
+ try{const r=await trainingStreamRequest(action);res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
+ catch{res.status(503).json({error:'TRAINING_WORKER_UNAVAILABLE'});}
+});
+
 // No actual control commands are accepted here. Pure in-process diagnostics only.
 // Read-only worker health; distinct from simulator success and physical output verification.
 // Real schedule snapshot + worker status, READ ONLY. No emergency commands, no playout.

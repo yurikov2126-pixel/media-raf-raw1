@@ -13,6 +13,8 @@ import {createWorkerMchsLabSession} from '../src/lib/mchsWorkerLabSession.js';
 import {createMchsLabPcmStream} from '../src/lib/mchsWorkerLabPcmStream.js';
 import {makeMchsLabSessionChunk} from '../src/lib/mchsWorkerLabSessionAudio.js';
 import http from 'node:http';
+import {readFileSync} from 'node:fs';
+import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -323,11 +325,19 @@ function authorized(req) {
   return a.length===b.length && timingSafeEqual(a,b);
 }
 const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUFS_ENABLED!=='false'});
+// OFF by default. The operator must provision a short, unmistakably educational
+// 48kHz stereo PCM16LE recording on the server and explicitly enable this mode.
+const trainingEnabled=process.env.RADIO_MCHS_TRAINING_STREAM_ENABLED==='true';
+const trainingPcm=trainingEnabled?readFileSync(process.env.RADIO_MCHS_TRAINING_PCM_FILE||''):null;
+const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled,pcm:trainingPcm});
 function startEncoder() {
   encoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin',
     '-f','s16le','-ar','48000','-ac','2','-i','pipe:0',
     '-c:a','libmp3lame','-b:a','128k','-ar','48000','-f','mp3','-write_xing','0','pipe:1'],
     {stdio:['pipe','pipe','pipe']});
+  // All program sources converge here, before MP3 encoding for both website and Agent.
+  const originalWrite=encoder.stdin.write.bind(encoder.stdin);
+  encoder.stdin.write=(frame,...args)=>originalWrite(trainingOverlay.replace(frame),...args);
   encoder.stdout.on('data',data=>{
     loudnessMeter.observe(data);
     state.frames+=1;
@@ -1903,6 +1913,23 @@ async function run() {
 const mchsWorkerLabSession=createWorkerMchsLabSession();
 const mchsLabFixtures=createMchsLabFixtureStore();
 const server=http.createServer((req,res)=>{
+  if(req.url==='/mchs-training-stream' && ['GET','POST'].includes(req.method)){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    if(req.method==='GET'){
+      res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify(trainingOverlay.snapshot()));return;
+    }
+    let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>256)req.destroy();});
+    req.on('end',()=>{
+      let action;try{action=JSON.parse(raw).action;}catch{}
+      if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
+      const result=action==='STOP'?trainingOverlay.stop():trainingOverlay.start();
+      if(result.ok&&action==='START')stopDecoder();
+      console.info('MCHS_TRAINING_STREAM',JSON.stringify({action,ok:result.ok,revision:result.revision,reason:result.reason||null}));
+      res.writeHead(result.ok?200:409,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify(result));
+    });return;
+  }
   if(req.url==='/mchs-lab/fixtures' && req.method==='GET'){
     if(!authorized(req)){res.writeHead(403).end();return;}
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
