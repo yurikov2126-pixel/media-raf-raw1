@@ -1,6 +1,3 @@
-import MchsWorkerFixtureStage from './MchsWorkerFixtureStage.jsx';
-import MchsWorkerLivePcmMonitor from './MchsWorkerLivePcmMonitor.jsx';
-import MchsWorkerSessionMonitor from './MchsWorkerSessionMonitor.jsx';
 import {useCallback,useEffect,useState} from 'react';
 export default function MchsWorkerServerSession({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -22,8 +19,8 @@ export default function MchsWorkerServerSession({token}){
   finally{setBusy(false);}
  };
  return <div className="rounded-xl border border-slate-300 dark:border-white/20 p-4 space-y-3">
-  <h4 className="font-semibold">Серверная сессия PCM — лабораторный контроль</h4>
-  <p className="text-sm text-slate-600 dark:text-slate-300">Лабораторная серверная сессия управляет учебным PCM, который можно прослушать в мониторе ниже. Она не подключена к радиоэфиру или усилителю.</p>
+  <h4 className="font-semibold">Учебная сессия Radio Worker</h4>
+  <p className="text-sm text-slate-600 dark:text-slate-300">Команды меняют только состояние учебной сессии Worker. Для реального аппаратного испытания требуется отдельная проверенная процедура и контроль физической цепи.</p>
   <p role="status" className="text-sm">Состояние Worker: {status?.phase||'неизвестно'} · Ревизия: {status?.revision??'—'}</p>
   <div className="flex flex-wrap gap-2">
    <button disabled={busy||status?.phase!=='IDLE'} onClick={()=>void command('START')} className="rounded-lg bg-violet-600 px-3 py-2 text-white text-sm disabled:opacity-40">START</button>
@@ -34,9 +31,6 @@ export default function MchsWorkerServerSession({token}){
   </div>
   {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
   <p className="text-xs text-slate-600 dark:text-slate-300">Реакция Worker на команду до первого PCM-тика: {status?.pcmObservation && status.pcmObservation.revision===status.revision ? status.pcmObservation.workerCommandToPcmTickMs+' мс':'не измерена — обновите статус после команды при запущенном потоке'}. Это только серверная задержка, не время появления звука в наушниках.</p>
-  <MchsWorkerSessionMonitor token={token} phase={status?.phase} revision={status?.revision}/>
-  <MchsWorkerLivePcmMonitor token={token} phase={status?.phase} revision={status?.revision}/>
-  <MchsWorkerFixtureStage token={token}/>
   <p className="text-xs">Сессия автоматически истекает через 120 секунд без команд. STOP не влияет на настоящее радио.</p>
  </div>;
 }
