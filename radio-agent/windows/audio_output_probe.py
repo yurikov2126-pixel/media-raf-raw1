@@ -11,7 +11,7 @@ import sys
 SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
 $items = @(Get-PnpDevice -Class AudioEndpoint -ErrorAction Stop |
- Where-Object { $_.FriendlyName -and $_.FriendlyName -match '(Speakers|Headphones|Динамики|Наушники|Line Out|Выход)' } |
+ Where-Object { $_.FriendlyName } |
  Select-Object -First 12 FriendlyName, Status)
 @($items) | ConvertTo-Json -Compress -Depth 3
 """
