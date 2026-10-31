@@ -8,12 +8,12 @@ export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={})
  if(enabled && pcm!==undefined && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
      pcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS))
   throw new TypeError('INVALID_TRAINING_PCM');
- let active=false,at=0,position=0,revision=0,source=pcm;
- const stop=()=>{if(active){active=false;revision++;}return snapshot();};
+ let active=false,at=0,position=0,revision=0,source=pcm,lastStopReason=null;
+ const stop=(reason='OPERATOR_STOP')=>{if(active){active=false;revision++;lastStopReason=reason;}return snapshot();};
  function snapshot(){
-  if(active && now()-at>=MAX_TRAINING_SECONDS*1000)stop();
+  if(active && now()-at>=MAX_TRAINING_SECONDS*1000)stop('MAX_DURATION');
   return {enabled,active,revision,maxSeconds:MAX_TRAINING_SECONDS,remainingBytes:active?Math.max(0,source.length-position):0,
-   output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};
+   output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',lastStopReason,realEmergencyReady:false};
  }
  return {
   snapshot,
@@ -26,7 +26,7 @@ export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={})
   start(){
    if(!enabled)return {ok:false,reason:'DISABLED',...snapshot()};
    if(active)return {ok:false,reason:'ALREADY_ACTIVE',...snapshot()};
-   active=true;at=now();position=0;revision++;
+   active=true;at=now();position=0;revision++;lastStopReason=null;
    return {ok:true,...snapshot()};
   },
   stop:()=>({ok:true,...stop()}),
@@ -37,7 +37,7 @@ export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={})
    const n=Math.min(frame.length,source.length-position);
    source.copy(result,0,position,position+n);
    position+=n;
-   if(position===source.length)stop();
+   if(position===source.length)stop('FILE_ENDED');
    return result;
   }
  };
