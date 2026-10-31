@@ -44,3 +44,20 @@ test('invalid/oversized source rejected at configuration',()=>{
  assert.throws(()=>createTrainingOverlay({enabled:true,pcm:Buffer.alloc(PCM_BYTES_PER_SECOND*10+4)}));
  assert.throws(()=>createTrainingOverlay({enabled:true,pcm:Buffer.alloc(7)}));
 });
+
+test('training session reports file completion and manual stop',()=>{
+ const x=createTrainingOverlay({enabled:true});
+ x.startWith(Buffer.alloc(1920,8));
+ x.replace(Buffer.alloc(1920));
+ assert.equal(x.snapshot().lastStopReason,'FILE_ENDED');
+ x.startWith(Buffer.alloc(3840,8));
+ assert.equal(x.snapshot().lastStopReason,null);
+ x.stop();
+ assert.equal(x.snapshot().lastStopReason,'OPERATOR_STOP');
+});
+test('training session reports timeout rather than silently stopping',()=>{
+ let t=0;
+ const x=createTrainingOverlay({enabled:true,pcm:Buffer.alloc(3840),now:()=>t});
+ x.start();t=10001;
+ assert.equal(x.snapshot().lastStopReason,'MAX_DURATION');
+});
