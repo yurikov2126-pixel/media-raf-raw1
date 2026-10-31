@@ -1,18 +1,18 @@
 /** Server-side training PCM overlay for the shared station MP3 encoder.
  * Explicit, opt-in, operator-controlled. Not a real emergency trigger.
- * Source PCM is prevalidated 48kHz stereo 16-bit signed LE, max 10 seconds.
+ * Source PCM is prevalidated 48kHz stereo 16-bit signed LE, max 60 seconds.
  */
 export const PCM_BYTES_PER_SECOND=48000*2*2;
-export const MAX_TRAINING_SECONDS=10;
+export const MAX_TRAINING_SECONDS=60;
 export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={}){
  if(enabled && pcm!==undefined && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
      pcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS))
   throw new TypeError('INVALID_TRAINING_PCM');
- let active=false,at=0,position=0,revision=0,source=pcm;
- const stop=()=>{if(active){active=false;revision++;}return snapshot();};
+ let active=false,at=0,position=0,revision=0,source=pcm,lastStopReason=null;
+ const stop=(reason='OPERATOR_STOP')=>{if(active){active=false;revision++;lastStopReason=reason;}return snapshot();};
  function snapshot(){
-  if(active && now()-at>=MAX_TRAINING_SECONDS*1000)stop();
-  return {enabled,active,revision,maxSeconds:MAX_TRAINING_SECONDS,remainingBytes:active?Math.max(0,source.length-position):0,
+  if(active && now()-at>=MAX_TRAINING_SECONDS*1000)stop('MAX_DURATION');
+  return {enabled,active,revision,maxSeconds:MAX_TRAINING_SECONDS,remainingBytes:active?Math.max(0,source.length-position):0,lastStopReason,
    output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};
  }
  return {
@@ -26,7 +26,7 @@ export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={})
   start(){
    if(!enabled)return {ok:false,reason:'DISABLED',...snapshot()};
    if(active)return {ok:false,reason:'ALREADY_ACTIVE',...snapshot()};
-   active=true;at=now();position=0;revision++;
+   active=true;at=now();position=0;lastStopReason=null;revision++;
    return {ok:true,...snapshot()};
   },
   stop:()=>({ok:true,...stop()}),
@@ -37,7 +37,7 @@ export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={})
    const n=Math.min(frame.length,source.length-position);
    source.copy(result,0,position,position+n);
    position+=n;
-   if(position===source.length)stop();
+   if(position===source.length)stop('FILE_COMPLETED');
    return result;
   }
  };

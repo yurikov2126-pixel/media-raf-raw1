@@ -329,6 +329,15 @@ const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUF
 const trainingEnabled=process.env.RADIO_MCHS_TRAINING_STREAM_ENABLED==='true';
 const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled});
 let trainingAssetId=null;
+let trainingLastRevision=0;
+function trainingStatus(){
+ const state=trainingOverlay.snapshot();
+ if(state.revision!==trainingLastRevision){
+  trainingLastRevision=state.revision;
+  if(!state.active&&state.lastStopReason)console.info('MCHS_TRAINING_STREAM_FINISHED',JSON.stringify({assetId:trainingAssetId,reason:state.lastStopReason,revision:state.revision,at:new Date().toISOString()}));
+ }
+ return state;
+}
 async function loadTrainingAlarm(assetId){
   if(typeof assetId!=='string'||!/^[-a-zA-Z0-9_]{1,120}$/.test(assetId))throw new Error('INVALID_ASSET_ID');
   const asset=await prisma.radioAsset.findUnique({where:{id:assetId},select:{storageKey:true,category:true,mimeType:true}});
@@ -336,11 +345,11 @@ async function loadTrainingAlarm(assetId){
   const file=path.resolve(assetsRoot,asset.storageKey);
   if(!file.startsWith(assetsRoot+path.sep))throw new Error('INVALID_STORAGE_KEY');
   const chunks=[];let size=0;
-  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-i',file,'-t','10','-f','s16le','-ar','48000','-ac','2','pipe:1'],{stdio:['ignore','pipe','ignore']});
+  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-i',file,'-t','60','-f','s16le','-ar','48000','-ac','2','pipe:1'],{stdio:['ignore','pipe','ignore']});
   const pcm=await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>child.kill('SIGKILL'),15000);
     let excessive=false;
-    child.stdout.on('data',chunk=>{size+=chunk.length;if(size>1920000){excessive=true;child.kill('SIGKILL');return;}chunks.push(chunk);});
+    child.stdout.on('data',chunk=>{size+=chunk.length;if(size>11520000){excessive=true;child.kill('SIGKILL');return;}chunks.push(chunk);});
     child.on('error',reject);
     child.on('close',code=>{clearTimeout(timer);if(code!==0||excessive||size===0||size%4)return reject(new Error('PCM_DECODE_FAILED'));resolve(Buffer.concat(chunks));});
   });
@@ -353,7 +362,7 @@ function startEncoder() {
     {stdio:['pipe','pipe','pipe']});
   // All program sources converge here, before MP3 encoding for both website and Agent.
   const originalWrite=encoder.stdin.write.bind(encoder.stdin);
-  encoder.stdin.write=(frame,...args)=>originalWrite(trainingOverlay.replace(frame),...args);
+  encoder.stdin.write=(frame,...args)=>originalWrite((trainingStatus(),trainingOverlay.replace(frame)),...args);
   encoder.stdout.on('data',data=>{
     loudnessMeter.observe(data);
     state.frames+=1;
@@ -1933,17 +1942,17 @@ const server=http.createServer((req,res)=>{
     if(!authorized(req)){res.writeHead(403).end();return;}
     if(req.method==='GET'){
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-      res.end(JSON.stringify({...trainingOverlay.snapshot(),assetId:trainingOverlay.snapshot().active?trainingAssetId:null}));return;
+      res.end(JSON.stringify({...trainingStatus(),assetId:trainingStatus().active?trainingAssetId:null}));return;
     }
     let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
     req.on('end',async()=>{
       let action,assetId;try{({action,assetId}=JSON.parse(raw));}catch{}
       if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
       let result;
-      if(action==='STOP'){result=trainingOverlay.stop();trainingAssetId=null;}
+      if(action==='STOP'){result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
       else {
         if(!trainingEnabled||trainingOverlay.snapshot().active){result={ok:false,reason:'DISABLED_OR_ACTIVE',...trainingOverlay.snapshot()};}
-        else try{const pcm=await loadTrainingAlarm(assetId);result=trainingOverlay.startWith(pcm);if(result.ok)trainingAssetId=assetId;}
+        else try{const pcm=await loadTrainingAlarm(assetId);result=trainingOverlay.startWith(pcm);if(result.ok){trainingAssetId=assetId;trainingStatus();}}
         catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
       }
       if(result.ok&&action==='START')stopDecoder();
