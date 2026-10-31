@@ -25,7 +25,7 @@ export default function MchsEmergencySimulation({token}){
   </div>
   <div className="rounded-xl border border-amber-300/50 p-3 space-y-3">
    <p className="text-sm font-medium">Основной поток: {status?.active?'Учебная запись':'Обычная программа'} · {status?.enabled?'Режим включён на сервере':'Режим выключен на сервере'}</p>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Не более 10 секунд. Выберите уже загруженную запись ALARM. Сервер декодирует её автоматически; отдельно готовить PCM не требуется. Для первого теста используйте явно учебную запись, а не настоящий сигнал тревоги. Ни START, ни STOP не управляют ESP32 или усилителем.</p>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Полная запись ALARM, но не более 60 секунд. Выберите уже загруженную запись ALARM. Сервер декодирует её автоматически; отдельно готовить PCM не требуется. Для первого теста используйте явно учебную запись, а не настоящий сигнал тревоги. Ни START, ни STOP не управляют ESP32 или усилителем.</p>
    <label className="block text-sm">Аудиозапись из категории ALARM
     <select className="mt-1 w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 dark:bg-slate-900 dark:text-white" value={assetId} onChange={e=>setAssetId(e.target.value)}><option value="">Выберите запись</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select>
    </label>
