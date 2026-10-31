@@ -18,6 +18,7 @@ test('training PCM temporarily replaces identical-sized station frames then resu
  assert.equal(x.snapshot().active,true);
  assert.deepEqual(x.replace(normal),Buffer.alloc(1920,11));
  assert.equal(x.snapshot().active,false);
+ assert.equal(x.snapshot().lastStopReason,'FILE_COMPLETED');
  assert.equal(x.replace(normal),normal);
 });
 test('selected ALARM source is bounded to 10 seconds',()=>{
@@ -32,15 +33,17 @@ test('operator STOP restores normal program on next frame',()=>{
  x.stop();
  const frame=Buffer.alloc(1920,2);
  assert.equal(x.replace(frame),frame);
+ assert.equal(x.snapshot().lastStopReason,'OPERATOR_STOP');
 });
-test('hard 10 second wall-clock limit',()=>{
+test('hard 60 second wall-clock limit',()=>{
  let t=10;
- const x=createTrainingOverlay({enabled:true,pcm:Buffer.alloc(PCM_BYTES_PER_SECOND*10),now:()=>t});
- x.start();t+=10001;
+ const x=createTrainingOverlay({enabled:true,pcm:Buffer.alloc(PCM_BYTES_PER_SECOND*60),now:()=>t});
+ x.start();t+=60001;
  assert.equal(x.snapshot().active,false);
+ assert.equal(x.snapshot().lastStopReason,'MAX_DURATION');
  assert.equal(x.replace(Buffer.alloc(1920,4))[0],4);
 });
 test('invalid/oversized source rejected at configuration',()=>{
- assert.throws(()=>createTrainingOverlay({enabled:true,pcm:Buffer.alloc(PCM_BYTES_PER_SECOND*10+4)}));
+ assert.throws(()=>createTrainingOverlay({enabled:true,pcm:Buffer.alloc(PCM_BYTES_PER_SECOND*60+4)}));
  assert.throws(()=>createTrainingOverlay({enabled:true,pcm:Buffer.alloc(7)}));
 });
