@@ -1,3 +1,4 @@
+import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
@@ -100,6 +101,23 @@ router.post('/mchs-training-sequence/stop',requireRole('ADMIN'),async(_req,res)=
  }
  res.set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
 });
+/** Operator configurable repeats; a setting alone never triggers broadcast. */
+router.get('/mchs-alarm-repeats',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}});
+  res.set('Cache-Control','no-store').json({dangerRepeats:normalizeDangerRepeats(Number(row?.value||DEFAULT_DANGER_REPEATS)),clearRepeats:1,
+   automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+router.put('/mchs-alarm-repeats',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const count=req.body?.dangerRepeats;
+  if(!validateDangerRepeats(count))return res.status(400).json({error:'DANGER_REPEATS_OUT_OF_RANGE',min:1,max:5});
+  await prisma.setting.upsert({where:{key:MCHS_ALARM_REPEATS_KEY},
+   create:{key:MCHS_ALARM_REPEATS_KEY,value:String(count)},update:{value:String(count)}});
+  res.set('Cache-Control','no-store').json({dangerRepeats:count,clearRepeats:1,automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
 /** Starts a detached operator-only sequence; HTTP/browser lifecycle never stops audio. */
 router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res,next)=>{
  try{
@@ -118,7 +136,9 @@ router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res,next)=>
    startedAt:new Date().toISOString(),finishedAt:null,result:null,abort:new globalThis.AbortController()};
   mchsTrainingSequenceSession=session;
   res.status(202).set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
+  const repeatRow=await prisma.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}});
   void runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
+   dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS)),
    signal:session.abort.signal,pollMs:750,maxWaitMs:300000,
    onProgress:progress=>{session.stage=progress.stage+':'+progress.status;}})
    .then(result=>{
