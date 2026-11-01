@@ -25,6 +25,7 @@ import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassifica
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
+import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
 import {planMissileAlarmTransition} from '../lib/mchsMissileAlarmTransition.js';
@@ -781,6 +782,24 @@ router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
  * Does not authorize or trigger PA output. */
 /** Review inbox for automatically received missile alert candidates. No playout access. */
 /** Public government bulletin cross-check; read-only, never authorizes broadcast. */
+/** Read-only candidate cross-check; public message matching cannot authorize audio. */
+router.get('/missile-bulletin-correlation',requireRole('ADMIN'),async (_req,res)=>{
+ try{
+  const [observations,bulletins]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+    orderBy:{receivedAt:'desc'},take:100,
+    select:{id:true,title:true,body:true,source:true,sourceEventId:true,
+     region:true,verified:true,occurredAt:true,receivedAt:true}}),
+   fetchRegionalOfficialFeed()
+  ]);
+  const comparisons=correlateMissileBulletins(observations,bulletins);
+  res.set('Cache-Control','no-store').json({comparisons,bulletinSource:REGIONAL_OFFICIAL_FEED_URL,
+   dispatchAuthorized:false,automaticPlaybackEnabled:false,output:'REVIEW_ONLY'});
+ }catch(error){
+  res.status(503).set('Cache-Control','no-store').json({error:'BULLETIN_CORRELATION_UNAVAILABLE',
+   reason:error.message,dispatchAuthorized:false,automaticPlaybackEnabled:false});
+ }
+});
 router.get('/missile-official-bulletins',requireRole('ADMIN'),async (_req,res)=>{
  try{
   const bulletins=await fetchRegionalOfficialFeed();
