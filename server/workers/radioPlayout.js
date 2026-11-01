@@ -18,6 +18,8 @@ import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import os from 'node:os';
 import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../src/lib/prisma.js';
 import { resolveRadioCursor } from '../src/lib/radioTimeline.js';
@@ -339,21 +341,39 @@ function trainingStatus(){
  return state;
 }
 async function loadTrainingAlarm(assetId){
-  if(typeof assetId!=='string'||!/^[-a-zA-Z0-9_]{1,120}$/.test(assetId))throw new Error('INVALID_ASSET_ID');
-  const asset=await prisma.radioAsset.findUnique({where:{id:assetId},select:{storageKey:true,category:true,mimeType:true}});
-  if(asset?.category!=='ALARM'||!asset.mimeType?.startsWith('audio/')||!asset.storageKey)throw new Error('NOT_ALARM_AUDIO');
-  const file=path.resolve(assetsRoot,asset.storageKey);
-  if(!file.startsWith(assetsRoot+path.sep))throw new Error('INVALID_STORAGE_KEY');
-  const chunks=[];let size=0;
-  const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-i',file,'-t','60','-f','s16le','-ar','48000','-ac','2','pipe:1'],{stdio:['ignore','pipe','ignore']});
-  const pcm=await new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>child.kill('SIGKILL'),15000);
-    let excessive=false;
-    child.stdout.on('data',chunk=>{size+=chunk.length;if(size>11520000){excessive=true;child.kill('SIGKILL');return;}chunks.push(chunk);});
-    child.on('error',reject);
-    child.on('close',code=>{clearTimeout(timer);if(code!==0||excessive||size===0||size%4)return reject(new Error('PCM_DECODE_FAILED'));resolve(Buffer.concat(chunks));});
+ if(typeof assetId!=='string'||!/^[-a-zA-Z0-9_]{1,120}$/.test(assetId))throw new Error('INVALID_ASSET_ID');
+ const asset=await prisma.radioAsset.findUnique({where:{id:assetId},select:{storageKey:true,category:true,mimeType:true}});
+ if(asset?.category!=='ALARM'||!asset.mimeType?.startsWith('audio/')||!asset.storageKey)throw new Error('NOT_ALARM_AUDIO');
+ const file=path.resolve(assetsRoot,asset.storageKey);
+ if(!file.startsWith(assetsRoot+path.sep))throw new Error('INVALID_STORAGE_KEY');
+ const tempDir=await fs.mkdtemp(path.join(os.tmpdir(),'mediaraf-alarm-'));
+ const tempFile=path.join(tempDir,'audio.pcm');
+ try {
+  // Decode to a private temporary file, never hold entire PCM in Node heap.
+  await new Promise((resolve,reject)=>{
+   const child=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin','-i',file,
+    '-f','s16le','-ar','48000','-ac','2','-y',tempFile],{stdio:['ignore','ignore','pipe']});
+   const timer=setTimeout(()=>child.kill('SIGKILL'),120000);
+   child.on('error',error=>{clearTimeout(timer);reject(error);});
+   child.on('close',code=>{clearTimeout(timer);code===0?resolve():reject(new Error('PCM_DECODE_FAILED'));});
   });
-  return pcm;
+  const stat=await fs.stat(tempFile);
+  if(!Number.isSafeInteger(stat.size)||stat.size<=0||stat.size%4)throw new Error('INVALID_DECODED_PCM');
+  const fd=fsSync.openSync(tempFile,'r');
+  let closed=false;
+  return {size:stat.size,
+   read(position,size){
+    const buffer=Buffer.alloc(size);
+    const n=fsSync.readSync(fd,buffer,0,size,position);
+    return buffer.subarray(0,n);
+   },
+   close(){
+    if(closed)return;
+    closed=true;fsSync.closeSync(fd);
+    fsSync.rmSync(tempDir,{recursive:true,force:true});
+   }
+  };
+ }catch(error){await fs.rm(tempDir,{recursive:true,force:true});throw error;}
 }
 function startEncoder() {
   encoder=spawn(ffmpeg,['-hide_banner','-loglevel','error','-nostdin',
@@ -1952,7 +1972,7 @@ const server=http.createServer((req,res)=>{
       if(action==='STOP'){result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
       else {
         if(!trainingEnabled||trainingOverlay.snapshot().active){result={ok:false,reason:'DISABLED_OR_ACTIVE',...trainingOverlay.snapshot()};}
-        else try{const pcm=await loadTrainingAlarm(assetId);result=trainingOverlay.startWith(pcm);if(result.ok){trainingAssetId=assetId;trainingStatus();}}
+        else try{const pcm=await loadTrainingAlarm(assetId);result=trainingOverlay.startWith(pcm);if(!result.ok)pcm.close();if(result.ok){trainingAssetId=assetId;trainingStatus();}}
         catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
       }
       if(result.ok&&action==='START')stopDecoder();
