@@ -634,6 +634,27 @@ router.post('/missile-auto-intents/:id/deliver-dry-run',requireRole('ADMIN'),asy
    playbackStarted:false,executionEnabled:false});
  }catch(error){next(error);}
 });
+/** Synthetic transport check: never uses MCHS event rows or real playback intents. */
+router.post('/missile-transport-smoke',requireRole('ADMIN'),async (req,res)=>{
+ try{
+  const commandId='smoke-'+crypto.randomBytes(12).toString('hex');
+  const leaseToken=crypto.randomBytes(24).toString('hex');
+  const first=await sendMchsDryRunReceipt({commandId,eventType:'MISSILE_DANGER',leaseToken});
+  const repeat=await sendMchsDryRunReceipt({commandId,eventType:'MISSILE_DANGER',leaseToken});
+  const valid=first.ok&&!first.duplicate&&repeat.ok&&repeat.duplicate&&
+   first.receipt?.receivedAt===repeat.receipt?.receivedAt;
+  const saved=await prisma.safetyMchsSyntheticReceipt.create({data:{commandId,operatorId:req.user?.id||null,status:valid?'ACKED_DRY_RUN':'FAILED',duplicateOk:valid},select:{id:true,status:true,checkedAt:true}});
+  console.info('MCHS_SYNTHETIC_TRANSPORT_SMOKE',JSON.stringify({commandId,ok:valid,recordId:saved.id,at:new Date().toISOString()}));
+  res.status(valid?200:503).set('Cache-Control','no-store').json({
+   ok:valid,commandId,firstReceipt:first.receipt?.status,duplicateDetected:repeat.duplicate,
+   checkedAt:new Date().toISOString(),synthetic:true,
+   databaseDispatchWritten:false,syntheticReceiptSaved:true,receiptStatus:saved.status,playbackStarted:false,executionEnabled:false});
+ }catch(error){
+  console.warn('MCHS_SYNTHETIC_TRANSPORT_SMOKE',JSON.stringify({ok:false,reason:error?.message||'TRANSPORT_FAILED'}));
+  res.status(503).set('Cache-Control','no-store').json({ok:false,error:'WORKER_RECEIPT_UNAVAILABLE',
+   synthetic:true,playbackStarted:false,executionEnabled:false});
+ }
+});
 router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const intents=await prisma.safetyMchsPlaybackIntent.findMany({orderBy:{createdAt:'desc'},take:100});
