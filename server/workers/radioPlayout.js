@@ -339,7 +339,7 @@ let trainingAuthorityRevision=0;
 let alarmResumeWarmup=null;
 let alarmResumeWarmupRevision=-1;
 function warmAlarmResume(){
- if(alarmResumeWarmup||!trainingOverlay.snapshot().active||publicLive.onAir)return;
+ if(alarmResumeWarmup||prewarmed||!trainingOverlay.snapshot().active||publicLive.onAir)return;
  const revision=trainingAuthorityRevision;
  alarmResumeWarmupRevision=revision;
  alarmResumeWarmup=(async()=>{
@@ -372,7 +372,10 @@ function warmAlarmResume(){
 }
 function invalidateTrainingSource(reason){
  trainingAuthorityRevision++;
- stopDecoder();
+ // Keep only the prepared successor on ALERT exit; all other cached transitions are cleared.
+ if(reason==='RESELECT_CURRENT_AUTHORITY'&&prewarmed){
+  if(decoder){decoder.kill('SIGTERM');decoder=null;}
+ }else stopDecoder();
  lastDecodedSource=null;previousSourcePcmTail=null;shadowOverlap=null;
  reverseReservedTarget=null;reverseReservedShift=null;reverseMixAuthorityAt=null;
  reverseMixAuthorityReservation=null;
