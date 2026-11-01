@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {createMissileAlarmExecutorGuard} from '../src/lib/mchsMissileAlarmExecutorGuard.js';
 import {createMchsCommandReceiptStore} from '../src/lib/mchsCommandReceiptStore.js';
 import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
 /**
@@ -2027,6 +2028,7 @@ async function run() {
 const mchsWorkerLabSession=createWorkerMchsLabSession();
 const mchsLabFixtures=createMchsLabFixtureStore();
 const mchsCommandReceipts=createMchsCommandReceiptStore();
+const mchsAlarmExecutorGuard=createMissileAlarmExecutorGuard();
 const server=http.createServer((req,res)=>{
   if(req.url==='/mchs-command-receipt' && req.method==='POST'){
     if(!authorized(req)){res.writeHead(403).end();return;}
@@ -2038,6 +2040,25 @@ const server=http.createServer((req,res)=>{
       console.info('MCHS_WORKER_DRY_RUN_RECEIPT',JSON.stringify({commandId:result.receipt?.commandId||null,accepted:result.ok,duplicate:result.duplicate||false}));
       res.writeHead(result.ok?200:400,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({...result,executionEnabled:false}));
+    });return;
+  }
+  if(req.url==='/mchs-alarm-guard' && ['GET','POST'].includes(req.method)){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    if(req.method==='GET'){
+      res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify(mchsAlarmExecutorGuard.snapshot()));return;
+    }
+    let raw='';let tooLarge=false;
+    req.on('data',part=>{raw+=part;if(raw.length>512){tooLarge=true;req.destroy();}});
+    req.on('end',()=>{
+      if(tooLarge)return;
+      let payload;try{payload=JSON.parse(raw);}catch{res.writeHead(400).end();return;}
+      const result=payload?.action==='HALT'?mchsAlarmExecutorGuard.halt():
+       payload?.action==='RESET_TEST'?mchsAlarmExecutorGuard.resetForTest():
+       {ok:false,reason:'INVALID_ACTION'};
+      console.info('MCHS_ALARM_GUARD',JSON.stringify({action:payload?.action||null,state:result.state,automaticPlaybackEnabled:false}));
+      res.writeHead(result.ok===false?400:200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify({...result,playbackStarted:false}));
     });return;
   }
   if(req.url==='/mchs-training-stream' && ['GET','POST'].includes(req.method)){
