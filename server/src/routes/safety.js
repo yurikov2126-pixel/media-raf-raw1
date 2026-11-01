@@ -75,6 +75,7 @@ router.get('/mchs-training-stream/assets',requireRole('ADMIN'),async (_req,res,n
  catch(error){next(error);}
 });
 /** Operator-confirmed real-stream training ONLY; never called by ingestion or automation. */
+let mchsTrainingSequenceBusy=false;
 router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res)=>{
  if(req.body?.confirmation!=='TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED')
   return res.status(400).json({error:'EXPLICIT_CONFIRMATION_REQUIRED'});
@@ -84,11 +85,17 @@ router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res)=>{
  const assets=await prisma.radioAsset.findMany({where:{id:{in:[dangerAssetId,clearAssetId]},category:'ALARM',
   mimeType:{startsWith:'audio/'}},select:{id:true}});
  if(assets.length!==2)return res.status(400).json({error:'ALARM_ASSET_NOT_FOUND'});
+ if(mchsTrainingSequenceBusy)return res.status(409).json({error:'TRAINING_SEQUENCE_BUSY'});
+ mchsTrainingSequenceBusy=true;
  const abort=new AbortController();
- const result=await runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
-  signal:abort.signal,pollMs:750,maxWaitMs:120000});
- console.info('MCHS_MANUAL_AUDIO_SEQUENCE',JSON.stringify({operatorId:req.user?.id||null,ok:result.ok,reason:result.reason}));
- res.status(result.ok?200:409).set('Cache-Control','no-store').json({...result,automaticPlaybackEnabled:false});
+ const disconnect=()=>{if(!res.writableFinished)abort.abort();};
+ res.on('close',disconnect);
+ try{
+  const result=await runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
+   signal:abort.signal,pollMs:750,maxWaitMs:120000});
+  console.info('MCHS_MANUAL_AUDIO_SEQUENCE',JSON.stringify({operatorId:req.user?.id||null,ok:result.ok,reason:result.reason}));
+  if(!res.destroyed)res.status(result.ok?200:409).set('Cache-Control','no-store').json({...result,automaticPlaybackEnabled:false});
+ }finally{res.off('close',disconnect);mchsTrainingSequenceBusy=false;}
 });
 router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
  try{const r=await trainingStreamRequest();res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
