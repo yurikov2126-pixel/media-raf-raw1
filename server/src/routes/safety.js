@@ -26,6 +26,7 @@ import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGat
 import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
+import {buildCorrelationReview,MCHS_CORRELATION_REVIEW_KEY} from '../lib/mchsCorrelationReview.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
 import {planMissileAlarmTransition} from '../lib/mchsMissileAlarmTransition.js';
@@ -782,6 +783,33 @@ router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
  * Does not authorize or trigger PA output. */
 /** Review inbox for automatically received missile alert candidates. No playout access. */
 /** Public government bulletin cross-check; read-only, never authorizes broadcast. */
+router.get('/missile-correlation-review',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_CORRELATION_REVIEW_KEY}});
+  let saved=null;try{saved=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({review:saved,dispatchAuthorized:false,automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+router.post('/missile-correlation-review/refresh',requireRole('ADMIN'),async (req,res)=>{
+ let comparisons,sourceAvailable=true,error=null;
+ try{
+  const [observations,bulletins]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},orderBy:{receivedAt:'desc'},take:100,
+    select:{id:true,title:true,body:true,source:true,sourceEventId:true,region:true,verified:true,occurredAt:true,receivedAt:true}}),
+   fetchRegionalOfficialFeed()]);
+  comparisons=correlateMissileBulletins(observations,bulletins);
+ }catch(e){sourceAvailable=false;error=e.message;comparisons=[];}
+ const review=buildCorrelationReview(comparisons,{sourceAvailable});
+ try{
+  await prisma.setting.upsert({where:{key:MCHS_CORRELATION_REVIEW_KEY},
+   create:{key:MCHS_CORRELATION_REVIEW_KEY,value:JSON.stringify(review)},
+   update:{value:JSON.stringify(review)}});
+  console.info('MCHS_CORRELATION_REVIEW',JSON.stringify({operatorId:req.user?.id||null,
+   checkedAt:review.checkedAt,sourceAvailable,counts:review.counts}));
+  res.status(sourceAvailable?200:503).set('Cache-Control','no-store').json({review,error,
+   dispatchAuthorized:false,automaticPlaybackEnabled:false});
+ }catch(e){res.status(503).json({error:e.message,dispatchAuthorized:false});}
+});
 router.get('/missile-bulletin-correlation',requireRole('ADMIN'),async (_req,res)=>{
  try{
   const [observations,bulletins]=await Promise.all([
