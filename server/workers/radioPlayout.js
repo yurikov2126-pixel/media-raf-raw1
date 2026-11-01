@@ -1,5 +1,5 @@
-import {createMchsCommandReceiptStore} from '../src/lib/mchsCommandReceiptStore.js';
 #!/usr/bin/env node
+import {createMchsCommandReceiptStore} from '../src/lib/mchsCommandReceiptStore.js';
 import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
 /**
  * Opt-in station playout worker: one persistent MP3 encoder, shared live output.
