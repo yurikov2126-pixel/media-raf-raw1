@@ -87,7 +87,7 @@ router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res)=>{
  if(assets.length!==2)return res.status(400).json({error:'ALARM_ASSET_NOT_FOUND'});
  if(mchsTrainingSequenceBusy)return res.status(409).json({error:'TRAINING_SEQUENCE_BUSY'});
  mchsTrainingSequenceBusy=true;
- const abort=new AbortController();
+ const abort=new globalThis.AbortController();
  const disconnect=()=>{if(!res.writableFinished)abort.abort();};
  res.on('close',disconnect);
  try{
