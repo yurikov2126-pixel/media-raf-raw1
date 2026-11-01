@@ -635,7 +635,7 @@ router.post('/missile-auto-intents/:id/deliver-dry-run',requireRole('ADMIN'),asy
  }catch(error){next(error);}
 });
 /** Synthetic transport check: never uses MCHS event rows or real playback intents. */
-router.post('/missile-transport-smoke',requireRole('ADMIN'),async (_req,res)=>{
+router.post('/missile-transport-smoke',requireRole('ADMIN'),async (req,res)=>{
  try{
   const commandId='smoke-'+crypto.randomBytes(12).toString('hex');
   const leaseToken=crypto.randomBytes(24).toString('hex');
