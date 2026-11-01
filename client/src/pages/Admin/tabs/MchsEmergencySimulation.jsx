@@ -7,10 +7,18 @@ export default function MchsEmergencySimulation({token}){
  const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
  const [dangerAssetId,setDangerAssetId]=useState(''),[clearAssetId,setClearAssetId]=useState('');
  const [sequenceBusy,setSequenceBusy]=useState(false),[sequenceResult,setSequenceResult]=useState(null);
+ const [sequenceSession,setSequenceSession]=useState(null);
  const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
  const [pcmTrialBusy,setPcmTrialBusy]=useState(false),[pcmTrialResult,setPcmTrialResult]=useState(null);
  const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
  const [transitionPreview,setTransitionPreview]=useState(null);
+ useEffect(()=>{
+  let mounted=true;
+  const poll=async()=>{try{const result=await api('/safety/mchs-training-sequence/status',{token});
+   if(mounted){setSequenceSession(result.session);if(result.session?.status!=='RUNNING'&&result.session?.result)setSequenceResult(result.session.result);}}
+   catch{/* Radio status refresh remains independent from the control connection. */}};
+  void poll();const id=setInterval(poll,1500);return()=>{mounted=false;clearInterval(id);};
+ },[token]);
  const refresh=async()=>{
   try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
   catch(e){setError(e.message||'Нет связи с Radio Worker');}
@@ -46,15 +54,16 @@ export default function MchsEmergencySimulation({token}){
      {assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
     </select>
    </label>
-   <button type="button" disabled={sequenceBusy||!dangerAssetId||!clearAssetId||dangerAssetId===clearAssetId} className="rounded-lg border border-amber-500 px-3 py-2 disabled:opacity-50" onClick={async()=>{
+   <button type="button" disabled={sequenceBusy||sequenceSession?.status==='RUNNING'||!dangerAssetId||!clearAssetId||dangerAssetId===clearAssetId} className="rounded-lg border border-amber-500 px-3 py-2 disabled:opacity-50" onClick={async()=>{
     if(!window.confirm('ВНИМАНИЕ! Это РЕАЛЬНЫЙ ОСНОВНОЙ РАДИОПОТОК. Громкоговорители физически отключены, слушатели предупреждены, обе записи явно учебные. Запустить тревогу и отбой?'))return;
     setSequenceBusy(true);setSequenceResult(null);
-    try{setSequenceResult(await api('/safety/mchs-training-sequence',{token,method:'POST',body:{dangerAssetId,clearAssetId,confirmation:'TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED'}}));}
+    try{const data=await api('/safety/mchs-training-sequence',{token,method:'POST',body:{dangerAssetId,clearAssetId,confirmation:'TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED'}});setSequenceSession(data.session);}
     catch(e){setSequenceResult({ok:false,reason:e.message||'Не удалось запустить учебный цикл'});}
     finally{setSequenceBusy(false);}
    }}>{sequenceBusy?'Учебный цикл выполняется…':'Запустить учебную тревогу и отбой'}</button>
+   {sequenceSession?.status==='RUNNING'&&<div className="space-y-2 text-sm"><p role="status">Учебный цикл выполняется: {sequenceSession.stage||'Подготовка'}</p><button type="button" className="rounded-lg border border-red-500 px-3 py-2" onClick={async()=>{try{await api('/safety/mchs-training-sequence/stop',{token,method:'POST'});}catch(e){setError(e.message||'Не удалось остановить цикл');}}}>Остановить учебный цикл</button></div>}
    {sequenceResult&&<p role="status" className="text-sm">{sequenceResult.ok?'Учебный цикл завершён; проверьте фактический возврат к радиопрограмме.':('Ошибка или остановка: '+(sequenceResult.reason||'Проверьте Worker'))}</p>}
-   <p className="text-xs text-slate-600 dark:text-slate-300">Для экстренной остановки используйте существующую кнопку STOP ниже. Не закрывайте страницу до завершения: разрыв запроса отменяет последовательность.</p>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Для экстренной остановки используйте кнопку остановки цикла или существующую кнопку STOP ниже. Закрытие страницы не прерывает учебную запись; состояние сеанса восстанавливается при повторном открытии.</p>
   </div>
   <div className="rounded-xl border border-amber-300/50 p-3 space-y-3">
    <p className="text-sm font-medium">Основной поток: {status?.active?'Учебная запись':'Обычная программа'} · {status?.enabled?'Режим включён на сервере':'Режим выключен на сервере'}</p>
