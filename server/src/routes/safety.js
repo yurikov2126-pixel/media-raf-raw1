@@ -24,6 +24,7 @@ import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
+import {evaluateAndroidMissileSequence} from '../lib/mchsAndroidSingleSource.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
 import {buildCorrelationReview,MCHS_CORRELATION_REVIEW_KEY} from '../lib/mchsCorrelationReview.js';
@@ -833,6 +834,17 @@ router.get('/missile-official-bulletins',requireRole('ADMIN'),async (_req,res)=>
   res.status(503).set('Cache-Control','no-store').json({source:REGIONAL_OFFICIAL_FEED_URL,
    error:'OFFICIAL_BULLETIN_UNAVAILABLE',reason:error.message,playbackAuthorized:false,sourcePlatform:'MAX'});
  }
+});
+/** Automatic decision preview from existing MCHS Android channel, no MAX/Telegram. */
+router.get('/missile-android-sequence',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const observations=await prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+   orderBy:{occurredAt:'desc'},take:100,
+   select:{id:true,title:true,body:true,source:true,sourceEventId:true,
+    region:true,verified:true,occurredAt:true,receivedAt:true}});
+  const evaluation=evaluateAndroidMissileSequence(observations);
+  res.set('Cache-Control','no-store').json(evaluation);
+ }catch(error){next(error);}
 });
 router.get('/missile-automatic-candidates',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
