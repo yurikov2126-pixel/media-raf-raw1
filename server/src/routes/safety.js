@@ -26,6 +26,7 @@ import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassifica
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
 import {evaluateAndroidMissileSequence} from '../lib/mchsAndroidSingleSource.js';
+import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
 import {buildCorrelationReview,MCHS_CORRELATION_REVIEW_KEY} from '../lib/mchsCorrelationReview.js';
@@ -856,6 +857,25 @@ router.get('/missile-official-bulletins',requireRole('ADMIN'),async (_req,res)=>
  }
 });
 /** Automatic decision preview from existing MCHS Android channel, no MAX/Telegram. */
+/** Preview what the next qualifying Android event would request. Read-only. */
+router.get('/missile-android-playback-preview',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [events,checkpointRow,repeatRow,rules]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+    orderBy:{occurredAt:'desc'},take:20,
+    select:{id:true,title:true,body:true,source:true,verified:true,sourceEventId:true,region:true,occurredAt:true}}),
+   prisma.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
+   prisma.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}}),getTypeRules()
+  ]);
+  let checkpoint;try{checkpoint=JSON.parse(checkpointRow?.value||'null');}catch{}
+  const settings={dangerAssetId:rules.MISSILE_DANGER?.audioAssetId,
+   clearAssetId:rules.MISSILE_ALL_CLEAR?.audioAssetId,
+   dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))};
+  const previews=events.map(event=>planMchsAndroidAlarmEvent({event,checkpoint,settings}));
+  res.set('Cache-Control','no-store').json({settings,previews,
+   dispatchAuthorized:false,automaticPlaybackEnabled:false,mode:'PREVIEW_ONLY'});
+ }catch(error){next(error);}
+});
 router.get('/missile-android-sequence',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const observations=await prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
