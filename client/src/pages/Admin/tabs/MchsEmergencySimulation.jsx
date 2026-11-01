@@ -67,6 +67,12 @@ export default function MchsEmergencySimulation({token}){
   </div>
   <div className="rounded-xl border border-amber-300/50 p-3 space-y-3">
    <p className="text-sm font-medium">Основной поток: {status?.active?'Учебная запись':'Обычная программа'} · {status?.enabled?'Режим включён на сервере':'Режим выключен на сервере'}</p>
+   <div className="rounded-lg bg-slate-100 p-3 text-sm dark:bg-slate-800 space-y-1">
+    <p className="font-semibold">Диагностика последней записи ALARM (Worker)</p>
+    <p>PCM: {status?.audioQuality?.state==='PCM_FEED_STABLE'?'Подано без обнаруженных задержек':status?.audioQuality?.state==='PCM_FEED_GAPS'?'Обнаружены задержки подачи PCM':status?.audioQuality?.state==='NOT_COMPLETED'?'Запись ещё не подтверждена завершённой':'Нет завершённого измерения'}</p>
+    <p>Кадры: {status?.lastPcmClock?.frames??'—'} · задержки: {status?.lastPcmClock?.gaps??'—'} · максимум: {status?.lastPcmClock?.maxDelayMs??'—'} мс</p>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Последнее измерение: {status?.lastPcmClock?.at?new Date(status.lastPcmClock.at).toLocaleString():'—'}. Это диагностика PCM на сервере, а не подтверждение работы Windows Agent или отсутствия прерываний у слушателей.</p>
+   </div>
    {status?.active && <div className="space-y-1">
     <p className="text-sm">В эфире: {assets.find(a=>a.id===status.assetId)?.name || 'ALARM'} — {Math.floor((status.playedBytes || 0)/192000)} сек.</p>
     <progress className="w-full" value={status.playedBytes || 0} max={Math.max(1,status.totalBytes || 1)}/>
