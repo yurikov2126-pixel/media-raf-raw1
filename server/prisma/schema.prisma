@@ -1572,3 +1572,14 @@ model SafetyMchsPlaybackIntent {
   updatedAt      DateTime @updatedAt
   @@index([status, createdAt])
 }
+
+/** Isolated synthetic transport checks, never a real MCHS event or playback intent. */
+model SafetyMchsSyntheticReceipt {
+  id          String   @id @default(cuid())
+  commandId   String   @unique
+  operatorId  String?
+  status      String
+  duplicateOk Boolean
+  checkedAt   DateTime @default(now())
+  @@index([checkedAt])
+}
