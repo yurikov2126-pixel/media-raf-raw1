@@ -331,6 +331,8 @@ const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUF
 const trainingEnabled=process.env.RADIO_MCHS_TRAINING_STREAM_ENABLED==='true';
 const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled});
 let trainingAssetId=null;
+let trainingCommandEpoch=0;
+let trainingPreparing=false;
 let trainingLastRevision=0;
 function trainingStatus(){
  const state=trainingOverlay.snapshot();
@@ -1969,11 +1971,18 @@ const server=http.createServer((req,res)=>{
       let action,assetId;try{({action,assetId}=JSON.parse(raw));}catch{}
       if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
       let result;
-      if(action==='STOP'){result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
+      if(action==='STOP'){trainingCommandEpoch++;result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
       else {
-        if(!trainingEnabled||trainingOverlay.snapshot().active){result={ok:false,reason:'DISABLED_OR_ACTIVE',...trainingOverlay.snapshot()};}
-        else try{const pcm=await loadTrainingAlarm(assetId);result=trainingOverlay.startWith(pcm);if(!result.ok)pcm.close();if(result.ok){trainingAssetId=assetId;trainingStatus();}}
+        if(!trainingEnabled||trainingOverlay.snapshot().active||trainingPreparing){result={ok:false,reason:'DISABLED_OR_ACTIVE_OR_PREPARING',...trainingOverlay.snapshot()};}
+        else try{
+          trainingPreparing=true;
+          const epoch=++trainingCommandEpoch;
+          const pcm=await loadTrainingAlarm(assetId);
+          if(epoch!==trainingCommandEpoch){pcm.close();result={ok:false,reason:'CANCELLED_BY_STOP',...trainingOverlay.snapshot()};}
+          else {result=trainingOverlay.startWith(pcm);if(!result.ok)pcm.close();if(result.ok){trainingAssetId=assetId;trainingStatus();}}
+        }
         catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
+        finally{trainingPreparing=false;}
       }
       if(result.ok&&action==='START')stopDecoder();
       console.info('MCHS_TRAINING_STREAM',JSON.stringify({action,ok:result.ok,revision:result.revision,reason:result.reason||null}));
