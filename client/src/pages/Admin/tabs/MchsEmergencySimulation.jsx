@@ -6,11 +6,13 @@ export default function MchsEmergencySimulation({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
  const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
+ const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
  const refresh=async()=>{
   try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
   catch(e){setError(e.message||'Нет связи с Radio Worker');}
  };
  useEffect(()=>{api('/safety/mchs-training-stream/assets',{token}).then(data=>setAssets(data.assets||[])).catch(()=>setError('Не удалось загрузить категорию ALARM'));},[token]);
+ useEffect(()=>{api('/safety/missile-execution-control',{token}).then(setExecutionControl).catch(()=>{});},[token]);
  useEffect(()=>{void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},3000);return()=>clearInterval(timer);},[token]);
  const command=async action=>{
   if(action==='START'&&!window.confirm('Запустить учебное сообщение в ОСНОВНОМ радиопотоке? Звук получат интернет-слушатели и подключённые громкоговорители. Подтвердите, что аудитория предупреждена, запись явно учебная, громкость безопасная и доступна физическая остановка усилителя.'))return;
@@ -41,6 +43,28 @@ export default function MchsEmergencySimulation({token}){
     <button type="button" onClick={()=>void refresh()} className="rounded-lg border px-3 py-2">Обновить</button>
    </div>
    {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+   <h4 className="font-semibold">Автоматические ALARM — контроль готовности</h4>
+   <p className="text-sm text-amber-700 dark:text-amber-300">Автоматическое включение реального эфира заблокировано до подтверждения официального источника и проверки исполнительного механизма.</p>
+   <div className="grid grid-cols-2 gap-2 text-sm">
+    <div>Автозапуск: <b>{executionControl?.executionEnabled?'Разрешён':'Отключён'}</b></div>
+    <div>Состояние: <b>{executionControl?.checkpointState||'—'}</b></div>
+    <div>В очереди: <b>{executionControl?.queue?.staged??'—'}</b></div>
+    <div>Просрочено: <b>{executionControl?.queue?.expired??'—'}</b></div>
+   </div>
+   <div className="text-xs text-slate-600 dark:text-slate-300">Причины блокировки: {executionControl?.holds?.join(', ')||'Загрузка или нет данных'}</div>
+   <button type="button" disabled={holdBusy} className="rounded-lg border border-red-300 px-3 py-2 text-sm disabled:opacity-50" onClick={async()=>{
+    setHoldBusy(true);
+    try{await api('/safety/missile-execution-control/hold',{token,method:'POST'});
+     setExecutionControl(await api('/safety/missile-execution-control',{token}));}
+    catch(e){setError(e.message||'Не удалось установить блокировку');}
+    finally{setHoldBusy(false);}
+   }}>Заблокировать автоматическое исполнение</button>
+   {executionControl?.recentIntents?.length>0&&<div className="text-xs space-y-1">
+    <p className="font-semibold">Последние команды</p>
+    {executionControl.recentIntents.slice(0,5).map(item=><p key={item.id}>{item.eventType} · {item.status}</p>)}
+   </div>}
   </div>
   <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
    <h4 className="font-semibold">Проверка доставки команд МЧС (без звука)</h4>
