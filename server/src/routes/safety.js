@@ -1,3 +1,4 @@
+import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroidEventId} from '../lib/mchsExecutionRecovery.js';
 import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJournal,recoverExecutionJournal} from '../lib/mchsExecutionJournal.js';
 import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
 import crypto from 'node:crypto';
@@ -766,6 +767,46 @@ router.get('/missile-alarm-transition-preview',requireRole('ADMIN'),async (_req,
  }catch(error){next(error);}
 });
 /** Read-only recovery journal; never starts a Worker or grants dispatch. */
+/** Safe, transactional reconciliation; can be invoked by scheduler on startup. */
+router.post('/missile-execution-journal/recover-safe',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581449)`;
+   const row=await tx.setting.findUnique({where:{key:MCHS_EXECUTION_JOURNAL_KEY}});
+   let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+   const outcome=reconcilePersistedAlarmAfterRestart(saved);
+   if(outcome.changed){
+    await tx.setting.upsert({where:{key:MCHS_EXECUTION_JOURNAL_KEY},
+     create:{key:MCHS_EXECUTION_JOURNAL_KEY,value:JSON.stringify(outcome.journal)},
+     update:{value:JSON.stringify(outcome.journal)}});
+   }
+   return outcome;
+  });
+  res.set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
+/** Explicit Android message acknowledgement. Records IDs only; never dispatches sound. */
+router.post('/missile-android-event-ack',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const id=req.body?.sourceEventId;
+  if(typeof id!=='string'||id.length<1||id.length>200)return res.status(400).json({error:'INVALID_EVENT_ID'});
+  const exists=await prisma.safetyMchsEvent.findFirst({
+   where:{source:'MCHS_ANDROID',sourceEventId:id},select:{id:true}});
+  if(!exists)return res.status(404).json({error:'OBSERVATION_NOT_FOUND'});
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581450)`;
+   const row=await tx.setting.findUnique({where:{key:MCHS_SEEN_EVENT_IDS_KEY}});
+   let saved;try{saved=JSON.parse(row?.value||'[]');}catch{}
+   const outcome=recordAndroidEventId(saved,id);
+   if(outcome.accepted)await tx.setting.upsert({where:{key:MCHS_SEEN_EVENT_IDS_KEY},
+    create:{key:MCHS_SEEN_EVENT_IDS_KEY,value:JSON.stringify(outcome.seen)},
+    update:{value:JSON.stringify(outcome.seen)}});
+   return outcome;
+  });
+  res.set('Cache-Control','no-store').json({...result,seenCount:result.seen.length,
+   automaticPlaybackEnabled:false,dispatchAuthorized:false});
+ }catch(error){next(error);}
+});
 router.get('/missile-execution-journal',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const row=await prisma.setting.findUnique({where:{key:MCHS_EXECUTION_JOURNAL_KEY}});
