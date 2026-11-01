@@ -5,6 +5,7 @@ import MchsWorkerServerSession from './MchsWorkerServerSession.jsx';
 export default function MchsEmergencySimulation({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
+ const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
  const refresh=async()=>{
   try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
   catch(e){setError(e.message||'Нет связи с Radio Worker');}
@@ -40,6 +41,17 @@ export default function MchsEmergencySimulation({token}){
     <button type="button" onClick={()=>void refresh()} className="rounded-lg border px-3 py-2">Обновить</button>
    </div>
    {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+   <h4 className="font-semibold">Проверка доставки команд МЧС (без звука)</h4>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Синтетическая команда проверяет API → Radio Worker → PostgreSQL и защиту от повторов. Настоящие уведомления и эфир не затрагиваются.</p>
+   <button type="button" disabled={transportBusy} onClick={async()=>{
+    setTransportBusy(true);setTransportResult(null);
+    try{setTransportResult(await api('/safety/missile-transport-smoke',{token,method:'POST'}));}
+    catch(e){setTransportResult({ok:false,error:e.message||'Ошибка связи'});}
+    finally{setTransportBusy(false);}
+   }} className="rounded-lg border px-3 py-2 disabled:opacity-50">{transportBusy?'Проверка…':'Проверить доставку'}</button>
+   {transportResult&&<p role="status" className="text-sm">{transportResult.ok?'Проверка успешна: команда получена, повтор распознан, подтверждение сохранено в PostgreSQL.':('Проверка не пройдена: '+(transportResult.error||'Не получено подтверждение'))}</p>}
   </div>
   <details className="rounded-xl border border-slate-200 dark:border-white/15 p-3">
    <summary className="cursor-pointer font-medium">Изолированная лабораторная сессия (архивные тесты)</summary>
