@@ -75,27 +75,59 @@ router.get('/mchs-training-stream/assets',requireRole('ADMIN'),async (_req,res,n
  catch(error){next(error);}
 });
 /** Operator-confirmed real-stream training ONLY; never called by ingestion or automation. */
-let mchsTrainingSequenceBusy=false;
-router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res)=>{
- if(req.body?.confirmation!=='TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED')
-  return res.status(400).json({error:'EXPLICIT_CONFIRMATION_REQUIRED'});
- const {dangerAssetId,clearAssetId}=req.body||{};
- if(typeof dangerAssetId!=='string'||typeof clearAssetId!=='string'||dangerAssetId===clearAssetId)
-  return res.status(400).json({error:'INVALID_ASSET_SELECTION'});
- const assets=await prisma.radioAsset.findMany({where:{id:{in:[dangerAssetId,clearAssetId]},category:'ALARM',
-  mimeType:{startsWith:'audio/'}},select:{id:true}});
- if(assets.length!==2)return res.status(400).json({error:'ALARM_ASSET_NOT_FOUND'});
- if(mchsTrainingSequenceBusy)return res.status(409).json({error:'TRAINING_SEQUENCE_BUSY'});
- mchsTrainingSequenceBusy=true;
- const abort=new globalThis.AbortController();
- const disconnect=()=>{if(!res.writableFinished)abort.abort();};
- res.on('close',disconnect);
+let mchsTrainingSequenceSession=null;
+const sequencePublicStatus=()=>mchsTrainingSequenceSession&&({
+ id:mchsTrainingSequenceSession.id,status:mchsTrainingSequenceSession.status,
+ stage:mchsTrainingSequenceSession.stage,startedAt:mchsTrainingSequenceSession.startedAt,
+ finishedAt:mchsTrainingSequenceSession.finishedAt,
+ result:mchsTrainingSequenceSession.result||null
+});
+router.get('/mchs-training-sequence/status',requireRole('ADMIN'),(_req,res)=>{
+ res.set('Cache-Control','no-store').json({session:sequencePublicStatus()});
+});
+router.post('/mchs-training-sequence/stop',requireRole('ADMIN'),async(_req,res)=>{
+ const session=mchsTrainingSequenceSession;
+ if(!session||session.status!=='RUNNING')return res.status(409).json({error:'NO_RUNNING_SEQUENCE'});
+ session.abort.abort();
+ // Stop immediately rather than waiting for the next poll to notice cancellation.
+ try{await trainingStreamRequest('STOP');}catch(error){
+  console.warn('MCHS_TRAINING_STOP_FAILED',JSON.stringify({reason:error.message}));
+ }
+ res.set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
+});
+/** Starts a detached operator-only sequence; HTTP/browser lifecycle never stops audio. */
+router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res,next)=>{
  try{
-  const result=await runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
-   signal:abort.signal,pollMs:750,maxWaitMs:120000});
-  console.info('MCHS_MANUAL_AUDIO_SEQUENCE',JSON.stringify({operatorId:req.user?.id||null,ok:result.ok,reason:result.reason}));
-  if(!res.destroyed)res.status(result.ok?200:409).set('Cache-Control','no-store').json({...result,automaticPlaybackEnabled:false});
- }finally{res.off('close',disconnect);mchsTrainingSequenceBusy=false;}
+  if(req.body?.confirmation!=='TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED')
+   return res.status(400).json({error:'EXPLICIT_CONFIRMATION_REQUIRED'});
+  const {dangerAssetId,clearAssetId}=req.body||{};
+  if(typeof dangerAssetId!=='string'||typeof clearAssetId!=='string'||dangerAssetId===clearAssetId)
+   return res.status(400).json({error:'INVALID_ASSET_SELECTION'});
+  if(mchsTrainingSequenceSession?.status==='RUNNING')
+   return res.status(409).json({error:'TRAINING_SEQUENCE_BUSY'});
+  const assets=await prisma.radioAsset.findMany({where:{id:{in:[dangerAssetId,clearAssetId]},category:'ALARM',
+   mimeType:{startsWith:'audio/'}},select:{id:true,durationMs:true}});
+  if(assets.length!==2)return res.status(400).json({error:'ALARM_ASSET_NOT_FOUND'});
+  // One asset may have a long runtime: duration is bounded by the existing Worker timeout.
+  const session={id:crypto.randomBytes(12).toString('hex'),status:'RUNNING',stage:'STARTING',
+   startedAt:new Date().toISOString(),finishedAt:null,result:null,abort:new globalThis.AbortController()};
+  mchsTrainingSequenceSession=session;
+  res.status(202).set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
+  void runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
+   signal:session.abort.signal,pollMs:750,maxWaitMs:300000,
+   onProgress:progress=>{session.stage=progress.stage+':'+progress.status;}})
+   .then(result=>{
+    session.result=result;
+    session.status=result.ok?'COMPLETED':'FAILED';
+    session.finishedAt=new Date().toISOString();
+    console.info('MCHS_MANUAL_AUDIO_SEQUENCE',JSON.stringify({operatorId:req.user?.id||null,
+     sessionId:session.id,ok:result.ok,reason:result.reason}));
+   }).catch(error=>{
+    session.result={ok:false,reason:error.message||'UNEXPECTED_ERROR'};
+    session.status='FAILED';session.finishedAt=new Date().toISOString();
+    console.error('MCHS_MANUAL_AUDIO_SEQUENCE_FAILED',JSON.stringify({sessionId:session.id,reason:session.result.reason}));
+   });
+ }catch(error){next(error);}
 });
 router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
  try{const r=await trainingStreamRequest();res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
