@@ -19,6 +19,7 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
+import { decideAutomaticMchsEvent } from '../lib/mchsAutomaticDispatchGate.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
@@ -448,6 +449,29 @@ router.put('/dispatch-mode', requireRole('ADMIN'), async (req, res, next) => {
 
 
 /** Read-only what-would-happen preview: no playback and no dispatch writes. */
+router.get('/automatic-dispatch-readiness', canView, async (_req,res,next)=>{
+ try{
+  const [events,rules,assets]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({orderBy:{receivedAt:'desc'},take:30,
+    select:{id:true,sourceEventId:true,title:true,body:true,region:true,occurredAt:true}}),
+   getTypeRules(),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},
+    select:{id:true,category:true,mimeType:true}})
+  ]);
+  const byAsset=new Map(assets.map(a=>[a.id,a]));
+  const seen=new Set();
+  const decisions=events.map(event=>{
+   const kind=classifyMchsObservation(event.title,event.body);
+   const rule=rules[kind];
+   const result=decideAutomaticMchsEvent({event,rule,asset:byAsset.get(rule?.audioAssetId),
+    seenIds:seen,enabled:false,provenance:{officialVerified:false}});
+   if(event.sourceEventId)seen.add(event.sourceEventId);
+   return {eventId:event.id,...result};
+  });
+  res.set('Cache-Control','no-store').json({automaticPlaybackEnabled:false,
+   officialOriginVerificationAvailable:false,output:'NO_PLAYBACK',decisions});
+ }catch(error){next(error);}
+});
 router.get('/dispatch-preview', canView, async (_req, res, next) => {
   try {
     const [events, rules, assetRows] = await Promise.all([
