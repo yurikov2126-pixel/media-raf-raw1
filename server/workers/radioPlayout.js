@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {assessTrainingAudioQuality} from '../src/lib/mchsTrainingAudioQuality.js';
 import {createAlarmPcmClock} from '../src/lib/mchsAlarmPcmClock.js';
 import {createMissileAlarmExecutorGuard} from '../src/lib/mchsMissileAlarmExecutorGuard.js';
 import {createMchsCommandReceiptStore} from '../src/lib/mchsCommandReceiptStore.js';
@@ -337,6 +338,7 @@ let trainingAssetId=null;
 let trainingCommandEpoch=0;
 let trainingPreparing=false;
 let trainingLastRevision=0;
+let lastTrainingPcmClock=null;
 let trainingAudioWasActive=false;
 let trainingAuthorityRevision=0;
 let alarmResumeWarmup=null;
@@ -953,7 +955,8 @@ async function run() {
       continue;
     }
     if(alarmClockActive){
-      console.info('MCHS_ALARM_PCM_CLOCK_FINAL',JSON.stringify(alarmPcmClock.snapshot()));
+      lastTrainingPcmClock={...alarmPcmClock.snapshot(),at:new Date().toISOString()};
+      console.info('MCHS_ALARM_PCM_CLOCK_FINAL',JSON.stringify(lastTrainingPcmClock));
       alarmClockActive=false;
     }
     if(publicLive.onAir){
@@ -2078,7 +2081,10 @@ const server=http.createServer((req,res)=>{
     if(!authorized(req)){res.writeHead(403).end();return;}
     if(req.method==='GET'){
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
-      res.end(JSON.stringify({...trainingStatus(),assetId:trainingStatus().active?trainingAssetId:null}));return;
+      const overlay=trainingStatus();
+      res.end(JSON.stringify({...overlay,assetId:overlay.active?trainingAssetId:null,
+       audioQuality:assessTrainingAudioQuality({clock:lastTrainingPcmClock,overlay}),
+       lastPcmClock:lastTrainingPcmClock}));return;
     }
     let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
     req.on('end',async()=>{
