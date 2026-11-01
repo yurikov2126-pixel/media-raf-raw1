@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { classifyMchsObservation } from '../lib/mchsClassification.js';
+import {assessMissileProvenance} from '../lib/mchsMissileProvenance.js';
 
 // Dedicated machine-to-machine route. Never accepts user JWT or triggers any playback.
 // Disabled by default, even after deployment.
@@ -46,6 +47,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
       eventTime = new Date(occurredAt);
       if (!Number.isFinite(eventTime.getTime())) return fail(res, 400, 'INVALID_TIME');
     }
+    const provenance=assessMissileProvenance(input,{allowedChannels:(process.env.MCHS_MISSILE_TRUSTED_CHANNEL_IDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
     const result = await prisma.$transaction(async tx => {
       const event = await tx.safetyMchsEvent.upsert({
       where: { source_sourceEventId: { source: 'MCHS_ANDROID', sourceEventId: eventId } },
@@ -68,7 +70,8 @@ router.post('/event', signedRequest, async (req, res, next) => {
       });
       return event;
     });
-    res.status(200).json({ accepted: true, eventId, id: result.id, receivedAt: result.receivedAt, verified: false, testOnly: true });
+    console.info('MCHS_MISSILE_SOURCE_PROVENANCE',JSON.stringify({eventId,eventType:provenance.eventType,acceptable:provenance.acceptable,reason:provenance.reason,officiallyVerified:false}));
+    res.status(200).json({ accepted: true, eventId, id: result.id, receivedAt: result.receivedAt, verified: false, testOnly: true, provenance });
   } catch (error) { next(error); }
 });
 router.post('/heartbeat', signedRequest, async (req, res, next) => {
