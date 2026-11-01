@@ -643,11 +643,12 @@ router.post('/missile-transport-smoke',requireRole('ADMIN'),async (_req,res)=>{
   const repeat=await sendMchsDryRunReceipt({commandId,eventType:'MISSILE_DANGER',leaseToken});
   const valid=first.ok&&!first.duplicate&&repeat.ok&&repeat.duplicate&&
    first.receipt?.receivedAt===repeat.receipt?.receivedAt;
-  console.info('MCHS_SYNTHETIC_TRANSPORT_SMOKE',JSON.stringify({commandId,ok:valid,operatorId:req.user?.id||null,at:new Date().toISOString()}));
+  const saved=await prisma.safetyMchsSyntheticReceipt.create({data:{commandId,operatorId:req.user?.id||null,status:valid?'ACKED_DRY_RUN':'FAILED',duplicateOk:valid},select:{id:true,status:true,checkedAt:true}});
+  console.info('MCHS_SYNTHETIC_TRANSPORT_SMOKE',JSON.stringify({commandId,ok:valid,recordId:saved.id,at:new Date().toISOString()}));
   res.status(valid?200:503).set('Cache-Control','no-store').json({
    ok:valid,commandId,firstReceipt:first.receipt?.status,duplicateDetected:repeat.duplicate,
    checkedAt:new Date().toISOString(),synthetic:true,
-   databaseDispatchWritten:false,playbackStarted:false,executionEnabled:false});
+   databaseDispatchWritten:false,syntheticReceiptSaved:true,receiptStatus:saved.status,playbackStarted:false,executionEnabled:false});
  }catch(error){
   console.warn('MCHS_SYNTHETIC_TRANSPORT_SMOKE',JSON.stringify({ok:false,reason:error?.message||'TRANSPORT_FAILED'}));
   res.status(503).set('Cache-Control','no-store').json({ok:false,error:'WORKER_RECEIPT_UNAVAILABLE',
