@@ -23,7 +23,7 @@ export function assessMissileAutoEvent(event,{nowMs=Date.now(),seenIds=new Set()
 }
 /** Enforce missile DANGER -> ALL_CLEAR progression; never synthesize an all-clear. */
 export function missileNextState(current,eventType){
- if(current!=='DANGER'&&current!=='CLEAR')return {accepted:false,state:'UNKNOWN',reason:'UNKNOWN_STATE'};
+ if(current!=='DANGER'&&current!=='CLEAR'&&current!=='UNKNOWN')return {accepted:false,state:'UNKNOWN',reason:'UNKNOWN_STATE'};
  if(eventType==='MISSILE_DANGER')
   return current==='DANGER'?{accepted:false,state:current,reason:'DUPLICATE_DANGER'}:{accepted:true,state:'DANGER',reason:null};
  if(eventType==='MISSILE_ALL_CLEAR')
