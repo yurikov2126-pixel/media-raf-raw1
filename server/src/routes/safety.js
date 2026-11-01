@@ -1,3 +1,4 @@
+import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
 import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroidEventId} from '../lib/mchsExecutionRecovery.js';
 import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJournal,recoverExecutionJournal} from '../lib/mchsExecutionJournal.js';
 import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
@@ -41,6 +42,38 @@ import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
 const router = Router();
+
+/** Automatically monitor stored Android observations. Never actuate radio. */
+let mchsMonitorRunning=false;
+async function tickMchsAndroidMonitor(){
+ if(mchsMonitorRunning)return;
+ mchsMonitorRunning=true;
+ try{
+  const outcome=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581451)`;
+   const [row,observations]=await Promise.all([
+    tx.setting.findUnique({where:{key:MCHS_MONITOR_KEY}}),
+    tx.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+     orderBy:{receivedAt:'desc'},take:150,
+     select:{id:true,title:true,body:true,source:true,verified:true,sourceEventId:true,region:true,occurredAt:true,receivedAt:true}})
+   ]);
+   let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+   const result=observeAndroidEvents(normalizeAndroidMonitor(saved),observations);
+   if(result.newEntries.length||!row)await tx.setting.upsert({where:{key:MCHS_MONITOR_KEY},
+    create:{key:MCHS_MONITOR_KEY,value:JSON.stringify(result.state)},
+    update:{value:JSON.stringify(result.state)}});
+   return result;
+  });
+  if(outcome.newEntries.length)console.info('MCHS_ANDROID_AUTOMATIC_OBSERVATION',JSON.stringify({
+   count:outcome.newEntries.length,decisions:outcome.newEntries.map(x=>({
+    eventId:x.eventId,eventType:x.eventType,result:x.result,reason:x.reason}))}));
+ }catch(error){console.error('MCHS_ANDROID_MONITOR_FAILED',JSON.stringify({reason:error.message}));}
+ finally{mchsMonitorRunning=false;}
+}
+const mchsMonitorTimer=setInterval(()=>{void tickMchsAndroidMonitor();},15000);
+mchsMonitorTimer.unref?.();
+setImmediate(()=>{void tickMchsAndroidMonitor();});
+
 const KEY = 'safety_mchs_config_v1';
 const defaults = Object.freeze({
   enabled: false,
@@ -966,6 +999,14 @@ router.get('/missile-android-playback-preview',requireRole('ADMIN'),async (_req,
   const previews=events.map(event=>planMchsAndroidAlarmEvent({event,checkpoint,settings}));
   res.set('Cache-Control','no-store').json({settings,previews,
    dispatchAuthorized:false,automaticPlaybackEnabled:false,mode:'PREVIEW_ONLY'});
+ }catch(error){next(error);}
+});
+router.get('/missile-android-monitor',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_MONITOR_KEY}});
+  let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({monitor:normalizeAndroidMonitor(saved),
+   dispatchAuthorized:false,automaticPlaybackEnabled:false});
  }catch(error){next(error);}
 });
 router.get('/missile-android-sequence',requireRole('ADMIN'),async (_req,res,next)=>{
