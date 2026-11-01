@@ -509,6 +509,7 @@ router.post('/missile-auto-intents/stage',requireRole('ADMIN'),async (_req,res,n
  try{
   const result=await prisma.$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   await tx.safetyMchsPlaybackIntent.updateMany({where:{status:'STAGED',createdAt:{lte:new Date(Date.now()-120000)}},data:{status:'EXPIRED',lastError:'STALE_INTENT'}});
    const [stateRow,ruleRow,events,assets]=await Promise.all([
     tx.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
     tx.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
@@ -536,6 +537,21 @@ router.post('/missile-auto-intents/stage',requireRole('ADMIN'),async (_req,res,n
    return {staged,checkpoint:evaluated.checkpoint};
   });
   res.set('Cache-Control','no-store').json({...result,executionEnabled:false,output:'STAGED_ONLY'});
+ }catch(error){next(error);}
+});
+/** Expiry is a terminal state: this endpoint cannot send audio or restore an expired intent. */
+router.post('/missile-auto-intents/expire',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const now=new Date();
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const changed=await tx.safetyMchsPlaybackIntent.updateMany({
+    where:{status:'STAGED',createdAt:{lte:new Date(now.getTime()-120000)}},
+    data:{status:'EXPIRED',lastError:'STALE_INTENT'}
+   });
+   return {expiredCount:changed.count};
+  });
+  res.set('Cache-Control','no-store').json({...result,executionEnabled:false});
  }catch(error){next(error);}
 });
 router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
