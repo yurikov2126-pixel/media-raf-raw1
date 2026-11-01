@@ -20,6 +20,7 @@ import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
+import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
@@ -448,6 +449,39 @@ router.put('/dispatch-mode', requireRole('ADMIN'), async (req, res, next) => {
 });
 
 
+/** Durable, serialised checkpoint for the two missile notifications only.
+ * Admin reconciliation never dispatches audio to Radio Worker or AA-300. */
+router.get('/missile-auto-checkpoint',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}});
+  let value;try{value=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({checkpoint:normalizeMissileCheckpoint(value),
+   automaticPlaybackEnabled:false,output:'DECISION_ONLY'});
+ }catch(error){next(error);}
+});
+router.post('/missile-auto-checkpoint/reconcile',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const row=await tx.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}});
+   let checkpoint;try{checkpoint=JSON.parse(row?.value||'null');}catch{}
+   checkpoint=normalizeMissileCheckpoint(checkpoint);
+   const [events,ruleRow,assetRows]=await Promise.all([
+    tx.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID',verified:true},
+     orderBy:[{occurredAt:'asc'},{id:'asc'}],take:500,
+     select:{id:true,source:true,sourceEventId:true,title:true,body:true,region:true,verified:true,occurredAt:true}}),
+    tx.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
+    tx.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true}})
+   ]);
+   let saved={};try{saved=JSON.parse(ruleRow?.value||'{}');}catch{}
+   const rules=Object.fromEntries(MCHS_EVENT_TYPES.map(type=>[type.id,{...emptyTypeRule(),...(saved[type.id]||{})}]));
+   const evaluated=advanceMissileCheckpoint(checkpoint,events,{rules,assets:new Set(assetRows.map(a=>a.id))});
+   await tx.setting.upsert({where:{key:MISSILE_CHECKPOINT_KEY},create:{key:MISSILE_CHECKPOINT_KEY,value:JSON.stringify(evaluated.checkpoint)},update:{value:JSON.stringify(evaluated.checkpoint)}});
+   return {...evaluated,decisions:evaluated.decisions.slice(-30)};
+  });
+  res.set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
 /** Two-event automatic missile policy preview, with strict source/region/freshness gates.
  * Does not authorize or trigger PA output. */
 router.get('/missile-auto-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
