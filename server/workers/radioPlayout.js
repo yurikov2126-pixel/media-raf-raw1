@@ -334,8 +334,26 @@ let trainingAssetId=null;
 let trainingCommandEpoch=0;
 let trainingPreparing=false;
 let trainingLastRevision=0;
+let trainingAudioWasActive=false;
+let trainingAuthorityRevision=0;
+function invalidateTrainingSource(reason){
+ trainingAuthorityRevision++;
+ stopDecoder();
+ lastDecodedSource=null;previousSourcePcmTail=null;shadowOverlap=null;
+ reverseReservedTarget=null;reverseReservedShift=null;reverseMixAuthorityAt=null;
+ reverseMixAuthorityReservation=null;
+ pendingScheduledHandover=null;confirmedScheduledHourlyReservation=null;
+ delayedScheduledSlot=null;scheduledEntryOverlap=null;
+ musicQueueKey=null;musicQueueNextId=null;
+ state.playout=null;state.trackId=null;state.slotId=null;state.nextTrackId=null;
+ recordBoundary({source:'MCHS_TRAINING',reason,revision:trainingAuthorityRevision});
+}
 function trainingStatus(){
  const state=trainingOverlay.snapshot();
+ if(state.active!==trainingAudioWasActive){
+  trainingAudioWasActive=state.active;
+  invalidateTrainingSource(state.active?'PREEMPT':'RESELECT_CURRENT_AUTHORITY');
+ }
  if(state.revision!==trainingLastRevision){
   trainingLastRevision=state.revision;
   if(!state.active&&state.lastStopReason)console.info('MCHS_TRAINING_STREAM_FINISHED',JSON.stringify({assetId:trainingAssetId,reason:state.lastStopReason,revision:state.revision,at:new Date().toISOString()}));
@@ -1984,7 +2002,7 @@ const server=http.createServer((req,res)=>{
         catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
         finally{trainingPreparing=false;}
       }
-      if(result.ok&&action==='START')stopDecoder();
+      if(result.ok&&action==='START')trainingStatus();
       console.info('MCHS_TRAINING_STREAM',JSON.stringify({action,ok:result.ok,revision:result.revision,reason:result.reason||null}));
       res.writeHead(result.ok?200:409,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify(result));
