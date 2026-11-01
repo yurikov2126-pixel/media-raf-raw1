@@ -6,14 +6,14 @@ const SOURCE='https://t.me/s/tularegion71';
 const MAX_BYTES=600000;
 const decode=s=>s.replace(/&nbsp;|&#160;/g,' ').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'")
  .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
- .replace(/<br\\s*\\/?\\s*>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim();
+ .replace(/<br\s*\/?\s*>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 export function parseRegionalOfficialFeed(html,{nowMs=Date.now()}={}){
  if(typeof html!=='string')return [];
  const blocks=html.split(/<div class="tgme_widget_message_wrap/).slice(1,100);
  return blocks.map(block=>{
-  const postId=block.match(/data-post="tularegion71\\/(\\d+)"/)?.[1];
+  const postId=block.match(/data-post="tularegion71\/(\d+)"/)?.[1];
   const publishedAt=block.match(/<time[^>]+datetime="([^"]+)"/)?.[1];
-  const textHtml=block.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\\s\\S]*?)<\\/div>/)?.[1]||'';
+  const textHtml=block.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/)?.[1]||'';
   const message=decode(textHtml);
   const type=classifyMchsObservation(message,'');
   const time=Date.parse(publishedAt||'');
