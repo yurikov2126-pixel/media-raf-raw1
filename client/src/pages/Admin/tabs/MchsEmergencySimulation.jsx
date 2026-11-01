@@ -7,12 +7,14 @@ export default function MchsEmergencySimulation({token}){
  const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
  const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
  const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
+ const [transitionPreview,setTransitionPreview]=useState(null);
  const refresh=async()=>{
   try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
   catch(e){setError(e.message||'Нет связи с Radio Worker');}
  };
  useEffect(()=>{api('/safety/mchs-training-stream/assets',{token}).then(data=>setAssets(data.assets||[])).catch(()=>setError('Не удалось загрузить категорию ALARM'));},[token]);
- useEffect(()=>{api('/safety/missile-execution-control',{token}).then(setExecutionControl).catch(()=>{});},[token]);
+ useEffect(()=>{api('/safety/missile-execution-control',{token}).then(setExecutionControl).catch(()=>{});
+  api('/safety/missile-alarm-transition-preview',{token}).then(setTransitionPreview).catch(()=>{});},[token]);
  useEffect(()=>{void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},3000);return()=>clearInterval(timer);},[token]);
  const command=async action=>{
   if(action==='START'&&!window.confirm('Запустить учебное сообщение в ОСНОВНОМ радиопотоке? Звук получат интернет-слушатели и подключённые громкоговорители. Подтвердите, что аудитория предупреждена, запись явно учебная, громкость безопасная и доступна физическая остановка усилителя.'))return;
@@ -54,6 +56,7 @@ export default function MchsEmergencySimulation({token}){
     <div>Просрочено: <b>{executionControl?.queue?.expired??'—'}</b></div>
    </div>
    <div className="text-xs text-slate-600 dark:text-slate-300">Причины блокировки: {executionControl?.holds?.join(', ')||'Загрузка или нет данных'}</div>
+   <div className="text-xs text-slate-600 dark:text-slate-300">Переходы ALARM: {transitionPreview?.transitionPlans?.length??'—'} предварительных решений · возврат к действующей эфирной сетке после окончания записи · реальное исполнение отключено.</div>
    <button type="button" disabled={holdBusy} className="rounded-lg border border-red-300 px-3 py-2 text-sm disabled:opacity-50" onClick={async()=>{
     setHoldBusy(true);
     try{await api('/safety/missile-execution-control/hold',{token,method:'POST'});
