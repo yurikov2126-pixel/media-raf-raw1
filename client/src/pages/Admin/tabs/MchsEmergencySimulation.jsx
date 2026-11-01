@@ -1,174 +1,96 @@
 import {useEffect,useState} from 'react';
 import {api} from '../../../api/client.js';
-import MchsWorkerServerSession from './MchsWorkerServerSession.jsx';
 
+/** Single operator workspace. Legacy laboratory tools remain server-side but are not primary controls. */
 export default function MchsEmergencySimulation({token}){
- const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
- const [dangerAssetId,setDangerAssetId]=useState(''),[clearAssetId,setClearAssetId]=useState('');
- const [dangerRepeats,setDangerRepeats]=useState(1),[repeatSaving,setRepeatSaving]=useState(false),[repeatMessage,setRepeatMessage]=useState('');
- const [sequenceBusy,setSequenceBusy]=useState(false),[sequenceResult,setSequenceResult]=useState(null);
- const [sequenceSession,setSequenceSession]=useState(null);
- const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
- const [pcmTrialBusy,setPcmTrialBusy]=useState(false),[pcmTrialResult,setPcmTrialResult]=useState(null);
- const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
- const [transitionPreview,setTransitionPreview]=useState(null);
- const [bulletinCheck,setBulletinCheck]=useState(null),[bulletinBusy,setBulletinBusy]=useState(false);
- useEffect(()=>{
-  let mounted=true;
-  const poll=async()=>{try{const result=await api('/safety/mchs-training-sequence/status',{token});
-   if(mounted){setSequenceSession(result.session);if(result.session?.status!=='RUNNING'&&result.session?.result)setSequenceResult(result.session.result);}}
-   catch{/* Radio status refresh remains independent from the control connection. */}};
-  void poll();const id=setInterval(poll,1500);return()=>{mounted=false;clearInterval(id);};
- },[token]);
+ const [assets,setAssets]=useState([]),[danger,setDanger]=useState(''),[clear,setClear]=useState('');
+ const [repeats,setRepeats]=useState(1),[saving,setSaving]=useState(false),[message,setMessage]=useState('');
+ const [worker,setWorker]=useState(null),[session,setSession]=useState(null),[control,setControl]=useState(null);
+ const [monitor,setMonitor]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const refresh=async()=>{
-  try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
-  catch(e){setError(e.message||'Нет связи с Radio Worker');}
+  const results=await Promise.allSettled([
+   api('/safety/mchs-training-stream',{token}),
+   api('/safety/mchs-training-sequence/status',{token}),
+   api('/safety/missile-execution-control',{token}),
+   api('/safety/missile-android-monitor',{token})
+  ]);
+  if(results[0].status==='fulfilled')setWorker(results[0].value);
+  if(results[1].status==='fulfilled')setSession(results[1].value.session);
+  if(results[2].status==='fulfilled')setControl(results[2].value);
+  if(results[3].status==='fulfilled')setMonitor(results[3].value.monitor);
+  if(results[0].status==='rejected')setError('Нет связи с Radio Worker');
  };
- useEffect(()=>{api('/safety/mchs-alarm-repeats',{token}).then(data=>setDangerRepeats(data.dangerRepeats)).catch(()=>setRepeatMessage('Не удалось загрузить настройку повторов'));},[token]);
- useEffect(()=>{api('/safety/mchs-training-stream/assets',{token}).then(data=>setAssets(data.assets||[])).catch(()=>setError('Не удалось загрузить категорию ALARM'));},[token]);
- useEffect(()=>{api('/safety/missile-execution-control',{token}).then(setExecutionControl).catch(()=>{});
-  api('/safety/missile-alarm-transition-preview',{token}).then(setTransitionPreview).catch(()=>{});},[token]);
- useEffect(()=>{void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},3000);return()=>clearInterval(timer);},[token]);
- const command=async action=>{
-  if(action==='START'&&!window.confirm('Запустить учебное сообщение в ОСНОВНОМ радиопотоке? Звук получат интернет-слушатели и подключённые громкоговорители. Подтвердите, что аудитория предупреждена, запись явно учебная, громкость безопасная и доступна физическая остановка усилителя.'))return;
+ useEffect(()=>{
+  api('/safety/mchs-training-stream/assets',{token}).then(x=>setAssets(x.assets||[])).catch(()=>setError('Не удалось получить библиотеку ALARM'));
+  api('/safety/mchs-alarm-repeats',{token}).then(x=>setRepeats(x.dangerRepeats||1)).catch(()=>{});
+  void refresh();
+  const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},5000);
+  return()=>clearInterval(timer);
+ },[token]);
+ const saveRepeats=async()=>{
+  setSaving(true);setMessage('');
+  try{await api('/safety/mchs-alarm-repeats',{token,method:'PUT',body:{dangerRepeats:repeats}});setMessage('Повторения сохранены');}
+  catch(e){setMessage(e.message||'Не удалось сохранить');}finally{setSaving(false);}
+ };
+ const start=async()=>{
+  if(!window.confirm('УЧЕБНОЕ ВЕЩАНИЕ в основном радиопотоке! Физически отключены громкоговорители, слушатели предупреждены, записи имеют пометку «Учебная тревога»?'))return;
   setBusy(true);setError('');
-  try{setStatus(await api('/safety/mchs-training-stream',{token,method:'POST',body:{action,assetId:action==='START'?assetId:null}}));}
-  catch(e){setError(e.message||'Команда не выполнена');}
+  try{const r=await api('/safety/mchs-training-sequence',{token,method:'POST',body:{dangerAssetId:danger,clearAssetId:clear,confirmation:'TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED'}});setSession(r.session);}
+  catch(e){setError(e.message||'Не удалось запустить');}finally{setBusy(false);}
+ };
+ const stop=async()=>{
+  setBusy(true);setError('');
+  try{
+   if(session?.status==='RUNNING')await api('/safety/mchs-training-sequence/stop',{token,method:'POST'});
+   else await api('/safety/mchs-training-stream',{token,method:'POST',body:{action:'STOP'}});
+   await refresh();
+  }catch(e){setError('Остановка не подтверждена: '+(e.message||'нет ответа Worker'));}
   finally{setBusy(false);}
  };
- return <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 sm:p-5 space-y-4">
-  <div className="space-y-1">
-   <h3 className="text-lg font-semibold">Учебное переключение основного радиопотока</h3>
-   <p className="text-sm text-slate-600 dark:text-slate-300">Отдельный режим: учебная запись заменяет PCM перед общим MP3-кодировщиком. Она может быть слышна и на сайте, и через Windows Agent. Автоматические тревоги МЧС не задействованы.</p>
-  </div>
-  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
-   <h4 className="font-semibold">Сверка сообщений МЧС и региональных публикаций</h4>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Результаты сохраняются в журнале проверки. Совпадение публикаций не разрешает автоматический запуск ALARM.</p>
-   <button type="button" disabled={bulletinBusy} className="rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
-    setBulletinBusy(true);
-    try{const data=await api('/safety/missile-correlation-review/refresh',{token,method:'POST'});setBulletinCheck(data.review);}
-    catch(e){setBulletinCheck({error:e.message||'Нет связи с источником'});}
-    finally{setBulletinBusy(false);}
-   }}>{bulletinBusy?'Сверка…':'Проверить и сохранить сверку'}</button>
-   <button type="button" className="rounded-lg border px-3 py-2 ml-2" onClick={async()=>{
-    try{const data=await api('/safety/missile-correlation-review',{token});setBulletinCheck(data.review);}
-    catch(e){setBulletinCheck({error:e.message});}
-   }}>Последняя проверка</button>
-   {bulletinCheck?.error&&<p role="status" className="text-sm">{bulletinCheck.error}</p>}
-   {bulletinCheck?.counts&&<p role="status" className="text-sm">Совпадений: {bulletinCheck.counts.corroborated} · без публикации: {bulletinCheck.counts.unmatched} · отклонено: {bulletinCheck.counts.rejected} · источник: {bulletinCheck.sourceAvailable?'доступен':'недоступен'}</p>}
-   {bulletinCheck?.items&&<div className="max-h-52 overflow-auto space-y-1 text-xs">{bulletinCheck.items.slice(0,20).map((item,i)=><div key={item.eventId||i} className="rounded-lg bg-slate-100 dark:bg-slate-800 p-2">{item.eventType}: {item.status} · {item.reason||'—'} {item.bulletinUrl&&<a href={item.bulletinUrl} target="_blank" rel="noreferrer" className="underline">Исходная публикация</a>}</div>)}</div>}
-  </div>
-  <div className="rounded-xl border border-amber-400/70 p-3 space-y-3">
-   <h4 className="font-semibold">Учебный цикл: тревога → отбой → обычный эфир</h4>
-   <p className="text-sm text-amber-700 dark:text-amber-300">Внимание: записи действительно прозвучат в ОСНОВНОМ радиопотоке. До запуска физически отключите громкоговорители, предупредите слушателей и используйте только записи с отчётливой пометкой «Учебная тревога».</p>
-   <div className="rounded-lg border p-3 space-y-2">
-    <label className="block text-sm font-medium" htmlFor="mchs-danger-repeats">Повторений записи «Ракетная опасность»</label>
-    <select id="mchs-danger-repeats" className="rounded-lg border p-2 bg-white text-slate-900 dark:bg-slate-900 dark:text-white" value={dangerRepeats} onChange={e=>{setDangerRepeats(Number(e.target.value));setRepeatMessage('Изменения не сохранены');}}>
-     {[1,2,3,4,5].map(n=><option key={n} value={n}>{n} {n===1?'раз':'раз(а)'}</option>)}
-    </select>
-    <button type="button" disabled={repeatSaving} className="ml-2 rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
-     setRepeatSaving(true);try{await api('/safety/mchs-alarm-repeats',{token,method:'PUT',body:{dangerRepeats}});setRepeatMessage('Повторения сохранены');}
-     catch(e){setRepeatMessage(e.message||'Ошибка сохранения');}finally{setRepeatSaving(false);}
-    }}>Сохранить повторы</button>
-    <p className="text-xs text-slate-600 dark:text-slate-300">Настройка применяется к следующему учебному циклу. Отбой звучит один раз. Реальная автоматическая трансляция остаётся отключённой.</p>
-    {repeatMessage&&<p role="status" className="text-xs">{repeatMessage}</p>}
+ return <section className="mchs-panel space-y-4">
+  <div className="rounded-2xl border border-slate-200 dark:border-white/15 p-4 space-y-2">
+   <div className="flex flex-wrap items-center justify-between gap-3">
+    <h3 className="font-semibold text-lg">Состояние эфира и МЧС</h3>
+    <button className="rounded-lg border px-3 py-2" type="button" onClick={()=>void refresh()}>Обновить</button>
    </div>
-   <label className="block text-sm">Учебная тревога
-    <select className="mt-1 w-full rounded-lg border p-2 bg-white text-slate-900 dark:bg-slate-900 dark:text-white" value={dangerAssetId} onChange={e=>setDangerAssetId(e.target.value)}>
-     <option value="">Выбрать файл ALARM</option>
-     {assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-    </select>
-   </label>
-   <label className="block text-sm">Учебный отбой
-    <select className="mt-1 w-full rounded-lg border p-2 bg-white text-slate-900 dark:bg-slate-900 dark:text-white" value={clearAssetId} onChange={e=>setClearAssetId(e.target.value)}>
-     <option value="">Выбрать файл ALARM</option>
-     {assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-    </select>
-   </label>
-   <button type="button" disabled={sequenceBusy||sequenceSession?.status==='RUNNING'||!dangerAssetId||!clearAssetId||dangerAssetId===clearAssetId} className="rounded-lg border border-amber-500 px-3 py-2 disabled:opacity-50" onClick={async()=>{
-    if(!window.confirm('ВНИМАНИЕ! Это РЕАЛЬНЫЙ ОСНОВНОЙ РАДИОПОТОК. Громкоговорители физически отключены, слушатели предупреждены, обе записи явно учебные. Запустить тревогу и отбой?'))return;
-    setSequenceBusy(true);setSequenceResult(null);
-    try{const data=await api('/safety/mchs-training-sequence',{token,method:'POST',body:{dangerAssetId,clearAssetId,confirmation:'TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED'}});setSequenceSession(data.session);}
-    catch(e){setSequenceResult({ok:false,reason:e.message||'Не удалось запустить учебный цикл'});}
-    finally{setSequenceBusy(false);}
-   }}>{sequenceBusy?'Учебный цикл выполняется…':'Запустить учебную тревогу и отбой'}</button>
-   {sequenceSession?.status==='RUNNING'&&<div className="space-y-2 text-sm"><p role="status">Учебный цикл выполняется: {sequenceSession.stage||'Подготовка'}</p><button type="button" className="rounded-lg border border-red-500 px-3 py-2" onClick={async()=>{try{await api('/safety/mchs-training-sequence/stop',{token,method:'POST'});}catch(e){setError(e.message||'Не удалось остановить цикл');}}}>Остановить учебный цикл</button></div>}
-   {sequenceResult&&<p role="status" className="text-sm">{sequenceResult.ok?'Учебный цикл завершён; проверьте фактический возврат к радиопрограмме.':('Ошибка или остановка: '+(sequenceResult.reason||'Проверьте Worker'))}</p>}
-   <p className="text-xs text-slate-600 dark:text-slate-300">Для экстренной остановки используйте кнопку остановки цикла или существующую кнопку STOP ниже. Закрытие страницы не прерывает учебную запись; состояние сеанса восстанавливается при повторном открытии.</p>
-  </div>
-  <div className="rounded-xl border border-amber-300/50 p-3 space-y-3">
-   <p className="text-sm font-medium">Основной поток: {status?.active?'Учебная запись':'Обычная программа'} · {status?.enabled?'Режим включён на сервере':'Режим выключен на сервере'}</p>
-   <div className="rounded-lg bg-slate-100 p-3 text-sm dark:bg-slate-800 space-y-1">
-    <p className="font-semibold">Диагностика последней записи ALARM (Worker)</p>
-    <p>PCM: {status?.audioQuality?.state==='PCM_FEED_STABLE'?'Подано без обнаруженных задержек':status?.audioQuality?.state==='PCM_FEED_GAPS'?'Обнаружены задержки подачи PCM':status?.audioQuality?.state==='NOT_COMPLETED'?'Запись ещё не подтверждена завершённой':'Нет завершённого измерения'}</p>
-    <p>Кадры: {status?.lastPcmClock?.frames??'—'} · задержки: {status?.lastPcmClock?.gaps??'—'} · максимум: {status?.lastPcmClock?.maxDelayMs??'—'} мс</p>
-    <p className="text-xs text-slate-600 dark:text-slate-300">Последнее измерение: {status?.lastPcmClock?.at?new Date(status.lastPcmClock.at).toLocaleString():'—'}. Это диагностика PCM на сервере, а не подтверждение работы Windows Agent или отсутствия прерываний у слушателей.</p>
+   <div className="grid gap-2 sm:grid-cols-2 text-sm">
+    <p>Радиопоток: <strong>{worker?.active?'Учебный ALARM':worker?'Обычная программа':'Нет данных'}</strong></p>
+    <p>Цикл: <strong>{session?.status||'Не выполняется'}</strong></p>
+    <p>Автоматический запуск: <strong>{control?.executionEnabled?'Включён':'Отключён'}</strong></p>
+    <p>Обработано Android-событий: <strong>{monitor?.entries?.length??'—'}</strong></p>
+    <p>PCM-кадры: <strong>{worker?.lastPcmClock?.frames??'—'}</strong></p>
+    <p>Задержки PCM: <strong>{worker?.lastPcmClock?.gaps??'—'}</strong></p>
    </div>
-   {status?.active && <div className="space-y-1">
-    <p className="text-sm">В эфире: {assets.find(a=>a.id===status.assetId)?.name || 'ALARM'} — {Math.floor((status.playedBytes || 0)/192000)} сек.</p>
-    <progress className="w-full" value={status.playedBytes || 0} max={Math.max(1,status.totalBytes || 1)}/>
-   </div>}
-   {status?.finishedAt && <p className="text-xs">Последнее завершение: {status.lastStopReason || '—'} ({new Date(status.finishedAt).toLocaleTimeString('ru-RU')})</p>}
-   <p className="text-xs text-slate-600 dark:text-slate-300">Запись ALARM воспроизводится до конца или до ручного STOP. Длинные записи подаются с диска, без загрузки целиком в память. Выберите уже загруженную запись ALARM. Сервер декодирует её автоматически; отдельно готовить PCM не требуется. Для первого теста используйте явно учебную запись, а не настоящий сигнал тревоги. Ни START, ни STOP не управляют ESP32 или усилителем.</p>
-   <label className="block text-sm">Аудиозапись из категории ALARM
-    <select className="mt-1 w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 dark:bg-slate-900 dark:text-white" value={assetId} onChange={e=>setAssetId(e.target.value)}><option value="">Выберите запись</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select>
-   </label>
+   {control?.holds?.length>0&&<p className="text-xs text-slate-600 dark:text-slate-300">Ограничения автоматики: {control.holds.join(' · ')}</p>}
+   {session?.result&&<p role="status" className="text-sm">Последний цикл: {session.result.ok?'Завершён':'Ошибка / остановлен'} · {session.result.reason}</p>}
+  </div>
+  <div className="rounded-2xl border border-amber-300/60 p-4 space-y-3">
+   <h3 className="font-semibold text-lg">Учебный ALARM</h3>
+   <p className="text-sm text-amber-700 dark:text-amber-300">Учебные записи звучат в реальном радиопотоке. Перед запуском необходимо физически отключить громкоговорители и предупредить слушателей.</p>
+   <div className="grid gap-3 sm:grid-cols-2">
+    <label className="text-sm">Тревога<select value={danger} onChange={e=>setDanger(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white"><option value="">Выбрать ALARM</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+    <label className="text-sm">Отбой<select value={clear} onChange={e=>setClear(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white"><option value="">Выбрать ALARM</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+   </div>
+   <div className="flex flex-wrap items-end gap-3">
+    <label className="text-sm">Повторы тревоги (1–5)<select value={repeats} onChange={e=>{setRepeats(Number(e.target.value));setMessage('Не сохранено');}} className="mt-1 block rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white">{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
+    <button type="button" disabled={saving} onClick={()=>void saveRepeats()} className="rounded-lg border px-3 py-2 disabled:opacity-50">Сохранить повторы</button>
+    <span role="status" className="text-xs">{message}</span>
+   </div>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Запись отбоя всегда воспроизводится один раз. Автоматический запуск по Android-уведомлениям пока отключён.</p>
    <div className="flex flex-wrap gap-2">
-    <button type="button" disabled={busy||!assetId||!status?.enabled||status?.active} onClick={()=>void command('START')} className="rounded-lg bg-amber-600 px-3 py-2 text-white disabled:opacity-40">Включить учебную запись в эфир</button>
-    <button type="button" disabled={busy} onClick={()=>void command('STOP')} className="rounded-lg bg-red-700 px-3 py-2 text-white disabled:opacity-50">СТОП / вернуть программу</button>
-    <button type="button" onClick={()=>void refresh()} className="rounded-lg border px-3 py-2">Обновить</button>
+    <button type="button" disabled={busy||session?.status==='RUNNING'||!danger||!clear||danger===clear} onClick={()=>void start()} className="rounded-lg bg-amber-600 px-4 py-2 text-white disabled:opacity-40">Запустить учебный цикл</button>
+    <button type="button" disabled={busy} onClick={()=>void stop()} className="rounded-lg bg-red-700 px-4 py-2 text-white disabled:opacity-50">СТОП / вернуть эфир</button>
    </div>
-   {error&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
+   {session?.status==='RUNNING'&&<p role="status" className="text-sm">Выполняется: {session.stage||'Подготовка'}</p>}
   </div>
-  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
-   <h4 className="font-semibold">Автоматические ALARM — контроль готовности</h4>
-   <p className="text-sm text-amber-700 dark:text-amber-300">Автоматическое включение реального эфира заблокировано до подтверждения официального источника и проверки исполнительного механизма.</p>
-   <div className="grid grid-cols-2 gap-2 text-sm">
-    <div>Автозапуск: <b>{executionControl?.executionEnabled?'Разрешён':'Отключён'}</b></div>
-    <div>Состояние: <b>{executionControl?.checkpointState||'—'}</b></div>
-    <div>В очереди: <b>{executionControl?.queue?.staged??'—'}</b></div>
-    <div>Просрочено: <b>{executionControl?.queue?.expired??'—'}</b></div>
-   </div>
-   <div className="text-xs text-slate-600 dark:text-slate-300">Причины блокировки: {executionControl?.holds?.join(', ')||'Загрузка или нет данных'}</div>
-   <div className="text-xs text-slate-600 dark:text-slate-300">Переходы ALARM: {transitionPreview?.transitionPlans?.length??'—'} предварительных решений · возврат к действующей эфирной сетке после окончания записи · реальное исполнение отключено.</div>
-   <button type="button" disabled={holdBusy} className="rounded-lg border border-red-300 px-3 py-2 text-sm disabled:opacity-50" onClick={async()=>{
-    setHoldBusy(true);
-    try{await api('/safety/missile-execution-control/hold',{token,method:'POST'});
-     setExecutionControl(await api('/safety/missile-execution-control',{token}));}
-    catch(e){setError(e.message||'Не удалось установить блокировку');}
-    finally{setHoldBusy(false);}
-   }}>Заблокировать автоматическое исполнение</button>
-   {executionControl?.recentIntents?.length>0&&<div className="text-xs space-y-1">
-    <p className="font-semibold">Последние команды</p>
-    {executionControl.recentIntents.slice(0,5).map(item=><p key={item.id}>{item.eventType} · {item.status}</p>)}
-   </div>}
+  <div className="rounded-2xl border border-slate-200 dark:border-white/15 p-4 space-y-2">
+   <h3 className="font-semibold">Аварийное управление</h3>
+   <p className="text-sm text-slate-600 dark:text-slate-300">Дополнительная блокировка автоматического исполнения. Не заменяет физическое отключение усилителя при неисправности.</p>
+   <button type="button" className="rounded-lg border border-red-400 px-3 py-2 text-sm" onClick={async()=>{
+    try{await api('/safety/missile-execution-journal/halt',{token,method:'POST'});await refresh();}
+    catch(e){setError('Блокировка / остановка не подтверждена: '+e.message);}
+   }}>Заблокировать исполнение и отправить STOP</button>
   </div>
-  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
-   <h4 className="font-semibold">Тревога → Отбой → Возврат к музыке (изолированный PCM-тест)</h4>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Проверяет существующий PCM-движок в памяти API на синтетических аудиокадрах. Общий эфир и усилитель не затрагиваются.</p>
-   <button type="button" disabled={pcmTrialBusy} className="rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
-    setPcmTrialBusy(true);setPcmTrialResult(null);
-    try{setPcmTrialResult(await api('/safety/missile-alarm-pcm-trial',{token,method:'POST'}));}
-    catch(e){setPcmTrialResult({ok:false,reason:e.message||'Ошибка PCM'});}
-    finally{setPcmTrialBusy(false);}
-   }}>{pcmTrialBusy?'Проверка…':'Проверить переходы ALARM без звука'}</button>
-   {pcmTrialResult&&<p role="status" className="text-sm">{pcmTrialResult.ok&&pcmTrialResult.resumedNormalPcm?'Тест успешен: тревога, отбой и возврат к исходному PCM проверены.':'Тест не прошёл: '+(pcmTrialResult.reason||'Проверьте API')}</p>}
-  </div>
-  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
-   <h4 className="font-semibold">Проверка доставки команд МЧС (без звука)</h4>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Синтетическая команда проверяет API → Radio Worker → PostgreSQL и защиту от повторов. Настоящие уведомления и эфир не затрагиваются.</p>
-   <button type="button" disabled={transportBusy} onClick={async()=>{
-    setTransportBusy(true);setTransportResult(null);
-    try{setTransportResult(await api('/safety/missile-transport-smoke',{token,method:'POST'}));}
-    catch(e){setTransportResult({ok:false,error:e.message||'Ошибка связи'});}
-    finally{setTransportBusy(false);}
-   }} className="rounded-lg border px-3 py-2 disabled:opacity-50">{transportBusy?'Проверка…':'Проверить доставку'}</button>
-   {transportResult&&<p role="status" className="text-sm">{transportResult.ok?'Проверка успешна: команда получена, повтор распознан, подтверждение сохранено в PostgreSQL.':('Проверка не пройдена: '+(transportResult.error||'Не получено подтверждение'))}</p>}
-  </div>
-  <details className="rounded-xl border border-slate-200 dark:border-white/15 p-3">
-   <summary className="cursor-pointer font-medium">Изолированная лабораторная сессия (архивные тесты)</summary>
-   <div className="mt-3"><MchsWorkerServerSession token={token}/></div>
-  </details>
+  {error&&<p role="alert" className="rounded-lg border border-red-400 p-3 text-red-600 dark:text-red-300">{error}</p>}
  </section>;
 }
