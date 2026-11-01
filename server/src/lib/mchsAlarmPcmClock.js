@@ -1,7 +1,7 @@
 /** Monotonic paced PCM frame clock, for the training ALARM path only.
  * Never skips source PCM frames to catch up: audible continuity wins over wall time.
  */
-export function createAlarmPcmClock({frameMs=20,now=()=>performance.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+export function createAlarmPcmClock({frameMs=20,now=()=>globalThis.performance.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
  let due=null,frames=0,gaps=0,maxDelayMs=0;
  return {
   async pace(){
