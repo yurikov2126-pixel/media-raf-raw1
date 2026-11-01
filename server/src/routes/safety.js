@@ -504,6 +504,46 @@ router.get('/missile-auto-playback-plan',requireRole('ADMIN'),async (_req,res,ne
    checkpoint:evaluated.checkpoint,blocked:evaluated.decisions.filter(d=>!d.eligible).map(d=>({eventId:d.eventId,reason:d.reason})).slice(-30)});
  }catch(error){next(error);}
 });
+/** Stage verified missile command intents. Never transmits them to broadcast playout. */
+router.post('/missile-auto-intents/stage',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581440)`;
+   const [stateRow,ruleRow,events,assets]=await Promise.all([
+    tx.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
+    tx.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
+    tx.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID',verified:true},
+     orderBy:[{occurredAt:'asc'},{id:'asc'}],take:500,
+     select:{id:true,source:true,sourceEventId:true,title:true,body:true,region:true,verified:true,occurredAt:true}}),
+    tx.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true}})
+   ]);
+   let state,stored;
+   try{state=JSON.parse(stateRow?.value||'null');}catch{}
+   try{stored=JSON.parse(ruleRow?.value||'{}');}catch{}
+   const rules=Object.fromEntries(MCHS_EVENT_TYPES.map(t=>[t.id,{...emptyTypeRule(),...(stored?.[t.id]||{})}]));
+   const evaluated=advanceMissileCheckpoint(normalizeMissileCheckpoint(state),events,{rules,assets:new Set(assets.map(a=>a.id))});
+   const staged=[];
+   for(const decision of evaluated.decisions.filter(x=>x.eligible)){
+    const intent=await tx.safetyMchsPlaybackIntent.upsert({
+     where:{eventId:decision.eventId},
+     create:{eventId:decision.eventId,eventType:decision.eventType,audioAssetId:decision.audioAssetId,status:'STAGED'},
+     update:{},select:{id:true,eventId:true,eventType:true,status:true}});
+    staged.push(intent);
+   }
+   await tx.setting.upsert({where:{key:MISSILE_CHECKPOINT_KEY},
+    create:{key:MISSILE_CHECKPOINT_KEY,value:JSON.stringify(evaluated.checkpoint)},
+    update:{value:JSON.stringify(evaluated.checkpoint)}});
+   return {staged,checkpoint:evaluated.checkpoint};
+  });
+  res.set('Cache-Control','no-store').json({...result,executionEnabled:false,output:'STAGED_ONLY'});
+ }catch(error){next(error);}
+});
+router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const intents=await prisma.safetyMchsPlaybackIntent.findMany({orderBy:{createdAt:'desc'},take:100});
+  res.set('Cache-Control','no-store').json({intents,executionEnabled:false});
+ }catch(error){next(error);}
+});
 /** Two-event automatic missile policy preview, with strict source/region/freshness gates.
  * Does not authorize or trigger PA output. */
 router.get('/missile-auto-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
