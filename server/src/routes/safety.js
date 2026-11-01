@@ -24,6 +24,7 @@ import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassifica
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
+import {MCHS_EXECUTION_POLICY_KEY,normalizeMchsExecutionPolicy,assessMchsExecutionReadiness} from '../lib/mchsExecutionControl.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
@@ -654,6 +655,38 @@ router.post('/missile-transport-smoke',requireRole('ADMIN'),async (req,res)=>{
   res.status(503).set('Cache-Control','no-store').json({ok:false,error:'WORKER_RECEIPT_UNAVAILABLE',
    synthetic:true,playbackStarted:false,executionEnabled:false});
  }
+});
+/** Unified operational status. Fail-closed and read-only for all real playout. */
+router.get('/missile-execution-control',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [policyRow,checkpointRow,intents]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MCHS_EXECUTION_POLICY_KEY}}),
+   prisma.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
+   prisma.safetyMchsPlaybackIntent.findMany({orderBy:{createdAt:'desc'},take:100,
+    select:{id:true,eventId:true,eventType:true,status:true,createdAt:true,updatedAt:true,lastError:true}})
+  ]);
+  let policy,checkpoint;
+  try{policy=JSON.parse(policyRow?.value||'null');}catch{}
+  try{checkpoint=JSON.parse(checkpointRow?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({
+   ...assessMchsExecutionReadiness({policy,checkpoint:normalizeMissileCheckpoint(checkpoint),intents}),
+   recentIntents:intents.slice(0,15),allowedTypes:['MISSILE_DANGER','MISSILE_ALL_CLEAR'],
+   output:'STATUS_ONLY'});
+ }catch(error){next(error);}
+});
+/** Operator emergency hold: always stays locked until authoritative integration exists. */
+router.post('/missile-execution-control/hold',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const policy=normalizeMchsExecutionPolicy({
+   operatorHold:true,requestedMode:'DISABLED',lastChangedAt:new Date().toISOString(),
+   lastChangedBy:req.user?.id||null,reason:'OPERATOR_HOLD'
+  });
+  await prisma.setting.upsert({where:{key:MCHS_EXECUTION_POLICY_KEY},
+   create:{key:MCHS_EXECUTION_POLICY_KEY,value:JSON.stringify(policy)},
+   update:{value:JSON.stringify(policy)}});
+  console.info('MCHS_AUTOMATION_OPERATOR_HOLD',JSON.stringify({operatorId:req.user?.id||null,at:policy.lastChangedAt}));
+  res.set('Cache-Control','no-store').json({policy,executionEnabled:false});
+ }catch(error){next(error);}
 });
 router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
