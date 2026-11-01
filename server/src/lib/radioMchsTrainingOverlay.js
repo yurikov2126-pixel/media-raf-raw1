@@ -1,43 +1,42 @@
-/** Server-side training PCM overlay for the shared station MP3 encoder.
- * Explicit, opt-in, operator-controlled. Not a real emergency trigger.
- * Source PCM is prevalidated 48kHz stereo 16-bit signed LE, max 60 seconds.
+/** Bounded-memory shared station PCM training override, manual and off by default.
+ * Audio duration is determined by the selected ALARM file, not a time limit.
  */
 export const PCM_BYTES_PER_SECOND=48000*2*2;
-export const MAX_TRAINING_SECONDS=60;
-export function createTrainingOverlay({pcm,enabled=false,now=()=>Date.now()}={}){
- if(enabled && pcm!==undefined && (!Buffer.isBuffer(pcm)||pcm.length===0||pcm.length%4!==0||
-     pcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS))
-  throw new TypeError('INVALID_TRAINING_PCM');
- let active=false,at=0,position=0,revision=0,source=pcm,lastStopReason=null;
- const stop=(reason='OPERATOR_STOP')=>{if(active){active=false;revision++;lastStopReason=reason;}return snapshot();};
- function snapshot(){
-  if(active && now()-at>=MAX_TRAINING_SECONDS*1000)stop('MAX_DURATION');
-  return {enabled,active,revision,maxSeconds:MAX_TRAINING_SECONDS,remainingBytes:active?Math.max(0,source.length-position):0,lastStopReason,
-   output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};
- }
+export function createTrainingOverlay({pcm,enabled=false}={}){
+ let active=false,revision=0,source=pcm||null,position=0,lastStopReason=null;
+ const close=()=>{if(source&&typeof source.close==='function')source.close();source=null;};
+ const stop=(reason='OPERATOR_STOP')=>{
+  if(active){active=false;revision++;lastStopReason=reason;close();}
+  return snapshot();
+ };
+ function snapshot(){return {enabled,active,revision,remainingBytes:active?Math.max(0,source.size-position):0,
+  lastStopReason,output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};}
+ function valid(s){return s&&Number.isSafeInteger(s.size)&&s.size>0&&s.size%4===0&&typeof s.read==='function'&&typeof s.close==='function';}
+ const asSource=(buf)=>({size:buf.length,read:(pos,n)=>buf.subarray(pos,pos+n),close:()=>{}});
  return {
   snapshot,
   startWith(sourcePcm){
    if(!enabled)return {ok:false,reason:'DISABLED',...snapshot()};
-   if(!Buffer.isBuffer(sourcePcm)||!sourcePcm.length||sourcePcm.length%4||sourcePcm.length>PCM_BYTES_PER_SECOND*MAX_TRAINING_SECONDS)return {ok:false,reason:'INVALID_PCM',...snapshot()};
-   source=sourcePcm;
-   return this.start();
-  },
-  start(){
-   if(!enabled)return {ok:false,reason:'DISABLED',...snapshot()};
    if(active)return {ok:false,reason:'ALREADY_ACTIVE',...snapshot()};
-   active=true;at=now();position=0;lastStopReason=null;revision++;
+   const next=Buffer.isBuffer(sourcePcm)?asSource(sourcePcm):sourcePcm;
+   if(!valid(next))return {ok:false,reason:'INVALID_PCM',...snapshot()};
+   source=next;position=0;lastStopReason=null;active=true;revision++;
    return {ok:true,...snapshot()};
   },
+  start(){return this.startWith(source);},
   stop:()=>({ok:true,...stop()}),
   replace(frame){
    if(!Buffer.isBuffer(frame)||frame.length%4!==0)throw new TypeError('INVALID_PCM_FRAME');
-   if(!snapshot().active)return frame;
+   if(!active)return frame;
    const result=Buffer.alloc(frame.length);
-   const n=Math.min(frame.length,source.length-position);
-   source.copy(result,0,position,position+n);
-   position+=n;
-   if(position===source.length)stop('FILE_COMPLETED');
+   try{
+    const n=Math.min(frame.length,source.size-position);
+    const data=source.read(position,n);
+    if(!Buffer.isBuffer(data)||data.length!==n)throw new Error('READ_FAILED');
+    data.copy(result,0);
+    position+=n;
+    if(position>=source.size)stop('FILE_COMPLETED');
+   }catch{stop('SOURCE_READ_FAILED');return Buffer.alloc(frame.length);}
    return result;
   }
  };
