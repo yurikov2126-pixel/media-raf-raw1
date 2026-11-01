@@ -20,8 +20,13 @@ export async function runTrainingSequence({dangerAssetId,clearAssetId,request,si
    while(Date.now()<deadline){
     if(signal?.aborted)throw new Error('CANCELLED');
     await sleep(pollMs);
-    const status=await request();
-    if(status.httpStatus!==200)throw new Error('STATUS_UNAVAILABLE');
+    let status;
+    try{status=await request();}catch(error){
+     if(signal?.aborted)throw new Error('CANCELLED');
+     onProgress({stage,status:'RETRYING_WORKER_STATUS',reason:error?.message||'NETWORK_ERROR'});
+     continue;
+    }
+    if(status.httpStatus!==200){onProgress({stage,status:'RETRYING_WORKER_STATUS',reason:'HTTP_'+status.httpStatus});continue;}
     if(!status.data?.active){
      if(status.data?.lastStopReason!=='FILE_COMPLETED')throw new Error('ABORTED_'+stage);
      finished=true;break;
