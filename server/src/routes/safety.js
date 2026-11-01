@@ -4,6 +4,7 @@ import http from 'node:http';
 import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {trainingStreamRequest} from '../lib/mchsTrainingStreamProxy.js';
+import {sendMchsDryRunReceipt} from '../lib/mchsWorkerReceiptProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
 import { summarizeMchsDelivery } from '../lib/mchsDeliveryDiagnostics.js';
@@ -601,6 +602,36 @@ router.post('/missile-auto-intents/:id/ack',requireRole('ADMIN'),async(req,res,n
    return {ok:true,id:updated.id,status:updated.status,executionEnabled:false};
   });
   res.status(result.ok?200:409).set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
+/** Explicit administrator-driven dry-run delivery only; does not start ALARM. */
+router.post('/missile-auto-intents/:id/deliver-dry-run',requireRole('ADMIN'),async(req,res,next)=>{
+ try{
+  const token=req.body?.leaseToken;
+  if(typeof token!=='string'||!/^[a-f0-9]{48}$/.test(token))
+   return res.status(400).json({error:'INVALID_LEASE_TOKEN'});
+  const row=await prisma.safetyMchsPlaybackIntent.findUnique({where:{id:req.params.id}});
+  if(!row||row.status!=='LEASED'||row.leaseToken!==token||
+    !row.leaseUntil||row.leaseUntil.getTime()<=Date.now()||
+    Date.now()-row.createdAt.getTime()>=120000||
+    !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(row.eventType))
+   return res.status(409).json({error:'INVALID_OR_EXPIRED_LEASE'});
+  // A dry-run receipt is not proof of audible playback. The Worker never triggers audio.
+  const delivered=await sendMchsDryRunReceipt({
+   commandId:row.id,eventType:row.eventType,leaseToken:token});
+  const acknowledged=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const fresh=await tx.safetyMchsPlaybackIntent.findUnique({where:{id:row.id}});
+   if(!fresh||fresh.status!=='LEASED'||fresh.leaseToken!==token||
+    !fresh.leaseUntil||fresh.leaseUntil.getTime()<=Date.now())
+    return false;
+   await tx.safetyMchsPlaybackIntent.update({where:{id:row.id},
+    data:{status:'ACKED_DRY_RUN',acknowledgedAt:new Date(),leaseToken:null,leaseUntil:null}});
+   return true;
+  });
+  res.status(acknowledged?200:409).set('Cache-Control','no-store').json({
+   delivered:delivered.ok,duplicate:delivered.duplicate,acknowledged,
+   playbackStarted:false,executionEnabled:false});
  }catch(error){next(error);}
 });
 router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
