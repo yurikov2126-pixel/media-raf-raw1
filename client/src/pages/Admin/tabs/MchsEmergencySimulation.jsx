@@ -12,6 +12,7 @@ export default function MchsEmergencySimulation({token}){
  const [pcmTrialBusy,setPcmTrialBusy]=useState(false),[pcmTrialResult,setPcmTrialResult]=useState(null);
  const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
  const [transitionPreview,setTransitionPreview]=useState(null);
+ const [bulletinCheck,setBulletinCheck]=useState(null),[bulletinBusy,setBulletinBusy]=useState(false);
  useEffect(()=>{
   let mounted=true;
   const poll=async()=>{try{const result=await api('/safety/mchs-training-sequence/status',{token});
@@ -38,6 +39,24 @@ export default function MchsEmergencySimulation({token}){
   <div className="space-y-1">
    <h3 className="text-lg font-semibold">Учебное переключение основного радиопотока</h3>
    <p className="text-sm text-slate-600 dark:text-slate-300">Отдельный режим: учебная запись заменяет PCM перед общим MP3-кодировщиком. Она может быть слышна и на сайте, и через Windows Agent. Автоматические тревоги МЧС не задействованы.</p>
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+   <h4 className="font-semibold">Сверка уведомлений МЧС с публикациями региона</h4>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Только просмотр: совпадение с публикацией не подтверждает подлинность диспетчерской команды и не включает ALARM.</p>
+   <button type="button" disabled={bulletinBusy} className="rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
+    setBulletinBusy(true);
+    try{setBulletinCheck(await api('/safety/missile-bulletin-correlation',{token}));}
+    catch(e){setBulletinCheck({error:e.message||'Нет данных источника'});}
+    finally{setBulletinBusy(false);}
+   }}>{bulletinBusy?'Сверка…':'Проверить поступившие сообщения'}</button>
+   {bulletinCheck?.error&&<p role="status" className="text-sm">{bulletinCheck.error}</p>}
+   {bulletinCheck?.comparisons&&<div className="max-h-60 overflow-auto space-y-1 text-xs" role="status">
+    {bulletinCheck.comparisons.length===0&&<p>Нет уведомлений для сверки</p>}
+    {bulletinCheck.comparisons.slice(0,20).map((item,i)=><div key={item.eventId||i} className="rounded-lg bg-slate-100 dark:bg-slate-800 p-2">
+     <strong>{item.eventType}</strong> · {item.status} · {item.reason||'—'}
+     {item.bulletin?.url&&<a className="ml-2 underline" href={item.bulletin.url} target="_blank" rel="noreferrer">Публикация</a>}
+    </div>)}
+   </div>}
   </div>
   <div className="rounded-xl border border-amber-400/70 p-3 space-y-3">
    <h4 className="font-semibold">Учебный цикл: тревога → отбой → обычный эфир</h4>
