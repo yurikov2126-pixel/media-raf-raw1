@@ -336,9 +336,46 @@ let trainingPreparing=false;
 let trainingLastRevision=0;
 let trainingAudioWasActive=false;
 let trainingAuthorityRevision=0;
+let alarmResumeWarmup=null;
+let alarmResumeWarmupRevision=-1;
+function warmAlarmResume(){
+ if(alarmResumeWarmup||prewarmed||!trainingOverlay.snapshot().active||publicLive.onAir)return;
+ const revision=trainingAuthorityRevision;
+ alarmResumeWarmupRevision=revision;
+ alarmResumeWarmup=(async()=>{
+  try{
+   const choice=await current();
+   if(revision!==trainingAuthorityRevision||!trainingOverlay.snapshot().active)return;
+   const target=choice?.asset;
+   if(!target||!choice?.cursor?.track)return;
+   // The existing prewarm remains advisory; main loop rechecks authority.
+   const durationMs=choice.cursor.track.durationMs||target.durationMs||0;
+   const seekMs=choice.cursor.track.seekMs??choice.cursor.track.offsetMs??0;
+   if(durationMs<1000)return;
+   const filename=path.join(assetsRoot,path.basename(target.storageKey));
+   await fs.access(filename);
+   if(revision!==trainingAuthorityRevision||!trainingOverlay.snapshot().active)return;
+   if(prewarmed||prewarming)return;
+   const args=['-hide_banner','-loglevel','error','-nostdin','-re','-ss',String(seekMs/1000),'-i',filename,
+     '-t',String(durationMs/1000),'-vn','-f','s16le','-ac','2','-ar','48000','pipe:1'];
+   const child=spawn(ffmpeg,args,{stdio:['ignore','pipe','pipe']});
+   child.stderr.resume();
+   child.stdout.pause();
+   child.on('close',()=>{if(prewarmed?.child===child)prewarmed=null;});
+   if(revision!==trainingAuthorityRevision||!trainingOverlay.snapshot().active){child.kill('SIGTERM');return;}
+   prewarmed={child,assetId:target.id,seekMs,durationMs,scheduledSlotId:choice.cursor.slot?.id||null,
+     scheduledSlotStartMs:choice.cursor.slot?.startAt?Date.parse(choice.cursor.slot.startAt):null,
+     sourceAuthorityConfirmedAt:Date.now(),argsKey:JSON.stringify(args)};
+   console.info('MCHS_RESUME_PREWARM',JSON.stringify({status:'READY',assetId:target.id,mode:choice.cursor.status}));
+  }catch(error){console.warn('MCHS_RESUME_PREWARM',JSON.stringify({status:'FAILED',type:error?.name||'Error'}));}
+ })().finally(()=>{alarmResumeWarmup=null;});
+}
 function invalidateTrainingSource(reason){
  trainingAuthorityRevision++;
- stopDecoder();
+ // Keep only the prepared successor on ALERT exit; all other cached transitions are cleared.
+ if(reason==='RESELECT_CURRENT_AUTHORITY'&&prewarmed){
+  if(decoder){decoder.kill('SIGTERM');decoder=null;}
+ }else stopDecoder();
  lastDecodedSource=null;previousSourcePcmTail=null;shadowOverlap=null;
  reverseReservedTarget=null;reverseReservedShift=null;reverseMixAuthorityAt=null;
  reverseMixAuthorityReservation=null;
@@ -898,6 +935,8 @@ async function run() {
     // ALARM owns the shared encoder clock. Do not select/advance music beneath it.
     // Its PCM is injected by trainingOverlay.replace() into these silent frames.
     if(trainingOverlay.snapshot().active){
+      const remaining=trainingOverlay.snapshot().remainingBytes;
+      if(remaining>0&&remaining<=PCM_BYTES_PER_MS*3000)warmAlarmResume();
       if(!encoder.stdin.write(Buffer.alloc(3840)))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
       await new Promise(resolve=>setTimeout(resolve,20));
       continue;
