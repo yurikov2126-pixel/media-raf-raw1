@@ -23,6 +23,7 @@ import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
+import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
 import {planMissileAlarmTransition} from '../lib/mchsMissileAlarmTransition.js';
@@ -777,6 +778,21 @@ router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
 });
 /** Two-event automatic missile policy preview, with strict source/region/freshness gates.
  * Does not authorize or trigger PA output. */
+/** Review inbox for automatically received missile alert candidates. No playout access. */
+router.get('/missile-automatic-candidates',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const observations=await prisma.safetyMchsEvent.findMany({
+   where:{source:'MCHS_ANDROID'},orderBy:{receivedAt:'desc'},take:100,
+   select:{id:true,title:true,body:true,source:true,sourceEventId:true,
+    region:true,verified:true,occurredAt:true,receivedAt:true}});
+  const candidates=observations.map(event=>({
+   ...classifyAutomaticAlarmCandidate(event),
+   receivedAt:event.receivedAt,occurredAt:event.occurredAt,
+   region:event.region,sourceEventId:event.sourceEventId}));
+  res.set('Cache-Control','no-store').json({candidates,officialVerificationAvailable:false,
+   automaticPlaybackEnabled:false,output:'REVIEW_ONLY'});
+ }catch(error){next(error);}
+});
 router.get('/missile-auto-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const [events,rules,assetRows]=await Promise.all([
