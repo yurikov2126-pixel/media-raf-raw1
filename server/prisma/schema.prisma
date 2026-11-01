@@ -1565,6 +1565,9 @@ model SafetyMchsPlaybackIntent {
   status         String   @default("STAGED")
   attempts       Int      @default(0)
   lastError      String?
+  leaseToken     String?
+  leaseUntil     DateTime?
+  acknowledgedAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   @@index([status, createdAt])
