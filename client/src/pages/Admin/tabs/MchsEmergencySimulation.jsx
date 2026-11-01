@@ -12,6 +12,7 @@ export default function MchsEmergencySimulation({token}){
  const [pcmTrialBusy,setPcmTrialBusy]=useState(false),[pcmTrialResult,setPcmTrialResult]=useState(null);
  const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
  const [transitionPreview,setTransitionPreview]=useState(null);
+ const [bulletinCheck,setBulletinCheck]=useState(null),[bulletinBusy,setBulletinBusy]=useState(false);
  useEffect(()=>{
   let mounted=true;
   const poll=async()=>{try{const result=await api('/safety/mchs-training-sequence/status',{token});
@@ -38,6 +39,23 @@ export default function MchsEmergencySimulation({token}){
   <div className="space-y-1">
    <h3 className="text-lg font-semibold">Учебное переключение основного радиопотока</h3>
    <p className="text-sm text-slate-600 dark:text-slate-300">Отдельный режим: учебная запись заменяет PCM перед общим MP3-кодировщиком. Она может быть слышна и на сайте, и через Windows Agent. Автоматические тревоги МЧС не задействованы.</p>
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+   <h4 className="font-semibold">Сверка сообщений МЧС и региональных публикаций</h4>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Результаты сохраняются в журнале проверки. Совпадение публикаций не разрешает автоматический запуск ALARM.</p>
+   <button type="button" disabled={bulletinBusy} className="rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
+    setBulletinBusy(true);
+    try{const data=await api('/safety/missile-correlation-review/refresh',{token,method:'POST'});setBulletinCheck(data.review);}
+    catch(e){setBulletinCheck({error:e.message||'Нет связи с источником'});}
+    finally{setBulletinBusy(false);}
+   }}>{bulletinBusy?'Сверка…':'Проверить и сохранить сверку'}</button>
+   <button type="button" className="rounded-lg border px-3 py-2 ml-2" onClick={async()=>{
+    try{const data=await api('/safety/missile-correlation-review',{token});setBulletinCheck(data.review);}
+    catch(e){setBulletinCheck({error:e.message});}
+   }}>Последняя проверка</button>
+   {bulletinCheck?.error&&<p role="status" className="text-sm">{bulletinCheck.error}</p>}
+   {bulletinCheck?.counts&&<p role="status" className="text-sm">Совпадений: {bulletinCheck.counts.corroborated} · без публикации: {bulletinCheck.counts.unmatched} · отклонено: {bulletinCheck.counts.rejected} · источник: {bulletinCheck.sourceAvailable?'доступен':'недоступен'}</p>}
+   {bulletinCheck?.items&&<div className="max-h-52 overflow-auto space-y-1 text-xs">{bulletinCheck.items.slice(0,20).map((item,i)=><div key={item.eventId||i} className="rounded-lg bg-slate-100 dark:bg-slate-800 p-2">{item.eventType}: {item.status} · {item.reason||'—'} {item.bulletinUrl&&<a href={item.bulletinUrl} target="_blank" rel="noreferrer" className="underline">Исходная публикация</a>}</div>)}</div>}
   </div>
   <div className="rounded-xl border border-amber-400/70 p-3 space-y-3">
    <h4 className="font-semibold">Учебный цикл: тревога → отбой → обычный эфир</h4>
