@@ -3,14 +3,14 @@
  */
 export const PCM_BYTES_PER_SECOND=48000*2*2;
 export function createTrainingOverlay({pcm,enabled=false}={}){
- let active=false,revision=0,source=pcm||null,position=0,lastStopReason=null;
+ let active=false,revision=0,source=pcm||null,position=0,lastStopReason=null,startedAt=null,finishedAt=null,totalBytes=0;
  const close=()=>{if(source&&typeof source.close==='function')source.close();source=null;};
  const stop=(reason='OPERATOR_STOP')=>{
-  if(active){active=false;revision++;lastStopReason=reason;close();}
+  if(active){active=false;revision++;lastStopReason=reason;finishedAt=new Date().toISOString();close();}
   return snapshot();
  };
  function snapshot(){return {enabled,active,revision,remainingBytes:active?Math.max(0,source.size-position):0,
-  lastStopReason,output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};}
+  lastStopReason,startedAt,finishedAt,totalBytes,playedBytes:active?position:totalBytes,output:active?'SHARED_STATION_ENCODER_TRAINING':'NORMAL_PROGRAM',realEmergencyReady:false};}
  function valid(s){return s&&Number.isSafeInteger(s.size)&&s.size>0&&s.size%4===0&&typeof s.read==='function'&&typeof s.close==='function';}
  const asSource=(buf)=>({size:buf.length,read:(pos,n)=>buf.subarray(pos,pos+n),close:()=>{}});
  return {
@@ -20,7 +20,7 @@ export function createTrainingOverlay({pcm,enabled=false}={}){
    if(active)return {ok:false,reason:'ALREADY_ACTIVE',...snapshot()};
    const next=Buffer.isBuffer(sourcePcm)?asSource(sourcePcm):sourcePcm;
    if(!valid(next))return {ok:false,reason:'INVALID_PCM',...snapshot()};
-   source=next;position=0;lastStopReason=null;active=true;revision++;
+   source=next;position=0;totalBytes=next.size;lastStopReason=null;startedAt=new Date().toISOString();finishedAt=null;active=true;revision++;
    return {ok:true,...snapshot()};
   },
   start(){return this.startWith(source);},
