@@ -1,3 +1,4 @@
+import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJournal,recoverExecutionJournal} from '../lib/mchsExecutionJournal.js';
 import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
@@ -762,6 +763,56 @@ router.get('/missile-alarm-transition-preview',requireRole('ADMIN'),async (_req,
    transitionPlans:intents.map(command=>({id:command.id,eventType:command.eventType,
     ...planMissileAlarmTransition({state:checkpoint.state,activeEventId:checkpoint.lastEventId,command,operatorHold:true})})),
    executionEnabled:false,output:'PREVIEW_ONLY'});
+ }catch(error){next(error);}
+});
+/** Read-only recovery journal; never starts a Worker or grants dispatch. */
+router.get('/missile-execution-journal',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_EXECUTION_JOURNAL_KEY}});
+  let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({journal:normalizeExecutionJournal(saved),
+   dispatchAuthorized:false,automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+/** Persist a HALT marker and try to stop the existing manual training overlay. */
+router.post('/missile-execution-journal/halt',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const journal=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581449)`;
+   const row=await tx.setting.findUnique({where:{key:MCHS_EXECUTION_JOURNAL_KEY}});
+   let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+   const updated=appendExecutionJournal({...normalizeExecutionJournal(saved),state:'HALTED'},
+    {action:'OPERATOR_HALT',reason:'ADMIN_REQUEST'});
+   await tx.setting.upsert({where:{key:MCHS_EXECUTION_JOURNAL_KEY},
+    create:{key:MCHS_EXECUTION_JOURNAL_KEY,value:JSON.stringify(updated)},
+    update:{value:JSON.stringify(updated)}});
+   return updated;
+  });
+  if(mchsTrainingSequenceSession?.status==='RUNNING')mchsTrainingSequenceSession.abort.abort();
+  let workerStop='NOT_CONFIRMED';
+  try{
+   const result=await trainingStreamRequest('STOP');
+   workerStop=result.httpStatus===200&&result.data?.ok?'CONFIRMED':'NOT_CONFIRMED';
+  }catch{/* Persisted hold is authoritative; failed Worker STOP must be visible. */}
+  console.warn('MCHS_EXECUTION_OPERATOR_HALT',JSON.stringify({operatorId:req.user?.id||null,workerStop}));
+  res.status(workerStop==='CONFIRMED'?200:503).set('Cache-Control','no-store').json({
+   journal,workerStop,automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+/** On-demand restart reconciliation. Never resumes a pending ALARM. */
+router.post('/missile-execution-journal/reconcile',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const journal=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581449)`;
+   const row=await tx.setting.findUnique({where:{key:MCHS_EXECUTION_JOURNAL_KEY}});
+   let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+   const updated=recoverExecutionJournal(saved);
+   await tx.setting.upsert({where:{key:MCHS_EXECUTION_JOURNAL_KEY},
+    create:{key:MCHS_EXECUTION_JOURNAL_KEY,value:JSON.stringify(updated)},
+    update:{value:JSON.stringify(updated)}});
+   return updated;
+  });
+  res.set('Cache-Control','no-store').json({journal,automaticPlaybackEnabled:false});
  }catch(error){next(error);}
 });
 router.get('/missile-execution-control',requireRole('ADMIN'),async (_req,res,next)=>{
