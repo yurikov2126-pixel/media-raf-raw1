@@ -25,6 +25,7 @@ import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGat
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
 import {planMissileAlarmTransition} from '../lib/mchsMissileAlarmTransition.js';
+import {runIsolatedMissileAlarmPcmTrial} from '../lib/mchsMissileIsolatedPcmTrial.js';
 import {MCHS_EXECUTION_POLICY_KEY,normalizeMchsExecutionPolicy,assessMchsExecutionReadiness} from '../lib/mchsExecutionControl.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
@@ -659,6 +660,13 @@ router.post('/missile-transport-smoke',requireRole('ADMIN'),async (req,res)=>{
 });
 /** Unified operational status. Fail-closed and read-only for all real playout. */
 /** Preview transition priority and schedule resume, without authorizing real alarm audio. */
+/** Actual PCM engine integration in isolated memory, not live radio. */
+router.post('/missile-alarm-pcm-trial',requireRole('ADMIN'),(_req,res)=>{
+ const music=Buffer.alloc(7680,17),danger=Buffer.alloc(7680,36),clear=Buffer.alloc(7680,72);
+ const result=runIsolatedMissileAlarmPcmTrial({music,danger,clear});
+ console.info('MCHS_ISOLATED_PCM_TRIAL',JSON.stringify({ok:result.ok,resumedNormalPcm:result.resumedNormalPcm,executionEnabled:false}));
+ res.status(result.ok?200:503).set('Cache-Control','no-store').json(result);
+});
 router.get('/missile-alarm-transition-preview',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const [checkpointRow,intents]=await Promise.all([
