@@ -4,6 +4,7 @@ import http from 'node:http';
 import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {trainingStreamRequest} from '../lib/mchsTrainingStreamProxy.js';
+import {runTrainingSequence} from '../lib/mchsTrainingSequence.js';
 import {sendMchsDryRunReceipt} from '../lib/mchsWorkerReceiptProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
@@ -72,6 +73,29 @@ router.use(auth);
 router.get('/mchs-training-stream/assets',requireRole('ADMIN'),async (_req,res,next)=>{
  try{const assets=await prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true,name:true,durationMs:true},orderBy:{createdAt:'desc'},take:200});res.set('Cache-Control','no-store').json({assets});}
  catch(error){next(error);}
+});
+/** Operator-confirmed real-stream training ONLY; never called by ingestion or automation. */
+let mchsTrainingSequenceBusy=false;
+router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res)=>{
+ if(req.body?.confirmation!=='TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED')
+  return res.status(400).json({error:'EXPLICIT_CONFIRMATION_REQUIRED'});
+ const {dangerAssetId,clearAssetId}=req.body||{};
+ if(typeof dangerAssetId!=='string'||typeof clearAssetId!=='string'||dangerAssetId===clearAssetId)
+  return res.status(400).json({error:'INVALID_ASSET_SELECTION'});
+ const assets=await prisma.radioAsset.findMany({where:{id:{in:[dangerAssetId,clearAssetId]},category:'ALARM',
+  mimeType:{startsWith:'audio/'}},select:{id:true}});
+ if(assets.length!==2)return res.status(400).json({error:'ALARM_ASSET_NOT_FOUND'});
+ if(mchsTrainingSequenceBusy)return res.status(409).json({error:'TRAINING_SEQUENCE_BUSY'});
+ mchsTrainingSequenceBusy=true;
+ const abort=new globalThis.AbortController();
+ const disconnect=()=>{if(!res.writableFinished)abort.abort();};
+ res.on('close',disconnect);
+ try{
+  const result=await runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
+   signal:abort.signal,pollMs:750,maxWaitMs:120000});
+  console.info('MCHS_MANUAL_AUDIO_SEQUENCE',JSON.stringify({operatorId:req.user?.id||null,ok:result.ok,reason:result.reason}));
+  if(!res.destroyed)res.status(result.ok?200:409).set('Cache-Control','no-store').json({...result,automaticPlaybackEnabled:false});
+ }finally{res.off('close',disconnect);mchsTrainingSequenceBusy=false;}
 });
 router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
  try{const r=await trainingStreamRequest();res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
