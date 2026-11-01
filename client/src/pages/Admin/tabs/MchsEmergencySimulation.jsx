@@ -6,6 +6,7 @@ export default function MchsEmergencySimulation({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
  const [dangerAssetId,setDangerAssetId]=useState(''),[clearAssetId,setClearAssetId]=useState('');
+ const [dangerRepeats,setDangerRepeats]=useState(1),[repeatSaving,setRepeatSaving]=useState(false),[repeatMessage,setRepeatMessage]=useState('');
  const [sequenceBusy,setSequenceBusy]=useState(false),[sequenceResult,setSequenceResult]=useState(null);
  const [sequenceSession,setSequenceSession]=useState(null);
  const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
@@ -24,6 +25,7 @@ export default function MchsEmergencySimulation({token}){
   try{setStatus(await api('/safety/mchs-training-stream',{token}));setError('');}
   catch(e){setError(e.message||'Нет связи с Radio Worker');}
  };
+ useEffect(()=>{api('/safety/mchs-alarm-repeats',{token}).then(data=>setDangerRepeats(data.dangerRepeats)).catch(()=>setRepeatMessage('Не удалось загрузить настройку повторов'));},[token]);
  useEffect(()=>{api('/safety/mchs-training-stream/assets',{token}).then(data=>setAssets(data.assets||[])).catch(()=>setError('Не удалось загрузить категорию ALARM'));},[token]);
  useEffect(()=>{api('/safety/missile-execution-control',{token}).then(setExecutionControl).catch(()=>{});
   api('/safety/missile-alarm-transition-preview',{token}).then(setTransitionPreview).catch(()=>{});},[token]);
@@ -60,6 +62,18 @@ export default function MchsEmergencySimulation({token}){
   <div className="rounded-xl border border-amber-400/70 p-3 space-y-3">
    <h4 className="font-semibold">Учебный цикл: тревога → отбой → обычный эфир</h4>
    <p className="text-sm text-amber-700 dark:text-amber-300">Внимание: записи действительно прозвучат в ОСНОВНОМ радиопотоке. До запуска физически отключите громкоговорители, предупредите слушателей и используйте только записи с отчётливой пометкой «Учебная тревога».</p>
+   <div className="rounded-lg border p-3 space-y-2">
+    <label className="block text-sm font-medium" htmlFor="mchs-danger-repeats">Повторений записи «Ракетная опасность»</label>
+    <select id="mchs-danger-repeats" className="rounded-lg border p-2 bg-white text-slate-900 dark:bg-slate-900 dark:text-white" value={dangerRepeats} onChange={e=>{setDangerRepeats(Number(e.target.value));setRepeatMessage('Изменения не сохранены');}}>
+     {[1,2,3,4,5].map(n=><option key={n} value={n}>{n} {n===1?'раз':'раз(а)'}</option>)}
+    </select>
+    <button type="button" disabled={repeatSaving} className="ml-2 rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
+     setRepeatSaving(true);try{await api('/safety/mchs-alarm-repeats',{token,method:'PUT',body:{dangerRepeats}});setRepeatMessage('Повторения сохранены');}
+     catch(e){setRepeatMessage(e.message||'Ошибка сохранения');}finally{setRepeatSaving(false);}
+    }}>Сохранить повторы</button>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Настройка применяется к следующему учебному циклу. Отбой звучит один раз. Реальная автоматическая трансляция остаётся отключённой.</p>
+    {repeatMessage&&<p role="status" className="text-xs">{repeatMessage}</p>}
+   </div>
    <label className="block text-sm">Учебная тревога
     <select className="mt-1 w-full rounded-lg border p-2 bg-white text-slate-900 dark:bg-slate-900 dark:text-white" value={dangerAssetId} onChange={e=>setDangerAssetId(e.target.value)}>
      <option value="">Выбрать файл ALARM</option>
