@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {createMchsCommandReceiptStore} from '../src/lib/mchsCommandReceiptStore.js';
 import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
 /**
  * Opt-in station playout worker: one persistent MP3 encoder, shared live output.
@@ -2025,7 +2026,20 @@ async function run() {
 
 const mchsWorkerLabSession=createWorkerMchsLabSession();
 const mchsLabFixtures=createMchsLabFixtureStore();
+const mchsCommandReceipts=createMchsCommandReceiptStore();
 const server=http.createServer((req,res)=>{
+  if(req.url==='/mchs-command-receipt' && req.method==='POST'){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    let raw='';
+    req.on('data',part=>{raw+=part;if(raw.length>1024)req.destroy();});
+    req.on('end',()=>{
+      let payload;try{payload=JSON.parse(raw);}catch{res.writeHead(400).end();return;}
+      const result=mchsCommandReceipts.receive(payload);
+      console.info('MCHS_WORKER_DRY_RUN_RECEIPT',JSON.stringify({commandId:result.receipt?.commandId||null,accepted:result.ok,duplicate:result.duplicate||false}));
+      res.writeHead(result.ok?200:400,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify({...result,executionEnabled:false}));
+    });return;
+  }
   if(req.url==='/mchs-training-stream' && ['GET','POST'].includes(req.method)){
     if(!authorized(req)){res.writeHead(403).end();return;}
     if(req.method==='GET'){
