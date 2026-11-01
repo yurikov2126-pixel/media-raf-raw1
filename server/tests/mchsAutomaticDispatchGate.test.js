@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {decideAutomaticMchsEvent as decide} from '../src/lib/mchsAutomaticDispatchGate.js';
+const event={sourceEventId:'evt-123',title:'Ракетная опасность',body:'Объявлена ракетная опасность',region:'Тульская область',occurredAt:'2026-11-01T12:00:00Z'};
+const asset={id:'alarm1',category:'ALARM',mimeType:'audio/mpeg'};
+const common={event,asset,rule:{mode:'AUTO',audioAssetId:'alarm1'},provenance:{officialVerified:true,verifiedSourceEventId:'evt-123'},enabled:true,nowMs:Date.parse(event.occurredAt)+1000};
+test('transport-only messages cannot authorize public alert',()=>{assert.equal(decide({...common,provenance:{officialVerified:false}}).action,'BLOCK');});
+test('disabled by default',()=>{assert.equal(decide({...common,enabled:false}).action,'BLOCK');});
+test('fresh authenticated confirmed event is a candidate decision, not a dispatched command',()=>{const x=decide(common);assert.equal(x.action,'START');assert.equal(x.executable,false);});
+test('duplicates and old alerts are blocked',()=>{assert.equal(decide({...common,seenIds:new Set(['evt-123'])}).action,'BLOCK');assert.equal(decide({...common,nowMs:Date.parse(event.occurredAt)+130000}).action,'BLOCK');});
+test('all-clear can only stop matching incident',()=>{const clear={...event,sourceEventId:'clear1',title:'Отбой ракетной опасности'};const provenance={officialVerified:true,verifiedSourceEventId:'clear1'};assert.equal(decide({...common,event:clear,provenance}).action,'BLOCK');assert.equal(decide({...common,event:clear,provenance,activeIncident:{hazard:'MISSILE'}}).action,'STOP');});
