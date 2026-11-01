@@ -556,6 +556,20 @@ router.post('/missile-auto-intents/expire',requireRole('ADMIN'),async (_req,res,
  }catch(error){next(error);}
 });
 /** Administrative protocol rehearsal only: no Worker transport, no sound output. */
+/** Reconcile expired leases to a terminal state; never replay after expiry. */
+router.post('/missile-auto-intents/reconcile-leases',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const changed=await tx.safetyMchsPlaybackIntent.updateMany({
+    where:{status:'LEASED',leaseUntil:{lt:new Date()}},
+    data:{status:'EXPIRED',lastError:'LEASE_EXPIRED',leaseToken:null,leaseUntil:null}
+   });
+   return {expiredCount:changed.count,executionEnabled:false};
+  });
+  res.set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
 router.post('/missile-auto-intents/:id/claim',requireRole('ADMIN'),async (req,res,next)=>{
  try{
   const result=await prisma.$transaction(async tx=>{
