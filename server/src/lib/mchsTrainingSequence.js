@@ -1,7 +1,8 @@
+import {planAlarmSequence,normalizeDangerRepeats} from './mchsAlarmRepeats.js';
 /** Explicit operator-run training sequence on existing PCM training overlay.
  * Always stops on failure; never runs from MCHS events.
  */
-export async function runTrainingSequence({dangerAssetId,clearAssetId,request,signal,onProgress=()=>{},pollMs=500,maxWaitMs=300000}={}){
+export async function runTrainingSequence({dangerAssetId,clearAssetId,request,signal,onProgress=()=>{},pollMs=500,maxWaitMs=300000,dangerRepeats=1}={}){
  if(!dangerAssetId||!clearAssetId||dangerAssetId===clearAssetId||typeof request!=='function')
   return {ok:false,reason:'INVALID_TRAINING_ASSETS'};
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -9,9 +10,9 @@ export async function runTrainingSequence({dangerAssetId,clearAssetId,request,si
  try{
   const initial=await request();
   if(initial.httpStatus!==200||initial.data?.active)return {ok:false,reason:'WORKER_BUSY'};
-  for(const [stage,assetId] of [['DANGER',dangerAssetId],['ALL_CLEAR',clearAssetId]]){
+  for(const {stage,assetId,repetition,total} of planAlarmSequence({dangerAssetId,clearAssetId,dangerRepeats:normalizeDangerRepeats(dangerRepeats)})){
    if(signal?.aborted)throw new Error('CANCELLED');
-   onProgress({stage,status:'STARTING'});
+   onProgress({stage,status:'STARTING',repetition,total});
    const start=await request('START',assetId);
    if(start.httpStatus!==200||!start.data?.ok)throw new Error('START_FAILED_'+stage);
    started=true;
@@ -34,7 +35,7 @@ export async function runTrainingSequence({dangerAssetId,clearAssetId,request,si
    }
    if(!finished)throw new Error('TIMEOUT_'+stage);
    started=false;
-   onProgress({stage,status:'COMPLETED'});
+   onProgress({stage,status:'COMPLETED',repetition,total});
   }
   return {ok:true,reason:'SEQUENCE_COMPLETED',normalProgramExpected:true};
  }catch(error){
