@@ -788,6 +788,7 @@ router.post('/missile-execution-journal/halt',requireRole('ADMIN'),async (req,re
     update:{value:JSON.stringify(updated)}});
    return updated;
   });
+  if(mchsTrainingSequenceSession?.status==='RUNNING')mchsTrainingSequenceSession.abort.abort();
   let workerStop='NOT_CONFIRMED';
   try{
    const result=await trainingStreamRequest('STOP');
