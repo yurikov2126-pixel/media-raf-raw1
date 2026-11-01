@@ -509,6 +509,7 @@ router.post('/missile-auto-intents/stage',requireRole('ADMIN'),async (_req,res,n
  try{
   const result=await prisma.$transaction(async tx=>{
    await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   await tx.safetyMchsPlaybackIntent.updateMany({where:{status:'STAGED',createdAt:{lte:new Date(Date.now()-120000)}},data:{status:'EXPIRED',lastError:'STALE_INTENT'}});
    const [stateRow,ruleRow,events,assets]=await Promise.all([
     tx.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
     tx.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
