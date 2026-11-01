@@ -6,7 +6,6 @@ import MchsEventTypeRules from './MchsEventTypeRules.jsx';
 import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
 import MchsOperationalOverview from './MchsOperationalOverview.jsx';
-import MchsAnalytics from './MchsAnalytics.jsx';
 import MchsEmergencySimulation from './MchsEmergencySimulation.jsx';
 import MchsDeliveryReliability from './MchsDeliveryReliability.jsx';
 import { api } from '../../../api/client.js';
@@ -26,18 +25,16 @@ export default function SafetyMchs({ token }) {
 
   const panes = [
     ['overview', 'Обзор'],
-    ['delivery', 'Android и доставка'],
-    ['reliability', 'Надёжность доставки'],
-    ['queue', 'Очередь и анализ'],
-    ['incidents', 'Неисправности'],
     ['events', 'Уведомления'],
-    ['analytics', 'Аналитика'],
-    ['simulation', 'Симулятор эфира'],
-    ['rules', 'Правила и сценарии'],
+    ['delivery', 'Доставка и неисправности'],
+    ['simulation', 'Управление эфиром'],
+    ['rules', 'Правила ALARM'],
     ['settings', 'Настройки'],
   ];
+  const legacyPaneMap={reliability:'delivery',queue:'delivery',incidents:'delivery',analytics:'overview'};
   const selectedPane = searchParams.get('mchsView');
-  const pane = searchParams.has('incident') ? 'incidents' : panes.some(([id]) => id === selectedPane) ? selectedPane : 'overview';
+  const requestedPane=legacyPaneMap[selectedPane]||selectedPane;
+  const pane = searchParams.has('incident') ? 'delivery' : panes.some(([id]) => id === requestedPane) ? requestedPane : 'overview';
   const switchPane = (next,incidentId) => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', 'safety-mchs');
@@ -60,7 +57,7 @@ export default function SafetyMchs({ token }) {
   };
   return <div data-mchs-theme={resolved} className="mchs-admin-workspace space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · этап 1: подготовка, без автоматического запуска</p>
+      <p className="text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · управление и диагностика</p>
       <button type="button" onClick={load} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-white/10">Обновить состояние</button>
     </div>
     <div role="status" className="mchs-safety-banner rounded-2xl border border-amber-400/40 bg-amber-100/60 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100 p-4">
@@ -76,7 +73,7 @@ export default function SafetyMchs({ token }) {
     </nav>
     <div className="flex items-center justify-between gap-2">
       <h2 className="text-xl font-semibold">{panes.find(([id])=>id===pane)?.[1]}</h2>
-      <span className="text-xs text-slate-500 dark:text-white/50">Диагностика · без запуска эфира</span>
+      <span className="text-xs text-slate-500 dark:text-white/50">Учебный ALARM доступен · автоматический эфир выключен</span>
     </div>
     {pane === "settings" && <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
       <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
@@ -108,10 +105,10 @@ export default function SafetyMchs({ token }) {
       </>}
     </section>}
     {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
-    {pane === 'analytics' && <MchsAnalytics token={token} />}
+    
     {pane === 'simulation' && <MchsEmergencySimulation token={token} />}
-    {pane === 'reliability' && <MchsDeliveryReliability token={token} onOpen={switchPane} />}
-    {(pane === 'delivery' || pane === 'queue' || pane === 'incidents') && <MchsQueueMonitor token={token} view={pane} />}
+    
+    {pane === 'delivery' && <div className="space-y-4"><MchsDeliveryReliability token={token} onOpen={switchPane}/><MchsQueueMonitor token={token} view={searchParams.has('incident')?'incidents':'delivery'}/><MchsQueueMonitor token={token} view="queue"/></div>}
 
     {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />}
     {pane === "rules" && data && <div className="space-y-4">
