@@ -831,7 +831,7 @@ router.get('/missile-official-bulletins',requireRole('ADMIN'),async (_req,res)=>
    playbackAuthorized:false,output:'REVIEW_ONLY'});
  }catch(error){
   res.status(503).set('Cache-Control','no-store').json({source:REGIONAL_OFFICIAL_FEED_URL,
-   error:'OFFICIAL_BULLETIN_UNAVAILABLE',reason:error.message,playbackAuthorized:false});
+   error:'OFFICIAL_BULLETIN_UNAVAILABLE',reason:error.message,playbackAuthorized:false,sourcePlatform:'MAX'});
  }
 });
 router.get('/missile-automatic-candidates',requireRole('ADMIN'),async (_req,res,next)=>{
