@@ -24,6 +24,7 @@ import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassifica
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
+import {planMissileAlarmTransition} from '../lib/mchsMissileAlarmTransition.js';
 import {MCHS_EXECUTION_POLICY_KEY,normalizeMchsExecutionPolicy,assessMchsExecutionReadiness} from '../lib/mchsExecutionControl.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
@@ -657,6 +658,22 @@ router.post('/missile-transport-smoke',requireRole('ADMIN'),async (req,res)=>{
  }
 });
 /** Unified operational status. Fail-closed and read-only for all real playout. */
+/** Preview transition priority and schedule resume, without authorizing real alarm audio. */
+router.get('/missile-alarm-transition-preview',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [checkpointRow,intents]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
+   prisma.safetyMchsPlaybackIntent.findMany({orderBy:{createdAt:'desc'},take:15,
+    select:{id:true,eventId:true,eventType:true,audioAssetId:true,status:true,createdAt:true}})
+  ]);
+  let state;try{state=JSON.parse(checkpointRow?.value||'null');}catch{}
+  const checkpoint=normalizeMissileCheckpoint(state);
+  res.set('Cache-Control','no-store').json({checkpoint,
+   transitionPlans:intents.map(command=>({id:command.id,eventType:command.eventType,
+    ...planMissileAlarmTransition({state:checkpoint.state,activeEventId:checkpoint.lastEventId,command,operatorHold:true})})),
+   executionEnabled:false,output:'PREVIEW_ONLY'});
+ }catch(error){next(error);}
+});
 router.get('/missile-execution-control',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const [policyRow,checkpointRow,intents]=await Promise.all([
