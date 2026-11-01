@@ -6,6 +6,7 @@ export default function MchsEmergencySimulation({token}){
  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [assets,setAssets]=useState([]),[assetId,setAssetId]=useState('');
  const [transportBusy,setTransportBusy]=useState(false),[transportResult,setTransportResult]=useState(null);
+ const [pcmTrialBusy,setPcmTrialBusy]=useState(false),[pcmTrialResult,setPcmTrialResult]=useState(null);
  const [executionControl,setExecutionControl]=useState(null),[holdBusy,setHoldBusy]=useState(false);
  const [transitionPreview,setTransitionPreview]=useState(null);
  const refresh=async()=>{
@@ -68,6 +69,17 @@ export default function MchsEmergencySimulation({token}){
     <p className="font-semibold">Последние команды</p>
     {executionControl.recentIntents.slice(0,5).map(item=><p key={item.id}>{item.eventType} · {item.status}</p>)}
    </div>}
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+   <h4 className="font-semibold">Тревога → Отбой → Возврат к музыке (изолированный PCM-тест)</h4>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Проверяет существующий PCM-движок в памяти API на синтетических аудиокадрах. Общий эфир и усилитель не затрагиваются.</p>
+   <button type="button" disabled={pcmTrialBusy} className="rounded-lg border px-3 py-2 disabled:opacity-50" onClick={async()=>{
+    setPcmTrialBusy(true);setPcmTrialResult(null);
+    try{setPcmTrialResult(await api('/safety/missile-alarm-pcm-trial',{token,method:'POST'}));}
+    catch(e){setPcmTrialResult({ok:false,reason:e.message||'Ошибка PCM'});}
+    finally{setPcmTrialBusy(false);}
+   }}>{pcmTrialBusy?'Проверка…':'Проверить переходы ALARM без звука'}</button>
+   {pcmTrialResult&&<p role="status" className="text-sm">{pcmTrialResult.ok&&pcmTrialResult.resumedNormalPcm?'Тест успешен: тревога, отбой и возврат к исходному PCM проверены.':'Тест не прошёл: '+(pcmTrialResult.reason||'Проверьте API')}</p>}
   </div>
   <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
    <h4 className="font-semibold">Проверка доставки команд МЧС (без звука)</h4>
