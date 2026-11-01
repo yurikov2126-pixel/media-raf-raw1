@@ -1555,3 +1555,17 @@ model SafetyMchsTechnicalIncident {
   @@index([openedAt])
   @@index([kind, resolvedAt])
 }
+
+/** Durable command intent, deliberately not authorized for automatic playback. */
+model SafetyMchsPlaybackIntent {
+  id             String   @id @default(cuid())
+  eventId        String   @unique
+  eventType      String
+  audioAssetId   String
+  status         String   @default("STAGED")
+  attempts       Int      @default(0)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([status, createdAt])
+}
