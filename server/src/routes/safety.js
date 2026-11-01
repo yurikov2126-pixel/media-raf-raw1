@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
 import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
@@ -552,6 +553,54 @@ router.post('/missile-auto-intents/expire',requireRole('ADMIN'),async (_req,res,
    return {expiredCount:changed.count};
   });
   res.set('Cache-Control','no-store').json({...result,executionEnabled:false});
+ }catch(error){next(error);}
+});
+/** Administrative protocol rehearsal only: no Worker transport, no sound output. */
+/** Reconcile expired leases to a terminal state; never replay after expiry. */
+router.post('/missile-auto-intents/reconcile-leases',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const changed=await tx.safetyMchsPlaybackIntent.updateMany({
+    where:{status:'LEASED',leaseUntil:{lt:new Date()}},
+    data:{status:'EXPIRED',lastError:'LEASE_EXPIRED',leaseToken:null,leaseUntil:null}
+   });
+   return {expiredCount:changed.count,executionEnabled:false};
+  });
+  res.set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
+router.post('/missile-auto-intents/:id/claim',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const row=await tx.safetyMchsPlaybackIntent.findUnique({where:{id:req.params.id}});
+   if(!row||row.status!=='STAGED')return {ok:false,reason:'NOT_STAGED'};
+   if(!['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(row.eventType))return {ok:false,reason:'TYPE_NOT_ALLOWED'};
+   if(Date.now()-row.createdAt.getTime()>=120000)return {ok:false,reason:'STALE_INTENT'};
+   const token=crypto.randomBytes(24).toString('hex');
+   const updated=await tx.safetyMchsPlaybackIntent.update({where:{id:row.id},
+    data:{status:'LEASED',leaseToken:token,leaseUntil:new Date(Date.now()+15000),attempts:{increment:1}}});
+   return {ok:true,id:updated.id,leaseToken:token,leaseUntil:updated.leaseUntil,
+    executionEnabled:false,output:'DRY_RUN'};
+  });
+  res.status(result.ok?200:409).set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
+router.post('/missile-auto-intents/:id/ack',requireRole('ADMIN'),async(req,res,next)=>{
+ try{
+  const token=req.body?.leaseToken;
+  if(typeof token!=='string'||!/^[a-f0-9]{48}$/.test(token))return res.status(400).json({error:'INVALID_LEASE_TOKEN'});
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
+   const row=await tx.safetyMchsPlaybackIntent.findUnique({where:{id:req.params.id}});
+   if(!row||row.status!=='LEASED'||row.leaseToken!==token)return {ok:false,reason:'INVALID_LEASE'};
+   if(!row.leaseUntil||row.leaseUntil.getTime()<Date.now())return {ok:false,reason:'LEASE_EXPIRED'};
+   const updated=await tx.safetyMchsPlaybackIntent.update({where:{id:row.id},
+    data:{status:'ACKED_DRY_RUN',acknowledgedAt:new Date(),leaseToken:null,leaseUntil:null}});
+   return {ok:true,id:updated.id,status:updated.status,executionEnabled:false};
+  });
+  res.status(result.ok?200:409).set('Cache-Control','no-store').json(result);
  }catch(error){next(error);}
 });
 router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
