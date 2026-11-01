@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {createAlarmPcmClock} from '../src/lib/mchsAlarmPcmClock.js';
 import {createMissileAlarmExecutorGuard} from '../src/lib/mchsMissileAlarmExecutorGuard.js';
 import {createMchsCommandReceiptStore} from '../src/lib/mchsCommandReceiptStore.js';
 import {createMchsLabFixtureStore} from '../src/lib/mchsLabFixtureStore.js';
@@ -932,16 +933,28 @@ async function emitHourlySignalAtSafeBoundary(){
  console.info('RADIO_HOURLY_SIGNAL_PCM',JSON.stringify(state.hourlySignal.last));
 }
 async function run() {
+  const alarmPcmClock=createAlarmPcmClock();
+  let alarmClockActive=false,lastAlarmGapLogAt=0;
   startEncoder();
   while(!stopping) {
     // ALARM owns the shared encoder clock. Do not select/advance music beneath it.
     // Its PCM is injected by trainingOverlay.replace() into these silent frames.
     if(trainingOverlay.snapshot().active){
+      if(!alarmClockActive){alarmPcmClock.reset();alarmClockActive=true;lastAlarmGapLogAt=0;}
+      await alarmPcmClock.pace();
       const remaining=trainingOverlay.snapshot().remainingBytes;
       if(remaining>0&&remaining<=PCM_BYTES_PER_MS*3000)warmAlarmResume();
       if(!encoder.stdin.write(Buffer.alloc(3840)))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
-      await new Promise(resolve=>setTimeout(resolve,20));
+      const report=alarmPcmClock.snapshot();
+      if(report.gaps&&Date.now()-lastAlarmGapLogAt>10000){
+        lastAlarmGapLogAt=Date.now();
+        console.warn('MCHS_ALARM_PCM_CLOCK',JSON.stringify(report));
+      }
       continue;
+    }
+    if(alarmClockActive){
+      console.info('MCHS_ALARM_PCM_CLOCK_FINAL',JSON.stringify(alarmPcmClock.snapshot()));
+      alarmClockActive=false;
     }
     if(publicLive.onAir){
       reverseReservedTarget=null;reverseMixAuthorityAt=null;
