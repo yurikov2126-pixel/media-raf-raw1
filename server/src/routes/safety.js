@@ -19,6 +19,7 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
+import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
@@ -447,6 +448,35 @@ router.put('/dispatch-mode', requireRole('ADMIN'), async (req, res, next) => {
 });
 
 
+/** Two-event automatic missile policy preview, with strict source/region/freshness gates.
+ * Does not authorize or trigger PA output. */
+router.get('/missile-auto-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [events,rules,assetRows]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({orderBy:[{receivedAt:'asc'},{id:'asc'}],take:200,
+    select:{id:true,source:true,sourceEventId:true,title:true,body:true,region:true,verified:true,occurredAt:true,receivedAt:true}}),
+   getTypeRules(),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true,name:true}})
+  ]);
+  const assets=new Map(assetRows.map(a=>[a.id,a.name]));
+  const seen=new Set();let missileState='CLEAR';
+  const decisions=events.map(event=>{
+   let result=assessMissileAutoEvent(event,{rules,seenIds:seen});
+   if(event.sourceEventId)seen.add(event.sourceEventId);
+   if(result.eligible&&!assets.has(result.audioAssetId))
+    result={...result,eligible:false,reason:'ALARM_AUDIO_MISSING',audioAssetId:null};
+   if(result.eligible){
+    const transition=missileNextState(missileState,result.eventType);
+    if(transition.accepted)missileState=transition.state;
+    else result={...result,eligible:false,reason:transition.reason,audioAssetId:null};
+   }
+   return {...result,receivedAt:event.receivedAt};
+  });
+  res.set('Cache-Control','no-store').json({types:['MISSILE_DANGER','MISSILE_ALL_CLEAR'],
+   automaticPlaybackEnabled:false,output:'DECISION_ONLY',state:missileState,
+   blockedCount:decisions.filter(d=>!d.eligible).length,decisions:decisions.slice(-50).reverse()});
+ }catch(error){next(error);}
+});
 /** Read-only what-would-happen preview: no playback and no dispatch writes. */
 router.get('/dispatch-preview', canView, async (_req, res, next) => {
   try {
