@@ -21,6 +21,7 @@ import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
+import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
 import { inspectMchsObservationOrder } from '../lib/mchsObservationOrder.js';
 import { assessMchsQueueObservation } from '../lib/mchsQueueAssessment.js';
 
@@ -480,6 +481,27 @@ router.post('/missile-auto-checkpoint/reconcile',requireRole('ADMIN'),async (_re
    return {...evaluated,decisions:evaluated.decisions.slice(-30)};
   });
   res.set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
+/** Read-only command preview. Nothing is sent to the Worker or amplifier. */
+router.get('/missile-auto-playback-plan',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [stateRow,ruleRow,events,assets]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
+   prisma.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID',verified:true},
+    orderBy:[{occurredAt:'asc'},{id:'asc'}],take:200,
+    select:{id:true,source:true,sourceEventId:true,title:true,body:true,region:true,verified:true,occurredAt:true}}),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true}})
+  ]);
+  let checkpoint,storedRules;
+  try{checkpoint=JSON.parse(stateRow?.value||'null');}catch{}
+  try{storedRules=JSON.parse(ruleRow?.value||'{}');}catch{}
+  const rules=Object.fromEntries(MCHS_EVENT_TYPES.map(type=>[type.id,{...emptyTypeRule(),...(storedRules?.[type.id]||{})}]));
+  const evaluated=advanceMissileCheckpoint(normalizeMissileCheckpoint(checkpoint),events,{
+   rules,assets:new Set(assets.map(a=>a.id))});
+  res.set('Cache-Control','no-store').json({...planMissilePlayback(evaluated.decisions),
+   checkpoint:evaluated.checkpoint,blocked:evaluated.decisions.filter(d=>!d.eligible).map(d=>({eventId:d.eventId,reason:d.reason})).slice(-30)});
  }catch(error){next(error);}
 });
 /** Two-event automatic missile policy preview, with strict source/region/freshness gates.
