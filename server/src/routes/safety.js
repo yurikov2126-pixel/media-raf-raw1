@@ -24,6 +24,7 @@ import { hasPermission } from '../lib/roles.js';
 import { classifyMchsObservation, MCHS_EVENT_TYPES } from '../lib/mchsClassification.js';
 import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGate.js';
 import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
+import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {MISSILE_CHECKPOINT_KEY,emptyMissileCheckpoint,normalizeMissileCheckpoint,advanceMissileCheckpoint} from '../lib/mchsMissileCheckpoint.js';
 import {planMissilePlayback} from '../lib/mchsMissilePlaybackPlan.js';
 import {planMissileAlarmTransition} from '../lib/mchsMissileAlarmTransition.js';
@@ -779,6 +780,18 @@ router.get('/missile-auto-intents',requireRole('ADMIN'),async (_req,res,next)=>{
 /** Two-event automatic missile policy preview, with strict source/region/freshness gates.
  * Does not authorize or trigger PA output. */
 /** Review inbox for automatically received missile alert candidates. No playout access. */
+/** Public government bulletin cross-check; read-only, never authorizes broadcast. */
+router.get('/missile-official-bulletins',requireRole('ADMIN'),async (_req,res)=>{
+ try{
+  const bulletins=await fetchRegionalOfficialFeed();
+  res.set('Cache-Control','no-store').json({source:REGIONAL_OFFICIAL_FEED_URL,
+   bulletins,sourceAuthentication:'PUBLIC_CHANNEL_ONLY',dispatchAuthority:false,
+   playbackAuthorized:false,output:'REVIEW_ONLY'});
+ }catch(error){
+  res.status(503).set('Cache-Control','no-store').json({source:REGIONAL_OFFICIAL_FEED_URL,
+   error:'OFFICIAL_BULLETIN_UNAVAILABLE',reason:error.message,playbackAuthorized:false});
+ }
+});
 router.get('/missile-automatic-candidates',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const observations=await prisma.safetyMchsEvent.findMany({
