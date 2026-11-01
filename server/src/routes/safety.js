@@ -508,7 +508,7 @@ router.get('/missile-auto-playback-plan',requireRole('ADMIN'),async (_req,res,ne
 router.post('/missile-auto-intents/stage',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const result=await prisma.$transaction(async tx=>{
-   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581440)`;
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581439)`;
    const [stateRow,ruleRow,events,assets]=await Promise.all([
     tx.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
     tx.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
