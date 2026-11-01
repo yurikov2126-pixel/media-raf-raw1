@@ -1,3 +1,4 @@
+import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
 import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroidEventId} from '../lib/mchsExecutionRecovery.js';
 import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJournal,recoverExecutionJournal} from '../lib/mchsExecutionJournal.js';
@@ -999,6 +1000,21 @@ router.get('/missile-android-playback-preview',requireRole('ADMIN'),async (_req,
   const previews=events.map(event=>planMchsAndroidAlarmEvent({event,checkpoint,settings}));
   res.set('Cache-Control','no-store').json({settings,previews,
    dispatchAuthorized:false,automaticPlaybackEnabled:false,mode:'PREVIEW_ONLY'});
+ }catch(error){next(error);}
+});
+/** Replay recent Android MCHS events as a dry-run: never sends commands to Radio Worker. */
+router.get('/missile-automatic-execution-dry-run',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [events,rules,repeatRow]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},orderBy:{occurredAt:'desc'},take:100,
+    select:{id:true,sourceEventId:true,eventType:true,title:true,body:true,source:true,
+     verified:true,occurredAt:true,region:true}}),
+   getTypeRules(),prisma.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}})
+  ]);
+  const observations=events.map(e=>({...e,eventType:classifyMchsObservation(e.title,e.body)}));
+  const plan=buildMchsDryRunExecution({observations,rules,
+   dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
+  res.set('Cache-Control','no-store').json(plan);
  }catch(error){next(error);}
 });
 router.get('/missile-android-monitor',requireRole('ADMIN'),async (_req,res,next)=>{
