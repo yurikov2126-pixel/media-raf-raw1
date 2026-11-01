@@ -895,6 +895,13 @@ async function emitHourlySignalAtSafeBoundary(){
 async function run() {
   startEncoder();
   while(!stopping) {
+    // ALARM owns the shared encoder clock. Do not select/advance music beneath it.
+    // Its PCM is injected by trainingOverlay.replace() into these silent frames.
+    if(trainingOverlay.snapshot().active){
+      if(!encoder.stdin.write(Buffer.alloc(3840)))await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+      await new Promise(resolve=>setTimeout(resolve,20));
+      continue;
+    }
     if(publicLive.onAir){
       reverseReservedTarget=null;reverseMixAuthorityAt=null;
       lastDecodedSource=null;
@@ -1020,6 +1027,7 @@ async function run() {
     try {dsp=await readAudioProcessing();}catch(error){state.lastError=error.message;dsp={enabled:false,loudnessTarget:-16,truePeak:-2,fadeMs:0,crossfadeMs:0};}
     state.audioProcessing={enabled:dsp.enabled,loudnessTarget:dsp.loudnessTarget,truePeak:dsp.truePeak,fadeMs:dsp.fadeMs,crossfadeMs:dsp.crossfadeMs};
     const filter=audioProcessingFilter(dsp,remaining/1000);
+    const alarmSourceRevision=trainingAuthorityRevision;
     const blend=(cursor.status==='AUTO_DJ'||(cursor.status==='SCHEDULED'&&SCHEDULED_CROSSFADE_ENABLED))?cursor.track.blend:null;
     let args;
     let usableBlend=blend;
@@ -1247,7 +1255,7 @@ async function run() {
     try {
       const pcmChunks=matches&&prepared.iterator?continuePcmIterator(prepared.iterator):child.stdout;
       for await(const chunk of pcmChunks) {
-        if(stopping||publicLive.onAir) {child.kill('SIGTERM');break;}
+        if(stopping||publicLive.onAir||trainingOverlay.snapshot().active||alarmSourceRevision!==trainingAuthorityRevision) {child.kill('SIGTERM');break;}
         const decoded=pcmStaging?pcmStaging.push(chunk):chunk;
         if(!decoded?.length)continue;
         if(publicLive.onAir){child.kill('SIGTERM');break;}
@@ -1842,7 +1850,8 @@ async function run() {
       if(transition.completed)state.transitions.crossfadeCompleted++;
       else state.transitions.crossfadeFailed++;
     }
-    if(cursor.status==='SCHEDULED'){
+    const preemptedByAlarm=alarmSourceRevision!==trainingAuthorityRevision;
+    if(cursor.status==='SCHEDULED'&&!preemptedByAlarm){
       if(!hourlyInterrupt&&exitCode===0&&!truncatedAtBoundary){
         lastCompletedScheduledTrack={
           slotId:cursor.slot.id,playlistId:cursor.slot.playlistId,
@@ -1878,16 +1887,16 @@ async function run() {
     // Log only PCM that actually reached the persistent encoder, not planned selections.
     // The event measures generated playout, NOT acoustic proof at the listener.
     const generatedMs=emittedBytes/(48000*2*2)*1000;
-    if(generatedMs>=1000){
+    if(generatedMs>=1000&&!preemptedByAlarm){
       const events=playbackAttributions({track:{id:asset.id,name:asset.name},
         blend:usableBlend,generatedMs,startedAt:playbackStartedAt,
         mode:cursor.status,slotId:cursor.slot?.id||null});
       // A slow journal write must never create dead air at the next track boundary.
       void recordPlayoutEvents(events).catch(error=>{state.lastError='Playback journal: '+error.message;});
     }
-    if(generatedMs>=250&&['AUTO_DJ','SCHEDULED'].includes(cursor.status))
+    if(!preemptedByAlarm&&generatedMs>=250&&['AUTO_DJ','SCHEDULED'].includes(cursor.status))
       lastDecodedSource={id:asset.id,mode:cursor.status,emittedMs:generatedMs,at:Date.now()};
-    if(hourlyInterrupt&&cursor.status==='SCHEDULED'){
+    if(!preemptedByAlarm&&hourlyInterrupt&&cursor.status==='SCHEDULED'){
       lastCompletedScheduledTrack={
         slotId:cursor.slot.id,playlistId:cursor.slot.playlistId,
         index:cursor.track.index,assetId:asset.id,at:Date.now()
@@ -1898,7 +1907,7 @@ async function run() {
         nextTrackId,at:new Date().toISOString()
       }));
     }
-    if(hourlyInterrupt){
+    if(!preemptedByAlarm&&hourlyInterrupt){
       console.info('RADIO_HOURLY_INTERRUPT_COMMITTED',JSON.stringify({
         assetId:asset.id,nextTrackId:nextTrackId||null,emittedMs:Math.round(generatedMs),
         key:state.hourlySignal.pendingInterrupt?.key||null
@@ -1908,20 +1917,20 @@ async function run() {
       musicSinceJingle=0;
       discardPrewarm();
     }
-    if(cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){
+    if(!preemptedByAlarm&&cursor.status==='AUTO_DJ' && !cursor.isJingle && generatedMs>=1000){
       lastAutoDjTrackId=asset.id;
       recentlyAiredArtists.push(id3Artist(asset));
       if(recentlyAiredArtists.length>12)recentlyAiredArtists=recentlyAiredArtists.slice(-12);
     }
-    if(cursor.status==='SCHEDULED' && isLastScheduledTrack && exitCode===0 && !truncatedAtBoundary && generatedMs>=1000){
+    if(!preemptedByAlarm&&cursor.status==='SCHEDULED' && isLastScheduledTrack && exitCode===0 && !truncatedAtBoundary && generatedMs>=1000){
       finishedScheduledSlot={id:cursor.slot.id,endAtMs:Date.parse(cursor.slot.endAt)};
       resumeAutoDjAfterShow=true;
       recordBoundary({source:'SCHEDULED',reason:'FINAL_TRACK_FINISHED',slotId:cursor.slot.id,trackId:asset.id});
     }
-    if(cursor.isJingle){
+    if(!preemptedByAlarm&&cursor.isJingle){
       jinglePending=false;
       if(generatedMs>=1000&&exitCode===0){jinglesPlayed++;musicSinceJingle=0;}
-    } else if(cursor.status==='AUTO_DJ'&&!hourlyInterrupt&&generatedMs>=1000&&exitCode===0){
+    } else if(!preemptedByAlarm&&cursor.status==='AUTO_DJ'&&!hourlyInterrupt&&generatedMs>=1000&&exitCode===0){
       musicSinceJingle++;
       // Commit the next queue position only for completed songs, never for jingles.
       if(nextTrackId)musicQueueNextId=nextTrackId;
@@ -1934,7 +1943,7 @@ async function run() {
     // Recover any scheduled show that started during this AutoDJ track, even
     // when its original wall-clock end has already passed. Otherwise current()
     // would seek into the middle of the show's playlist and skip early tracks.
-    if(cursor.status==='AUTO_DJ' && !cursor.isJingle && !pendingScheduledHandover &&
+    if(!preemptedByAlarm&&cursor.status==='AUTO_DJ' && !cursor.isJingle && !pendingScheduledHandover &&
        !stopping && !publicLive.onAir){
       try{
         const settings=await readAutoDjSettings();
@@ -1954,7 +1963,7 @@ async function run() {
         }
       }catch(error){state.lastError='Scheduled handover recovery: '+error.message;}
     }
-    if(cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping && !publicLive.onAir){
+    if(!preemptedByAlarm&&cursor.status==='AUTO_DJ' && pendingScheduledHandover && !stopping && !publicLive.onAir){
       const h=pendingScheduledHandover;pendingScheduledHandover=null;
       // Honor explicit schedule changes made while the song was playing.
       const validHandover=await prisma.radioScheduleSlot.findUnique({where:{id:h.id},
