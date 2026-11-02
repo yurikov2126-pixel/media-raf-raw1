@@ -48,3 +48,27 @@ test('operator abort while START pending sends STOP to both channels',async()=>{
  assert.equal(x.reason,'CANCELLED');
  assert.ok(log.includes('agent STOP'));assert.ok(log.includes('worker:STOP'));
 });
+
+test('hanging Agent STOP is bounded and cannot be reported as verified',async()=>{
+ const log=[];
+ const hanging={start:async spec=>({
+  eventId:spec.eventId,eventType:spec.eventType,action:'START',
+  confirmed:true,playbackState:'ACTIVE',confirmedAt:new Date(now).toISOString()}),
+  stop:()=>{log.push('agent STOP called');return new Promise(()=>{});}};
+ const result=await runMchsTwoChannelExecution({
+  event,authorization,worker:channel('worker',log),agent:hanging,
+  now:()=>now,stopTimeoutMs:100});
+ assert.equal(result.ok,false);
+ assert.equal(result.reason,'STOP_NOT_CONFIRMED');
+ assert.ok(result.stopEvidence.holds.some(x=>x.includes('AGENT')));
+ assert.ok(log.includes('worker:STOP'));
+ assert.ok(log.includes('agent STOP called'));
+});
+test('invalid STOP timeout prevents any channel action',async()=>{
+ const log=[];
+ const result=await runMchsTwoChannelExecution({
+  event,authorization,worker:channel('worker',log),agent:channel('agent',log),
+  now:()=>now,stopTimeoutMs:0});
+ assert.equal(result.reason,'INVALID_STOP_TIMEOUT');
+ assert.equal(log.length,0);
+});
