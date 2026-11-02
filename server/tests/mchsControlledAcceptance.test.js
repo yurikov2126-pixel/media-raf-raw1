@@ -27,7 +27,7 @@ test('public output authorization cannot be used for controlled acceptance',asyn
   authorization:{...args.authorization,publicStreamAllowed:true}});
  assert.equal(result.reason,'TRIAL_AUTHORIZATION_REQUIRED');
 });
-test('no all-clear before danger',async()=>{
- const result=await executeMchsControlledAcceptance({...args,checkpoint:{state:'UNKNOWN'}});
+test('invalid checkpoint state is rejected before playing audio',async()=>{
+ const result=await executeMchsControlledAcceptance({...args,checkpoint:{state:'INVALID'}});
  assert.equal(result.reason,'UNKNOWN_STATE');
 });
