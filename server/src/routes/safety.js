@@ -1,3 +1,4 @@
+import {assessMchsDispatchQueue} from '../lib/mchsDispatchQueueReadiness.js';
 import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents,stageAndroidExecutionIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
@@ -1029,6 +1030,19 @@ router.get('/missile-automatic-execution-dry-run',requireRole('ADMIN'),async (_r
   const plan=buildMchsDryRunExecution({observations,rules,
    dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
   res.set('Cache-Control','no-store').json(plan);
+ }catch(error){next(error);}
+});
+router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [row,worker]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}}),
+   trainingStreamRequest().catch(()=>null)
+  ]);
+  let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+  const report=assessMchsDispatchQueue(normalizeAndroidIntents(saved),{
+   operatorHold:true,workerReady:worker?.httpStatus===200,agentReady:false});
+  res.set('Cache-Control','no-store').json({...report,
+   workerReachable:worker?.httpStatus===200,agentConfirmed:false});
  }catch(error){next(error);}
 });
 router.get('/missile-android-execution-intents',requireRole('ADMIN'),async (_req,res,next)=>{
