@@ -14,6 +14,7 @@ import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,norm
 import {normalizeMchsTypeRepeats,validateMchsTypeRepeats,buildMchsTypeAudioPreview} from '../lib/mchsTypeAudioPlan.js';
 import {assessMchsLiveTrialPreflight} from '../lib/mchsLiveTrialPreflight.js';
 import {assessMissileExecutionInterlock} from '../lib/mchsExecutionInterlock.js';
+import {assessMchsDeliveryReceipts} from '../lib/mchsDeliveryReceipts.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
@@ -1193,6 +1194,33 @@ router.post('/missile-dispatch-protocol/halt',requireRole('ADMIN'),async (_req,r
 /** Read-only activation acceptance checklist. Never enables PA or automation. */
 router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
  res.set('Cache-Control','no-store').json(assessMchsLiveAcceptance());
+});
+/** Live transport evidence without converting heartbeats into event ACKs. */
+router.get('/missile-delivery-observation',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
+  const [worker,device,observerRow,event]=await Promise.all([
+   trainingStreamRequest().catch(()=>null),
+   id?prisma.radioDevice.findUnique({where:{id},select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
+   id?prisma.setting.findUnique({where:{key:'mchs_agent_observer_v1_'+id}}):null,
+   prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+    orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,receivedAt:true}})
+  ]);
+  let observer;try{observer=JSON.parse(observerRow?.value||'null');}catch{}
+  const age=Date.now()-Date.parse(observer?.receivedAt||'');
+  const agentHeartbeat=!!device&&!device.revokedAt&&device.playbackAllowed===true&&
+   Date.now()-new Date(device.lastSeenAt).getTime()>=0&&Date.now()-new Date(device.lastSeenAt).getTime()<=15000;
+  const observerFresh=observer?.mode==='OBSERVE_ONLY'&&Number.isFinite(age)&&age>=0&&age<=15000;
+  // A fresh heartbeat or Worker read probe is not an event-specific playback receipt.
+  // Both remain null until actual event-correlated transport ACK telemetry exists.
+  const receipts=assessMchsDeliveryReceipts({envelope:null,workerReceipt:null,agentReceipt:null});
+  res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),
+   eventId:event?.id||null,workerReadProbeOk:worker?.httpStatus===200,
+   agentHeartbeatCurrent:agentHeartbeat,agentObserverFresh:observerFresh,
+   workerEventReceipt:null,agentEventReceipt:null,receipts,
+   reason:'EVENT_ACK_TELEMETRY_NOT_IMPLEMENTED',automaticPlaybackEnabled:false,
+   publicBroadcastAuthorized:false});
+ }catch(error){next(error);}
 });
 router.get('/missile-integration-probe',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
