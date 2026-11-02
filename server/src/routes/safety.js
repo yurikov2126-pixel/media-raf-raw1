@@ -237,6 +237,12 @@ router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
 router.post('/mchs-training-stream',requireRole('ADMIN'),async (req,res)=>{
  const action=req.body?.action;
  if(!['START','STOP'].includes(action))return res.status(400).json({error:'INVALID_ACTION'});
+ if(action==='STOP'){
+  const stop=await stopAndVerifyMchsWorker({request:trainingStreamRequest});
+  return res.status(stop.confirmed?200:503).set('Cache-Control','no-store').json({
+   ok:stop.confirmed,stopConfirmed:stop.confirmed,reason:stop.reason,
+   ...(!stop.confirmed?{error:'STOP_NOT_CONFIRMED'}:{})});
+ }
  try{const r=await trainingStreamRequest(action,req.body?.assetId);res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
  catch{res.status(503).json({error:'TRAINING_WORKER_UNAVAILABLE'});}
 });
