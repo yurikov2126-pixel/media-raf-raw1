@@ -28,6 +28,7 @@ from mchs_transition_shadow import MchsTransitionShadow
 from mchs_isolated_output_pilot import LocalMonitor
 from mchs_trial_watchdog import trial_stop_reason
 from mchs_lab_trigger import next_lab_trigger
+from mchs_auto_trial_fence import queued_auto_trial_current
 from mchs_lab_resume import should_stop_auto_lab
 from mchs_lab_observer_failsafe import observer_failsafe
 
@@ -499,9 +500,8 @@ def run(args, token):
                 if MCHS_LAB_AUTO_ACTIVE.is_set():
                     with MCHS_LAB_ONE_SHOT_LOCK:
                         observed=dict(MCHS_LAB_OBSERVED)
-                    if (not observed['ready'] or observed['phase']!='ALERT' or
-                            observed['revision']!=MCHS_AUTO_LAB_EXPECTED_REVISION['value'] or
-                            now-observed['at']>3 or now<observed['at']):
+                    if not queued_auto_trial_current(
+                            observed,MCHS_AUTO_LAB_EXPECTED_REVISION['value'],now):
                         MCHS_LAB_AUTO_ACTIVE.clear()
                         MCHS_AUTO_LAB_EXPECTED_REVISION['value']=None
                         MCHS_AUDIO_ARMED.clear()
