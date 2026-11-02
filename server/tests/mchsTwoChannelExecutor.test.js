@@ -28,3 +28,23 @@ test('stale event is rejected',async()=>{
   authorization,worker:{},agent:{},now:()=>now});
  assert.equal(x.reason,'EXPIRED_EVENT');
 });
+
+test('unresponsive Agent START times out and sends STOP to both channels',async()=>{
+ const log=[];
+ const slow={start:()=>new Promise(()=>{}),stop:async()=>{log.push('agent STOP');return {confirmed:false};}};
+ const x=await runMchsTwoChannelExecution({event,authorization,worker:channel('worker',log),agent:slow,
+  now:()=>now,startTimeoutMs:100});
+ assert.equal(x.reason,'START_TIMEOUT');
+ assert.equal(x.stopConfirmed,false);
+ assert.equal(x.requiresOperatorReview,true);
+ assert.ok(log.includes('worker:STOP'));assert.ok(log.includes('agent STOP'));
+});
+test('operator abort while START pending sends STOP to both channels',async()=>{
+ const log=[];const ctl=new globalThis.AbortController();
+ const slow={start:()=>new Promise(()=>{}),stop:async()=>{log.push('agent STOP');}};
+ setTimeout(()=>ctl.abort(),10);
+ const x=await runMchsTwoChannelExecution({event,authorization,worker:channel('worker',log),agent:slow,
+  now:()=>now,startTimeoutMs:2000,signal:ctl.signal});
+ assert.equal(x.reason,'CANCELLED');
+ assert.ok(log.includes('agent STOP'));assert.ok(log.includes('worker:STOP'));
+});
