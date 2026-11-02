@@ -26,23 +26,25 @@ const yesNo=value=>value===true?'Подтверждено':value===false?'Нет
 export default function MchsTransportStatus({token}){
  const [data,setData]=useState(null);
  const [preflight,setPreflight]=useState(null);
+ const [lifecycle,setLifecycle]=useState(null);
+ const [channels,setChannels]=useState(null);
  const [error,setError]=useState('');
  const [updated,setUpdated]=useState(null);
  const [loading,setLoading]=useState(false);
  const refresh=useCallback(async()=>{
   setLoading(true);
   try{
-   const [result,checks]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token})]);
-   setData(result);setPreflight(checks);setError('');setUpdated(new Date());
-  }catch(e){setData(null);setPreflight(null);setError(e.message||'Ошибка проверки состояния');}
+   const [result,checks,session,channelReport]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token}),api('/safety/missile-session-lifecycle',{token}),api('/safety/missile-two-channel-session',{token})]);
+   setData(result);setPreflight(checks);setLifecycle(session);setChannels(channelReport);setError('');setUpdated(new Date());
+  }catch(e){setData(null);setPreflight(null);setLifecycle(null);setChannels(null);setError(e.message||'Ошибка проверки состояния');}
   finally{setLoading(false);}
  },[token]);
  useEffect(()=>{
   let alive=true;
   const read=async()=>{try{
-   const [result,checks]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token})]);
-   if(alive){setData(result);setPreflight(checks);setError('');setUpdated(new Date());}
-  }catch(e){if(alive){setError(e.message||'Нет связи с диагностикой');setData(null);setPreflight(null);}}};
+   const [result,checks,session,channelReport]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token}),api('/safety/missile-session-lifecycle',{token}),api('/safety/missile-two-channel-session',{token})]);
+   if(alive){setData(result);setPreflight(checks);setLifecycle(session);setChannels(channelReport);setError('');setUpdated(new Date());}
+  }catch(e){if(alive){setError(e.message||'Нет связи с диагностикой');setData(null);setPreflight(null);setLifecycle(null);setChannels(null);}}};
   read();const timer=setInterval(read,15000);
   return ()=>{alive=false;clearInterval(timer);};
  },[token]);
@@ -67,6 +69,26 @@ export default function MchsTransportStatus({token}){
     <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.detail}</p>
    </div>)}
   </div>
+  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Исполнительный контур МЧС">
+   <div><strong className="block text-sm">Двухканальный цикл оповещения</strong>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Последнее настоящее Android-событие. Только наблюдение: подтверждения учебного VLC не равны воспроизведению ALARM.</p></div>
+   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    {[
+     {name:'Событие',value:lifecycle?.eventId?lifecycle.eventId:'Не зарегистрировано'},
+     {name:'Состояние',value:lifecycle?.state||'Нет данных'},
+     {name:'START обоих каналов',value:channels?.started?.bothConfirmed===true?'Подтверждён':'Не подтверждён'},
+     {name:'STOP обоих каналов',value:channels?.stopped?.bothConfirmed===true?'Подтверждён':'Не подтверждён'}
+    ].map(item=><div key={item.name} className="rounded-lg bg-slate-50 dark:bg-white/5 p-3 min-w-0">
+     <span className="block text-xs text-slate-600 dark:text-slate-300">{item.name}</span>
+     <strong className="block mt-1 text-sm break-all">{item.value}</strong>
+    </div>)}
+   </div>
+   <p className="text-xs font-medium">Операторская блокировка: активна · Автоматический эфир: отключён</p>
+   {(channels?.holds||[]).length>0&&<details className="text-xs">
+    <summary className="cursor-pointer">Почему контур не готов ({channels.holds.length})</summary>
+    <ul className="mt-2 list-disc pl-5 space-y-1">{channels.holds.map((code,i)=><li key={code+i}>{names[code]||code}</li>)}</ul>
+   </details>}
+  </section>
   <div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 space-y-2">
    <strong className="block text-sm">Разрешение на запуск: отсутствует</strong>
    <p className="text-xs text-slate-600 dark:text-slate-300">Даже полная телеметрия не разрешает автоматический ALARM и не подтверждает отсутствие звука в громкоговорителях.</p>
