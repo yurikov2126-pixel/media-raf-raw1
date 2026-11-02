@@ -55,6 +55,10 @@ class AlarmPlaybackSession:
                 with self._lock:
                     self._process=process
                     self._status='PLAYING'
+                # STOP may arrive while launch() blocks; never let that
+                # late child escape the cancellation watchdog.
+                if self._cancel.is_set() or not self.heartbeat():
+                    raise RuntimeError('STOP_OR_WATCHDOG')
                 while process.poll() is None:
                     if self._cancel.is_set() or not self.heartbeat():
                         raise RuntimeError('STOP_OR_WATCHDOG')
@@ -65,7 +69,7 @@ class AlarmPlaybackSession:
                     self._process=None
                     self._completed+=1
             with self._lock:
-                self._status='COMPLETED'
+                self._status='STOPPED' if self._cancel.is_set() else 'COMPLETED'
         except Exception:
             with self._lock:
                 self._status='STOPPED'
@@ -89,4 +93,7 @@ class AlarmPlaybackSession:
             process.terminate()
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=4)
+        with self._lock:
+            if self._status in ('STARTING','PLAYING'):
+                self._status='STOPPED'
         return self.status()
