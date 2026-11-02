@@ -1,3 +1,4 @@
+import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents,stageAndroidExecutionIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
 import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroidEventId} from '../lib/mchsExecutionRecovery.js';
@@ -60,6 +61,19 @@ async function tickMchsAndroidMonitor(){
    ]);
    let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
    const result=observeAndroidEvents(normalizeAndroidMonitor(saved),observations);
+   if(result.newEntries.length){
+    const [intentRow,repeatRow]=await Promise.all([
+     tx.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}}),
+     tx.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}})
+    ]);
+    let savedIntents;try{savedIntents=JSON.parse(intentRow?.value||'null');}catch{}
+    // Never grant dispatch: persist only reviewed candidates, not audio commands.
+    const staged=stageAndroidExecutionIntents(savedIntents,result.newEntries,{
+     dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
+    if(staged.added.length)await tx.setting.upsert({where:{key:MCHS_ANDROID_INTENTS_KEY},
+     create:{key:MCHS_ANDROID_INTENTS_KEY,value:JSON.stringify(staged.ledger)},
+     update:{value:JSON.stringify(staged.ledger)}});
+   }
    if(result.newEntries.length||!row)await tx.setting.upsert({where:{key:MCHS_MONITOR_KEY},
     create:{key:MCHS_MONITOR_KEY,value:JSON.stringify(result.state)},
     update:{value:JSON.stringify(result.state)}});
@@ -1015,6 +1029,14 @@ router.get('/missile-automatic-execution-dry-run',requireRole('ADMIN'),async (_r
   const plan=buildMchsDryRunExecution({observations,rules,
    dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
   res.set('Cache-Control','no-store').json(plan);
+ }catch(error){next(error);}
+});
+router.get('/missile-android-execution-intents',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}});
+  let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({ledger:normalizeAndroidIntents(saved),
+   dispatchAuthorized:false,automaticPlaybackEnabled:false});
  }catch(error){next(error);}
 });
 router.get('/missile-android-monitor',requireRole('ADMIN'),async (_req,res,next)=>{
