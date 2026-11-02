@@ -5,7 +5,7 @@ import {assessMchsDualChannelTransition} from './mchsDualChannelTransition.js';
  * Caller must provide verified authorization; no implicit fallback.
  */
 export async function runMchsTwoChannelExecution({
- event,authorization,worker,agent,signal,now=()=>Date.now()
+ event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000
 }={}){
  const fail=(reason,details={})=>({ok:false,reason,...details,automaticBroadcastEnabled:false});
  if(!authorization||authorization.approved!==true||authorization.mode!=='ISOLATED_TRIAL'||
@@ -21,19 +21,48 @@ export async function runMchsTwoChannelExecution({
   return fail('CHANNEL_ADAPTER_MISSING');
  const spec={eventId:event.id,eventType:event.eventType,assetId:event.assetId,repeats:event.repeats,
   publicStreamAllowed:false,amplifierAllowed:false};
- const stopBoth=async()=>Promise.allSettled([worker.stop(spec),agent.stop(spec)]);
+ const stopBoth=async()=>Promise.allSettled([
+  Promise.resolve().then(()=>worker.stop(spec)),
+  Promise.resolve().then(()=>agent.stop(spec))
+ ]);
+ const awaitStarts=()=>new Promise(resolve=>{
+  let completed=false;
+  let timer;
+  const done=result=>{
+   if(completed)return;
+   completed=true;clearTimeout(timer);
+   signal?.removeEventListener?.('abort',onAbort);
+   resolve(result);
+  };
+  const onAbort=()=>done({reason:'CANCELLED'});
+  signal?.addEventListener?.('abort',onAbort,{once:true});
+  timer=setTimeout(()=>done({reason:'START_TIMEOUT'}),startTimeoutMs);
+  void Promise.allSettled([
+   Promise.resolve().then(()=>worker.start(spec)),
+   Promise.resolve().then(()=>agent.start(spec))
+  ]).then(results=>done({results}));
+  if(signal?.aborted)onAbort();
+ });
  if(signal?.aborted)return fail('CANCELLED');
  let starts;
  try{
   // Both are attempted, so a rejected START cannot conceal a concurrent success.
-  starts=await Promise.allSettled([worker.start(spec),agent.start(spec)]);
+  if(!Number.isInteger(startTimeoutMs)||startTimeoutMs<100||startTimeoutMs>120000)
+   return fail('INVALID_START_TIMEOUT');
+  const outcome=await awaitStarts();
+  if(outcome.reason){
+   const stops=await stopBoth();
+   return fail(outcome.reason,{stopRequestsSettled:stops.every(x=>x.status==='fulfilled'),
+    stopConfirmed:false,requiresOperatorReview:true});
+  }
+  starts=outcome.results;
   const evidence=assessMchsDualChannelTransition({eventId:event.id,eventType:event.eventType,
    action:'START',worker:starts[0].status==='fulfilled'?starts[0].value:null,
    agent:starts[1].status==='fulfilled'?starts[1].value:null,nowMs:now()});
   if(!evidence.bothConfirmed||signal?.aborted){
    const stops=await stopBoth();
    return fail(signal?.aborted?'CANCELLED':'START_NOT_CONFIRMED',{startEvidence:evidence,
-    stopRequestsSettled:stops.every(x=>x.status==='fulfilled')});
+    stopRequestsSettled:stops.every(x=>x.status==='fulfilled'),stopConfirmed:false,requiresOperatorReview:true});
   }
   // This is a bounded handoff; not a playback loop or an endorsement of actual
   // audible emergency warnings. Caller must signal STOP, never auto-resume.
