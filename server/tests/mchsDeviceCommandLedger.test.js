@@ -10,11 +10,11 @@ test('STOP is queued, delivered and acknowledged with exact event binding',()=>{
  assert.equal(sent.command.action,'STOP');
  const rejected=advance(first.state,{type:'RECEIPT',receipt:{
   sequence:1,eventId:'other',eventType:'MISSILE_DANGER',action:'STOP',
-  confirmed:true,playbackState:'STOPPED'}},{nowMs:t+200});
+  confirmed:true,playbackState:'STOPPED',localTrialStoppedConfirmed:true,confirmedAt:new Date(t+200).toISOString()}},{nowMs:t+200});
  assert.equal(rejected.ok,false);
  const accepted=advance(first.state,{type:'RECEIPT',receipt:{
   sequence:1,eventId:'event-1',eventType:'MISSILE_DANGER',action:'STOP',
-  confirmed:true,playbackState:'STOPPED'}},{nowMs:t+200});
+  confirmed:true,playbackState:'STOPPED',localTrialStoppedConfirmed:true,confirmedAt:new Date(t+200).toISOString()}},{nowMs:t+200});
  assert.equal(accepted.ok,true);assert.equal(accepted.state.pending,null);
 });
 test('HALT cancels pending START while preserving STOP priority',()=>{
