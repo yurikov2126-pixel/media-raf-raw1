@@ -203,6 +203,47 @@ router.get('/agent/mchs-integration-observe',deviceAuth,safe(async(req,res)=>{
   res.status(503).json({error:'LAB_WORKER_UNAVAILABLE',mode:'OBSERVE_ONLY'});
  }
 }));
+// Authenticated observation of the newest real missile event. No playback commands.
+router.get('/agent/mchs-event-observation',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const event=await prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+  orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,region:true,occurredAt:true}});
+ const title=(event?.title||'').toLowerCase();
+ const body=(event?.body||'').toLowerCase();
+ const phrase=title+' '+body;
+ const eventType=/(отбой|отмена).*(ракетн)/.test(phrase)?'MISSILE_ALL_CLEAR':
+  /ракетн.*опасност/.test(phrase)?'MISSILE_DANGER':null;
+ const age=Date.now()-new Date(event?.occurredAt).getTime();
+ const allowed=!!event&&event.region?.trim().toLocaleLowerCase('ru-RU')==='тульская область'&&
+  Number.isFinite(age)&&age>=0&&age<=120000&&!!eventType;
+ res.json({eventId:allowed?event.id:null,eventType:allowed?eventType:null,
+  observationOnly:true,automaticPlaybackEnabled:false,playbackCommand:null});
+}));
+router.post('/agent/mchs-event-observation-received',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const id=req.body?.eventId,type=req.body?.eventType;
+ if(typeof id!=='string'||id.length>128||!['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(type))
+  return res.status(400).json({error:'INVALID_EVENT_RECEIPT'});
+ const event=await prisma.safetyMchsEvent.findUnique({where:{id},
+  select:{source:true,verified:true,occurredAt:true,region:true,title:true,body:true}});
+ const age=Date.now()-new Date(event?.occurredAt).getTime();
+ const phrase=((event?.title||'')+' '+(event?.body||'')).toLowerCase();
+ const classified=/(отбой|отмена).*(ракетн)/.test(phrase)?'MISSILE_ALL_CLEAR':
+  /ракетн.*опасност/.test(phrase)?'MISSILE_DANGER':null;
+ if(!event||event.source!=='MCHS_ANDROID'||event.verified!==true||
+    event.region?.trim().toLocaleLowerCase('ru-RU')!=='тульская область'||
+    !Number.isFinite(age)||age<0||age>120000||classified!==type)
+  return res.status(409).json({error:'EVENT_NOT_ELIGIBLE'});
+ const key='mchs_agent_event_receipt_v1_'+req.radioDevice.id;
+ const value=JSON.stringify({eventId:id,eventType:type,receiptOnly:true,status:'RECEIVED',
+  observedAt:new Date().toISOString(),audioPlayed:false});
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ res.json({accepted:true,receiptOnly:true,audioPlayed:false});
+}));
 // Authenticated, non-actuating HALT beacon. The Agent only confirms receipt.
 router.get('/agent/mchs-dispatch-halt',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
