@@ -13,6 +13,7 @@ import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJour
 import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
 import {normalizeMchsTypeRepeats,validateMchsTypeRepeats,buildMchsTypeAudioPreview} from '../lib/mchsTypeAudioPlan.js';
 import {assessMchsLiveTrialPreflight} from '../lib/mchsLiveTrialPreflight.js';
+import {assessMissileExecutionInterlock} from '../lib/mchsExecutionInterlock.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
@@ -690,6 +691,43 @@ router.get('/missile-local-audio-trial/candidates',requireRole('ADMIN'),async (_
   });
   res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),candidates,
    output:'BROWSER_LOCAL_ONLY',automaticBroadcastEnabled:false,dispatchAuthorized:false});
+ }catch(error){next(error);}
+});
+/** Evaluate latest verified Android event against real Worker and Agent state.
+ * No commands are sent to the transport, speaker or amplifier.
+ */
+router.get('/missile-execution-interlock/latest',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [event,checkpointRow,ruleRow,assets,worker,device,stopRow]=await Promise.all([
+   prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+    orderBy:{receivedAt:'desc'},select:{id:true,source:true,sourceEventId:true,title:true,body:true,
+    region:true,verified:true,occurredAt:true,receivedAt:true}}),
+   prisma.setting.findUnique({where:{key:MISSILE_CHECKPOINT_KEY}}),
+   prisma.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true}}),
+   trainingStreamRequest().catch(()=>null),
+   id?prisma.radioDevice.findUnique({where:{id},select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
+   id?prisma.setting.findUnique({where:{key:'mchs_trial_process_stop_v1_'+id}}):null
+  ]);
+  let rawCheckpoint,rawRules,stop;
+  try{rawCheckpoint=JSON.parse(checkpointRow?.value||'null');}catch{}
+  try{rawRules=JSON.parse(ruleRow?.value||'{}');}catch{}
+  try{stop=JSON.parse(stopRow?.value||'null');}catch{}
+  const rules=Object.fromEntries(['MISSILE_DANGER','MISSILE_ALL_CLEAR'].map(type=>[
+   type,{...emptyTypeRule(),...(rawRules?.[type]||{})}]));
+  const decision=event?assessMissileAutoEvent(event,{rules}):null;
+  const assetAvailable=!!decision?.audioAssetId&&assets.some(asset=>asset.id===decision.audioAssetId);
+  const command=decision?.eligible&&assetAvailable?planMissilePlayback([decision],{rules}).commands[0]:null;
+  const checkpoint=normalizeMissileCheckpoint(rawCheckpoint);
+  const agentReady=!!device&&!device.revokedAt&&device.playbackAllowed===true&&
+   Date.now()-new Date(device.lastSeenAt).getTime()<=15000;
+  const stopReady=assessMchsTrialStopConfirmation(stop,{deviceBound:!!device}).confirmed===true;
+  const assessment=assessMissileExecutionInterlock({command,sourceEvent:event,checkpoint,
+   workerReady:worker?.httpStatus===200,agentReady,stopReady,operatorHold:true});
+  res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),eventId:event?.id||null,
+   eventType:decision?.eventType||null,decisionReason:decision?.reason||(!assetAvailable?'ALARM_AUDIO_MISSING':null),
+   ...assessment});
  }catch(error){next(error);}
 });
 router.get('/missile-auto-playback-plan',requireRole('ADMIN'),async (_req,res,next)=>{
