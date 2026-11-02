@@ -142,9 +142,16 @@ def poll_mchs_execution_command(server, token):
         raise ValueError('MCHS_EXECUTION_PROTOCOL_MISMATCH')
     command=state.get('command')
     if command is not None:
-        # The production event-scoped playback path is not wired yet.
-        # Never reinterpret event metadata as permission to play the lab stream.
-        print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
+        # STOP always takes precedence. Never treat this as verified PA silence.
+        if command.get('action')=='STOP' and isinstance(command.get('eventId'),str):
+            MCHS_AUDIO_STOP.set()
+            MCHS_AUDIO_START.clear()
+            MCHS_AUDIO_ARMED.clear()
+            MCHS_LAB_ONE_SHOT.clear()
+            print('MCHS_EXECUTION_STOP_REQUESTED',command['eventId'],flush=True)
+        else:
+            # Real event-bound START is not connected to a verified audio asset.
+            print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
     if state.get('halted') is True:
         epoch=state.get('haltEpoch')
         if isinstance(epoch,str) and epoch:
