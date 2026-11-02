@@ -315,6 +315,33 @@ router.post('/mchs-agent-queue-stop',...admin,safe(async(req,res)=>{
  res.json({queued:true,sequence:result.state.sequence,physicalStopVerified:false});
 }));
 
+// Event-scoped STOP receipt: only confirms that the Agent's isolated VLC
+// is gone. It must never be interpreted as physical PA verification.
+router.post('/agent/mchs-device-stop-received',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const receipt=req.body||{};
+ if(receipt.action!=='STOP'||receipt.confirmed!==true||
+    receipt.playbackState!=='STOPPED'||!Number.isSafeInteger(receipt.sequence)||
+    receipt.localTrialStoppedConfirmed!==true)
+  return res.status(400).json({error:'INVALID_STOP_RECEIPT'});
+ const key='mchs_agent_device_commands_v1_'+req.radioDevice.id;
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581457)`;
+  const row=await tx.setting.findUnique({where:{key}});
+  let state;try{state=JSON.parse(row?.value||'null');}catch{}
+  const next=advanceMchsDeviceCommand(state||{},{type:'RECEIPT',receipt});
+  if(!next.ok)return next;
+  const value=JSON.stringify(next.state);
+  await tx.setting.upsert({where:{key},create:{key,value},update:{value}});
+  return next;
+ });
+ if(!result.ok)return res.status(409).json({error:result.reason});
+ res.json({accepted:true,localTrialStoppedConfirmed:true,
+   realEventPlaybackConfirmed:false,physicalPaStoppedVerified:false});
+}));
+
 router.get('/agent/mchs-dispatch-halt',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
