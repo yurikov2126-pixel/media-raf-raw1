@@ -5,7 +5,7 @@ import {assessMchsDualChannelTransition} from './mchsDualChannelTransition.js';
  * Caller must provide verified authorization; no implicit fallback.
  */
 export async function runMchsTwoChannelExecution({
- event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000,stopTimeoutMs=5000,onLateStop
+ event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000,stopTimeoutMs=5000,onLateStop,completionTimeoutMs=300000
 }={}){
  const fail=(reason,details={})=>({ok:false,reason,...details,automaticBroadcastEnabled:false});
  if(!authorization||authorization.approved!==true||authorization.mode!=='ISOLATED_TRIAL'||
@@ -59,6 +59,8 @@ export async function runMchsTwoChannelExecution({
   });
   if(signal?.aborted)onAbort();
  });
+ if(!Number.isInteger(completionTimeoutMs)||completionTimeoutMs<100||completionTimeoutMs>600000)
+  return fail('INVALID_COMPLETION_TIMEOUT');
  if(!Number.isInteger(stopTimeoutMs)||stopTimeoutMs<100||stopTimeoutMs>120000)
   return fail('INVALID_STOP_TIMEOUT');
  if(signal?.aborted)return fail('CANCELLED');
@@ -82,8 +84,35 @@ export async function runMchsTwoChannelExecution({
    return fail(signal?.aborted?'CANCELLED':'START_NOT_CONFIRMED',{startEvidence:evidence,
     stopRequestsSettled:stops.every(x=>x.status==='fulfilled'),stopConfirmed:false,requiresOperatorReview:true});
   }
-  // This is a bounded handoff; not a playback loop or an endorsement of actual
-  // audible emergency warnings. Caller must signal STOP, never auto-resume.
+  // START receipts only establish that playback began. Wait for both adapters
+  // to confirm natural completion; don't cut the recording off immediately.
+  // An adapter without completion telemetry is NOT production-ready.
+  if(typeof worker.waitUntilCompleted!=='function'||typeof agent.waitUntilCompleted!=='function'){
+   await stopBoth();
+   return fail('COMPLETION_ADAPTER_MISSING',{requiresOperatorReview:true});
+  }
+  const completed=await new Promise(resolve=>{
+   let settled=false;
+   const done=value=>{
+    if(settled)return;
+    settled=true;clearTimeout(timer);
+    signal?.removeEventListener?.('abort',onAbort);
+    resolve(value);
+   };
+   const onAbort=()=>done({reason:'CANCELLED'});
+   const timer=setTimeout(()=>done({reason:'COMPLETION_TIMEOUT'}),completionTimeoutMs);
+   signal?.addEventListener?.('abort',onAbort,{once:true});
+   void Promise.allSettled([
+    Promise.resolve().then(()=>worker.waitUntilCompleted(spec)),
+    Promise.resolve().then(()=>agent.waitUntilCompleted(spec))
+   ]).then(results=>done({results}));
+   if(signal?.aborted)onAbort();
+  });
+  if(completed.reason||completed.results?.some(x=>x.status!=='fulfilled'||x.value?.completed!==true)){
+   const stops=await stopBoth();
+   return fail(completed.reason||'COMPLETION_NOT_CONFIRMED',{
+    stopRequestsSettled:stops.every(x=>x.status==='fulfilled'),requiresOperatorReview:true});
+  }
   const stops=await stopBoth();
   const stopEvidence=assessMchsDualChannelTransition({eventId:event.id,eventType:event.eventType,
    action:'STOP',worker:stops[0].status==='fulfilled'?stops[0].value:null,
