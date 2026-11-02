@@ -217,7 +217,7 @@ router.post('/agent/mchs-dispatch-halt-received',deviceAuth,safe(async(req,res)=
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
   return res.status(403).json({error:'DEVICE_NOT_BOUND'});
  const epoch=req.body?.haltEpoch;
- if(typeof epoch!=='string'||!/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$/.test(epoch))
+ if(typeof epoch!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(epoch))
   return res.status(400).json({error:'INVALID_HALT_EPOCH'});
  const result=await prisma.$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581452)`;
