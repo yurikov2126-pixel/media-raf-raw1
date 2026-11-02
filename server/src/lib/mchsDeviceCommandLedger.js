@@ -38,7 +38,13 @@ export function advanceMchsDeviceCommand(state={},input,{nowMs=Date.now()}={}){
    receipt.eventId!==pending.eventId||receipt.eventType!==pending.eventType||
    receipt.action!==pending.action)return fail('COMMAND_RECEIPT_MISMATCH');
   if(receipt.confirmed!==true||receipt.playbackState!=='STOPPED'||
-   pending.action!=='STOP')return fail('STOP_NOT_CONFIRMED');
+   pending.action!=='STOP'||receipt.localTrialStoppedConfirmed!==true)
+   return fail('STOP_NOT_CONFIRMED');
+  // A receipt without trustworthy time and local termination evidence does
+  // not establish that the commanded process actually stopped.
+  const confirmedAt=Date.parse(receipt.confirmedAt||'');
+  if(!Number.isFinite(confirmedAt)||confirmedAt>nowMs+5000||
+   nowMs-confirmedAt>15000)return fail('STALE_STOP_RECEIPT');
   return {ok:true,state:{...current,pending:null,lastReceipt:{
    ...receipt,receivedAt:new Date(nowMs).toISOString()}}};
  }
