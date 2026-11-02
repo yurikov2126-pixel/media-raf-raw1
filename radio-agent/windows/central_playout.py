@@ -134,6 +134,8 @@ def send_mchs_device_stop_receipt(server, token, command):
     payload=json.dumps({'action':'STOP','sequence':command['sequence'],
         'eventId':command['eventId'],'eventType':command['eventType'],
         'confirmed':True,'playbackState':'STOPPED',
+        'confirmedAt':__import__('datetime').datetime.now(
+            __import__('datetime').timezone.utc).isoformat().replace('+00:00','Z'),
         'localTrialStoppedConfirmed':True}).encode('utf-8')
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-device-stop-received',
                     data=payload,headers={'Authorization':'Bearer '+token,
