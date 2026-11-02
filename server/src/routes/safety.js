@@ -1,4 +1,5 @@
 import {assessMchsDispatchQueue} from '../lib/mchsDispatchQueueReadiness.js';
+import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispatchCommand,recordMchsDispatchDryRunAck,haltMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
 import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents,stageAndroidExecutionIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
@@ -1031,6 +1032,55 @@ router.get('/missile-automatic-execution-dry-run',requireRole('ADMIN'),async (_r
   const plan=buildMchsDryRunExecution({observations,rules,
    dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
   res.set('Cache-Control','no-store').json(plan);
+ }catch(error){next(error);}
+});
+/** Transactional protocol rehearsal. Never dispatches Worker or Agent audio. */
+async function mutateMchsDispatchProtocol(change){
+ return prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581452)`;
+  const row=await tx.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
+  let previous;try{previous=JSON.parse(row?.value||'null');}catch{}
+  const outcome=change(previous);
+  if(outcome.accepted||outcome.persist){
+   await tx.setting.upsert({where:{key:MCHS_DISPATCH_PROTOCOL_KEY},
+    create:{key:MCHS_DISPATCH_PROTOCOL_KEY,value:JSON.stringify(outcome.state)},
+    update:{value:JSON.stringify(outcome.state)}});
+  }
+  return outcome;
+ });
+}
+router.get('/missile-dispatch-protocol',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
+  let value;try{value=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({protocol:normalizeMchsDispatchProtocol(value),automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+router.post('/missile-dispatch-protocol/stage-dry-run',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const b=req.body||{};
+  const result=await mutateMchsDispatchProtocol(raw=>stageMchsDispatchCommand(raw,{
+   commandId:b.commandId,sourceEventId:b.sourceEventId,eventType:b.eventType,createdAt:b.createdAt}));
+  res.status(result.accepted?201:409).set('Cache-Control','no-store').json({...result,
+   dispatchAuthorized:false,automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+router.post('/missile-dispatch-protocol/ack-dry-run',requireRole('ADMIN'),async (req,res,next)=>{
+ try{
+  const b=req.body||{};
+  const result=await mutateMchsDispatchProtocol(raw=>{
+   const outcome=recordMchsDispatchDryRunAck(raw,{commandId:b.commandId,sourceEventId:b.sourceEventId});
+   return {...outcome,persist:outcome.reason==='EXPIRED'};
+  });
+  res.status(result.accepted?200:409).set('Cache-Control','no-store').json({...result,
+   playbackVerified:false,dispatchAuthorized:false,automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+router.post('/missile-dispatch-protocol/halt',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const result=await mutateMchsDispatchProtocol(raw=>({state:haltMchsDispatchProtocol(raw),persist:true}));
+  res.set('Cache-Control','no-store').json({...result,
+   workerStop:'NOT_ATTEMPTED',automaticPlaybackEnabled:false});
  }catch(error){next(error);}
 });
 router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
