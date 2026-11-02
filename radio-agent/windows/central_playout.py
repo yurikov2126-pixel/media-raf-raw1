@@ -146,6 +146,19 @@ def send_mchs_device_stop_receipt(server, token, command):
 
 
 
+def report_mchs_playback_session(server,token,alarm_session):
+    """Report observed local VLC process state, never physical PA state."""
+    state=alarm_session.status()
+    payload=json.dumps({'version':1,'eventId':state['eventId'],
+        'state':state['state'],
+        'completedRepeats':state['completedRepeats']}).encode('utf-8')
+    request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-playback-session-status',
+                    data=payload,headers={'Authorization':'Bearer '+token,
+                    'Content-Type':'application/json'},method='POST')
+    with urlopen(request,timeout=3) as response:
+        return response.status==200
+
+
 def poll_mchs_execution_command(server, token, alarm_session=None):
     """Authenticated command transport. Reject START until event-bound playback
     and emergency STOP telemetry are implemented; HALT cancels local lab audio.
@@ -223,6 +236,11 @@ def poll_mchs_execution_command(server, token, alarm_session=None):
                 MCHS_AUDIO_ARMED.clear()
                 MCHS_LAB_ONE_SHOT.clear()
             MCHS_EXECUTION_LAST_STATUS['haltEpoch']=epoch
+    if alarm_session is not None:
+        try:
+            report_mchs_playback_session(server,token,alarm_session)
+        except (HTTPError,URLError,OSError,ValueError):
+            print('MCHS_SESSION_STATUS_REPORT_UNAVAILABLE',flush=True)
     return state
 
 
