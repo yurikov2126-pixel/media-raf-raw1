@@ -492,7 +492,7 @@ router.put('/notification-policy-drafts/:eventId', requireRole('ADMIN'), async (
     const event = await prisma.safetyMchsEvent.findUnique({ where: { id: req.params.eventId },
       select: { id: true, sourceEventId: true } });
     if (!event) return res.status(404).json({ error: 'EVENT_NOT_FOUND' });
-    const { mode, audioAssetId, note, repeats = 1 } = req.body || {};
+    const { mode, audioAssetId, note } = req.body || {};
     if (!policyModes.has(mode) || typeof note !== 'string' || note.length > 500 ||
         (audioAssetId !== null && audioAssetId !== undefined && (typeof audioAssetId !== 'string' || audioAssetId.length > 120))) {
       return res.status(400).json({ error: 'INVALID_POLICY' });
@@ -546,7 +546,7 @@ router.get('/event-type-rules', canView, async (_req, res, next) => {
 router.put('/event-type-rules/:type', requireRole('ADMIN'), async (req, res, next) => {
   try {
     if (!MCHS_EVENT_TYPES.some(t => t.id === req.params.type)) return res.status(404).json({ error: 'UNKNOWN_TYPE' });
-    const { mode, audioAssetId, note } = req.body || {};
+    const { mode, audioAssetId, note, repeats = 1 } = req.body || {};
     if (!['IGNORE', 'REVIEW'].includes(mode) || typeof note !== 'string' || note.length > 500 ||
         (audioAssetId != null && (typeof audioAssetId !== 'string' || audioAssetId.length > 120)) ||
         !validateMchsTypeRepeats(repeats))
