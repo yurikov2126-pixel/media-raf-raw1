@@ -177,13 +177,26 @@ def poll_mchs_execution_command(server, token):
             elif reason!='INVALID_OR_REPLAYED_COMMAND':
                 print('MCHS_EXECUTION_STOP_REJECTED',reason,flush=True)
         elif command.get('action')=='START':
-            # Validate real cached bytes before future event-scoped playback
-            # implementation. Do not make an audible change in this phase.
-            from mchs_verified_alarm import verify_cached_alarm
-            cache_root=Path(os.environ.get('RADIO_AGENT_DATA_DIR','radio-agent-data'))/'mchs-alarm-cache'
-            _,reason=verify_cached_alarm(command,cache_root)
-            print('MCHS_EXECUTION_START_PREFLIGHT_ONLY',
-                  reason or 'AUDIO_HASH_VERIFIED_NO_PLAYBACK_AUTHORIZATION',flush=True)
+            # Verify that the central server explicitly authorized execution
+            # before even downloading. Hash validation alone never authorizes
+            # playback, and no automatic VLC launch occurs in this branch.
+            if state.get('halted') is not False or state.get('executionEnabled') is not True:
+                print('MCHS_EXECUTION_START_REJECTED_HOLD',flush=True)
+            else:
+                from mchs_event_commands import validate_command
+                from mchs_alarm_download import cache_verified_alarm
+                with MCHS_EXECUTION_RECEIPT_LOCK:
+                    last_sequence=MCHS_EXECUTION_LAST_STATUS['lastStopSequence']
+                accepted, reason=validate_command(command,
+                    last_sequence=last_sequence,halted=False)
+                if not accepted:
+                    print('MCHS_EXECUTION_START_REJECTED',reason,flush=True)
+                else:
+                    cache_root=Path(os.environ.get('RADIO_AGENT_DATA_DIR','radio-agent-data'))/'mchs-alarm-cache'
+                    _,reason=cache_verified_alarm(command,cache_root,server,token)
+                    print('MCHS_EXECUTION_START_ASSET_READY_ONLY' if reason is None
+                          else 'MCHS_EXECUTION_START_ASSET_REJECTED',reason or command['eventId'],
+                          flush=True)
         else:
             print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
     if state.get('halted') is True:
