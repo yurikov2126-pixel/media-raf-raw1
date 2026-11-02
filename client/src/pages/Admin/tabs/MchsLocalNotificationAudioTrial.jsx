@@ -6,8 +6,9 @@ export default function MchsLocalNotificationAudioTrial({token}){
  const [armed,setArmed]=useState(false),[status,setStatus]=useState('Остановлено'),[error,setError]=useState('');
  const audio=useRef(null),run=useRef(null),seen=useRef(new Set()),queue=useRef([]);
  const armedAt=useRef(0),busy=useRef(false),active=useRef(false),url=useRef(null);
+ const dangerActive=useRef(false);
  const stop=()=>{
-  active.current=false;run.current=null;queue.current=[];busy.current=false;
+  active.current=false;run.current=null;queue.current=[];busy.current=false;dangerActive.current=false;
   if(audio.current){audio.current.pause();audio.current.removeAttribute('src');audio.current.load();}
   if(url.current){URL.revokeObjectURL(url.current);url.current=null;}
   setArmed(false);setStatus('Остановлено');
@@ -65,7 +66,10 @@ export default function MchsLocalNotificationAudioTrial({token}){
      if(!e.allowed||!e.audioAssetId||!['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(e.eventType))continue;
      const t=Date.parse(e.receivedAt||'');
      if(!Number.isFinite(t)||t<armedAt.current||Date.now()-t>120000)continue;
-     if(e.eventType==='MISSILE_ALL_CLEAR'){
+     if(e.eventType==='MISSILE_ALL_CLEAR'&&!dangerActive.current)continue;
+     if(e.eventType==='MISSILE_DANGER'&&dangerActive.current)continue;
+     if(e.eventType==='MISSILE_DANGER')dangerActive.current=true;
+     if(e.eventType==='MISSILE_ALL_CLEAR'){dangerActive.current=false;
       queue.current=[];if(run.current){audio.current.pause();run.current=null;busy.current=false;
        if(url.current){URL.revokeObjectURL(url.current);url.current=null;}}
      }
@@ -74,8 +78,10 @@ export default function MchsLocalNotificationAudioTrial({token}){
     if(!busy.current)void next();
    }catch(e){if(!cancelled)setError('Нет подтверждения связи с сервером: '+e.message);}
   };
+  const onHidden=()=>{if(document.visibilityState==='hidden')stop();};
+  document.addEventListener('visibilitychange',onHidden);
   const interval=setInterval(()=>void poll(),2000);
-  return()=>{cancelled=true;clearInterval(interval);};
+  return()=>{cancelled=true;clearInterval(interval);document.removeEventListener('visibilitychange',onHidden);};
  },[armed,token]);
  return <section className="rounded-2xl border border-amber-300/50 p-4 space-y-3">
   <h3 className="font-semibold text-lg">Реальные Android-уведомления — локальный аудиотест</h3>
