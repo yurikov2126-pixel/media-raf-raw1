@@ -176,8 +176,15 @@ def poll_mchs_execution_command(server, token):
                 print('MCHS_EXECUTION_STOP_REQUESTED',command['eventId'],flush=True)
             elif reason!='INVALID_OR_REPLAYED_COMMAND':
                 print('MCHS_EXECUTION_STOP_REJECTED',reason,flush=True)
+        elif command.get('action')=='START':
+            # Validate real cached bytes before future event-scoped playback
+            # implementation. Do not make an audible change in this phase.
+            from mchs_verified_alarm import verify_cached_alarm
+            cache_root=Path(os.environ.get('RADIO_AGENT_DATA_DIR','radio-agent-data'))/'mchs-alarm-cache'
+            _,reason=verify_cached_alarm(command,cache_root)
+            print('MCHS_EXECUTION_START_PREFLIGHT_ONLY',
+                  reason or 'AUDIO_HASH_VERIFIED_NO_PLAYBACK_AUTHORIZATION',flush=True)
         else:
-            # Real event-bound START is not connected to a verified audio asset.
             print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
     if state.get('halted') is True:
         epoch=state.get('haltEpoch')
