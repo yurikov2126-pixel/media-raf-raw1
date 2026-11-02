@@ -4,7 +4,7 @@ const now=Date.parse('2026-11-02T18:00:00Z');
 const event={id:'evt',eventType:'MISSILE_DANGER',assetId:'alarm',repeats:2,occurredAt:'2026-11-02T17:59:50Z'};
 const authorization={approved:true,mode:'ISOLATED_TRIAL',publicStreamAllowed:false,amplifierAllowed:false};
 function channel(name,log,broken=false){
- return {async start(spec){log.push(name+':START');if(broken)throw Error('broken');
+ return {async waitUntilCompleted(){log.push(name+':COMPLETE');return {completed:true};},async start(spec){log.push(name+':START');if(broken)throw Error('broken');
   return {eventId:spec.eventId,eventType:spec.eventType,action:'START',confirmed:true,playbackState:'ACTIVE',confirmedAt:new Date(now).toISOString()};},
  async stop(spec){log.push(name+':STOP');return {eventId:spec.eventId,eventType:spec.eventType,action:'STOP',confirmed:true,playbackState:'STOPPED',confirmedAt:new Date(now).toISOString()};}};
 }
@@ -87,4 +87,19 @@ test('late START after timeout triggers second compensating STOP',async()=>{
  assert.equal(after.reason,'LATE_START_AFTER_CANCEL');
  assert.equal(log.filter(s=>s==='agent STOP').length,2);
  assert.equal(result.automaticBroadcastEnabled,false);
+});
+
+test('without completion adapters both channels are stopped, not treated as complete',async()=>{
+ const log=[];const worker=channel('worker',log),agent=channel('agent',log);
+ delete agent.waitUntilCompleted;
+ const x=await runMchsTwoChannelExecution({event,authorization,worker,agent,now:()=>now});
+ assert.equal(x.ok,false);assert.equal(x.reason,'COMPLETION_ADAPTER_MISSING');
+ assert.ok(log.includes('worker:STOP'));assert.ok(log.includes('agent:STOP'));
+});
+test('completion timeout triggers independent STOP requests',async()=>{
+ const log=[];const worker=channel('worker',log),agent=channel('agent',log);
+ agent.waitUntilCompleted=()=>new Promise(()=>{});
+ const x=await runMchsTwoChannelExecution({event,authorization,worker,agent,now:()=>now,completionTimeoutMs:100});
+ assert.equal(x.ok,false);assert.equal(x.reason,'COMPLETION_TIMEOUT');
+ assert.ok(log.includes('worker:STOP'));assert.ok(log.includes('agent:STOP'));
 });
