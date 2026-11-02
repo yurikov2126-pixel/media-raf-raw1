@@ -15,6 +15,7 @@ import {normalizeMchsTypeRepeats,validateMchsTypeRepeats,buildMchsTypeAudioPrevi
 import {assessMchsLiveTrialPreflight} from '../lib/mchsLiveTrialPreflight.js';
 import {assessMissileExecutionInterlock} from '../lib/mchsExecutionInterlock.js';
 import {assessMchsDeliveryReceipts} from '../lib/mchsDeliveryReceipts.js';
+import {assessMchsDualChannelTransition} from '../lib/mchsDualChannelTransition.js';
 import {normalizeMchsEventReceipt} from '../lib/mchsEventReceiptEvidence.js';
 import {advanceMchsReceiptLedger} from '../lib/mchsReceiptLedger.js';
 import crypto from 'node:crypto';
@@ -1198,6 +1199,39 @@ router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
  res.set('Cache-Control','no-store').json(assessMchsLiveAcceptance());
 });
 /** Live transport evidence without converting heartbeats into event ACKs. */
+/** Inspect current event and transport visibility without inventing START/STOP ACKs. */
+router.get('/missile-dual-channel-status',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [event,worker,device,agentRow]=await Promise.all([
+   prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+    orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,receivedAt:true}}),
+   trainingStreamRequest().catch(()=>null),
+   deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},
+    select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
+   deviceId?prisma.setting.findUnique({where:{key:'mchs_agent_event_receipt_v1_'+deviceId}}):null
+  ]);
+  let agentReceipt;try{agentReceipt=JSON.parse(agentRow?.value||'null');}catch{}
+  const eventType=event?classifyMchsObservation(event.title,event.body):null;
+  const metadata=normalizeMchsEventReceipt(agentReceipt,{eventId:event?.id,eventType});
+  // A worker overlay status has no event binding and an agent metadata receipt
+  // is not proof of local audio. Neither can be passed as a playback ACK.
+  const start=assessMchsDualChannelTransition({eventId:event?.id,eventType,action:'START',
+   worker:null,agent:null});
+  const stop=assessMchsDualChannelTransition({eventId:event?.id,eventType,action:'STOP',
+   worker:null,agent:null});
+  const seenAt=new Date(device?.lastSeenAt).getTime();
+  const age=Date.now()-seenAt;
+  res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),
+   eventId:event?.id||null,eventType,workerReachable:worker?.httpStatus===200,
+   workerOverlayActive:worker?.httpStatus===200?worker.data?.active===true:null,
+   agentConnected:!!device&&!device.revokedAt&&device.playbackAllowed===true&&
+    Number.isFinite(age)&&age>=0&&age<=15000,
+   agentMetadataReceived:!!metadata.receipt,agentMetadataReason:metadata.reason,
+   start,stop,automaticPlaybackEnabled:false,
+   reason:'EVENT_SCOPED_PLAYBACK_ACKS_NOT_AVAILABLE'});
+ }catch(error){next(error);}
+});
 router.get('/missile-delivery-observation',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
