@@ -5,7 +5,7 @@ import {assessMchsDualChannelTransition} from './mchsDualChannelTransition.js';
  * Caller must provide verified authorization; no implicit fallback.
  */
 export async function runMchsTwoChannelExecution({
- event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000
+ event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000,stopTimeoutMs=5000
 }={}){
  const fail=(reason,details={})=>({ok:false,reason,...details,automaticBroadcastEnabled:false});
  if(!authorization||authorization.approved!==true||authorization.mode!=='ISOLATED_TRIAL'||
@@ -21,10 +21,16 @@ export async function runMchsTwoChannelExecution({
   return fail('CHANNEL_ADAPTER_MISSING');
  const spec={eventId:event.id,eventType:event.eventType,assetId:event.assetId,repeats:event.repeats,
   publicStreamAllowed:false,amplifierAllowed:false};
- const stopBoth=async()=>Promise.allSettled([
-  Promise.resolve().then(()=>worker.stop(spec)),
-  Promise.resolve().then(()=>agent.stop(spec))
- ]);
+ // Bound each STOP independently. A hanging channel must never block the
+ // other channel's STOP or the operator's failure response.
+ const boundedStop=channel=>new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(new Error('STOP_TIMEOUT')),stopTimeoutMs);
+  Promise.resolve().then(()=>channel.stop(spec)).then(
+   value=>{clearTimeout(timer);resolve(value);},
+   error=>{clearTimeout(timer);reject(error);}
+  );
+ });
+ const stopBoth=async()=>Promise.allSettled([boundedStop(worker),boundedStop(agent)]);
  const awaitStarts=()=>new Promise(resolve=>{
   let completed=false;
   let timer;
@@ -43,6 +49,8 @@ export async function runMchsTwoChannelExecution({
   ]).then(results=>done({results}));
   if(signal?.aborted)onAbort();
  });
+ if(!Number.isInteger(stopTimeoutMs)||stopTimeoutMs<100||stopTimeoutMs>120000)
+  return fail('INVALID_STOP_TIMEOUT');
  if(signal?.aborted)return fail('CANCELLED');
  let starts;
  try{
