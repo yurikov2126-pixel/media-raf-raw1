@@ -40,6 +40,7 @@ MCHS_LAB_AUTO_ACTIVE = threading.Event()
 MCHS_LAB_ONE_SHOT_EXPIRES = {'at': 0.0}
 MCHS_LAB_ONE_SHOT_LOCK = threading.Lock()
 MCHS_LAB_OBSERVED = {'phase':None,'revision':None,'at':0.0,'ready':False}
+MCHS_HALT_RECEIPT_EPOCH = {'last': None}
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
 
@@ -82,12 +83,15 @@ def acknowledge_mchs_halt(server, token):
     epoch=state.get('haltEpoch')
     if state.get('halted') is not True or not isinstance(epoch,str) or not epoch:
         return
+    if MCHS_HALT_RECEIPT_EPOCH['last']==epoch:
+        return
     payload=json.dumps({'haltEpoch':epoch}).encode('utf-8')
     req=Request(base+'/api/radio-agent/agent/mchs-dispatch-halt-received',
                 data=payload,headers={**headers,'Content-Type':'application/json'},
                 method='POST')
     with urlopen(req,timeout=3) as response:
         if response.status==200:
+            MCHS_HALT_RECEIPT_EPOCH['last']=epoch
             print('MCHS_DISPATCH_HALT_RECEIPT_ONLY',flush=True)
 
 
