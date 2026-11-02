@@ -126,7 +126,22 @@ def acknowledge_mchs_halt(server, token):
             print('MCHS_DISPATCH_HALT_RECEIPT_ONLY',flush=True)
 
 
-MCHS_EXECUTION_LAST_STATUS = {'haltEpoch': None}
+MCHS_EXECUTION_LAST_STATUS = {'haltEpoch': None, 'pendingStop': None, 'lastStopSequence': 0}
+MCHS_EXECUTION_RECEIPT_LOCK = threading.Lock()
+
+def send_mchs_device_stop_receipt(server, token, command):
+    """Acknowledge only after the isolated VLC process has exited."""
+    payload=json.dumps({'action':'STOP','sequence':command['sequence'],
+        'eventId':command['eventId'],'eventType':command['eventType'],
+        'confirmed':True,'playbackState':'STOPPED',
+        'localTrialStoppedConfirmed':True}).encode('utf-8')
+    request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-device-stop-received',
+                    data=payload,headers={'Authorization':'Bearer '+token,
+                    'Content-Type':'application/json'},method='POST')
+    with urlopen(request,timeout=3) as response:
+        return response.status==200
+
+
 
 def poll_mchs_execution_command(server, token):
     """Authenticated command transport. Reject START until event-bound playback
@@ -144,11 +159,21 @@ def poll_mchs_execution_command(server, token):
     if command is not None:
         # STOP always takes precedence. Never treat this as verified PA silence.
         if command.get('action')=='STOP' and isinstance(command.get('eventId'),str):
-            MCHS_AUDIO_STOP.set()
-            MCHS_AUDIO_START.clear()
-            MCHS_AUDIO_ARMED.clear()
-            MCHS_LAB_ONE_SHOT.clear()
-            print('MCHS_EXECUTION_STOP_REQUESTED',command['eventId'],flush=True)
+            # Expired or replayed network commands cannot change local state.
+            from mchs_event_commands import validate_command
+            with MCHS_EXECUTION_RECEIPT_LOCK:
+                accepted, reason=validate_command(command,
+                    last_sequence=MCHS_EXECUTION_LAST_STATUS['lastStopSequence'],halted=True)
+                if accepted:
+                    MCHS_EXECUTION_LAST_STATUS['pendingStop']=dict(command)
+            if accepted:
+                MCHS_AUDIO_STOP.set()
+                MCHS_AUDIO_START.clear()
+                MCHS_AUDIO_ARMED.clear()
+                MCHS_LAB_ONE_SHOT.clear()
+                print('MCHS_EXECUTION_STOP_REQUESTED',command['eventId'],flush=True)
+            elif reason!='INVALID_OR_REPLAYED_COMMAND':
+                print('MCHS_EXECUTION_STOP_REJECTED',reason,flush=True)
         else:
             # Real event-bound START is not connected to a verified audio asset.
             print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
@@ -612,6 +637,20 @@ def run(args, token):
                 network_ok=False  # trigger fresh normal stream probe/reconnect
                 last_probe=0.0
                 print('MCHS_AUDIO_TRIAL_STOPPED_RETURN_TO_PROGRAM',flush=True)
+            # Report actual process exit, not merely receipt of a STOP request.
+            # Failed acknowledgements are retried on the next main-loop iteration.
+            with MCHS_EXECUTION_RECEIPT_LOCK:
+                pending_stop=MCHS_EXECUTION_LAST_STATUS['pendingStop']
+            if pending_stop and trial_vlc is None and not MCHS_AUDIO_START.is_set():
+                try:
+                    if send_mchs_device_stop_receipt(args.server,token,pending_stop):
+                        with MCHS_EXECUTION_RECEIPT_LOCK:
+                            if MCHS_EXECUTION_LAST_STATUS['pendingStop'] is pending_stop:
+                                MCHS_EXECUTION_LAST_STATUS['lastStopSequence']=pending_stop['sequence']
+                                MCHS_EXECUTION_LAST_STATUS['pendingStop']=None
+                        print('MCHS_DEVICE_STOP_RECEIPT_CONFIRMED',pending_stop['eventId'],flush=True)
+                except (HTTPError,OSError,ValueError):
+                    print('MCHS_DEVICE_STOP_RECEIPT_RETRY',flush=True)
             if MCHS_AUDIO_START.is_set():
                 MCHS_AUDIO_START.clear()
                 if MCHS_LAB_AUTO_ACTIVE.is_set():
