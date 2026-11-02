@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from standby_plan import standby_selection
 from sync_agent import sync
+from mchs_alarm_playback import AlarmPlaybackSession
 from esp32_local import send_heartbeat
 from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
@@ -145,7 +146,7 @@ def send_mchs_device_stop_receipt(server, token, command):
 
 
 
-def poll_mchs_execution_command(server, token):
+def poll_mchs_execution_command(server, token, alarm_session=None):
     """Authenticated command transport. Reject START until event-bound playback
     and emergency STOP telemetry are implemented; HALT cancels local lab audio.
     """
@@ -169,6 +170,8 @@ def poll_mchs_execution_command(server, token):
                 if accepted:
                     MCHS_EXECUTION_LAST_STATUS['pendingStop']=dict(command)
             if accepted:
+                if alarm_session is not None:
+                    alarm_session.stop()
                 MCHS_AUDIO_STOP.set()
                 MCHS_AUDIO_START.clear()
                 MCHS_AUDIO_ARMED.clear()
@@ -193,13 +196,24 @@ def poll_mchs_execution_command(server, token):
                     print('MCHS_EXECUTION_START_REJECTED',reason,flush=True)
                 else:
                     cache_root=Path(os.environ.get('RADIO_AGENT_DATA_DIR','radio-agent-data'))/'mchs-alarm-cache'
-                    _,reason=cache_verified_alarm(command,cache_root,server,token)
-                    print('MCHS_EXECUTION_START_ASSET_READY_ONLY' if reason is None
-                          else 'MCHS_EXECUTION_START_ASSET_REJECTED',reason or command['eventId'],
-                          flush=True)
+                    verified_file,reason=cache_verified_alarm(command,cache_root,server,token)
+                    if reason is not None:
+                        print('MCHS_EXECUTION_START_ASSET_REJECTED',reason,flush=True)
+                    elif alarm_session is None:
+                        print('MCHS_EXECUTION_START_REJECTED_NO_ISOLATED_SESSION',flush=True)
+                    else:
+                        outcome=alarm_session.start(
+                            event_id=command['eventId'],file=verified_file,
+                            repeats=command['repeats'],
+                            authorized=(state.get('executionEnabled') is True
+                                        and state.get('halted') is False))
+                        print('MCHS_EXECUTION_START_SESSION',
+                              json.dumps(outcome),flush=True)
         else:
             print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
     if state.get('halted') is True:
+        if alarm_session is not None:
+            alarm_session.stop()
         epoch=state.get('haltEpoch')
         if isinstance(epoch,str) and epoch:
             if (MCHS_AUDIO_ARMED.is_set() or MCHS_AUDIO_START.is_set() or
@@ -372,6 +386,15 @@ def run(args, token):
     last_mchs_observed_revision=None
     mchs_transition_shadow=MchsTransitionShadow()
     mchs_lab_chain_transition=LabChainTransition()
+    # Only the explicitly started headphones pilot can create this session.
+    # A server command cannot declare the physical output isolated.
+    alarm_session=AlarmPlaybackSession(
+        lambda file:start_vlc(args.vlc,logfile,str(file)),
+        heartbeat=lambda:(
+            not STOP.is_set() and
+            PLAYBACK_STATE.get('lastAuthorized',0)>0 and
+            time.monotonic()-PLAYBACK_STATE.get('lastAuthorized',0)<15),
+        isolation_verified=False)
     trial_vlc=None
     trial_relay=None
     trial_started_at=0.0
@@ -542,7 +565,7 @@ def run(args, token):
                 execution_command_busy.set()
                 def check_execution_command():
                     try:
-                        poll_mchs_execution_command(args.server,token)
+                        poll_mchs_execution_command(args.server,token,alarm_session)
                     except (HTTPError,OSError,ValueError):
                         print('MCHS_EXECUTION_COMMAND_CHANNEL_UNAVAILABLE',flush=True)
                     finally:
