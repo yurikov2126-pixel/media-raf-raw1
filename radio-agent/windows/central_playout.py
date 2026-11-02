@@ -108,7 +108,7 @@ def acknowledge_mchs_halt(server, token):
         return
     # HALT immediately cancels any pending or running isolated trial.
     # Do not stop the regular station stream or touch amplifier / ESP32.
-    if MCHS_AUDIO_ARMED.is_set() or PLAYBACK_STATE.get('mode')=='MCHS_LAB_TRIAL':
+    if MCHS_AUDIO_ARMED.is_set() or MCHS_AUDIO_START.is_set() or PLAYBACK_STATE.get('mode')=='MCHS_LAB_TRIAL':
         MCHS_AUDIO_STOP.set()
         MCHS_AUDIO_START.clear()
         MCHS_AUDIO_ARMED.clear()
