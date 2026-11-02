@@ -27,6 +27,7 @@ import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {trainingStreamRequest} from '../lib/mchsTrainingStreamProxy.js';
 import {runTrainingSequence} from '../lib/mchsTrainingSequence.js';
+import {stopAndVerifyMchsWorker} from '../lib/mchsWorkerStopVerification.js';
 import {sendMchsDryRunReceipt} from '../lib/mchsWorkerReceiptProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
