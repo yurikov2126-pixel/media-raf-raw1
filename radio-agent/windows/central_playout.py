@@ -31,6 +31,7 @@ from mchs_lab_trigger import next_lab_trigger
 from mchs_auto_trial_fence import queued_auto_trial_current
 from mchs_lab_resume import should_stop_auto_lab
 from mchs_lab_observer_failsafe import observer_failsafe
+from mchs_agent_stop_evidence import trial_stop_evidence
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -514,8 +515,7 @@ def run(args, token):
                 stop_vlc(stopped_process)
                 # A stop request is not a verified stop until the child has exited.
                 # Keep the evidence scoped to this isolated trial VLC process.
-                process_exited=stopped_process is not None and stopped_process.poll() is not None
-                trial_vlc=None
+                                trial_vlc=None
                 relay_closed=False
                 if trial_relay is not None:
                     trial_relay.shutdown()
@@ -524,9 +524,8 @@ def run(args, token):
                     relay_closed=True
                 if stopped_process is not None:
                     evidence={'mode':'LAB_PROCESS_ONLY','kind':'TRIAL_VLC_STOP',
-                              'processExited':process_exited,'relayClosed':relay_closed,
-                              'reason':'OPERATOR_STOP' if not trial_reason else 'WATCHDOG',
-                              'paOutputVerified':False,'stationPlaybackStoppedVerified':False}
+                              **trial_stop_evidence(stopped_process,relay_closed),
+                              'reason':'OPERATOR_STOP' if not trial_reason else 'WATCHDOG'}
                     threading.Thread(target=report_trial_stop,args=(evidence,),daemon=True).start()
                 MCHS_LAB_AUTO_ACTIVE.clear()
                 MCHS_AUDIO_ARMED.clear()
