@@ -1,5 +1,6 @@
 import {assessMchsDispatchQueue} from '../lib/mchsDispatchQueueReadiness.js';
 import {assessMchsTrialStopConfirmation} from '../lib/mchsTrialStopConfirmation.js';
+import {assessMchsIntegrationProbe} from '../lib/mchsIntegrationProbe.js';
 import {assessMchsTransportChain} from '../lib/mchsTransportChainDiagnostics.js';
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispatchCommand,recordMchsDispatchDryRunAck,haltMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
@@ -1083,6 +1084,24 @@ router.post('/missile-dispatch-protocol/halt',requireRole('ADMIN'),async (_req,r
   const result=await mutateMchsDispatchProtocol(raw=>({state:haltMchsDispatchProtocol(raw),persist:true}));
   res.set('Cache-Control','no-store').json({...result,
    workerStop:'NOT_ATTEMPTED',automaticPlaybackEnabled:false});
+ }catch(error){next(error);}
+});
+/** Live read-only check: never invokes Worker START/STOP or any Agent command. */
+router.get('/missile-integration-probe',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
+  const [worker,device,observerRow,receiptRow,protocolRow]=await Promise.all([
+   trainingStreamRequest().catch(()=>null),
+   id?prisma.radioDevice.findUnique({where:{id},select:{
+    id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):Promise.resolve(null),
+   id?prisma.setting.findUnique({where:{key:'mchs_agent_observer_v1_'+id}}):Promise.resolve(null),
+   id?prisma.setting.findUnique({where:{key:'mchs_agent_halt_seen_v1_'+id}}):Promise.resolve(null),
+   prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}})
+  ]);
+  const decode=row=>{try{return JSON.parse(row?.value||'null');}catch{return null;}};
+  const report=assessMchsIntegrationProbe({worker,agent:device,observer:decode(observerRow),
+   haltReceipt:decode(receiptRow),haltEpoch:normalizeMchsDispatchProtocol(decode(protocolRow)).haltEpoch});
+  res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),...report});
  }catch(error){next(error);}
 });
 router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
