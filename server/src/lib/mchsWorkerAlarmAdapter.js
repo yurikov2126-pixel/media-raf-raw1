@@ -2,12 +2,13 @@ import {stopAndVerifyMchsWorker} from './mchsWorkerStopVerification.js';
 /** Real PCM Worker transport for operator-authorized isolated acceptance.
  * Do not connect this adapter to public automatic emergency dispatch.
  */
-export function createMchsWorkerAlarmAdapter({request,pollMs=500,maxTrackMs=300000}={}){
+export function createMchsWorkerAlarmAdapter({request,pollMs=500,maxTrackMs=300000,isolatedOutputVerified=false}={}){
  if(typeof request!=='function')throw new Error('WORKER_TRANSPORT_REQUIRED');
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  let owner=null,abort=false;
  return {
   async start(spec){
+   if(!isolatedOutputVerified)return {confirmed:false,reason:'PUBLIC_OUTPUT_NOT_ISOLATED'};
    if(owner)return {confirmed:false,reason:'BUSY'};
    if(!spec?.eventId||!['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(spec.eventType)||
       !spec.assetId||!Number.isInteger(spec.repeats)||spec.repeats<1||spec.repeats>5||
@@ -49,7 +50,8 @@ export function createMchsWorkerAlarmAdapter({request,pollMs=500,maxTrackMs=3000
   },
   async stop(spec){
    abort=true;
-   const state=await stopAndVerifyMchsWorker({request});
+   const state=isolatedOutputVerified?await stopAndVerifyMchsWorker({request}):
+    {confirmed:false,reason:'PUBLIC_OUTPUT_NOT_ISOLATED'};
    return {eventId:spec?.eventId,eventType:spec?.eventType,action:'STOP',
     confirmed:state.confirmed===true,playbackState:state.confirmed?'STOPPED':'UNKNOWN',
     confirmedAt:new Date().toISOString(),reason:state.reason};
