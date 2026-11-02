@@ -776,4 +776,20 @@ router.get('/agent/assets/:id', deviceAuth, safe(async(req,res) => {
   res.setHeader('Content-Type','application/octet-stream');
   res.sendFile(path.join(assetsRoot,path.basename(asset.storageKey)));
 }));
+// Device-authenticated, ALARM-only asset delivery; never exposes an arbitrary
+// file path or changes playback. Production event START remains separately held.
+router.get('/agent/mchs-alarm-assets/:id',deviceAuth,safe(async(req,res)=>{
+  res.setHeader('Cache-Control','private, no-store');
+  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||
+     req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+    return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(req.params.id))
+    return res.status(400).json({error:'INVALID_ASSET_ID'});
+  const asset=await prisma.radioAsset.findFirst({
+    where:{id:req.params.id,category:'ALARM',mimeType:{startsWith:'audio/'}}});
+  if(!asset)return res.status(404).json({error:'ALARM_ASSET_NOT_FOUND'});
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('Content-Type','application/octet-stream');
+  return res.sendFile(path.join(assetsRoot,path.basename(asset.storageKey)));
+}));
 export default router;
