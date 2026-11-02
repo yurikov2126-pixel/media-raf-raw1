@@ -1205,24 +1205,35 @@ router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
 router.get('/missile-two-channel-session',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
-  const [event,worker,device,agentReceiptRow]=await Promise.all([
+  const [event,worker,device,agentReceiptRow,agentMetadataRow,protocolRow]=await Promise.all([
    prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
     orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,region:true,occurredAt:true}}),
    trainingStreamRequest().catch(()=>null),
    deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},select:{
     id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
-   deviceId?prisma.setting.findUnique({where:{key:'mchs_agent_trial_vlc_state_v1_'+deviceId}}):null
+   deviceId?prisma.setting.findUnique({where:{key:'mchs_agent_trial_vlc_state_v1_'+deviceId}}):null,
+   deviceId?prisma.setting.findUnique({where:{key:'mchs_agent_event_receipt_v1_'+deviceId}}):null,
+   prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}})
   ]);
-  let trial;try{trial=JSON.parse(agentReceiptRow?.value||'null');}catch{}
+  let trial,metadata,protocol;
+  try{trial=JSON.parse(agentReceiptRow?.value||'null');}catch{}
+  try{metadata=JSON.parse(agentMetadataRow?.value||'null');}catch{}
+  try{protocol=JSON.parse(protocolRow?.value||'null');}catch{}
   const eventType=event?classifyMchsObservation(event.title,event.body):null;
   const report=assessMchsTwoChannelSession({event:{id:event?.id,eventType},operatorHold:true});
+  const metadataEvidence=normalizeMchsEventReceipt(metadata,{eventId:event?.id,eventType});
+  const halt=normalizeMchsDispatchProtocol(protocol);
   const age=Date.now()-new Date(device?.lastSeenAt).getTime();
   res.set('Cache-Control','no-store').json({...report,checkedAt:new Date().toISOString(),
    observations:{workerReachable:worker?.httpStatus===200,
     workerOverlayActive:worker?.httpStatus===200?worker.data?.active===true:null,
     agentHeartbeatCurrent:!!device&&!device.revokedAt&&device.playbackAllowed===true&&
      Number.isFinite(age)&&age>=0&&age<=15000,
-    trialVlcState:trial?.state||null,trialIsNotEventPlayback:true}});
+    trialVlcState:trial?.state||null,trialIsNotEventPlayback:true,
+    agentEventMetadataReceived:!!metadataEvidence.receipt,
+    agentEventMetadataReason:metadataEvidence.reason,
+    dispatchHaltEpoch:halt.haltEpoch||null,
+    workerEventPlaybackAckAvailable:false,agentEventPlaybackAckAvailable:false}});
  }catch(error){next(error);}
 });
 router.get('/missile-dual-channel-status',requireRole('ADMIN'),async (_req,res,next)=>{
