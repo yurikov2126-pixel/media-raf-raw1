@@ -41,7 +41,7 @@ export function createMchsWorkerAlarmAdapter({request,pollMs=500,maxTrackMs=3000
      if(!complete)throw Error(abort?'STOP_REQUESTED':'PLAYBACK_TIMEOUT');
     }
     return {confirmed:true,eventId:spec.eventId,eventType:spec.eventType,
-     action:'START',playbackState:'ACTIVE',completed:true,repeats:spec.repeats,
+     action:'COMPLETE',playbackState:'STOPPED',completed:true,repeats:spec.repeats,
      confirmedAt:new Date().toISOString(),audibleOutputVerified:false};
    }catch(error){
     await stopAndVerifyMchsWorker({request});
