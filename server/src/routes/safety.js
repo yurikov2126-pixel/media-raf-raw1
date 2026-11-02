@@ -163,10 +163,16 @@ router.post('/mchs-training-sequence/stop',requireRole('ADMIN'),async(_req,res)=
  if(!session||session.status!=='RUNNING')return res.status(409).json({error:'NO_RUNNING_SEQUENCE'});
  session.abort.abort();
  // Stop immediately rather than waiting for the next poll to notice cancellation.
- try{await trainingStreamRequest('STOP');}catch(error){
-  console.warn('MCHS_TRAINING_STOP_FAILED',JSON.stringify({reason:error.message}));
+ const result=await stopAndVerifyMchsWorker({request:trainingStreamRequest});
+ if(!result.confirmed){
+  console.error('MCHS_TRAINING_STOP_UNCONFIRMED',JSON.stringify({
+   sessionId:session.id,reason:result.reason,attempts:result.attempts}));
+  return res.status(503).set('Cache-Control','no-store').json({
+   ok:false,error:'STOP_NOT_CONFIRMED',reason:result.reason,
+   stopConfirmed:false,session:sequencePublicStatus()});
  }
- res.set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
+ res.set('Cache-Control','no-store').json({
+  ok:true,stopConfirmed:true,session:sequencePublicStatus()});
 });
 /** Operator configurable repeats; a setting alone never triggers broadcast. */
 router.get('/mchs-alarm-repeats',requireRole('ADMIN'),async (_req,res,next)=>{
