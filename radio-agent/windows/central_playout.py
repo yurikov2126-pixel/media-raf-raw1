@@ -126,6 +126,38 @@ def acknowledge_mchs_halt(server, token):
             print('MCHS_DISPATCH_HALT_RECEIPT_ONLY',flush=True)
 
 
+MCHS_EXECUTION_LAST_STATUS = {'haltEpoch': None}
+
+def poll_mchs_execution_command(server, token):
+    """Authenticated command transport. Reject START until event-bound playback
+    and emergency STOP telemetry are implemented; HALT cancels local lab audio.
+    """
+    headers={'Authorization':'Bearer '+token}
+    base=server.rstrip('/')
+    req=Request(base+'/api/radio-agent/agent/mchs-execution-command',
+                headers=headers)
+    with urlopen(req,timeout=3) as response:
+        state=json.load(response)
+    if state.get('version')!=1:
+        raise ValueError('MCHS_EXECUTION_PROTOCOL_MISMATCH')
+    command=state.get('command')
+    if command is not None:
+        # The production event-scoped playback path is not wired yet.
+        # Never reinterpret event metadata as permission to play the lab stream.
+        print('MCHS_EXECUTION_COMMAND_REJECTED_UNSUPPORTED',flush=True)
+    if state.get('halted') is True:
+        epoch=state.get('haltEpoch')
+        if isinstance(epoch,str) and epoch:
+            if (MCHS_AUDIO_ARMED.is_set() or MCHS_AUDIO_START.is_set() or
+                    PLAYBACK_STATE.get('mode')=='MCHS_LAB_TRIAL'):
+                MCHS_AUDIO_STOP.set()
+                MCHS_AUDIO_START.clear()
+                MCHS_AUDIO_ARMED.clear()
+                MCHS_LAB_ONE_SHOT.clear()
+            MCHS_EXECUTION_LAST_STATUS['haltEpoch']=epoch
+    return state
+
+
 MCHS_EVENT_RECEIPT_LAST = {'id': None}
 
 def acknowledge_mchs_observed_event(server, token):
@@ -439,6 +471,8 @@ def run(args, token):
         finally:
             halt_poll_busy.clear()
 
+    execution_command_busy=threading.Event()
+    last_execution_command_poll=[0.0]
     event_observation_busy=threading.Event()
     last_event_observation_poll=[0.0]
     print('WINDOWS HEADPHONES PILOT; NO AMP/ESP32. Stop with Ctrl+C.',flush=True)
@@ -449,6 +483,17 @@ def run(args, token):
                 last_halt_poll=now
                 halt_poll_busy.set()
                 threading.Thread(target=check_halt_receipt,daemon=True).start()
+            if now-last_execution_command_poll[0]>=3 and not execution_command_busy.is_set():
+                last_execution_command_poll[0]=now
+                execution_command_busy.set()
+                def check_execution_command():
+                    try:
+                        poll_mchs_execution_command(args.server,token)
+                    except (HTTPError,OSError,ValueError):
+                        print('MCHS_EXECUTION_COMMAND_CHANNEL_UNAVAILABLE',flush=True)
+                    finally:
+                        execution_command_busy.clear()
+                threading.Thread(target=check_execution_command,daemon=True).start()
             if now-last_event_observation_poll[0]>=3 and not event_observation_busy.is_set():
                 last_event_observation_poll[0]=now
                 event_observation_busy.set()
