@@ -1,5 +1,6 @@
 import {assessMchsDispatchQueue} from '../lib/mchsDispatchQueueReadiness.js';
 import {assessMchsTrialStopConfirmation} from '../lib/mchsTrialStopConfirmation.js';
+import {assessMchsLiveAcceptance} from '../lib/mchsLiveAcceptanceGate.js';
 import {assessMchsIntegrationProbe} from '../lib/mchsIntegrationProbe.js';
 import {assessMchsTransportChain} from '../lib/mchsTransportChainDiagnostics.js';
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispatchCommand,recordMchsDispatchDryRunAck,haltMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
@@ -1087,6 +1088,10 @@ router.post('/missile-dispatch-protocol/halt',requireRole('ADMIN'),async (_req,r
  }catch(error){next(error);}
 });
 /** Live read-only check: never invokes Worker START/STOP or any Agent command. */
+/** Read-only activation acceptance checklist. Never enables PA or automation. */
+router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
+ res.set('Cache-Control','no-store').json(assessMchsLiveAcceptance());
+});
 router.get('/missile-integration-probe',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
