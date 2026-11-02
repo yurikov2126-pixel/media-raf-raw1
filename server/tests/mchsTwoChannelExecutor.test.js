@@ -72,3 +72,19 @@ test('invalid STOP timeout prevents any channel action',async()=>{
  assert.equal(result.reason,'INVALID_STOP_TIMEOUT');
  assert.equal(log.length,0);
 });
+
+test('late START after timeout triggers second compensating STOP',async()=>{
+ const log=[];let release;
+ const late={start:()=>new Promise(resolve=>{release=resolve;}),stop:async()=>{log.push('agent STOP');}};
+ let notify;const lateStop=new Promise(resolve=>{notify=resolve;});
+ const result=await runMchsTwoChannelExecution({event,authorization,
+  worker:channel('worker',log),agent:late,now:()=>now,startTimeoutMs:100,
+  onLateStop:notify});
+ assert.equal(result.reason,'START_TIMEOUT');
+ assert.equal(log.filter(s=>s==='agent STOP').length,1);
+ release({confirmed:true});
+ const after=await lateStop;
+ assert.equal(after.reason,'LATE_START_AFTER_CANCEL');
+ assert.equal(log.filter(s=>s==='agent STOP').length,2);
+ assert.equal(result.automaticBroadcastEnabled,false);
+});
