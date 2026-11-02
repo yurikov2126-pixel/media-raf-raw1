@@ -6,7 +6,7 @@ test('real shared public Worker remains blocked from isolated trial',async()=>{
  let called=false;
  const adapter=createMchsWorkerAlarmAdapter({request:async()=>{called=true;throw Error('MUST_NOT_CALL')}});
  const start=await adapter.start(spec);
- assert.equal(start.confirmed,false);assert.equal(start.reason,'PUBLIC_OUTPUT_NOT_ISOLATED');
+ assert.equal(start.confirmed,false);assert.equal(start.reason,'OUTPUT_ISOLATION_NOT_VERIFIED');
  assert.equal(called,false);
 });
 test('only missile types, and all-clear repeats once',async()=>{
