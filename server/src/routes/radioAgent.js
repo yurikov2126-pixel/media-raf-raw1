@@ -245,6 +245,44 @@ router.post('/agent/mchs-event-observation-received',deviceAuth,safe(async(req,r
  res.json({accepted:true,receiptOnly:true,audioPlayed:false});
 }));
 // Authenticated, non-actuating HALT beacon. The Agent only confirms receipt.
+
+// Production device-authenticated command transport. No automatic START is
+// issued while the real-event authorization and audio binding are unverified.
+// STOP is an actionable local trial cancellation, not a proof of PA silence.
+router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const row=await prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
+ let raw;try{raw=JSON.parse(row?.value||'null');}catch{}
+ const state=normalizeMchsDispatchProtocol(raw);
+ res.json({version:1,command:null,halted:true,haltEpoch:state.haltEpoch,
+  executionEnabled:false,automaticPlaybackEnabled:false,
+  reason:'REAL_EVENT_EXECUTION_NOT_AUTHORIZED'});
+}));
+router.post('/agent/mchs-execution-command-receipt',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const body=req.body||{};
+ if(body.version!==1||body.action!=='STOP'||body.commandId!=='HALT'||
+   typeof body.haltEpoch!=='string'||body.haltEpoch.length>40||
+   body.confirmed!==true||body.playbackState!=='STOPPED')
+  return res.status(400).json({error:'INVALID_COMMAND_RECEIPT'});
+ const row=await prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
+ let raw;try{raw=JSON.parse(row?.value||'null');}catch{}
+ const state=normalizeMchsDispatchProtocol(raw);
+ if(!state.haltEpoch||state.haltEpoch!==body.haltEpoch)
+  return res.status(409).json({error:'HALT_EPOCH_MISMATCH'});
+ const key='mchs_agent_execution_stop_receipt_v1_'+req.radioDevice.id;
+ const value=JSON.stringify({commandId:'HALT',haltEpoch:body.haltEpoch,
+  localTrialStoppedConfirmed:true,realEventPlaybackConfirmed:false,
+  physicalPaStoppedVerified:false,receivedAt:new Date().toISOString()});
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ res.json({accepted:true,localTrialStoppedConfirmed:true,
+  realEventPlaybackConfirmed:false,physicalPaStoppedVerified:false});
+}));
+
 router.get('/agent/mchs-dispatch-halt',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
