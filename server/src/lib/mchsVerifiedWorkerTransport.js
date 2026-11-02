@@ -63,8 +63,14 @@ export function createMchsVerifiedWorkerTransport({request,isolatedOutputVerifie
        throw Error('REPEAT_NOT_OBSERVED');
      }
     }
+    // Natural completion releases the event lock for the next genuine event.
+    // STOP remains independently available even after this transition.
+    if(session===current)session=null;
     return {completed:true,eventId:current.eventId,repeats:current.repeats};
-   }catch(error){return {completed:false,reason:error.message||'WORKER_FAILED'};}
+   }catch(error){
+    if(session===current)session=null;
+    return {completed:false,reason:error.message||'WORKER_FAILED'};
+   }
   },
   async stop(spec){
    if(session)session.aborted=true;
