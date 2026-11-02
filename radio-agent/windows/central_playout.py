@@ -40,6 +40,7 @@ MCHS_LAB_AUTO_ACTIVE = threading.Event()
 MCHS_LAB_ONE_SHOT_EXPIRES = {'at': 0.0}
 MCHS_LAB_ONE_SHOT_LOCK = threading.Lock()
 MCHS_LAB_OBSERVED = {'phase':None,'revision':None,'at':0.0,'ready':False}
+MCHS_AUTO_LAB_EXPECTED_REVISION = {'value':None}
 MCHS_HALT_RECEIPT_EPOCH = {'last': None}
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
@@ -348,6 +349,7 @@ def run(args, token):
                     MCHS_AUDIO_STOP.clear()
                     MCHS_AUDIO_ARMED.set()
                     MCHS_LAB_AUTO_ACTIVE.set()
+                    MCHS_AUTO_LAB_EXPECTED_REVISION['value']=revision
                     MCHS_AUDIO_START.set()
                     print('MCHS_LAB_ONE_SHOT_TRIGGERED',revision,flush=True)
                 last_mchs_observed_revision=revision
@@ -494,6 +496,17 @@ def run(args, token):
                 print('MCHS_AUDIO_TRIAL_STOPPED_RETURN_TO_PROGRAM',flush=True)
             if MCHS_AUDIO_START.is_set():
                 MCHS_AUDIO_START.clear()
+                if MCHS_LAB_AUTO_ACTIVE.is_set():
+                    with MCHS_LAB_ONE_SHOT_LOCK:
+                        observed=dict(MCHS_LAB_OBSERVED)
+                    if (not observed['ready'] or observed['phase']!='ALERT' or
+                            observed['revision']!=MCHS_AUTO_LAB_EXPECTED_REVISION['value'] or
+                            now-observed['at']>3 or now<observed['at']):
+                        MCHS_LAB_AUTO_ACTIVE.clear()
+                        MCHS_AUTO_LAB_EXPECTED_REVISION['value']=None
+                        MCHS_AUDIO_ARMED.clear()
+                        print('MCHS_AUTO_LAB_STALE_TRIGGER_REJECTED',flush=True)
+                        continue
                 if trial_vlc is None and MCHS_AUDIO_ARMED.is_set() and not denied and network_ok and now-last_authorized<15:
                     try:
                         # Close both audible decks before opening the training audio.
