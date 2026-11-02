@@ -776,6 +776,30 @@ router.get('/agent/assets/:id', deviceAuth, safe(async(req,res) => {
   res.setHeader('Content-Type','application/octet-stream');
   res.sendFile(path.join(assetsRoot,path.basename(asset.storageKey)));
 }));
+// Local executor telemetry is observability only: it never unlocks START,
+// changes an alarm state or attests that a physical PA speaker is silent.
+router.post('/agent/mchs-playback-session-status',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||
+    req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const body=req.body||{};
+ if(body.version!==1||
+    !['IDLE','STARTING','PLAYING','COMPLETED','STOPPED'].includes(body.state)||
+    (body.eventId!==null&&typeof body.eventId!=='string')||
+    (typeof body.eventId==='string'&&!/^[A-Za-z0-9_-]{1,128}$/.test(body.eventId))||
+    !Number.isInteger(body.completedRepeats)||body.completedRepeats<0||body.completedRepeats>5||
+    (body.state!=='IDLE'&&typeof body.eventId!=='string'))
+  return res.status(400).json({error:'INVALID_SESSION_STATUS'});
+ const key='mchs_agent_playback_session_status_v1_'+req.radioDevice.id;
+ const value=JSON.stringify({version:1,eventId:body.eventId,
+  state:body.state,completedRepeats:body.completedRepeats,
+  reportedAt:new Date().toISOString(),
+  localProcessStateOnly:true,physicalPaOutputVerified:false,
+  automaticPublicBroadcastAuthorized:false});
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ res.json({accepted:true,localProcessStateOnly:true,publicPlaybackAuthorized:false});
+}));
 // Device-authenticated, ALARM-only asset delivery; never exposes an arbitrary
 // file path or changes playback. Production event START remains separately held.
 router.get('/agent/mchs-alarm-assets/:id',deviceAuth,safe(async(req,res)=>{
