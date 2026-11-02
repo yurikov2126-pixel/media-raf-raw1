@@ -3,7 +3,7 @@ export const MCHS_DISPATCH_PROTOCOL_KEY='mchs_dispatch_protocol_v1';
 const STATES=new Set(['STAGED','ACKED_DRY_RUN','EXPIRED','HALTED']);
 export function normalizeMchsDispatchProtocol(raw){
  const r=raw&&typeof raw==='object'?raw:{};
- return {halted:true,commands:Array.isArray(r.commands)?r.commands.filter(c=>
+ return {halted:true,haltEpoch:typeof r.haltEpoch==='string' && Number.isFinite(Date.parse(r.haltEpoch))?r.haltEpoch:null,commands:Array.isArray(r.commands)?r.commands.filter(c=>
   c&&typeof c.commandId==='string'&&STATES.has(c.status)).slice(-250)
   .map(c=>({commandId:c.commandId,sourceEventId:typeof c.sourceEventId==='string'?c.sourceEventId:null,
    eventType:c.eventType,status:c.status,createdAt:c.createdAt,updatedAt:c.updatedAt})):[],
@@ -40,7 +40,7 @@ export function recordMchsDispatchDryRunAck(raw,{commandId,sourceEventId},nowMs=
 }
 export function haltMchsDispatchProtocol(raw,nowMs=Date.now()){
  const state=normalizeMchsDispatchProtocol(raw);
- return {...state,halted:true,commands:state.commands.map(c=>c.status==='STAGED'?
+ return {...state,halted:true,haltEpoch:new Date(nowMs).toISOString(),commands:state.commands.map(c=>c.status==='STAGED'?
   {...c,status:'HALTED',updatedAt:new Date(nowMs).toISOString()}:c),
   executionEnabled:false,dispatchAuthorized:false};
 }

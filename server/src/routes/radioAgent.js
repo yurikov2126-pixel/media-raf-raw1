@@ -15,6 +15,7 @@ import { streamWorker, workerHealth } from '../lib/radioWorkerProxy.js';
 import { workerRequest } from '../lib/radioLiveOpusGateway.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
+import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 const router = Router();
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -200,6 +201,38 @@ router.get('/agent/mchs-integration-observe',deviceAuth,safe(async(req,res)=>{
  }catch{
   res.status(503).json({error:'LAB_WORKER_UNAVAILABLE',mode:'OBSERVE_ONLY'});
  }
+}));
+// Authenticated, non-actuating HALT beacon. The Agent only confirms receipt.
+router.get('/agent/mchs-dispatch-halt',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const row=await prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
+ let raw;try{raw=JSON.parse(row?.value||'null');}catch{}
+ const state=normalizeMchsDispatchProtocol(raw);
+ res.json({halted:true,haltEpoch:state.haltEpoch,executionEnabled:false,automaticPlaybackEnabled:false});
+}));
+router.post('/agent/mchs-dispatch-halt-received',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const epoch=req.body?.haltEpoch;
+ if(typeof epoch!=='string'||!/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$/.test(epoch))
+  return res.status(400).json({error:'INVALID_HALT_EPOCH'});
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581452)`;
+  const row=await tx.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
+  let raw;try{raw=JSON.parse(row?.value||'null');}catch{}
+  const state=normalizeMchsDispatchProtocol(raw);
+  if(!state.haltEpoch||state.haltEpoch!==epoch)return {accepted:false};
+  const key='mchs_agent_halt_seen_v1_'+req.radioDevice.id;
+  const value=JSON.stringify({haltEpoch:epoch,receivedAt:new Date().toISOString(),receiptOnly:true,
+   playbackStoppedVerified:false,paStoppedVerified:false});
+  await tx.setting.upsert({where:{key},create:{key,value},update:{value}});
+  return {accepted:true};
+ });
+ if(!result.accepted)return res.status(409).json({error:'STALE_HALT_EPOCH'});
+ res.json({accepted:true,receiptOnly:true,playbackStoppedVerified:false,paStoppedVerified:false});
 }));
 // Read-only integration telemetry: no MCHS command or station output changes.
 router.post('/agent/mchs-observer-report',deviceAuth,safe(async(req,res)=>{

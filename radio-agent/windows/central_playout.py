@@ -40,6 +40,7 @@ MCHS_LAB_AUTO_ACTIVE = threading.Event()
 MCHS_LAB_ONE_SHOT_EXPIRES = {'at': 0.0}
 MCHS_LAB_ONE_SHOT_LOCK = threading.Lock()
 MCHS_LAB_OBSERVED = {'phase':None,'revision':None,'at':0.0,'ready':False}
+MCHS_HALT_RECEIPT_EPOCH = {'last': None}
 PLAYBACK_STATE = {'mode':'STOPPED','lastAuthorized':0.0,'offlineGrace':900,'streamLastSeen':0.0,'broadcastRunning':False}
 
 
@@ -71,6 +72,28 @@ def read_mchs_observer(server, token):
                     headers={'Authorization':'Bearer '+token})
     with urlopen(request,timeout=3) as response:
         return json.load(response)
+
+def acknowledge_mchs_halt(server, token):
+    """Read and acknowledge a HALT epoch; never manipulate playback or PA."""
+    base=server.rstrip('/')
+    headers={'Authorization':'Bearer '+token}
+    with urlopen(Request(base+'/api/radio-agent/agent/mchs-dispatch-halt',
+                         headers=headers),timeout=3) as response:
+        state=json.load(response)
+    epoch=state.get('haltEpoch')
+    if state.get('halted') is not True or not isinstance(epoch,str) or not epoch:
+        return
+    if MCHS_HALT_RECEIPT_EPOCH['last']==epoch:
+        return
+    payload=json.dumps({'haltEpoch':epoch}).encode('utf-8')
+    req=Request(base+'/api/radio-agent/agent/mchs-dispatch-halt-received',
+                data=payload,headers={**headers,'Content-Type':'application/json'},
+                method='POST')
+    with urlopen(req,timeout=3) as response:
+        if response.status==200:
+            MCHS_HALT_RECEIPT_EPOCH['last']=epoch
+            print('MCHS_DISPATCH_HALT_RECEIPT_ONLY',flush=True)
+
 
 def get_probe(server, token):
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/stream',
@@ -322,6 +345,13 @@ def run(args, token):
                     **report,'stationPlaybackChanged':False,'paOutputChanged':False}),flush=True)
             # Heartbeats refresh dashboard freshness even if revision is unchanged.
             # No audio, power or ESP32 action is performed by the observer.
+            try:
+                acknowledge_mchs_halt(args.server,token)
+            except HTTPError as error:
+                if error.code not in (403,409):
+                    print('MCHS_DISPATCH_HALT_RECEIPT_UNAVAILABLE',flush=True)
+            except (OSError,ValueError):
+                print('MCHS_DISPATCH_HALT_RECEIPT_UNAVAILABLE',flush=True)
             try:
                 send_mchs_observer_report(args.server,token,report)
             except (OSError,ValueError):
