@@ -6,6 +6,7 @@ import MchsEventTypeRules from './MchsEventTypeRules.jsx';
 import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
 import MchsOperationalOverview from './MchsOperationalOverview.jsx';
+import MchsTransportStatus from './MchsTransportStatus.jsx';
 import MchsEmergencySimulation from './MchsEmergencySimulation.jsx';
 import MchsDeliveryReliability from './MchsDeliveryReliability.jsx';
 import { api } from '../../../api/client.js';
@@ -104,7 +105,7 @@ export default function SafetyMchs({ token }) {
         <button type="button" disabled={saving} onClick={save} className="rounded-xl bg-violet-600 px-5 py-2.5 text-white font-semibold disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить настройки'}</button>
       </>}
     </section>}
-    {pane === 'overview' && <MchsOperationalOverview token={token} onOpen={switchPane} />}
+    {pane === 'overview' && <div className="space-y-4"><MchsTransportStatus token={token}/><MchsOperationalOverview token={token} onOpen={switchPane}/></div>}
     
     {pane === 'simulation' && <MchsEmergencySimulation token={token} />}
     
