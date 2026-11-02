@@ -12,6 +12,7 @@ import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroi
 import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJournal,recoverExecutionJournal} from '../lib/mchsExecutionJournal.js';
 import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
 import {normalizeMchsTypeRepeats,validateMchsTypeRepeats,buildMchsTypeAudioPreview} from '../lib/mchsTypeAudioPlan.js';
+import {assessMchsLiveTrialPreflight} from '../lib/mchsLiveTrialPreflight.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
@@ -632,6 +633,30 @@ router.post('/missile-auto-checkpoint/reconcile',requireRole('ADMIN'),async (_re
    return {...evaluated,decisions:evaluated.decisions.slice(-30)};
   });
   res.set('Cache-Control','no-store').json(result);
+ }catch(error){next(error);}
+});
+/** Real telemetry and saved rules, with no synthetic events or actuation. */
+router.get('/missile-live-trial-preflight',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [rules,assets,worker,device,stopRow,esp32Row]=await Promise.all([
+   getTypeRules(),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},select:{id:true}}),
+   trainingStreamRequest().catch(()=>null),
+   deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
+   deviceId?prisma.setting.findUnique({where:{key:'mchs_trial_process_stop_v1_'+deviceId}}):null,
+   prisma.setting.findUnique({where:{key:'radio_esp32_status_v1'}})
+  ]);
+  let stop,esp32;try{stop=JSON.parse(stopRow?.value||'null');}catch{}
+  try{esp32=JSON.parse(esp32Row?.value||'null');}catch{}
+  const agentConfirmed=!!device&&!device.revokedAt&&device.playbackAllowed===true&&
+   Date.now()-new Date(device.lastSeenAt).getTime()<=15000;
+  const stopConfirmed=assessMchsTrialStopConfirmation(stop,{deviceBound:!!device}).confirmed===true;
+  // Telemetry of an ESP32 does not prove physical isolation or a successful STOP.
+  const report=assessMchsLiveTrialPreflight({rules,assets,workerReachable:worker?.httpStatus===200,
+   agentConfirmed,stopConfirmed,esp32Ready:false});
+  res.set('Cache-Control','no-store').json({...report,checkedAt:new Date().toISOString(),
+   esp32TelemetryPresent:!!esp32,physicalIsolationVerified:false});
  }catch(error){next(error);}
 });
 /** Read-only command preview. Nothing is sent to the Worker or amplifier. */
