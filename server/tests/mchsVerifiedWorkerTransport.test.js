@@ -44,3 +44,18 @@ test('all clear cannot repeat',async()=>{
  const a=createMchsVerifiedWorkerTransport({request:async()=>{throw Error('unexpected');},isolatedOutputVerified:true});
  assert.equal((await a.start({...spec,eventType:'MISSILE_ALL_CLEAR'})).reason,'INVALID_SESSION');
 });
+
+test('completed Worker alarm unlocks next event without manual STOP',async()=>{
+ let active=false,starts=0;
+ const request=async(action,id)=>{
+  if(action==='START'){active=true;starts++;return {httpStatus:200,data:{ok:true}};}
+  if(action==='STOP'){active=false;return {httpStatus:200,data:{ok:true}};}
+  return {httpStatus:200,data:{active,assetId:spec.assetId,lastStopReason:'FILE_COMPLETED'}};
+ };
+ const adapter=createMchsVerifiedWorkerTransport({request,isolatedOutputVerified:true,
+  sleep:async()=>{active=false;},pollMs:1});
+ assert.equal((await adapter.start({...spec,repeats:1})).confirmed,true);
+ assert.equal((await adapter.waitUntilCompleted({...spec,repeats:1})).completed,true);
+ assert.equal((await adapter.start({...spec,id:'event-2',eventId:'event-2',repeats:1})).confirmed,true);
+ assert.equal(starts,2);
+});
