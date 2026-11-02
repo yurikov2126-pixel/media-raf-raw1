@@ -69,6 +69,16 @@ def send_mchs_observer_report(server, token, report):
         return response.status==200
 
 
+def send_mchs_trial_vlc_state(server, token, state, process_running):
+    """Report observed local trial VLC process state, not an MCHS event ACK."""
+    payload=json.dumps({'state':state,'processRunning':bool(process_running)}).encode('utf-8')
+    req=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-trial-vlc-state',
+                data=payload,headers={'Authorization':'Bearer '+token,
+                'Content-Type':'application/json'},method='POST')
+    with urlopen(req,timeout=3) as response:
+        return response.status==200
+
+
 def send_mchs_trial_process_stop(server, token, report):
     """Report only the isolated VLC process after local shutdown."""
     req=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-trial-process-stop',
@@ -395,6 +405,12 @@ def run(args, token):
         finally:
             mchs_observer_busy.clear()
 
+    def report_trial_vlc_state(state, process_running):
+        try:
+            send_mchs_trial_vlc_state(args.server,token,state,process_running)
+        except (OSError,ValueError):
+            print('MCHS_TRIAL_VLC_STATE_REPORT_UNAVAILABLE',flush=True)
+
     def report_trial_stop(evidence):
         try:
             send_mchs_trial_process_stop(args.server,token,evidence)
@@ -527,6 +543,9 @@ def run(args, token):
                               **trial_stop_evidence(stopped_process,relay_closed),
                               'reason':'OPERATOR_STOP' if not trial_reason else 'WATCHDOG'}
                     threading.Thread(target=report_trial_stop,args=(evidence,),daemon=True).start()
+                    if evidence['stopConfirmed']:
+                        threading.Thread(target=report_trial_vlc_state,
+                                         args=('STOPPED',False),daemon=True).start()
                 MCHS_LAB_AUTO_ACTIVE.clear()
                 MCHS_AUDIO_ARMED.clear()
                 MCHS_AUDIO_START.clear()
@@ -560,6 +579,9 @@ def run(args, token):
                         lab_url='http://127.0.0.1:%d/lab.wav'%trial_relay.server_address[1]
                         trial_vlc=start_vlc(args.vlc,logfile,'--network-caching=120',lab_url)
                         trial_started_at=now
+                        if trial_vlc is not None and trial_vlc.poll() is None:
+                            threading.Thread(target=report_trial_vlc_state,
+                                             args=('STARTED',True),daemon=True).start()
                         print('MCHS_AUDIO_TRIAL_STARTED_MAX_30_SECONDS',flush=True)
                     except (OSError,ValueError):
                         MCHS_AUDIO_STOP.set()
