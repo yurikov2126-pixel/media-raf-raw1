@@ -219,22 +219,19 @@ router.post('/agent/mchs-dispatch-halt-received',deviceAuth,safe(async(req,res)=
  const epoch=req.body?.haltEpoch;
  if(typeof epoch!=='string'||!/^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$/.test(epoch))
   return res.status(400).json({error:'INVALID_HALT_EPOCH'});
- await prisma.$transaction(async tx=>{
+ const result=await prisma.$transaction(async tx=>{
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581452)`;
   const row=await tx.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
   let raw;try{raw=JSON.parse(row?.value||'null');}catch{}
   const state=normalizeMchsDispatchProtocol(raw);
-  if(!state.haltEpoch||state.haltEpoch!==epoch)throw Object.assign(new Error('STALE_HALT_EPOCH'),{status:409});
+  if(!state.haltEpoch||state.haltEpoch!==epoch)return {accepted:false};
   const key='mchs_agent_halt_seen_v1_'+req.radioDevice.id;
   const value=JSON.stringify({haltEpoch:epoch,receivedAt:new Date().toISOString(),receiptOnly:true,
    playbackStoppedVerified:false,paStoppedVerified:false});
   await tx.setting.upsert({where:{key},create:{key,value},update:{value}});
- }).catch(error=>{if(error.status===409)return null;throw error;}).then(async result=>{
-  // Compare again for explicit stale response; no state changes to radio are performed.
+  return {accepted:true};
  });
- const seen=await prisma.setting.findUnique({where:{key:'mchs_agent_halt_seen_v1_'+req.radioDevice.id}});
- let receipt;try{receipt=JSON.parse(seen?.value||'null');}catch{}
- if(receipt?.haltEpoch!==epoch)return res.status(409).json({error:'STALE_HALT_EPOCH'});
+ if(!result.accepted)return res.status(409).json({error:'STALE_HALT_EPOCH'});
  res.json({accepted:true,receiptOnly:true,playbackStoppedVerified:false,paStoppedVerified:false});
 }));
 // Read-only integration telemetry: no MCHS command or station output changes.
