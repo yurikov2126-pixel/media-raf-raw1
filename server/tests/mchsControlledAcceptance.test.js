@@ -31,3 +31,21 @@ test('invalid checkpoint state is rejected before playing audio',async()=>{
  const result=await executeMchsControlledAcceptance({...args,checkpoint:{state:'INVALID'}});
  assert.equal(result.reason,'UNKNOWN_STATE');
 });
+
+test('accepted event completes through both channels and advances checkpoint only after verified STOP',async()=>{
+ const log=[];
+ const channel=name=>({
+  async start(spec){log.push(name+':start');return {eventId:spec.eventId,eventType:spec.eventType,
+   action:'START',confirmed:true,playbackState:'ACTIVE',confirmedAt:new Date(at).toISOString()};},
+  async waitUntilCompleted(){log.push(name+':complete');return {completed:true};},
+  async stop(spec){log.push(name+':stop');return {eventId:spec.eventId,eventType:spec.eventType,
+   action:'STOP',confirmed:true,playbackState:'STOPPED',confirmedAt:new Date(at).toISOString()};}
+ });
+ const result=await executeMchsControlledAcceptance({...args,
+  worker:channel('worker'),agent:channel('agent')});
+ assert.equal(result.ok,true);
+ assert.equal(result.proposedCheckpoint.state,'DANGER');
+ assert.equal(result.proposedCheckpoint.lastSourceEventId,'android-1');
+ assert.equal(result.executionEnabled,false);
+ assert.equal(log.length,6);
+});
