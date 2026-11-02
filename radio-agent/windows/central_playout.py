@@ -515,7 +515,7 @@ def run(args, token):
                 stop_vlc(stopped_process)
                 # A stop request is not a verified stop until the child has exited.
                 # Keep the evidence scoped to this isolated trial VLC process.
-                                trial_vlc=None
+                trial_vlc=None
                 relay_closed=False
                 if trial_relay is not None:
                     trial_relay.shutdown()
