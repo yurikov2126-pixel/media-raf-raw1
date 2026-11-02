@@ -5,7 +5,7 @@ import {assessMchsDualChannelTransition} from './mchsDualChannelTransition.js';
  * Caller must provide verified authorization; no implicit fallback.
  */
 export async function runMchsTwoChannelExecution({
- event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000,stopTimeoutMs=5000
+ event,authorization,worker,agent,signal,now=()=>Date.now(),startTimeoutMs=10000,stopTimeoutMs=5000,onLateStop
 }={}){
  const fail=(reason,details={})=>({ok:false,reason,...details,automaticBroadcastEnabled:false});
  if(!authorization||authorization.approved!==true||authorization.mode!=='ISOLATED_TRIAL'||
@@ -32,6 +32,7 @@ export async function runMchsTwoChannelExecution({
  });
  const stopBoth=async()=>Promise.allSettled([boundedStop(worker),boundedStop(agent)]);
  const awaitStarts=()=>new Promise(resolve=>{
+  let lateStartCancelled=false;
   let completed=false;
   let timer;
   const done=result=>{
@@ -40,13 +41,22 @@ export async function runMchsTwoChannelExecution({
    signal?.removeEventListener?.('abort',onAbort);
    resolve(result);
   };
-  const onAbort=()=>done({reason:'CANCELLED'});
+  const onAbort=()=>{lateStartCancelled=true;done({reason:'CANCELLED'});};
   signal?.addEventListener?.('abort',onAbort,{once:true});
-  timer=setTimeout(()=>done({reason:'START_TIMEOUT'}),startTimeoutMs);
+  timer=setTimeout(()=>{lateStartCancelled=true;done({reason:'START_TIMEOUT'});},startTimeoutMs);
   void Promise.allSettled([
    Promise.resolve().then(()=>worker.start(spec)),
    Promise.resolve().then(()=>agent.start(spec))
-  ]).then(results=>done({results}));
+  ]).then(results=>{
+   // START can finish *after* the timeout/abort and after initial STOP.
+   // Issue a second independent STOP, never promote late evidence to success.
+   if(completed&&lateStartCancelled){
+    void stopBoth().then(stops=>{
+     onLateStop?.({eventId:spec.eventId,reason:'LATE_START_AFTER_CANCEL',
+      stopSettled:stops.every(x=>x.status==='fulfilled')});
+    }).catch(()=>{});
+   }else done({results});
+  });
   if(signal?.aborted)onAbort();
  });
  if(!Number.isInteger(stopTimeoutMs)||stopTimeoutMs<100||stopTimeoutMs>120000)
