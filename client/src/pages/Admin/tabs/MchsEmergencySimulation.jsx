@@ -53,8 +53,11 @@ export default function MchsEmergencySimulation({token}){
  const stop=async()=>{
   setBusy(true);setError('');
   try{
-   if(session?.status==='RUNNING')await api('/safety/mchs-training-sequence/stop',{token,method:'POST'});
-   else await api('/safety/mchs-training-stream',{token,method:'POST',body:{action:'STOP'}});
+   const response=session?.status==='RUNNING'
+    ?await api('/safety/mchs-training-sequence/stop',{token,method:'POST'})
+    :await api('/safety/mchs-training-stream',{token,method:'POST',body:{action:'STOP'}});
+   if(response?.stopConfirmed!==true)throw new Error('Worker не подтвердил выключение ALARM');
+   setMessage('STOP подтверждён: звуковой ALARM в Radio Worker остановлен');
    await refresh();
   }catch(e){setError('Остановка не подтверждена: '+(e.message||'нет ответа Worker'));}
   finally{setBusy(false);}
