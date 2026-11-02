@@ -41,4 +41,27 @@ class SessionTests(unittest.TestCase):
         s._thread.join(timeout=2)
         self.assertEqual(s.status()['state'],'STOPPED')
 
+    def test_stop_during_slow_launch_does_not_report_completed(self):
+        launching=threading.Event()
+        proceed=threading.Event()
+        processes=[]
+        def slow_launch(_):
+            launching.set()
+            self.assertTrue(proceed.wait(timeout=2))
+            proc=FakeProcess()
+            proc.poll=lambda:proc.returncode
+            processes.append(proc)
+            return proc
+        session=AlarmPlaybackSession(slow_launch,isolation_verified=True)
+        self.assertTrue(session.start(event_id='race',file=self.file,repeats=1,authorized=True)['accepted'])
+        self.assertTrue(launching.wait(timeout=2))
+        stopper=threading.Thread(target=session.stop)
+        stopper.start()
+        proceed.set()
+        stopper.join(timeout=5)
+        session._thread.join(timeout=2)
+        self.assertEqual(session.status()['state'],'STOPPED')
+        self.assertEqual(session.status()['completedRepeats'],0)
+        self.assertIsNotNone(processes[0].returncode)
+
 if __name__=='__main__':unittest.main()
