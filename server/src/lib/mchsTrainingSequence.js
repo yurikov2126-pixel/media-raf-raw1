@@ -1,3 +1,4 @@
+import {stopAndVerifyMchsWorker} from './mchsWorkerStopVerification.js';
 import {planAlarmSequence,normalizeDangerRepeats} from './mchsAlarmRepeats.js';
 /** Explicit operator-run training sequence on existing PCM training overlay.
  * Always stops on failure; never runs from MCHS events.
@@ -39,7 +40,8 @@ export async function runTrainingSequence({dangerAssetId,clearAssetId,request,si
   }
   return {ok:true,reason:'SEQUENCE_COMPLETED',normalProgramExpected:true};
  }catch(error){
-  if(started)try{await request('STOP');}catch{}
-  return {ok:false,reason:error.message||'SEQUENCE_FAILED',normalProgramExpected:true};
+  const stop=started?await stopAndVerifyMchsWorker({request}):null;
+  return {ok:false,reason:error.message||'SEQUENCE_FAILED',normalProgramExpected:stop?.confirmed===true,
+   stopConfirmed:stop?.confirmed??null,stopReason:stop?.reason||null};
  }
 }
