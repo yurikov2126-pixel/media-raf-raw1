@@ -16,6 +16,7 @@ import {assessMchsLiveTrialPreflight} from '../lib/mchsLiveTrialPreflight.js';
 import {assessMissileExecutionInterlock} from '../lib/mchsExecutionInterlock.js';
 import {assessMchsDeliveryReceipts} from '../lib/mchsDeliveryReceipts.js';
 import {normalizeMchsEventReceipt} from '../lib/mchsEventReceiptEvidence.js';
+import {advanceMchsReceiptLedger} from '../lib/mchsReceiptLedger.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
@@ -1218,11 +1219,12 @@ router.get('/missile-delivery-observation',requireRole('ADMIN'),async (_req,res,
   let agentRaw;try{agentRaw=JSON.parse(agentEventRow?.value||'null');}catch{}
   const eventType=event?classifyMchsObservation(event.title,event.body):null;
   const agentEvidence=normalizeMchsEventReceipt(agentRaw,{eventId:event?.id,eventType});
+  const receiptLedger=agentEvidence.receipt?advanceMchsReceiptLedger(null,{...agentEvidence.receipt,channel:'AGENT'}):null;
   const receipts=assessMchsDeliveryReceipts({envelope:null,workerReceipt:null,agentReceipt:agentEvidence.receipt});
   res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),
    eventId:event?.id||null,workerReadProbeOk:worker?.httpStatus===200,
    agentHeartbeatCurrent:agentHeartbeat,agentObserverFresh:observerFresh,
-   workerEventReceipt:null,agentEventReceipt:agentEvidence.receipt,agentReceiptReason:agentEvidence.reason,receipts,
+   workerEventReceipt:null,agentEventReceipt:agentEvidence.receipt,agentReceiptReason:agentEvidence.reason,agentReceiptCheck:receiptLedger?{accepted:receiptLedger.accepted,reason:receiptLedger.reason}:null,receipts,
    reason:'EVENT_ACK_TELEMETRY_NOT_IMPLEMENTED',automaticPlaybackEnabled:false,
    publicBroadcastAuthorized:false});
  }catch(error){next(error);}
