@@ -1,3 +1,4 @@
+import {advanceMchsDeviceCommand} from '../lib/mchsDeviceCommandLedger.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
 import { Router } from 'express';
@@ -249,16 +250,25 @@ router.post('/agent/mchs-event-observation-received',deviceAuth,safe(async(req,r
 // Production device-authenticated command transport. No automatic START is
 // issued while the real-event authorization and audio binding are unverified.
 // STOP is an actionable local trial cancellation, not a proof of PA silence.
+// STOP-only device command polling; public START still requires production evidence.
 router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
   return res.status(403).json({error:'DEVICE_NOT_BOUND'});
- const row=await prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}});
- let raw;try{raw=JSON.parse(row?.value||'null');}catch{}
+ const key='mchs_agent_device_commands_v1_'+req.radioDevice.id;
+ const [commandRow,haltRow]=await Promise.all([
+  prisma.setting.findUnique({where:{key}}),
+  prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}})
+ ]);
+ let ledger,raw;try{ledger=JSON.parse(commandRow?.value||'null');}catch{}
+ try{raw=JSON.parse(haltRow?.value||'null');}catch{}
  const state=normalizeMchsDispatchProtocol(raw);
- res.json({version:1,command:null,halted:true,haltEpoch:state.haltEpoch,
+ const delivered=advanceMchsDeviceCommand(ledger||{}, {type:'DELIVER'});
+ // Never send a START while active HOLD is latched.
+ const command=delivered.command?.action==='STOP'?delivered.command:null;
+ res.json({version:1,command,halted:true,haltEpoch:state.haltEpoch,
   executionEnabled:false,automaticPlaybackEnabled:false,
-  reason:'REAL_EVENT_EXECUTION_NOT_AUTHORIZED'});
+  reason:'STOP_ONLY_NO_PUBLIC_START'});
 }));
 router.post('/agent/mchs-execution-command-receipt',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
@@ -281,6 +291,28 @@ router.post('/agent/mchs-execution-command-receipt',deviceAuth,safe(async(req,re
  await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
  res.json({accepted:true,localTrialStoppedConfirmed:true,
   realEventPlaybackConfirmed:false,physicalPaStoppedVerified:false});
+}));
+
+
+// Admin emergency STOP queues a device-bound, expiring STOP regardless of
+// START readiness. It does not assert physical PA output has been silenced.
+router.post('/mchs-agent-queue-stop',...admin,safe(async(req,res)=>{
+ const {eventId,eventType}=req.body||{};
+ const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID;
+ if(!deviceId)return res.status(503).json({error:'DEVICE_NOT_BOUND'});
+ const key='mchs_agent_device_commands_v1_'+deviceId;
+ const result=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581457)`;
+  const row=await tx.setting.findUnique({where:{key}});
+  let current;try{current=JSON.parse(row?.value||'null');}catch{}
+  const updated=advanceMchsDeviceCommand(current||{}, {type:'QUEUE_STOP',eventId,eventType});
+  if(!updated.ok)return updated;
+  const value=JSON.stringify(updated.state);
+  await tx.setting.upsert({where:{key},create:{key,value},update:{value}});
+  return updated;
+ });
+ if(!result.ok)return res.status(400).json({error:result.reason});
+ res.json({queued:true,sequence:result.state.sequence,physicalStopVerified:false});
 }));
 
 router.get('/agent/mchs-dispatch-halt',deviceAuth,safe(async(req,res)=>{
