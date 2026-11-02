@@ -15,6 +15,13 @@ export function advanceMchsDeviceCommand(state={},input,{nowMs=Date.now()}={}){
  if(input?.type==='QUEUE_STOP'){
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(input.eventId||'')||
    !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(input.eventType))return fail('INVALID_EVENT');
+  // Retrying the same emergency STOP must not invalidate an in-flight
+  // receipt by constantly incrementing the command sequence.
+  if(current.pending?.action==='STOP'&&
+     current.pending.eventId===input.eventId&&
+     current.pending.eventType===input.eventType&&
+     Date.parse(current.pending.expiresAt)>nowMs)
+   return {ok:true,state:current,alreadyQueued:true};
   return {ok:true,state:{...current,sequence:current.sequence+1,
    pending:{version:1,sequence:current.sequence+1,action:'STOP',
     eventId:input.eventId,eventType:input.eventType,
