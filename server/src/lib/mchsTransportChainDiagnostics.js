@@ -11,11 +11,22 @@ export function assessMchsTransportChain({workerReachable=false,agentTelemetry=n
      (deviceId?x.reporterId===deviceId:false)):[];
  const fresh=entries.filter(x=>{const t=Date.parse(x.observedAt||'');const age=nowMs-t;
   return Number.isFinite(t)&&age>=0&&age<=MCHS_ESP32_TTL_MS;});
- const powerTelemetry=fresh.length===1?fresh[0]:null;
+ const candidate=fresh.length===1?fresh[0]:null;
+ // A fresh timestamp is not sufficient if the payload is malformed or the
+ // reporter has not provided an unambiguous telemetry state.
+ const payloadValid=!!candidate&&typeof candidate.heartbeatFresh==='boolean'&&
+  typeof candidate.leaseValid==='boolean'&&typeof candidate.relayOutputEnabled==='boolean'&&
+  typeof candidate.amplifierPower==='string'&&candidate.amplifierPower.length>0&&
+  ['CENTRAL','LOCAL_RESERVE','STOPPED','DISCONNECTED'].includes(candidate.agentMode);
+ const powerTelemetry=payloadValid?candidate:null;
+ if(candidate&&!payloadValid)holds.push('ESP32_STATUS_INVALID');
  if(fresh.length===0)holds.push('ESP32_STATUS_STALE_OR_MISSING');
  if(fresh.length>1)holds.push('ESP32_STATUS_AMBIGUOUS');
  if(powerTelemetry?.heartbeatFresh!==true)holds.push('ESP32_HEARTBEAT_NOT_CONFIRMED');
  if(powerTelemetry?.leaseValid!==true)holds.push('ESP32_LEASE_NOT_CONFIRMED');
+ if(powerTelemetry?.agentMode==='DISCONNECTED')holds.push('ESP32_AGENT_DISCONNECTED');
+ if(powerTelemetry?.heartbeatFresh===true&&powerTelemetry?.leaseValid===false)
+  holds.push('ESP32_NO_VALID_CONTROL_LEASE');
  return {status:holds.length?'NOT_READY':'TELEMETRY_PRESENT_NOT_AUTHORIZED',
   worker:{reachable:workerReachable},
   agent:{connected:agentTelemetry?.connected===true,deviceBound:!!deviceId},
