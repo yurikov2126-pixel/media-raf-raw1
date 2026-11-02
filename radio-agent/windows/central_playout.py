@@ -107,6 +107,30 @@ def acknowledge_mchs_halt(server, token):
             print('MCHS_DISPATCH_HALT_RECEIPT_ONLY',flush=True)
 
 
+MCHS_EVENT_RECEIPT_LAST = {'id': None}
+
+def acknowledge_mchs_observed_event(server, token):
+    """Confirm receipt of real event metadata only; never start audio."""
+    base=server.rstrip('/')
+    headers={'Authorization':'Bearer '+token}
+    with urlopen(Request(base+'/api/radio-agent/agent/mchs-event-observation',
+                         headers=headers),timeout=3) as response:
+        state=json.load(response)
+    event_id=state.get('eventId')
+    event_type=state.get('eventType')
+    if state.get('observationOnly') is not True or not isinstance(event_id,str) or not event_id:
+        return
+    if event_type not in ('MISSILE_DANGER','MISSILE_ALL_CLEAR') or MCHS_EVENT_RECEIPT_LAST['id']==event_id:
+        return
+    payload=json.dumps({'eventId':event_id,'eventType':event_type}).encode('utf-8')
+    req=Request(base+'/api/radio-agent/agent/mchs-event-observation-received',
+                data=payload,headers={**headers,'Content-Type':'application/json'},method='POST')
+    with urlopen(req,timeout=3) as response:
+        if response.status==200:
+            MCHS_EVENT_RECEIPT_LAST['id']=event_id
+            print('MCHS_AGENT_EVENT_METADATA_RECEIVED_ONLY',flush=True)
+
+
 def get_probe(server, token):
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/stream',
                     headers={'Authorization':'Bearer '+token})
@@ -390,6 +414,8 @@ def run(args, token):
         finally:
             halt_poll_busy.clear()
 
+    event_observation_busy=threading.Event()
+    last_event_observation_poll=[0.0]
     print('WINDOWS HEADPHONES PILOT; NO AMP/ESP32. Stop with Ctrl+C.',flush=True)
     try:
         while not STOP.is_set():
@@ -398,6 +424,17 @@ def run(args, token):
                 last_halt_poll=now
                 halt_poll_busy.set()
                 threading.Thread(target=check_halt_receipt,daemon=True).start()
+            if now-last_event_observation_poll[0]>=3 and not event_observation_busy.is_set():
+                last_event_observation_poll[0]=now
+                event_observation_busy.set()
+                def check_event_observation():
+                    try:
+                        acknowledge_mchs_observed_event(args.server,token)
+                    except (HTTPError,OSError,ValueError):
+                        pass
+                    finally:
+                        event_observation_busy.clear()
+                threading.Thread(target=check_event_observation,daemon=True).start()
             # Playback health is independent from a power-intent HTTP request.
             active_audio=(primary is not None and primary.poll() is None and
                           not relay.failed.is_set() and now-relay.last_data<=4)
