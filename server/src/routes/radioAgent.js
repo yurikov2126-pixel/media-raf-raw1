@@ -16,6 +16,7 @@ import { workerRequest } from '../lib/radioLiveOpusGateway.js';
 import { auth, requireRole } from '../middleware/auth.js';
 
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
+import {validateMchsTrialStopEvidence} from '../lib/mchsTrialStopEvidence.js';
 const router = Router();
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -233,6 +234,28 @@ router.post('/agent/mchs-dispatch-halt-received',deviceAuth,safe(async(req,res)=
  });
  if(!result.accepted)return res.status(409).json({error:'STALE_HALT_EPOCH'});
  res.json({accepted:true,receiptOnly:true,playbackStoppedVerified:false,paStoppedVerified:false});
+}));
+// Evidence of termination of the *isolated* lab VLC process only.
+router.post('/agent/mchs-trial-process-stop',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const evidence=validateMchsTrialStopEvidence(req.body);
+ if(!evidence)return res.status(400).json({error:'INVALID_TRIAL_STOP_EVIDENCE'});
+ const key='mchs_trial_process_stop_v1_'+req.radioDevice.id;
+ const value=JSON.stringify({...evidence,receivedAt:new Date().toISOString()});
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ res.json({accepted:true,labProcessStopConfirmed:evidence.confirmed,
+  stationPlaybackStoppedVerified:false,paOutputVerified:false,dispatchAuthorized:false});
+}));
+router.get('/mchs-trial-process-stop',...admin,safe(async(_req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
+ if(!id)return res.json({evidence:null,confirmed:false});
+ const row=await prisma.setting.findUnique({where:{key:'mchs_trial_process_stop_v1_'+id}});
+ let evidence;try{evidence=JSON.parse(row?.value||'null');}catch{}
+ res.json({evidence:evidence||null,stationPlaybackStoppedVerified:false,
+  paOutputVerified:false,dispatchAuthorized:false});
 }));
 // Read-only integration telemetry: no MCHS command or station output changes.
 router.post('/agent/mchs-observer-report',deviceAuth,safe(async(req,res)=>{

@@ -66,6 +66,16 @@ def send_mchs_observer_report(server, token, report):
         return response.status==200
 
 
+def send_mchs_trial_process_stop(server, token, report):
+    """Report only the isolated VLC process after local shutdown."""
+    req=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-trial-process-stop',
+                data=json.dumps(report).encode('utf-8'),
+                headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+                method='POST')
+    with urlopen(req,timeout=3) as response:
+        return response.status==200
+
+
 def read_mchs_observer(server, token):
     """Read-only lab state. This function must never touch VLC or power control."""
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-integration-observe',
@@ -357,6 +367,12 @@ def run(args, token):
         finally:
             mchs_observer_busy.clear()
 
+    def report_trial_stop(evidence):
+        try:
+            send_mchs_trial_process_stop(args.server,token,evidence)
+        except (OSError,ValueError):
+            print('MCHS_TRIAL_PROCESS_STOP_REPORT_UNAVAILABLE',flush=True)
+
     # HALT receipt polling must not depend on the MCHS lab observer.
     halt_poll_busy=threading.Event()
     last_halt_poll=0.0
@@ -454,12 +470,22 @@ def run(args, token):
                 MCHS_AUDIO_STOP.clear()
                 if trial_relay is not None:
                     trial_relay.closing.set()
-                stop_vlc(trial_vlc)
+                stopped_process=trial_vlc
+                stop_vlc(stopped_process)
+                process_exited=stopped_process is not None and stopped_process.poll() is not None
                 trial_vlc=None
+                relay_closed=False
                 if trial_relay is not None:
                     trial_relay.shutdown()
                     trial_relay.server_close()
                     trial_relay=None
+                    relay_closed=True
+                if stopped_process is not None:
+                    evidence={'mode':'LAB_PROCESS_ONLY','kind':'TRIAL_VLC_STOP',
+                              'processExited':process_exited,'relayClosed':relay_closed,
+                              'reason':'OPERATOR_STOP' if not trial_reason else 'WATCHDOG',
+                              'paOutputVerified':False,'stationPlaybackStoppedVerified':False}
+                    threading.Thread(target=report_trial_stop,args=(evidence,),daemon=True).start()
                 MCHS_LAB_AUTO_ACTIVE.clear()
                 MCHS_AUDIO_ARMED.clear()
                 MCHS_AUDIO_START.clear()
