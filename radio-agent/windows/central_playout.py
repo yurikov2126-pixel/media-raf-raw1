@@ -97,7 +97,7 @@ def read_mchs_observer(server, token):
         return json.load(response)
 
 def acknowledge_mchs_halt(server, token):
-    """Read and acknowledge a HALT epoch; never manipulate playback or PA."""
+    """Enforce local trial STOP on HALT; ordinary station playback and PA remain untouched."""
     base=server.rstrip('/')
     headers={'Authorization':'Bearer '+token}
     with urlopen(Request(base+'/api/radio-agent/agent/mchs-dispatch-halt',
@@ -106,6 +106,14 @@ def acknowledge_mchs_halt(server, token):
     epoch=state.get('haltEpoch')
     if state.get('halted') is not True or not isinstance(epoch,str) or not epoch:
         return
+    # HALT immediately cancels any pending or running isolated trial.
+    # Do not stop the regular station stream or touch amplifier / ESP32.
+    if MCHS_AUDIO_ARMED.is_set() or MCHS_AUDIO_START.is_set() or PLAYBACK_STATE.get('mode')=='MCHS_LAB_TRIAL':
+        MCHS_AUDIO_STOP.set()
+        MCHS_AUDIO_START.clear()
+        MCHS_AUDIO_ARMED.clear()
+        MCHS_LAB_ONE_SHOT.clear()
+        print('MCHS_HALT_TRIAL_STOP_REQUESTED',flush=True)
     if MCHS_HALT_RECEIPT_EPOCH['last']==epoch:
         return
     payload=json.dumps({'haltEpoch':epoch}).encode('utf-8')
