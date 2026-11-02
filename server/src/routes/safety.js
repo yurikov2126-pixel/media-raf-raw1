@@ -660,6 +660,38 @@ router.get('/missile-live-trial-preflight',requireRole('ADMIN'),async (_req,res,
  }catch(error){next(error);}
 });
 /** Read-only command preview. Nothing is sent to the Worker or amplifier. */
+/** Real Android observations, but audio may be played ONLY in an operator's local browser.
+ * No Radio Worker / Agent / PA requests. Does not persist or dispatch.
+ */
+router.get('/missile-local-audio-trial/candidates',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [ruleRow,events,assets]=await Promise.all([
+   prisma.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+    orderBy:{receivedAt:'desc'},take:50,select:{id:true,source:true,sourceEventId:true,
+     title:true,body:true,region:true,verified:true,occurredAt:true,receivedAt:true}}),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},
+    select:{id:true,name:true,durationMs:true}})
+  ]);
+  let saved={};try{saved=JSON.parse(ruleRow?.value||'{}');}catch{}
+  const rules=Object.fromEntries(['MISSILE_DANGER','MISSILE_ALL_CLEAR'].map(type=>[
+   type,{...emptyTypeRule(),...(saved?.[type]||{})}]));
+  const byId=new Map(assets.map(a=>[a.id,a]));
+  const candidates=events.map(event=>{
+   const decision=assessMissileAutoEvent(event,{rules});
+   const asset=byId.get(decision.audioAssetId);
+   const allowed=decision.eligible&&!!asset&&Number.isFinite(asset.durationMs)&&asset.durationMs>0;
+   return {eventId:event.id,receivedAt:event.receivedAt,eventType:decision.eventType,
+    allowed:!!allowed,reason:!decision.eligible?decision.reason:!asset?'ALARM_AUDIO_MISSING':
+     !Number.isFinite(asset.durationMs)||asset.durationMs<=0?'ALARM_AUDIO_INVALID':null,
+    audioAssetId:allowed?asset.id:null,
+    repeats:decision.eventType==='MISSILE_ALL_CLEAR'?1:
+     normalizeMchsTypeRepeats(rules[decision.eventType]?.repeats)};
+  });
+  res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),candidates,
+   output:'BROWSER_LOCAL_ONLY',automaticBroadcastEnabled:false,dispatchAuthorized:false});
+ }catch(error){next(error);}
+});
 router.get('/missile-auto-playback-plan',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const [stateRow,ruleRow,events,assets]=await Promise.all([

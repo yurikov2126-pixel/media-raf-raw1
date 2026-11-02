@@ -9,6 +9,7 @@ import MchsOperationalOverview from './MchsOperationalOverview.jsx';
 import MchsTransportStatus from './MchsTransportStatus.jsx';
 import MchsConnectionRecoveryTrial from './MchsConnectionRecoveryTrial.jsx';
 import MchsEmergencySimulation from './MchsEmergencySimulation.jsx';
+import MchsLocalNotificationAudioTrial from './MchsLocalNotificationAudioTrial.jsx';
 import MchsDeliveryReliability from './MchsDeliveryReliability.jsx';
 import { api } from '../../../api/client.js';
 import { useTheme } from '../../../store/theme.jsx';
@@ -108,7 +109,7 @@ export default function SafetyMchs({ token }) {
     </section>}
     {pane === 'overview' && <div className="space-y-4"><MchsTransportStatus token={token}/><MchsConnectionRecoveryTrial token={token}/><MchsOperationalOverview token={token} onOpen={switchPane}/></div>}
     
-    {pane === 'simulation' && <MchsEmergencySimulation token={token} />}
+    {pane === 'simulation' && <div className="space-y-4"><MchsLocalNotificationAudioTrial token={token}/><MchsEmergencySimulation token={token} /></div>}
     
     {pane === 'delivery' && <div className="space-y-4"><MchsDeliveryReliability token={token} onOpen={switchPane}/><MchsQueueMonitor token={token} view={searchParams.has('incident')?'incidents':'delivery'}/><MchsQueueMonitor token={token} view="queue"/></div>}
 
