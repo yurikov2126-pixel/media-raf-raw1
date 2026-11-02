@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {assessMissileExecutionInterlock} from '../src/lib/mchsExecutionInterlock.js';
+const now=Date.parse('2026-11-02T12:00:00Z');
+const sourceEvent={id:'event1',source:'MCHS_ANDROID',verified:true,region:'Тульская область',occurredAt:'2026-11-02T11:59:30Z'};
+const command={eventType:'MISSILE_DANGER',mode:'DRY_RUN',speakerPlaybackEnabled:false,idempotencyKey:'event1',audioAssetId:'audio1',repeats:3};
+const checkpoint={lastEventId:'event1',state:'DANGER'};
+const valid={command,sourceEvent,checkpoint,workerReady:true,agentReady:true,stopReady:true,operatorHold:false,nowMs:now};
+test('clean interlock still never authorizes real output',()=>{const x=assessMissileExecutionInterlock(valid);assert.equal(x.readyForFutureIntegration,true);assert.equal(x.publicBroadcastAuthorized,false);assert.equal(x.executionEnabled,false);});
+test('hold and missing STOP always block readiness',()=>{const x=assessMissileExecutionInterlock({...valid,operatorHold:true,stopReady:false});assert.ok(x.holds.includes('OPERATOR_HOLD'));assert.ok(x.holds.includes('STOP_UNCONFIRMED'));});
+test('stale and mismatched events cannot pass',()=>{for(const patch of [{sourceEvent:{...sourceEvent,occurredAt:'2026-11-02T11:55:00Z'}},{command:{...command,idempotencyKey:'wrong'}},{checkpoint:{...checkpoint,lastEventId:'old'}},{sourceEvent:{...sourceEvent,verified:false}}]){assert.equal(assessMissileExecutionInterlock({...valid,...patch}).readyForFutureIntegration,false)}});
+test('all-clear requires one repeat and state CLEAR',()=>{const clear={...command,eventType:'MISSILE_ALL_CLEAR'};assert.ok(assessMissileExecutionInterlock({...valid,command:clear,checkpoint:{...checkpoint,state:'CLEAR'}}).holds.includes('CLEAR_REPEATS_INVALID'));assert.equal(assessMissileExecutionInterlock({...valid,command:{...clear,repeats:1},checkpoint:{...checkpoint,state:'CLEAR'}}).readyForFutureIntegration,true)});
