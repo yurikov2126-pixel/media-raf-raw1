@@ -7,6 +7,9 @@ const names={
  TRIAL_STOP_NOT_CONFIRMED:'Остановка лабораторного VLC не подтверждена',
  ESP32_STATUS_STALE_OR_MISSING:'Нет свежей телеметрии ESP32',
  ESP32_STATUS_AMBIGUOUS:'Неоднозначная телеметрия ESP32',
+ ESP32_STATUS_INVALID:'Данные ESP32 неполные или некорректны',
+ ESP32_AGENT_DISCONNECTED:'ESP32 сообщает об отключении Windows Agent',
+ ESP32_NO_VALID_CONTROL_LEASE:'ESP32 не имеет действующего разрешения управления',
  ESP32_HEARTBEAT_NOT_CONFIRMED:'Heartbeat ESP32 не подтверждён',
  ESP32_LEASE_NOT_CONFIRMED:'Разрешение ESP32 (lease) не подтверждено',
  PA_OUTPUT_NOT_INDEPENDENTLY_VERIFIED:'Физическое состояние громкоговорителей не подтверждено'
