@@ -17,6 +17,7 @@ import {assessMissileExecutionInterlock} from '../lib/mchsExecutionInterlock.js'
 import {assessMchsDeliveryReceipts} from '../lib/mchsDeliveryReceipts.js';
 import {assessMchsDualChannelTransition} from '../lib/mchsDualChannelTransition.js';
 import {assessMchsTwoChannelSession} from '../lib/mchsTwoChannelSession.js';
+import {advanceMchsSessionLifecycle} from '../lib/mchsSessionLifecycle.js';
 import {normalizeMchsEventReceipt} from '../lib/mchsEventReceiptEvidence.js';
 import {advanceMchsReceiptLedger} from '../lib/mchsReceiptLedger.js';
 import crypto from 'node:crypto';
@@ -1202,6 +1203,25 @@ router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
 /** Live transport evidence without converting heartbeats into event ACKs. */
 /** Inspect current event and transport visibility without inventing START/STOP ACKs. */
 /** Integrated read-only two-channel acceptance; never infer event playback from trial telemetry. */
+/** Full read-only two-channel event lifecycle, never sends audio commands. */
+router.get('/missile-session-lifecycle',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [event,previousRow,protocolRow]=await Promise.all([
+   prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+    orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,receivedAt:true}}),
+   prisma.setting.findUnique({where:{key:'mchs_session_lifecycle_v1'}}),
+   prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}})
+  ]);
+  let previous,protocol;try{previous=JSON.parse(previousRow?.value||'null');}catch{}
+  try{protocol=JSON.parse(protocolRow?.value||'null');}catch{}
+  const eventType=event?classifyMchsObservation(event.title,event.body):null;
+  const normalized=normalizeMchsDispatchProtocol(protocol);
+  const result=advanceMchsSessionLifecycle(previous,{
+   event:{id:event?.id,eventType},halted:true});
+  res.set('Cache-Control','no-store').json({...result,checkedAt:new Date().toISOString(),
+   haltEpoch:normalized.haltEpoch||null,recorded:false,publicBroadcastAuthorized:false});
+ }catch(error){next(error);}
+});
 router.get('/missile-two-channel-session',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
