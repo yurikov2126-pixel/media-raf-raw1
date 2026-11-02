@@ -346,13 +346,6 @@ def run(args, token):
             # Heartbeats refresh dashboard freshness even if revision is unchanged.
             # No audio, power or ESP32 action is performed by the observer.
             try:
-                acknowledge_mchs_halt(args.server,token)
-            except HTTPError as error:
-                if error.code not in (403,409):
-                    print('MCHS_DISPATCH_HALT_RECEIPT_UNAVAILABLE',flush=True)
-            except (OSError,ValueError):
-                print('MCHS_DISPATCH_HALT_RECEIPT_UNAVAILABLE',flush=True)
-            try:
                 send_mchs_observer_report(args.server,token,report)
             except (OSError,ValueError):
                 print('MCHS_AGENT_OBSERVER_REPORT_UNAVAILABLE',flush=True)
@@ -364,10 +357,28 @@ def run(args, token):
         finally:
             mchs_observer_busy.clear()
 
+    # HALT receipt polling must not depend on the MCHS lab observer.
+    halt_poll_busy=threading.Event()
+    last_halt_poll=0.0
+    def check_halt_receipt():
+        try:
+            acknowledge_mchs_halt(args.server,token)
+        except HTTPError as error:
+            if error.code not in (403,409):
+                print('MCHS_DISPATCH_HALT_RECEIPT_UNAVAILABLE',flush=True)
+        except (OSError,ValueError):
+            print('MCHS_DISPATCH_HALT_RECEIPT_UNAVAILABLE',flush=True)
+        finally:
+            halt_poll_busy.clear()
+
     print('WINDOWS HEADPHONES PILOT; NO AMP/ESP32. Stop with Ctrl+C.',flush=True)
     try:
         while not STOP.is_set():
             now=time.monotonic()
+            if now-last_halt_poll>=3 and not halt_poll_busy.is_set():
+                last_halt_poll=now
+                halt_poll_busy.set()
+                threading.Thread(target=check_halt_receipt,daemon=True).start()
             # Playback health is independent from a power-intent HTTP request.
             active_audio=(primary is not None and primary.poll() is None and
                           not relay.failed.is_set() and now-relay.last_data<=4)
