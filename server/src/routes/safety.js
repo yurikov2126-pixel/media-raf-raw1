@@ -651,7 +651,7 @@ router.get('/missile-auto-playback-plan',requireRole('ADMIN'),async (_req,res,ne
   const rules=Object.fromEntries(MCHS_EVENT_TYPES.map(type=>[type.id,{...emptyTypeRule(),...(storedRules?.[type.id]||{})}]));
   const evaluated=advanceMissileCheckpoint(normalizeMissileCheckpoint(checkpoint),events,{
    rules,assets:new Set(assets.map(a=>a.id))});
-  res.set('Cache-Control','no-store').json({...planMissilePlayback(evaluated.decisions),
+  res.set('Cache-Control','no-store').json({...planMissilePlayback(evaluated.decisions,{rules}),
    checkpoint:evaluated.checkpoint,blocked:evaluated.decisions.filter(d=>!d.eligible).map(d=>({eventId:d.eventId,reason:d.reason})).slice(-30)});
  }catch(error){next(error);}
 });
