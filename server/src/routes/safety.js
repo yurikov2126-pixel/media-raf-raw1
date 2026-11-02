@@ -27,6 +27,7 @@ import {fetchMchsWorkerLabChunk} from '../lib/mchsWorkerLabAudioProxy.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import {trainingStreamRequest} from '../lib/mchsTrainingStreamProxy.js';
 import {runTrainingSequence} from '../lib/mchsTrainingSequence.js';
+import {stopAndVerifyMchsWorker} from '../lib/mchsWorkerStopVerification.js';
 import {sendMchsDryRunReceipt} from '../lib/mchsWorkerReceiptProxy.js';
 import {fetchWorkerMchsLabWav} from '../lib/mchsWorkerLabProxy.js';
 import { mchsAnalyzerPublicStatus, MCHS_ANALYZER_HEALTH_KEY } from '../lib/mchsAnalyzerHealth.js';
@@ -163,10 +164,16 @@ router.post('/mchs-training-sequence/stop',requireRole('ADMIN'),async(_req,res)=
  if(!session||session.status!=='RUNNING')return res.status(409).json({error:'NO_RUNNING_SEQUENCE'});
  session.abort.abort();
  // Stop immediately rather than waiting for the next poll to notice cancellation.
- try{await trainingStreamRequest('STOP');}catch(error){
-  console.warn('MCHS_TRAINING_STOP_FAILED',JSON.stringify({reason:error.message}));
+ const result=await stopAndVerifyMchsWorker({request:trainingStreamRequest});
+ if(!result.confirmed){
+  console.error('MCHS_TRAINING_STOP_UNCONFIRMED',JSON.stringify({
+   sessionId:session.id,reason:result.reason,attempts:result.attempts}));
+  return res.status(503).set('Cache-Control','no-store').json({
+   ok:false,error:'STOP_NOT_CONFIRMED',reason:result.reason,
+   stopConfirmed:false,session:sequencePublicStatus()});
  }
- res.set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
+ res.set('Cache-Control','no-store').json({
+  ok:true,stopConfirmed:true,session:sequencePublicStatus()});
 });
 /** Operator configurable repeats; a setting alone never triggers broadcast. */
 router.get('/mchs-alarm-repeats',requireRole('ADMIN'),async (_req,res,next)=>{
@@ -231,6 +238,12 @@ router.get('/mchs-training-stream',requireRole('ADMIN'),async (_req,res)=>{
 router.post('/mchs-training-stream',requireRole('ADMIN'),async (req,res)=>{
  const action=req.body?.action;
  if(!['START','STOP'].includes(action))return res.status(400).json({error:'INVALID_ACTION'});
+ if(action==='STOP'){
+  const stop=await stopAndVerifyMchsWorker({request:trainingStreamRequest});
+  return res.status(stop.confirmed?200:503).set('Cache-Control','no-store').json({
+   ok:stop.confirmed,stopConfirmed:stop.confirmed,reason:stop.reason,
+   ...(!stop.confirmed?{error:'STOP_NOT_CONFIRMED'}:{})});
+ }
  try{const r=await trainingStreamRequest(action,req.body?.assetId);res.status(r.httpStatus).set('Cache-Control','no-store').json(r.data);}
  catch{res.status(503).json({error:'TRAINING_WORKER_UNAVAILABLE'});}
 });
