@@ -29,3 +29,28 @@ test('outdated commands expire and automatic START is denied',()=>{
  assert.equal(advance(queued.state,{type:'DELIVER'},{nowMs:t+15001}).command,null);
  assert.equal(advance({}, {type:'QUEUE_START',eventId:'event-1'}, {nowMs:t}).ok,false);
 });
+
+test('repeated STOP delivery keeps one sequence and its receipt valid',()=>{
+ const first=advance({},event,{nowMs:t});
+ const retry=advance(first.state,event,{nowMs:t+500});
+ assert.equal(retry.ok,true);
+ assert.equal(retry.alreadyQueued,true);
+ assert.equal(retry.state.sequence,first.state.sequence);
+ const receipt={sequence:first.state.sequence,eventId:event.eventId,
+  eventType:event.eventType,action:'STOP',confirmed:true,
+  playbackState:'STOPPED',localTrialStoppedConfirmed:true,
+  confirmedAt:new Date(t+600).toISOString()};
+ const ack=advance(retry.state,{type:'RECEIPT',receipt},{nowMs:t+600});
+ assert.equal(ack.ok,true);
+ assert.equal(ack.state.pending,null);
+});
+test('expired STOP may be requeued, stale receipt cannot confirm newer STOP',()=>{
+ const first=advance({},event,{nowMs:t});
+ const second=advance(first.state,event,{nowMs:t+16000});
+ assert.equal(second.state.sequence,2);
+ const stale={sequence:1,eventId:event.eventId,eventType:event.eventType,
+  action:'STOP',confirmed:true,playbackState:'STOPPED',
+  localTrialStoppedConfirmed:true,confirmedAt:new Date(t+16001).toISOString()};
+ assert.equal(advance(second.state,{type:'RECEIPT',receipt:stale},
+  {nowMs:t+16001}).reason,'COMMAND_RECEIPT_MISMATCH');
+});
