@@ -182,7 +182,9 @@ router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res,next)=>
  try{
   if(req.body?.confirmation!=='TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED')
    return res.status(400).json({error:'EXPLICIT_CONFIRMATION_REQUIRED'});
-  const {dangerAssetId,clearAssetId}=req.body||{};
+  const {dangerAssetId,clearAssetId,dangerRepeats}=req.body||{};
+  if(dangerRepeats!==undefined&&!validateDangerRepeats(dangerRepeats))
+   return res.status(400).json({error:'DANGER_REPEATS_OUT_OF_RANGE',min:1,max:5});
   if(typeof dangerAssetId!=='string'||typeof clearAssetId!=='string'||dangerAssetId===clearAssetId)
    return res.status(400).json({error:'INVALID_ASSET_SELECTION'});
   if(mchsTrainingSequenceSession?.status==='RUNNING')
@@ -197,7 +199,8 @@ router.post('/mchs-training-sequence',requireRole('ADMIN'),async(req,res,next)=>
   res.status(202).set('Cache-Control','no-store').json({ok:true,session:sequencePublicStatus()});
   const repeatRow=await prisma.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}});
   void runTrainingSequence({dangerAssetId,clearAssetId,request:trainingStreamRequest,
-   dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS)),
+   dangerRepeats:dangerRepeats===undefined?
+    normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS)):dangerRepeats,
    signal:session.abort.signal,pollMs:750,maxWaitMs:300000,
    onProgress:progress=>{session.stage=progress.stage+':'+progress.status;}})
    .then(result=>{

@@ -36,7 +36,7 @@ export default function MchsEmergencySimulation({token}){
   }
   setDanger(rule.audioAssetId);
   setRepeats(rule.repeats||1);
-  setMessage('Настройки шаблона перенесены в учебный сценарий. Повторы необходимо сохранить перед запуском.');
+  setMessage('Трек и повторы подставлены. При запуске используются повторы текущего сценария без изменения глобальных настроек.');
   setError('');
  };
  const saveRepeats=async()=>{
@@ -47,7 +47,7 @@ export default function MchsEmergencySimulation({token}){
  const start=async()=>{
   if(!window.confirm('УЧЕБНОЕ ВЕЩАНИЕ в основном радиопотоке! Физически отключены громкоговорители, слушатели предупреждены, записи имеют пометку «Учебная тревога»?'))return;
   setBusy(true);setError('');
-  try{const r=await api('/safety/mchs-training-sequence',{token,method:'POST',body:{dangerAssetId:danger,clearAssetId:clear,confirmation:'TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED'}});setSession(r.session);}
+  try{const r=await api('/safety/mchs-training-sequence',{token,method:'POST',body:{dangerAssetId:danger,clearAssetId:clear,dangerRepeats:repeats,confirmation:'TRAINING_AUDIO_OUTPUT_ACKNOWLEDGED'}});setSession(r.session);}
   catch(e){setError(e.message||'Не удалось запустить');}finally{setBusy(false);}
  };
  const stop=async()=>{
@@ -87,7 +87,7 @@ export default function MchsEmergencySimulation({token}){
      </select>
     </label>
     <button type="button" disabled={!selectedType||busy} onClick={applyTemplate} className="rounded-lg border px-3 py-2 disabled:opacity-50">Подставить трек и повторы</button>
-    <p className="text-xs opacity-70">Только заполнение учебного сценария: автоматический ALARM не включается. Отбой выбирается отдельно.</p>
+    <p className="text-xs opacity-70">Только заполнение учебного сценария: автоматический ALARM не включается. Отбой выбирается отдельно. Повторы применяются при запуске без отдельного сохранения.</p>
    </div>
    <div className="grid gap-3 sm:grid-cols-2">
     <label className="text-sm">Тревога<select value={danger} onChange={e=>setDanger(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white"><option value="">Выбрать ALARM</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
