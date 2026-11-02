@@ -277,6 +277,22 @@ router.post('/agent/mchs-dispatch-halt-received',deviceAuth,safe(async(req,res)=
  res.json({accepted:true,receiptOnly:true,playbackStoppedVerified:false,paStoppedVerified:false});
 }));
 // Evidence of termination of the *isolated* lab VLC process only.
+// Real local VLC state telemetry. This is NOT an event-scoped ALARM playback ACK.
+router.post('/agent/mchs-trial-vlc-state',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const {state,processRunning}=req.body||{};
+ if(!['STARTED','STOPPED'].includes(state)||typeof processRunning!=='boolean'||
+    (state==='STARTED'&&!processRunning)||(state==='STOPPED'&&processRunning))
+  return res.status(400).json({error:'INVALID_VLC_STATE'});
+ const value=JSON.stringify({state,processRunning,mode:'LAB_PROCESS_ONLY',
+  receivedAt:new Date().toISOString(),eventPlaybackConfirmed:false,
+  publicAudioVerified:false});
+ const key='mchs_agent_trial_vlc_state_v1_'+req.radioDevice.id;
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ res.json({accepted:true,mode:'LAB_PROCESS_ONLY',eventPlaybackConfirmed:false});
+}));
 router.post('/agent/mchs-trial-process-stop',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
