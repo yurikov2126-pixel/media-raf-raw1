@@ -1,4 +1,5 @@
 import {assessMchsDispatchQueue} from '../lib/mchsDispatchQueueReadiness.js';
+import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
 import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents,stageAndroidExecutionIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
@@ -1034,15 +1035,23 @@ router.get('/missile-automatic-execution-dry-run',requireRole('ADMIN'),async (_r
 });
 router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
-  const [row,worker]=await Promise.all([
+  // Bind only the configured pilot device; never accept a caller-supplied device ID.
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [row,worker,device,observerRow]=await Promise.all([
    prisma.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}}),
-   trainingStreamRequest().catch(()=>null)
+   trainingStreamRequest().catch(()=>null),
+   deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},
+    select:{id:true,name:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):Promise.resolve(null),
+   deviceId?prisma.setting.findUnique({where:{key:'mchs_agent_observer_v1_'+deviceId}}):Promise.resolve(null)
   ]);
   let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
+  let observer;try{observer=JSON.parse(observerRow?.value||'null');}catch{}
+  const telemetry=assessMchsAgentDispatchTelemetry(device,observer);
   const report=assessMchsDispatchQueue(normalizeAndroidIntents(saved),{
-   operatorHold:true,workerReady:worker?.httpStatus===200,agentReady:false});
+   operatorHold:true,workerReady:worker?.httpStatus===200,agentReady:telemetry.confirmed});
   res.set('Cache-Control','no-store').json({...report,
-   workerReachable:worker?.httpStatus===200,agentConfirmed:false});
+   workerReachable:worker?.httpStatus===200,agentConfirmed:telemetry.confirmed,
+   agentTelemetry:telemetry});
  }catch(error){next(error);}
 });
 router.get('/missile-android-execution-intents',requireRole('ADMIN'),async (_req,res,next)=>{
