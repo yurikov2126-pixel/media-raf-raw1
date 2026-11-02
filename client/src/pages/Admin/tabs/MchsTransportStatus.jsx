@@ -12,28 +12,37 @@ const names={
  ESP32_NO_VALID_CONTROL_LEASE:'ESP32 не имеет действующего разрешения управления',
  ESP32_HEARTBEAT_NOT_CONFIRMED:'Heartbeat ESP32 не подтверждён',
  ESP32_LEASE_NOT_CONFIRMED:'Разрешение ESP32 (lease) не подтверждено',
- PA_OUTPUT_NOT_INDEPENDENTLY_VERIFIED:'Физическое состояние громкоговорителей не подтверждено'
+ PA_OUTPUT_NOT_INDEPENDENTLY_VERIFIED:'Физическое состояние громкоговорителей не подтверждено',
+ WORKER_UNAVAILABLE:'Radio Worker недоступен',
+ AGENT_UNCONFIRMED:'Нет подтверждения связи Windows Agent',
+ STOP_NOT_CONFIRMED:'Остановка звукового процесса не подтверждена',
+ ESP32_NOT_CONFIRMED:'Безопасное состояние ESP32 не подтверждено',
+ ALARM_RULES_INCOMPLETE:'Настройки двух оповещений неполные',
+ RULE_DISABLED:'Обработка события выключена',
+ ALARM_AUDIO_MISSING:'Назначенный ALARM не найден',
+ INVALID_REPEATS:'Некорректное число повторов'
 };
 const yesNo=value=>value===true?'Подтверждено':value===false?'Нет подтверждения':'Нет данных';
 export default function MchsTransportStatus({token}){
  const [data,setData]=useState(null);
+ const [preflight,setPreflight]=useState(null);
  const [error,setError]=useState('');
  const [updated,setUpdated]=useState(null);
  const [loading,setLoading]=useState(false);
  const refresh=useCallback(async()=>{
   setLoading(true);
   try{
-   const result=await api('/safety/missile-dispatch-readiness',{token});
-   setData(result);setError('');setUpdated(new Date());
-  }catch(e){setData(null);setError(e.message||'Ошибка проверки состояния');}
+   const [result,checks]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token})]);
+   setData(result);setPreflight(checks);setError('');setUpdated(new Date());
+  }catch(e){setData(null);setPreflight(null);setError(e.message||'Ошибка проверки состояния');}
   finally{setLoading(false);}
  },[token]);
  useEffect(()=>{
   let alive=true;
   const read=async()=>{try{
-   const result=await api('/safety/missile-dispatch-readiness',{token});
-   if(alive){setData(result);setError('');setUpdated(new Date());}
-  }catch(e){if(alive){setError(e.message||'Нет связи с диагностикой');setData(null);}}};
+   const [result,checks]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token})]);
+   if(alive){setData(result);setPreflight(checks);setError('');setUpdated(new Date());}
+  }catch(e){if(alive){setError(e.message||'Нет связи с диагностикой');setData(null);setPreflight(null);}}};
   read();const timer=setInterval(read,15000);
   return ()=>{alive=false;clearInterval(timer);};
  },[token]);
@@ -62,6 +71,19 @@ export default function MchsTransportStatus({token}){
    <strong className="block text-sm">Разрешение на запуск: отсутствует</strong>
    <p className="text-xs text-slate-600 dark:text-slate-300">Даже полная телеметрия не разрешает автоматический ALARM и не подтверждает отсутствие звука в громкоговорителях.</p>
    {chain?.holds?.length>0&&<ul className="list-disc pl-5 text-sm space-y-1">{chain.holds.map((code,i)=><li key={code+'-'+i}>{names[code]||code}</li>)}</ul>}
+  </div>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+   <strong className="block text-sm">Предпроверка двух реальных уведомлений МЧС</strong>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Проверяются текущие настройки и телеметрия реального оборудования. Никакое сообщение не генерируется и ALARM не включается.</p>
+   <div className="grid gap-2 sm:grid-cols-2">
+    {(preflight?.types||[]).map(item=><div key={item.type} className="rounded-lg border border-slate-200 dark:border-white/15 p-3">
+     <strong className="text-sm">{item.type==='MISSILE_DANGER'?'Ракетная опасность':'Отбой ракетной опасности'}</strong>
+     <p className="text-xs mt-1 break-all">ALARM: {item.audioAssetId||'Не выбран'} · Повторы: {item.repeats}</p>
+     <p className="text-xs mt-1">{item.configured?'Конфигурация заполнена':item.reasons.map(code=>names[code]||code).join('; ')}</p>
+    </div>)}
+   </div>
+   {preflight?.holds?.length>0&&<ul className="list-disc pl-5 text-xs space-y-1">{preflight.holds.map(code=><li key={code}>{names[code]||code}</li>)}</ul>}
+   <p className="text-xs font-medium">Автоматическая отправка ALARM: {preflight?.automaticPlaybackEnabled?'Включена':'Заблокирована'} · Разрешение на усилитель: отсутствует.</p>
   </div>
   <p className="text-xs text-slate-600 dark:text-slate-300">Последнее обновление: {updated?updated.toLocaleString('ru-RU'):'Нет данных'} · Автопроверка каждые 15 секунд.</p>
  </section>;
