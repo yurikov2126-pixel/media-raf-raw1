@@ -16,7 +16,7 @@ class VerifiedAlarmTests(unittest.TestCase):
             sha256=hashlib.sha256(self.data).hexdigest())
     def test_exact_file(self):
         path,error=verify_cached_alarm(self.command,self.root)
-        self.assertEqual(path,self.root/'alarm1.alarm')
+        self.assertEqual(path, (self.root/'alarm1.alarm').resolve())
         self.assertIsNone(error)
     def test_mutated_file_denied(self):
         (self.root/'alarm1.alarm').write_bytes(b'other')
