@@ -75,10 +75,10 @@ export default function MchsEventTypeRules({ token }) {
       const rule = rules[type];
       const response = await api('/safety/event-type-rules/' + type, {
         token, method: 'PUT',
-        body: { mode: rule.mode, audioAssetId: rule.audioAssetId || null, note: rule.note || '' },
+        body: { mode: rule.mode, audioAssetId: rule.audioAssetId || null, repeats: Number(rule.repeats ?? 1), note: rule.note || '' },
       });
       change(type, 'updatedAt', response.rule.updatedAt);
-      setMessage('Шаблон сохранён для анализа. Автоматическое вещание не включено.');
+      setMessage('Трек и количество повторов сохранены. Автоматическое вещание не включено.');
     } catch (e) { setError(e.message); } finally { setSaving(''); }
   };
   return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5 md:p-5">
@@ -95,12 +95,12 @@ export default function MchsEventTypeRules({ token }) {
         </select>
       </label>
     </div>
-    <p className="text-sm opacity-70">Распознавание выполняется по тексту Android. Неоднозначные уведомления остаются без категории. Выберите аудио и необходимость проверки оператором отдельно для каждого типа. Эти правила не запускают эфир.</p>
+    <p className="text-sm opacity-70">Распознавание выполняется по тексту Android. Неоднозначные уведомления остаются без категории. Выберите аудио, число повторений и необходимость проверки оператором отдельно для каждого типа. Эти правила не запускают эфир.</p>
     {error && <p role="alert" className="text-red-600 dark:text-red-300 text-sm">{error}</p>}
     {message && <p role="status" className="text-emerald-700 dark:text-emerald-300 text-sm">{message}</p>}
     {!data && !error && <p>Загрузка…</p>}
     {data?.types?.map(type => {
-      const rule = rules[type.id] || { mode: 'IGNORE', audioAssetId: null, note: '' };
+      const rule = rules[type.id] || { mode: 'IGNORE', audioAssetId: null, repeats: 1, note: '' };
       const count = (data.classifications || []).filter(e => e.type === type.id).length;
       return <div key={type.id} className="rounded-xl border border-slate-200 p-4 dark:border-white/10 space-y-3">
         <div className="flex flex-wrap justify-between gap-2">
@@ -120,6 +120,24 @@ export default function MchsEventTypeRules({ token }) {
               {(data.assets || []).map(asset => <option value={asset.id} key={asset.id}>{asset.name}</option>)}
             </select>
           </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">Количество повторов ALARM
+            <select value={rule.repeats ?? 1} onChange={e=>change(type.id,'repeats',Number(e.target.value))}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent p-2 dark:border-white/20">
+              {[1,2,3,4,5].map(n=><option key={n} value={n}>{n} {n===1?'раз':n<5?'раза':'раз'}</option>)}
+            </select>
+          </label>
+          <div className="rounded-xl border border-slate-200 dark:border-white/15 px-3 py-2 text-sm">
+            <div className="font-medium">План воспроизведения</div>
+            <p className="mt-1 text-xs opacity-75">{rule.audioAssetId ? (
+              data.assets?.find(a=>a.id===rule.audioAssetId)
+                ? 'Файл выбран · '+(rule.repeats??1)+' повтор(ов) · ориентировочно '+(
+                    Math.round(((data.assets.find(a=>a.id===rule.audioAssetId)?.durationMs||0)*(rule.repeats??1))/1000)
+                  )+' сек.'
+                : 'Выбранный файл недоступен — назначьте другой'
+            ) : 'Файл не выбран — воспроизведение невозможно'}</p>
+          </div>
         </div>
         <button type="button" disabled={!rule.audioAssetId} onClick={() => preview(type.id, rule.audioAssetId)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-white/20 disabled:opacity-50">{playing === type.id ? 'Остановить прослушивание' : 'Прослушать выбранное ALARM'}</button>
         <label className="block text-sm">Комментарий
