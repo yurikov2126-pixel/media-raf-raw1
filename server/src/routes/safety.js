@@ -1201,13 +1201,14 @@ router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
 router.get('/missile-delivery-observation',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
-  const [worker,device,observerRow,event,agentEventRow]=await Promise.all([
+  const [worker,device,observerRow,event,agentEventRow,ledgerRow]=await Promise.all([
    trainingStreamRequest().catch(()=>null),
    id?prisma.radioDevice.findUnique({where:{id},select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
    id?prisma.setting.findUnique({where:{key:'mchs_agent_observer_v1_'+id}}):null,
    prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
     orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,receivedAt:true}}),
-   id?prisma.setting.findUnique({where:{key:'mchs_agent_event_receipt_v1_'+id}}):null
+   id?prisma.setting.findUnique({where:{key:'mchs_agent_event_receipt_v1_'+id}}):null,
+   prisma.setting.findUnique({where:{key:'mchs_receipt_ledger_v1'}})
   ]);
   let observer;try{observer=JSON.parse(observerRow?.value||'null');}catch{}
   const age=Date.now()-Date.parse(observer?.receivedAt||'');
@@ -1219,14 +1220,50 @@ router.get('/missile-delivery-observation',requireRole('ADMIN'),async (_req,res,
   let agentRaw;try{agentRaw=JSON.parse(agentEventRow?.value||'null');}catch{}
   const eventType=event?classifyMchsObservation(event.title,event.body):null;
   const agentEvidence=normalizeMchsEventReceipt(agentRaw,{eventId:event?.id,eventType});
-  const receiptLedger=agentEvidence.receipt?advanceMchsReceiptLedger(null,{...agentEvidence.receipt,channel:'AGENT'}):null;
+  let ledger;try{ledger=JSON.parse(ledgerRow?.value||'null');}catch{}
+  const receiptLedger=agentEvidence.receipt?advanceMchsReceiptLedger(ledger,{...agentEvidence.receipt,channel:'AGENT'}):null;
   const receipts=assessMchsDeliveryReceipts({envelope:null,workerReceipt:null,agentReceipt:agentEvidence.receipt});
   res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),
    eventId:event?.id||null,workerReadProbeOk:worker?.httpStatus===200,
    agentHeartbeatCurrent:agentHeartbeat,agentObserverFresh:observerFresh,
-   workerEventReceipt:null,agentEventReceipt:agentEvidence.receipt,agentReceiptReason:agentEvidence.reason,agentReceiptCheck:receiptLedger?{accepted:receiptLedger.accepted,reason:receiptLedger.reason}:null,receipts,
+   workerEventReceipt:null,agentEventReceipt:agentEvidence.receipt,agentReceiptReason:agentEvidence.reason,agentReceiptCheck:receiptLedger?{accepted:receiptLedger.accepted,reason:receiptLedger.reason,persisted:false}:null,receipts,
    reason:'EVENT_ACK_TELEMETRY_NOT_IMPLEMENTED',automaticPlaybackEnabled:false,
    publicBroadcastAuthorized:false});
+ }catch(error){next(error);}
+});
+/** Explicit receipt reconciliation: stores only already-observed matching Agent receipts.
+ * Never creates a receipt, never issues any playback or control command.
+ */
+router.post('/missile-delivery-observation/reconcile-agent',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const id=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
+  if(!id)return res.status(409).json({error:'AGENT_NOT_BOUND'});
+  const result=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581479)`;
+   const [device,event,receiptRow,ledgerRow]=await Promise.all([
+    tx.radioDevice.findUnique({where:{id},select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}),
+    tx.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+     orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true}}),
+    tx.setting.findUnique({where:{key:'mchs_agent_event_receipt_v1_'+id}}),
+    tx.setting.findUnique({where:{key:'mchs_receipt_ledger_v1'}})
+   ]);
+   const age=Date.now()-new Date(device?.lastSeenAt).getTime();
+   if(!device||device.revokedAt||device.playbackAllowed!==true||!Number.isFinite(age)||age<0||age>15000)
+    return {accepted:false,reason:'AGENT_NOT_CURRENT'};
+   let raw,ledger;try{raw=JSON.parse(receiptRow?.value||'null');}catch{}
+   try{ledger=JSON.parse(ledgerRow?.value||'null');}catch{}
+   const eventType=event?classifyMchsObservation(event.title,event.body):null;
+   const evidence=normalizeMchsEventReceipt(raw,{eventId:event?.id,eventType});
+   if(!evidence.receipt)return {accepted:false,reason:evidence.reason};
+   const next=advanceMchsReceiptLedger(ledger,{...evidence.receipt,channel:'AGENT'});
+   if(!next.accepted)return {accepted:false,reason:next.reason};
+   await tx.setting.upsert({where:{key:'mchs_receipt_ledger_v1'},
+    create:{key:'mchs_receipt_ledger_v1',value:JSON.stringify({receipts:next.receipts})},
+    update:{value:JSON.stringify({receipts:next.receipts})}});
+   return {accepted:true,eventId:event.id,eventType,receiptRecorded:true};
+  });
+  res.status(result.accepted?200:409).set('Cache-Control','no-store').json({...result,
+   playbackStarted:false,automaticPlaybackEnabled:false,publicBroadcastAuthorized:false});
  }catch(error){next(error);}
 });
 router.get('/missile-integration-probe',requireRole('ADMIN'),async (_req,res,next)=>{
