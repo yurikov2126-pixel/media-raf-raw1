@@ -4,6 +4,7 @@ import {api} from '../../../api/client.js';
 /** Single operator workspace. Legacy laboratory tools remain server-side but are not primary controls. */
 export default function MchsEmergencySimulation({token}){
  const [assets,setAssets]=useState([]),[danger,setDanger]=useState(''),[clear,setClear]=useState('');
+ const [typeRules,setTypeRules]=useState(null),[selectedType,setSelectedType]=useState('');
  const [repeats,setRepeats]=useState(1),[saving,setSaving]=useState(false),[message,setMessage]=useState('');
  const [worker,setWorker]=useState(null),[session,setSession]=useState(null),[control,setControl]=useState(null);
  const [monitor,setMonitor]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -22,11 +23,22 @@ export default function MchsEmergencySimulation({token}){
  };
  useEffect(()=>{
   api('/safety/mchs-training-stream/assets',{token}).then(x=>setAssets(x.assets||[])).catch(()=>setError('Не удалось получить библиотеку ALARM'));
+  api('/safety/event-type-rules',{token}).then(setTypeRules).catch(()=>setError('Не удалось получить шаблоны оповещений'));
   api('/safety/mchs-alarm-repeats',{token}).then(x=>setRepeats(x.dangerRepeats||1)).catch(()=>{});
   void refresh();
   const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},5000);
   return()=>clearInterval(timer);
  },[token]);
+ const applyTemplate=()=>{
+  const rule=typeRules?.rules?.[selectedType];
+  if(!rule?.audioAssetId||!assets.some(a=>a.id===rule.audioAssetId)){
+   setError('В выбранном шаблоне нет доступного ALARM-трека');return;
+  }
+  setDanger(rule.audioAssetId);
+  setRepeats(rule.repeats||1);
+  setMessage('Настройки шаблона перенесены в учебный сценарий. Повторы необходимо сохранить перед запуском.');
+  setError('');
+ };
  const saveRepeats=async()=>{
   setSaving(true);setMessage('');
   try{await api('/safety/mchs-alarm-repeats',{token,method:'PUT',body:{dangerRepeats:repeats}});setMessage('Повторения сохранены');}
@@ -67,6 +79,16 @@ export default function MchsEmergencySimulation({token}){
   <div className="rounded-2xl border border-amber-300/60 p-4 space-y-3">
    <h3 className="font-semibold text-lg">Учебный ALARM</h3>
    <p className="text-sm text-amber-700 dark:text-amber-300">Учебные записи звучат в реальном радиопотоке. Перед запуском необходимо физически отключить громкоговорители и предупредить слушателей.</p>
+   <div className="rounded-xl border border-slate-300 dark:border-white/20 p-3 space-y-2">
+    <label className="block text-sm">Загрузить настройки из шаблона ALARM
+     <select value={selectedType} onChange={e=>setSelectedType(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white">
+      <option value="">Выберите тип уведомления</option>
+      {(typeRules?.types||[]).map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+     </select>
+    </label>
+    <button type="button" disabled={!selectedType||busy} onClick={applyTemplate} className="rounded-lg border px-3 py-2 disabled:opacity-50">Подставить трек и повторы</button>
+    <p className="text-xs opacity-70">Только заполнение учебного сценария: автоматический ALARM не включается. Отбой выбирается отдельно.</p>
+   </div>
    <div className="grid gap-3 sm:grid-cols-2">
     <label className="text-sm">Тревога<select value={danger} onChange={e=>setDanger(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white"><option value="">Выбрать ALARM</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
     <label className="text-sm">Отбой<select value={clear} onChange={e=>setClear(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-white"><option value="">Выбрать ALARM</option>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
