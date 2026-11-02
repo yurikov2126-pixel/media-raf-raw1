@@ -16,6 +16,7 @@ import {assessMchsLiveTrialPreflight} from '../lib/mchsLiveTrialPreflight.js';
 import {assessMissileExecutionInterlock} from '../lib/mchsExecutionInterlock.js';
 import {assessMchsDeliveryReceipts} from '../lib/mchsDeliveryReceipts.js';
 import {assessMchsDualChannelTransition} from '../lib/mchsDualChannelTransition.js';
+import {assessMchsTwoChannelSession} from '../lib/mchsTwoChannelSession.js';
 import {normalizeMchsEventReceipt} from '../lib/mchsEventReceiptEvidence.js';
 import {advanceMchsReceiptLedger} from '../lib/mchsReceiptLedger.js';
 import crypto from 'node:crypto';
@@ -1200,6 +1201,30 @@ router.get('/missile-live-acceptance',requireRole('ADMIN'),(_req,res)=>{
 });
 /** Live transport evidence without converting heartbeats into event ACKs. */
 /** Inspect current event and transport visibility without inventing START/STOP ACKs. */
+/** Integrated read-only two-channel acceptance; never infer event playback from trial telemetry. */
+router.get('/missile-two-channel-session',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||'';
+  const [event,worker,device,agentReceiptRow]=await Promise.all([
+   prisma.safetyMchsEvent.findFirst({where:{source:'MCHS_ANDROID',verified:true},
+    orderBy:{receivedAt:'desc'},select:{id:true,title:true,body:true,region:true,occurredAt:true}}),
+   trainingStreamRequest().catch(()=>null),
+   deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},select:{
+    id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null,
+   deviceId?prisma.setting.findUnique({where:{key:'mchs_agent_trial_vlc_state_v1_'+deviceId}}):null
+  ]);
+  let trial;try{trial=JSON.parse(agentReceiptRow?.value||'null');}catch{}
+  const eventType=event?classifyMchsObservation(event.title,event.body):null;
+  const report=assessMchsTwoChannelSession({event:{id:event?.id,eventType},operatorHold:true});
+  const age=Date.now()-new Date(device?.lastSeenAt).getTime();
+  res.set('Cache-Control','no-store').json({...report,checkedAt:new Date().toISOString(),
+   observations:{workerReachable:worker?.httpStatus===200,
+    workerOverlayActive:worker?.httpStatus===200?worker.data?.active===true:null,
+    agentHeartbeatCurrent:!!device&&!device.revokedAt&&device.playbackAllowed===true&&
+     Number.isFinite(age)&&age>=0&&age<=15000,
+    trialVlcState:trial?.state||null,trialIsNotEventPlayback:true}});
+ }catch(error){next(error);}
+});
 router.get('/missile-dual-channel-status',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
