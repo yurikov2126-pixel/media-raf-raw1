@@ -32,7 +32,7 @@ def cache_verified_alarm(command, destination, server, token, *,
     target=directory/(asset_id+'.alarm')
     partial=directory/(asset_id+'.alarm.part')
     # Never accept arbitrary URLs supplied by the event itself.
-    url=server.rstrip('/')+'/api/radio-agent/agent/assets/'+quote(asset_id,safe='')
+    url=server.rstrip('/')+'/api/radio-agent/agent/mchs-alarm-assets/'+quote(asset_id,safe='')
     digest=hashlib.sha256()
     count=0
     try:

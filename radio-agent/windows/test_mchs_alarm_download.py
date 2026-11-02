@@ -27,7 +27,7 @@ class MchsAlarmDownloadTests(unittest.TestCase):
                                       opener=opener)
         self.assertIsNone(err)
         self.assertEqual(path.read_bytes(),self.data)
-        self.assertEqual(seen[0],('https://example.test/api/radio-agent/agent/assets/alarm1','Bearer token'))
+        self.assertEqual(seen[0],('https://example.test/api/radio-agent/agent/mchs-alarm-assets/alarm1','Bearer token'))
         self.assertFalse((self.root/'alarm1.alarm.part').exists())
     def test_corrupt_file_not_committed(self):
         path,err=cache_verified_alarm(self.cmd,self.root,'https://example.test','token',
