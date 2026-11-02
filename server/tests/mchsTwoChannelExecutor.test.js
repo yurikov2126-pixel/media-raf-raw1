@@ -40,7 +40,7 @@ test('unresponsive Agent START times out and sends STOP to both channels',async(
  assert.ok(log.includes('worker:STOP'));assert.ok(log.includes('agent STOP'));
 });
 test('operator abort while START pending sends STOP to both channels',async()=>{
- const log=[];const ctl=new AbortController();
+ const log=[];const ctl=new globalThis.AbortController();
  const slow={start:()=>new Promise(()=>{}),stop:async()=>{log.push('agent STOP');}};
  setTimeout(()=>ctl.abort(),10);
  const x=await runMchsTwoChannelExecution({event,authorization,worker:channel('worker',log),agent:slow,
