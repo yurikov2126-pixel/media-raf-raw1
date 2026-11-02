@@ -11,6 +11,7 @@ import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../
 import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroidEventId} from '../lib/mchsExecutionRecovery.js';
 import {MCHS_EXECUTION_JOURNAL_KEY,normalizeExecutionJournal,appendExecutionJournal,recoverExecutionJournal} from '../lib/mchsExecutionJournal.js';
 import {MCHS_ALARM_REPEATS_KEY,DEFAULT_DANGER_REPEATS,validateDangerRepeats,normalizeDangerRepeats} from '../lib/mchsAlarmRepeats.js';
+import {normalizeMchsTypeRepeats,validateMchsTypeRepeats,buildMchsTypeAudioPreview} from '../lib/mchsTypeAudioPlan.js';
 import crypto from 'node:crypto';
 import {mchsLabFixtureRequest} from '../lib/mchsLabFixtureProxy.js';
 import http from 'node:http';
@@ -491,7 +492,7 @@ router.put('/notification-policy-drafts/:eventId', requireRole('ADMIN'), async (
     const event = await prisma.safetyMchsEvent.findUnique({ where: { id: req.params.eventId },
       select: { id: true, sourceEventId: true } });
     if (!event) return res.status(404).json({ error: 'EVENT_NOT_FOUND' });
-    const { mode, audioAssetId, note } = req.body || {};
+    const { mode, audioAssetId, note, repeats = 1 } = req.body || {};
     if (!policyModes.has(mode) || typeof note !== 'string' || note.length > 500 ||
         (audioAssetId !== null && audioAssetId !== undefined && (typeof audioAssetId !== 'string' || audioAssetId.length > 120))) {
       return res.status(400).json({ error: 'INVALID_POLICY' });
@@ -521,12 +522,12 @@ router.put('/notification-policy-drafts/:eventId', requireRole('ADMIN'), async (
 
 
 const TYPE_RULE_KEY = 'mchs_four_type_rules_v1';
-const emptyTypeRule = () => ({ mode: 'IGNORE', audioAssetId: null, note: '', executable: false });
+const emptyTypeRule = () => ({ mode: 'IGNORE', audioAssetId: null, repeats: 1, note: '', executable: false });
 async function getTypeRules() {
   const row = await prisma.setting.findUnique({ where: { key: TYPE_RULE_KEY } });
   let stored = {};
   try { const parsed = JSON.parse(row?.value || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed; } catch {}
-  return Object.fromEntries(MCHS_EVENT_TYPES.map(type => [type.id, { ...emptyTypeRule(), ...(stored[type.id] || {}), executable: false }]));
+  return Object.fromEntries(MCHS_EVENT_TYPES.map(type => [type.id, { ...emptyTypeRule(), ...(stored[type.id] || {}), repeats: normalizeMchsTypeRepeats(stored[type.id]?.repeats), executable: false }]));
 }
 router.get('/event-type-rules', canView, async (_req, res, next) => {
   try {
@@ -536,7 +537,9 @@ router.get('/event-type-rules', canView, async (_req, res, next) => {
     const recent = await prisma.safetyMchsEvent.findMany({ orderBy: { receivedAt: 'desc' }, take: 100,
       select: { id: true, title: true, body: true, eventType: true } });
     res.set('Cache-Control', 'no-store');
-    return res.json({ types: MCHS_EVENT_TYPES, rules, assets, liveDispatchEnabled: false,
+    return res.json({ types: MCHS_EVENT_TYPES, rules, assets, previews:Object.fromEntries(MCHS_EVENT_TYPES.map(type => [type.id,
+      buildMchsTypeAudioPreview(rules[type.id],assets.find(asset=>asset.id===rules[type.id]?.audioAssetId))])),
+      repeatLimits:{min:1,max:5}, liveDispatchEnabled: false,
       classifications: recent.map(e => ({ id: e.id, type: classifyMchsObservation(e.title, e.body) })) });
   } catch (error) { next(error); }
 });
@@ -545,13 +548,14 @@ router.put('/event-type-rules/:type', requireRole('ADMIN'), async (req, res, nex
     if (!MCHS_EVENT_TYPES.some(t => t.id === req.params.type)) return res.status(404).json({ error: 'UNKNOWN_TYPE' });
     const { mode, audioAssetId, note } = req.body || {};
     if (!['IGNORE', 'REVIEW'].includes(mode) || typeof note !== 'string' || note.length > 500 ||
-        (audioAssetId != null && (typeof audioAssetId !== 'string' || audioAssetId.length > 120)))
+        (audioAssetId != null && (typeof audioAssetId !== 'string' || audioAssetId.length > 120)) ||
+        !validateMchsTypeRepeats(repeats))
       return res.status(400).json({ error: 'INVALID_TYPE_RULE' });
     if (audioAssetId) {
       const asset = await prisma.radioAsset.findUnique({ where: { id: audioAssetId }, select: { mimeType: true, category: true } });
       if (!asset?.mimeType?.startsWith('audio/') || asset.category !== 'ALARM') return res.status(400).json({ error: 'AUDIO_ASSET_NOT_FOUND' });
     }
-    const entry = { mode, audioAssetId: audioAssetId || null, note: note.trim(), executable: false,
+    const entry = { mode, audioAssetId: audioAssetId || null, repeats, note: note.trim(), executable: false,
       updatedBy: req.user.id, updatedAt: new Date().toISOString() };
     await prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581421)`;
