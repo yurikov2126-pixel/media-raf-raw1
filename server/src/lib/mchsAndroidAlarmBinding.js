@@ -50,3 +50,31 @@ export function bindAndroidAlarmCandidates({
  }
  return {eligible,rejected,dispatchAuthorized:false,automaticPlaybackEnabled:false};
 }
+
+/** Durable, non-executable playback proposals keyed by the Android source ID.
+ * One notification cannot be requeued after API restart or monitor retry.
+ */
+export function stageBoundAndroidIntents(raw,eligible,{now=new Date().toISOString()}={}){
+ const prior=raw&&typeof raw==='object'?raw:{};
+ const items=Array.isArray(prior.items)?
+  prior.items.filter(item=>item&&typeof item.sourceEventId==='string').slice(-250):[];
+ const seen=new Set(items.map(item=>item.sourceEventId));
+ const added=[];
+ for(const candidate of eligible){
+  if(candidate?.result!=='OBSERVED'||candidate.officialSourceVerified!==false||
+     candidate.dispatchAuthorized!==false||
+     !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(candidate.eventType)||
+     !/^[A-Za-z0-9_-]{1,128}$/.test(candidate.audioAssetId||'')||
+     typeof candidate.sourceEventId!=='string'||!candidate.sourceEventId||
+     seen.has(candidate.sourceEventId))continue;
+  const intent={sourceEventId:candidate.sourceEventId,eventId:candidate.eventId,
+   eventType:candidate.eventType,assetId:candidate.audioAssetId,
+   repetitions:candidate.eventType==='MISSILE_ALL_CLEAR'?1:candidate.repetitions,
+   expectedDurationMs:candidate.expectedDurationMs,
+   status:'STAGED',createdAt:now,officialSourceVerified:false,
+   dispatchAuthorized:false};
+  seen.add(candidate.sourceEventId);added.push(intent);items.push(intent);
+ }
+ return {ledger:{items:items.slice(-250),lastUpdated:added.length?now:prior.lastUpdated||null},
+  added,dispatchAuthorized:false,automaticPlaybackEnabled:false};
+}
