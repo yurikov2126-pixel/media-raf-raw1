@@ -150,9 +150,13 @@ def send_mchs_device_stop_receipt(server, token, command):
 def report_mchs_playback_session(server,token,alarm_session):
     """Report observed local VLC process state, never physical PA state."""
     state=alarm_session.status()
-    payload=json.dumps({'version':1,'eventId':state['eventId'],
+    payload=json.dumps({'version':2,'eventId':state['eventId'],
         'state':state['state'],
-        'completedRepeats':state['completedRepeats']}).encode('utf-8')
+        'completedRepeats':state['completedRepeats'],
+        'expectedRepeats':state['expectedRepeats'],
+        'naturalCompletion':state['naturalCompletion'],
+        'processRunning':state['processRunning'],
+        'failureReason':state['failureReason']}).encode('utf-8')
     request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-playback-session-status',
                     data=payload,headers={'Authorization':'Bearer '+token,
                     'Content-Type':'application/json'},method='POST')
