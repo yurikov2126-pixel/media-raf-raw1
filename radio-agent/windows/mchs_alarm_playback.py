@@ -38,6 +38,8 @@ class AlarmPlaybackSession:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return {'accepted':False,'reason':'BUSY'}
+            if self._event_id == event_id:
+                return {'accepted':False,'reason':'REPLAYED_EVENT'}
             self._event_id=event_id
             self._completed=0
             self._status='STARTING'
@@ -90,10 +92,18 @@ class AlarmPlaybackSession:
             process=self._process
             thread=self._thread
         if process is not None and process.poll() is None:
-            process.terminate()
+            try:
+                process.terminate()
+            except OSError:
+                pass
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=4)
         with self._lock:
-            if self._status in ('STARTING','PLAYING'):
+            still_running=self._thread is not None and self._thread.is_alive()
+            if not still_running and self._status in ('STARTING','PLAYING'):
                 self._status='STOPPED'
-        return self.status()
+            state=dict(eventId=self._event_id,state=self._status,
+                       completedRepeats=self._completed)
+            state['stopConfirmed']=not still_running and (
+                self._process is None or self._process.poll() is not None)
+        return state
