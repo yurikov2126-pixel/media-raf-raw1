@@ -1,3 +1,4 @@
+import {fetchIsolatedHeadphonesSelfTest} from '../lib/mchsHeadphonesSelfTestRelay.js';
 import {selectMchsAgentCommand} from '../lib/mchsAgentCommandSelection.js';
 import {advanceMchsDeviceCommand} from '../lib/mchsDeviceCommandLedger.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
@@ -801,6 +802,27 @@ router.post('/agent/mchs-playback-session-status',deviceAuth,safe(async(req,res)
   automaticPublicBroadcastAuthorized:false});
  await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
  res.json({accepted:true,localProcessStateOnly:true,publicPlaybackAuthorized:false});
+}));
+// Read-only loopback self-test for explicitly bound headphones pilot devices.
+// There is no command queue, no public output, no arbitrary asset ID or URL.
+router.get('/agent/mchs-headphones-self-test.wav',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','private, no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||
+    req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ if(process.env.MCHS_AGENT_HEADPHONES_SELF_TEST_ENABLED!=='true')
+  return res.status(404).json({error:'SELF_TEST_DISABLED'});
+ try{
+  const wav=await fetchIsolatedHeadphonesSelfTest();
+  res.setHeader('Content-Type','audio/wav');
+  res.setHeader('Content-Disposition','attachment; filename="headphones-self-test.wav"');
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('Content-Length',String(wav.length));
+  return res.send(wav);
+ }catch(error){
+  console.warn('MCHS_HEADPHONES_SELF_TEST_UNAVAILABLE',error?.message);
+  return res.status(503).json({error:'SELF_TEST_UNAVAILABLE'});
+ }
 }));
 // Device-authenticated, ALARM-only asset delivery; never exposes an arbitrary
 // file path or changes playback. Production event START remains separately held.
