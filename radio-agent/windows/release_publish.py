@@ -6,6 +6,7 @@ Never claim success until the expected EXE asset exists with matching SHA256.
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -53,18 +54,24 @@ def lookup_release(repo, tag):
     return None
 
 
-def assert_asset(release, local_sha, local_size):
+def assert_asset(release, local_sha, local_size, *, preexisting=False):
     matching = [a for a in release.get('assets', []) if a.get('name') == ASSET_NAME]
     if not matching:
         return False
     if len(matching) != 1:
         raise PublishFailure('Duplicate release assets: operator review required')
     asset = matching[0]
-    if asset.get('state') != 'uploaded' or asset.get('size') != local_size:
-        raise PublishFailure('Existing release asset is incomplete or has wrong size')
     digest = asset.get('digest')
-    if digest != 'sha256:' + local_sha:
-        raise PublishFailure('Existing release asset SHA256 unavailable or mismatched')
+    if asset.get('state') != 'uploaded' or not isinstance(asset.get('size'), int) or asset['size'] <= 0:
+        raise PublishFailure('Existing release asset is incomplete')
+    if not isinstance(digest, str) or not re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
+        raise PublishFailure('GitHub did not provide a valid uploaded EXE checksum')
+    if digest != 'sha256:' + local_sha or asset['size'] != local_size:
+        if not preexisting:
+            raise PublishFailure('Uploaded EXE SHA256 or size mismatch')
+        # GitHub's previous successful EXE must remain immutable. PyInstaller
+        # builds are not necessarily byte-reproducible on a second runner.
+        print('PREEXISTING_VERSIONED_EXE_PRESERVED', digest, asset['size'])
     return True
 
 
@@ -77,6 +84,7 @@ def publish(*, repo, commit_sha, asset_path, tagged=False):
     local_sha = hashlib.sha256(path.read_bytes()).hexdigest()
     local_size = path.stat().st_size
     release = lookup_release(repo, tag)
+    preexisting = release is not None
 
     if not release:
         args = ['release', 'create', tag, '--repo', repo]
@@ -101,7 +109,7 @@ def publish(*, repo, commit_sha, asset_path, tagged=False):
     if release.get('tag_name') != tag:
         raise PublishFailure('Release tag mismatch')
 
-    if not assert_asset(release, local_sha, local_size):
+    if not assert_asset(release, local_sha, local_size, preexisting=preexisting):
         # Do not use --clobber. It could silently replace an immutable asset.
         for attempt in range(5):
             code, _, err = gh('release', 'upload', tag, str(path), '--repo', repo)
@@ -116,10 +124,12 @@ def publish(*, repo, commit_sha, asset_path, tagged=False):
 
     # Final read confirms the GitHub API now advertises the correct asset hash.
     published = lookup_release(repo, tag)
-    if not published or not assert_asset(published, local_sha, local_size):
+    if not published or not assert_asset(published, local_sha, local_size,
+                                          preexisting=preexisting):
         raise PublishFailure('Release exists without verified EXE')
+    published_asset = next(a for a in published['assets'] if a['name'] == ASSET_NAME)
     print('RELEASE_PUBLISHED_AND_VERIFIED', tag, ASSET_NAME,
-          'sha256:' + local_sha, 'size:' + str(local_size))
+          published_asset['digest'], 'size:' + str(published_asset['size']))
     print('RELEASE_URL', published.get('html_url', ''))
 
 
