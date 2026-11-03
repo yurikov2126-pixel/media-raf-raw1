@@ -54,7 +54,9 @@ export function advanceIsolatedAndroidAutoFeed(raw,{events=[],observations=[],
   if(!/^[a-f0-9]{64}$/.test(sha256||''))continue;
   const repeats=eventType==='MISSILE_ALL_CLEAR'?1:
    (Number.isSafeInteger(dangerRepeats)&&dangerRepeats>=1&&dangerRepeats<=5?dangerRepeats:1);
-  const sequence=state.sequence+1;
+  // EventAdmissionLedger also observes legacy command sequences. Use a
+  // monotonic epoch sequence so a new isolated feed cannot replay an old one.
+  const sequence=Math.max(state.sequence+1,nowMs);
   const command={version:1,sequence,action:'START',eventId:event.id,eventType,
    assetId:eventType==='MISSILE_DANGER'?'isolated_danger':'isolated_clear',
    sha256,repeats,trialOnly:true,trialSourceAccepted:true,
