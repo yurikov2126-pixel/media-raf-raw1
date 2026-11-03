@@ -64,7 +64,8 @@ class LocalVlcProgram:
 
 def run_real_vlc_pilot(*, server,token,vlc,music,repeats=4,
                        ask=input,output=print,launch=None,
-                       timeout_s=60,wait_completion=wait_for_natural_completion):
+                       timeout_s=60,wait_completion=wait_for_natural_completion,
+                       restored_listen_s=4,sleep=time.sleep):
     exe=Path(vlc).resolve()
     track=Path(music).resolve()
     if not exe.is_file() or exe.name.lower()!='vlc.exe':
@@ -112,6 +113,8 @@ def run_real_vlc_pilot(*, server,token,vlc,music,repeats=4,
                 confirm_restored=program.restored,
                 repeats=repeats)
             output('LOCAL_HANDOVER_RESULT',result)
+            if result.program_restored and restored_listen_s>0:
+                sleep(restored_listen_s)
             return result
         finally:
             # This pilot owns only its own process, never the actual Radio Agent.
