@@ -43,6 +43,9 @@ jobs:
       - name: Dual-channel ALARM natural-completion evidence tests
         run: node --test tests/mchsNaturalCompletionEvidence.test.js tests/mchsAgentPlaybackReport.test.js tests/mchsVerifiedWorkerTransport.test.js
 
+      - name: Worker ALARM event journal regression tests
+        run: node --test tests/mchsWorkerEventJournal.test.js tests/mchsVerifiedWorkerTransport.test.js tests/radioMchsTrainingOverlay.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
