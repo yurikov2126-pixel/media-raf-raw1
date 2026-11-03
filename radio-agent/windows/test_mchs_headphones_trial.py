@@ -5,7 +5,7 @@ import wave
 from pathlib import Path
 from unittest.mock import patch
 
-from mchs_headphones_trial import fetch_self_test, verify_self_test, run_local_trial
+from mchs_headphones_trial import fetch_self_test, verify_self_test, run_local_trial, wait_for_natural_completion
 
 class FakeResponse:
     headers={'Content-Type':'audio/wav'}
@@ -78,6 +78,63 @@ class HeadphonesTrialTests(unittest.TestCase):
             self.assertTrue(result['stopConfirmed'])
             self.assertTrue(any(parts[0]=='LOCAL_START' for parts in logs))
             self.assertTrue(any(parts[0]=='LOCAL_STOP' for parts in logs))
+
+    def test_natural_complete_without_stop(self):
+        with tempfile.TemporaryDirectory() as td:
+            vlc=Path(td)/'vlc.exe'
+            vlc.write_bytes(b'fixture')
+            logs=[]
+            class Completed:
+                def status(self):
+                    return dict(state='COMPLETED',naturalCompletion=True,
+                        completedRepeats=3,expectedRepeats=3,
+                        processRunning=False,failureReason=None)
+            result=run_local_trial('https://station.example','rr_example',vlc,
+                repeats=3,natural_completion=True,
+                opener=lambda req,timeout:FakeResponse(fixture()),
+                ask=lambda prompt:'ISOLATED',output=lambda *x:logs.append(x),
+                launch=lambda path:FakeProcess(),
+                wait_completion=lambda session,timeout_s:wait_for_natural_completion(
+                    Completed(),clock=lambda:0,sleep=lambda _:None))
+            self.assertTrue(result['naturalCompletion'])
+            self.assertTrue(any(x[0]=='LOCAL_COMPLETE' for x in logs))
+            self.assertFalse(any(x[0]=='LOCAL_STOP' for x in logs))
+
+    def test_natural_failure_cleans_up_process(self):
+        with tempfile.TemporaryDirectory() as td:
+            vlc=Path(td)/'vlc.exe'
+            vlc.write_bytes(b'fixture')
+            logs=[]
+            with self.assertRaisesRegex(TimeoutError,'LOCAL_COMPLETION_TIMEOUT'):
+                run_local_trial('https://station.example','rr_example',vlc,
+                    natural_completion=True,
+                    opener=lambda req,timeout:FakeResponse(fixture()),
+                    ask=lambda prompt:'ISOLATED',output=lambda *x:logs.append(x),
+                    launch=lambda path:FakeProcess(),
+                    wait_completion=lambda session,timeout_s:(
+                        (_ for _ in ()).throw(TimeoutError('LOCAL_COMPLETION_TIMEOUT'))))
+            self.assertTrue(any(x[0]=='LOCAL_FAULT_STOP' and
+                                x[1]['stopConfirmed'] for x in logs))
+
+    def test_wait_completion_rejects_short_or_failed_sessions(self):
+        class FakeSession:
+            def __init__(self,state):self.state=state
+            def status(self):return self.state
+        good=dict(state='COMPLETED',naturalCompletion=True,
+                  completedRepeats=2,expectedRepeats=2,
+                  processRunning=False,failureReason=None)
+        self.assertTrue(wait_for_natural_completion(
+            FakeSession(good),clock=lambda:0,sleep=lambda _:None)['naturalCompletion'])
+        bad=dict(good,completedRepeats=1,naturalCompletion=False)
+        times=iter([0,1,2])
+        with self.assertRaises(TimeoutError):
+            wait_for_natural_completion(FakeSession(bad),timeout_s=1,
+                clock=lambda:next(times),sleep=lambda _:None)
+        stopped=dict(good,state='STOPPED',naturalCompletion=False,
+                     failureReason='PLAYER_FAILED')
+        with self.assertRaisesRegex(RuntimeError,'LOCAL_COMPLETION_FAILED'):
+            wait_for_natural_completion(FakeSession(stopped),
+                clock=lambda:0,sleep=lambda _:None)
 
 if __name__=='__main__':
     unittest.main()
