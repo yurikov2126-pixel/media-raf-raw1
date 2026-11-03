@@ -71,3 +71,12 @@ test('all-clear cannot run with unconfirmed central return or truncated playback
  assert.equal(r.command,null);
  assert.equal(r.reason,'AWAITING_LOCAL_COMPLETION');
 });
+
+test('temporary loss of central heartbeat during a locally running WAV does not impose HALT',()=>{
+ const first=advance(null,{...props,events:[danger]});
+ const paused=advance(first.state,{...props,events:[clear],readiness:{
+  ...readiness,centralPacketsConfirmed:false},nowMs:t+3000});
+ assert.equal(paused.reason,'AWAITING_LOCAL_COMPLETION');
+ assert.equal(paused.command,null);
+ assert.equal(paused.state.active.command.eventId,danger.id);
+});
