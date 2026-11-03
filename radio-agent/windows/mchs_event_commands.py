@@ -6,6 +6,9 @@ verify the event-bound signed/authorized asset and physical output.
 import datetime
 import re
 
+# Agent can distinguish an explicitly isolated trial from official-source authority.
+ISOLATED_TRIAL_SOURCE_ADMISSION_V1 = True
+
 def validate_command(command, *, last_sequence=0, halted=True, now=None):
     if not isinstance(command, dict) or command.get('version') != 1:
         return False, 'INVALID_VERSION'

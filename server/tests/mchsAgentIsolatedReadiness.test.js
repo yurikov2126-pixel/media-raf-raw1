@@ -5,13 +5,15 @@ import {normalizeMchsAgentReadiness as normalize,readMchsAgentReadiness as read}
 
 const now=Date.parse('2026-11-04T12:00:00Z');
 const body={version:1,mode:'ISOLATED_EVENT_AUDIO',operatorIsolationAttested:true,
- centralPacketsConfirmed:true,assets:{
+ centralPacketsConfirmed:true,isolatedTrialSourceAdmission:true,assets:{
  MISSILE_DANGER:'a'.repeat(64),MISSILE_ALL_CLEAR:'b'.repeat(64)}};
 test('valid headphones heartbeat remains non-actuating and cannot verify physical PA',()=>{
  const result=normalize(body);
  assert.equal(result.ok,true);
  assert.equal(result.value.physicalPaVerified,false);
  assert.equal(result.value.publicPlaybackAuthorized,false);
+ assert.equal(result.value.isolatedTrialSourceAdmission,true);
+ assert.equal(normalize({...body,isolatedTrialSourceAdmission:undefined}).value.isolatedTrialSourceAdmission,false);
  const saved={...result.value,receivedAt:new Date(now-1000).toISOString()};
  assert.equal(read(saved,{nowMs:now}).fresh,true);
  assert.equal(read(saved,{nowMs:now}).physicalPaVerified,false);

@@ -4,6 +4,7 @@ Never issues playback commands, claims physical PA verification, or logs secrets
 """
 import json
 from urllib.request import Request, urlopen
+from mchs_event_commands import ISOLATED_TRIAL_SOURCE_ADMISSION_V1
 
 ENDPOINT='/api/radio-agent/agent/mchs-isolated-readiness'
 
@@ -12,6 +13,7 @@ def make_isolated_readiness(assets, central_packets_confirmed):
         raise ValueError('ISOLATED_ASSET_MAP_REQUIRED')
     return {'version':1,'mode':'ISOLATED_EVENT_AUDIO',
             'operatorIsolationAttested':True,
+            'isolatedTrialSourceAdmission':ISOLATED_TRIAL_SOURCE_ADMISSION_V1,
             'centralPacketsConfirmed':bool(central_packets_confirmed),
             'assets':{
                 'MISSILE_DANGER':assets['MISSILE_DANGER']['sha256'],

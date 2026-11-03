@@ -69,6 +69,7 @@ router.get('/mchs-agent-trial-start-readiness',auth,requireRole('ADMIN'),async(r
    fresh:true,mode:agentReadiness.mode,
    centralPacketsConfirmed:agentReadiness.centralPacketsConfirmed,
    operatorIsolationAttested:agentReadiness.operatorIsolationAttested,
+   isolatedTrialSourceAdmission:agentReadiness.isolatedTrialSourceAdmission,
    localWavHashesReported:true,receivedAt:agentReadiness.receivedAt,
    physicalPaVerified:false
   }:null});

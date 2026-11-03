@@ -8,6 +8,8 @@ export function stageSyntheticHeadphonesCycle({state,readiness,nowMs=Date.now(),
   return {ok:false,reason:'CYCLE_ALREADY_ACTIVE'};
  if(!readiness?.fresh||!readiness.operatorIsolationAttested||
     !readiness.centralPacketsConfirmed)return {ok:false,reason:'AGENT_NOT_READY'};
+ if(readiness.isolatedTrialSourceAdmission!==true)
+  return {ok:false,reason:'WINDOWS_AGENT_UPDATE_REQUIRED'};
  if(!/^synthetic_[a-f0-9]{24}$/.test(id||''))
   return {ok:false,reason:'INVALID_SYNTHETIC_ID'};
  const sequence=Math.max(Number.isSafeInteger(state?.sequence)?state.sequence+1:1,nowMs);
@@ -35,12 +37,20 @@ export function advanceSyntheticHeadphonesCycle(state,{
   }
   if(active&&Date.parse(active.expiresAt)>nowMs)
    return {state,command:active,reason:'IN_FLIGHT_REDELIVERY'};
+  // An unanswered delivery must terminate rather than permanently jam the
+  // operator rehearsal. Never infer successful sound or queue ALL_CLEAR.
+  const at=Date.parse(active?.createdAt||'');
+  if(Number.isFinite(at)&&nowMs-at>60000)
+   return no('AGENT_COMPLETION_TIMEOUT',{...state,phase:'FAILED',
+    failReason:'AGENT_COMPLETION_TIMEOUT',active:null});
   return no('AWAITING_AGENT_COMPLETION');
  }
  if(!['DANGER_PENDING','CLEAR_PENDING'].includes(state.phase))
   return no('INVALID_STATE');
  if(!readiness?.fresh||!readiness.operatorIsolationAttested||
     !readiness.centralPacketsConfirmed)return no('AGENT_NOT_READY');
+ if(readiness.isolatedTrialSourceAdmission!==true)
+  return no('WINDOWS_AGENT_UPDATE_REQUIRED');
  const danger=state.phase==='DANGER_PENDING';
  const eventType=danger?'MISSILE_DANGER':'MISSILE_ALL_CLEAR';
  const sha256=readiness.assets?.[eventType];

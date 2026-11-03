@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {advanceIsolatedAndroidAutoFeed as advance} from '../src/lib/mchsIsolatedAndroidAutoFeed.js';
 const t=Date.parse('2026-11-04T12:00:00Z');
 const readiness={fresh:true,operatorIsolationAttested:true,centralPacketsConfirmed:true,
+ isolatedTrialSourceAdmission:true,
  assets:{MISSILE_DANGER:'a'.repeat(64),MISSILE_ALL_CLEAR:'b'.repeat(64)}};
 const danger={id:'danger_1',sourceEventId:'android:danger',source:'MCHS_ANDROID',
  title:'Ракетная опасность',body:'',region:'Тульская область',channelId:'mchs-tula',

@@ -35,6 +35,8 @@ export function advanceIsolatedAndroidAutoFeed(raw,{events=[],observations=[],
  }
  if(!readiness?.fresh||!readiness.operatorIsolationAttested||
     !readiness.centralPacketsConfirmed)return deny(state,'ISOLATED_AGENT_NOT_READY');
+ if(readiness.isolatedTrialSourceAdmission!==true)
+  return deny(state,'WINDOWS_AGENT_UPDATE_REQUIRED');
  if(!Array.isArray(allowedChannels)||!allowedChannels.length)
   return deny(state,'ANDROID_CHANNEL_ALLOWLIST_EMPTY');
  const ordered=[...events].sort((a,b)=>Date.parse(a.occurredAt)-Date.parse(b.occurredAt));
