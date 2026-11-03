@@ -311,6 +311,10 @@ router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
   if(auto.command)return res.json({version:1,command:auto.command,
    halted:false,executionEnabled:true,automaticPlaybackEnabled:false,
    reason:auto.reason,isolatedHeadphonesOnly:true,haltEpoch:state.haltEpoch});
+  if(['ALREADY_QUEUED','AWAITING_LOCAL_COMPLETION','NO_NEW_ANDROID_EVENT'].includes(auto.reason))
+   return res.json({version:1,command:null,halted:false,
+    executionEnabled:false,automaticPlaybackEnabled:false,
+    reason:auto.reason,isolatedHeadphonesOnly:true,haltEpoch:state.haltEpoch});
  }
  res.json({version:1,...selected,haltEpoch:state.haltEpoch});
 }));
