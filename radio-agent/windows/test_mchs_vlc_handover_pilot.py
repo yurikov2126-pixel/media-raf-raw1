@@ -39,6 +39,7 @@ class PilotTests(unittest.TestCase):
             result=run_real_vlc_pilot(
                 server='https://station.example',token='rr_example',vlc=vlc,music=music,
                 launch=launch,ask=lambda prompt:'ISOLATED',output=lambda *x:messages.append(x),
+                restored_listen_s=0,
                 wait_completion=lambda session,timeout_s:complete(4))
             self.assertTrue(result.ok)
             self.assertEqual([x[0] for x in launched],
@@ -66,7 +67,7 @@ class PilotTests(unittest.TestCase):
             result=run_real_vlc_pilot(
                 server='https://station.example',token='rr_example',vlc=vlc,music=music,
                 launch=lambda f:(starts.append(Path(f).name) or FakeProcess()),
-                ask=lambda prompt:'ISOLATED',
+                ask=lambda prompt:'ISOLATED',restored_listen_s=0,
                 wait_completion=lambda session,timeout_s:complete(3))
             self.assertFalse(result.ok)
             self.assertTrue(result.program_restored)
@@ -84,7 +85,7 @@ class PilotTests(unittest.TestCase):
                 return p
             result=run_real_vlc_pilot(
                 server='https://station.example',token='rr_example',vlc=vlc,music=music,
-                launch=launch,ask=lambda prompt:'ISOLATED',
+                launch=launch,ask=lambda prompt:'ISOLATED',restored_listen_s=0,
                 wait_completion=lambda session,timeout_s:(
                     (_ for _ in ()).throw(TimeoutError('expired'))))
             self.assertFalse(result.ok)
