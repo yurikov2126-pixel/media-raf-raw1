@@ -108,17 +108,25 @@ export async function runMchsTwoChannelExecution({
    ]).then(results=>done({results}));
    if(signal?.aborted)onAbort();
   });
-  if(completed.reason||completed.results?.some(x=>x.status!=='fulfilled'||x.value?.completed!==true)){
+  // The normal lifecycle has no STOP. Each adapter must independently report
+  // a complete, event-bound, exact-repeat natural finish before a trial can
+  // be considered successful. STOP remains a fault-recovery operation only.
+  const results=completed.results;
+  const matchingCompletion=Array.isArray(results)&&results.length===2&&results.every(x=>
+   x.status==='fulfilled'&&x.value?.completed===true&&
+   x.value.eventId===spec.eventId&&
+   x.value.repeats===spec.repeats&&
+   x.value.reason==='FILE_COMPLETED');
+  if(completed.reason||!matchingCompletion){
    const stops=await stopBoth();
    return fail(completed.reason||'COMPLETION_NOT_CONFIRMED',{
     stopRequestsSettled:stops.every(x=>x.status==='fulfilled'),requiresOperatorReview:true});
   }
-  const stops=await stopBoth();
-  const stopEvidence=assessMchsDualChannelTransition({eventId:event.id,eventType:event.eventType,
-   action:'STOP',worker:stops[0].status==='fulfilled'?stops[0].value:null,
-   agent:stops[1].status==='fulfilled'?stops[1].value:null,nowMs:now()});
-  return {ok:stopEvidence.bothConfirmed,reason:stopEvidence.bothConfirmed?'TRIAL_CONFIRMED':'STOP_NOT_CONFIRMED',
-   startEvidence:evidence,stopEvidence,automaticBroadcastEnabled:false};
+  return {ok:true,reason:'NATURAL_COMPLETION_CONFIRMED',
+   startEvidence:evidence,
+   completionEvidence:{worker:results[0].value,agent:results[1].value},
+   normalProgramExpected:true,manualStopRequired:false,
+   automaticBroadcastEnabled:false};
  }catch{
   await stopBoth();
   return fail('EXECUTION_FAILED');

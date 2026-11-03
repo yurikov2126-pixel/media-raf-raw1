@@ -19,7 +19,7 @@ const base={observation,checkpoint:{state:'CLEAR'},rules,asset,bytes,
 function adapter(events,label){
  return {async start(spec){events.push(label+':START');return {eventId:spec.eventId,eventType:spec.eventType,action:'START',
   confirmed:true,playbackState:'ACTIVE',confirmedAt:new Date(now).toISOString()};},
- async waitUntilCompleted(){events.push(label+':DONE');return {completed:true};},
+ async waitUntilCompleted(spec){events.push(label+':DONE');return {completed:true,eventId:spec.eventId,repeats:spec.repeats,reason:'FILE_COMPLETED'};},
  async stop(spec){events.push(label+':STOP');return {eventId:spec.eventId,eventType:spec.eventType,action:'STOP',
   confirmed:true,playbackState:'STOPPED',confirmedAt:new Date(now).toISOString()};}};
 }
@@ -30,6 +30,8 @@ test('verified event executes both isolated channels, no public authorization',a
  assert.equal(result.checkpointCommitted,false);
  assert.ok(events.includes('worker:START'));assert.ok(events.includes('agent:START'));
  assert.ok(events.includes('worker:DONE'));assert.ok(events.includes('agent:DONE'));
+ assert.equal(events.includes('worker:STOP'),false);
+ assert.equal(events.includes('agent:STOP'),false);
 });
 test('missing physical isolation never invokes output adapters',async()=>{
  const events=[];
