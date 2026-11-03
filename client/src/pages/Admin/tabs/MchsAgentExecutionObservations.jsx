@@ -89,10 +89,12 @@ export default function MchsAgentExecutionObservations({token}){
     <p>Автоматическое Android-испытание (только наушники): <strong>
      {readiness.isolatedAndroidAutoTrialEnabled?'Включено на сервере':'Отключено на сервере'}
     </strong>. Реальное вещание не затрагивается.</p>
+    {readiness.isolatedAndroidAutoTrialEnabled&&readiness.agentReadiness&&!readiness.agentReadiness.isolatedTrialSourceAdmission&&
+     <p className="text-amber-700 dark:text-amber-300">Windows Agent устарел: локальный обработчик отклоняет учебный START как SOURCE_NOT_VERIFIED. Обновите Python-файлы Agent из main и перезапустите изолированный режим.</p>}
     {readiness.isolatedAndroidAutoTrialEnabled&&!readiness.androidChannelAllowlistConfigured&&
      <p className="text-amber-700 dark:text-amber-300">Не указан разрешённый канал Android-уведомлений: автоматическое испытание не начнётся.</p>}
     {readiness.isolatedAndroidAutoTrialEnabled&&<div className="flex flex-wrap gap-2 items-center">
-     <button type="button" disabled={cycleBusy||!readiness.agentReadiness?.centralPacketsConfirmed}
+     <button type="button" disabled={cycleBusy||!readiness.agentReadiness?.centralPacketsConfirmed||!readiness.agentReadiness?.isolatedTrialSourceAdmission}
       onClick={()=>void runSyntheticCycle()}
       className="rounded-xl border border-amber-500 dark:border-amber-400/60 px-3 py-2 font-semibold disabled:opacity-50">
       {cycleBusy?'Запуск учебного цикла…':'Проверить цикл ALARM → отбой в наушниках'}
