@@ -25,3 +25,23 @@ export function readMchsExecutionObservationHistory(raw){
    .map(item=>({...item,localProcessObservationOnly:true,
         physicalPaOutputVerified:false,publicPlaybackAuthorized:false}));
 }
+
+/** Read legacy #975 one-event observation when the #976 history is empty.
+ * Never synthesize event delivery or PA output; require server-normalized data.
+ */
+export function mergeLegacyMchsExecutionObservation(history,legacyRaw){
+ const result=readMchsExecutionObservationHistory(JSON.stringify(history));
+ let legacy;
+ try{legacy=JSON.parse(legacyRaw||'null');}catch{return result;}
+ if(!legacy||typeof legacy!=='object'||Array.isArray(legacy))return result;
+ if(!['COMPLETE','FAILED'].includes(legacy.phase)||
+    !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(legacy.eventType)||
+    typeof legacy.eventId!=='string'||!legacy.eventId||
+    typeof legacy.receivedAt!=='string'||!Number.isSafeInteger(legacy.expectedRepeats)||
+    !Number.isSafeInteger(legacy.completedRepeats)||
+    typeof legacy.naturalCompletion!=='boolean'||
+    typeof legacy.centralReturnConfirmed!=='boolean')return result;
+ if(result.some(item=>item.eventId===legacy.eventId))return result;
+ return readMchsExecutionObservationHistory(
+  JSON.stringify([legacy,...result].slice(-EXECUTION_HISTORY_LIMIT)));
+}

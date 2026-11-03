@@ -42,7 +42,12 @@ export default function MchsAgentExecutionObservations({token}){
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {!data&&!error&&<p className="text-sm">Загрузка результатов…</p>}
   {data&&!data.bound&&<p className="text-sm">Учебное устройство Windows Agent не привязано. Результаты недоступны.</p>}
-  {data?.bound&&data.items.length===0&&<p className="text-sm">Подтверждённых отчётов от Windows Agent пока нет. Это не означает, что предупреждений МЧС не было.</p>}
+  {data?.bound&&data.items.length===0&&<div role="status" className="rounded-xl border border-amber-300/50 bg-amber-50/60 dark:bg-amber-400/10 p-3 text-sm space-y-2">
+   <p className="font-semibold">Сервер не получил результатов учебного аудио Windows Agent.</p>
+   <p>Успешное воспроизведение в наушниках само по себе не создаёт запись. Убедитесь, что запущена полная версия Agent не ниже #975, а в его журнале после завершения события есть <code>MCHS_EVENT_OBSERVATION_ACCEPTED</code>.</p>
+   <p>Если видна метка <code>MCHS_EVENT_OBSERVATION_RETRY</code>, отчёт не принят сервером: нужно проверить ответ API и авторизацию устройства. Не запускайте настоящую тревогу ради проверки.</p>
+  </div>}
+  {data?.newestObservationAt&&<p className="text-xs text-slate-600 dark:text-slate-300">Последний полученный отчёт Agent: {when(data.newestObservationAt)}</p>}
   {data?.items?.length>0&&<div className="space-y-2">
    {data.items.map((item,index)=><article key={item.eventId+'-'+index} className="rounded-xl border border-slate-200 dark:border-white/15 p-3 sm:p-4 space-y-2">
     <div className="flex flex-wrap justify-between gap-2 items-start">

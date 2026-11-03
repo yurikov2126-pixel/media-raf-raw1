@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {appendMchsExecutionObservation,readMchsExecutionObservationHistory,EXECUTION_HISTORY_LIMIT}
+import {appendMchsExecutionObservation,readMchsExecutionObservationHistory,mergeLegacyMchsExecutionObservation,EXECUTION_HISTORY_LIMIT}
   from '../src/lib/mchsExecutionObservationHistory.js';
 
 const obs=(id,phase='COMPLETE')=>({
@@ -52,4 +52,25 @@ test('reader rejects invalid or nonterminal records and cannot trust PA fields',
 test('invalid append arguments are rejected',()=>{
  assert.throws(()=>appendMchsExecutionObservation([],null,'now'),TypeError);
  assert.throws(()=>appendMchsExecutionObservation([],{eventId:'x'},null),TypeError);
+});
+
+test('legacy #975 singleton is visible when #976 history is empty',()=>{
+ const old={...obs('prior-event'),receivedAt:'2026-11-03T10:00:00Z',
+    physicalPaOutputVerified:true};
+ const items=mergeLegacyMchsExecutionObservation([],JSON.stringify(old));
+ assert.equal(items.length,1);
+ assert.equal(items[0].eventId,'prior-event');
+ assert.equal(items[0].physicalPaOutputVerified,false);
+});
+
+test('legacy and current events are combined without duplicate eventId',()=>{
+ const old={...obs('prior-event'),receivedAt:'2026-11-03T10:00:00Z'};
+ const history=[{...obs('recent-event'),receivedAt:'2026-11-03T10:02:00Z'}];
+ assert.equal(mergeLegacyMchsExecutionObservation(history,JSON.stringify(old)).length,2);
+ assert.equal(mergeLegacyMchsExecutionObservation([...history,old],JSON.stringify(old)).length,2);
+});
+
+test('corrupt or incomplete legacy receipt is ignored',()=>{
+ assert.deepEqual(mergeLegacyMchsExecutionObservation([], '{invalid'),[]);
+ assert.deepEqual(mergeLegacyMchsExecutionObservation([],JSON.stringify({eventId:'bad'})),[]);
 });
