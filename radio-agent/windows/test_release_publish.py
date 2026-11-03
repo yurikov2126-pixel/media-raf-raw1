@@ -38,9 +38,9 @@ class ReleasePublishingTests(unittest.TestCase):
                 state['release']['assets'] = [self.asset_entry()]
                 return 0, '', ''
             self.fail('unexpected gh call: ' + str(args))
-        with patch.object(publisher, 'app_version', return_value='0.5.14'), \\
-             patch.object(publisher, 'lookup_release', side_effect=lambda *_: state['release']), \\
-             patch.object(publisher, 'gh', side_effect=fake_gh), \\
+        with patch.object(publisher, 'app_version', return_value='0.5.14'), \
+             patch.object(publisher, 'lookup_release', side_effect=lambda *_: state['release']), \
+             patch.object(publisher, 'gh', side_effect=fake_gh), \
              patch.object(publisher.time, 'sleep', return_value=None):
             publisher.publish(repo='owner/repo', commit_sha='deadbeef',
                               asset_path=str(self.asset))
@@ -58,9 +58,9 @@ class ReleasePublishingTests(unittest.TestCase):
                 state['release']['assets'] = [self.asset_entry()]
                 return 0, '', ''
             self.fail('unexpected gh call')
-        with patch.object(publisher, 'app_version', return_value='0.5.14'), \\
-             patch.object(publisher, 'lookup_release', side_effect=lambda *_: state['release']), \\
-             patch.object(publisher, 'gh', side_effect=fake_gh), \\
+        with patch.object(publisher, 'app_version', return_value='0.5.14'), \
+             patch.object(publisher, 'lookup_release', side_effect=lambda *_: state['release']), \
+             patch.object(publisher, 'gh', side_effect=fake_gh), \
              patch.object(publisher.time, 'sleep', return_value=None):
             publisher.publish(repo='owner/repo', commit_sha='deadbeef',
                               asset_path=str(self.asset))
