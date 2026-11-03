@@ -36,6 +36,8 @@ from mchs_lab_observer_failsafe import observer_failsafe
 from mchs_agent_stop_evidence import trial_stop_evidence
 from mchs_central_return_monitor import CentralReturnMonitor
 from mchs_lab_end_evidence import assess_lab_trial_end
+from mchs_integrated_headphones_cycle import IntegratedHeadphonesCycle
+from mchs_two_stage_headphones_pilot import verify_local_training_wav
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -442,6 +444,21 @@ def run(args, token):
     trial_relay=None
     trial_started_at=0.0
     central_return_monitor=CentralReturnMonitor()
+    local_cycle=None
+    local_cycle_session=None
+    cycle_assets=getattr(args,'isolated_cycle_assets',None)
+    if cycle_assets is not None:
+        danger,clear=cycle_assets
+        local_cycle=IntegratedHeadphonesCycle(
+            danger_repeats=args.isolated_cycle_repeats,
+            danger_duration=danger['duration'],
+            clear_duration=clear['duration'])
+        local_cycle_session=AlarmPlaybackSession(
+            lambda file:start_vlc(args.vlc,logfile,str(file)),
+            heartbeat=lambda:(not STOP.is_set() and
+                time.monotonic()-PLAYBACK_STATE.get('lastAuthorized',0)<15),
+            isolation_verified=True)
+        print('MCHS_INTEGRATED_HEADPHONES_LOCAL_ONLY',flush=True)
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
     output_probe_busy=threading.Event()
@@ -604,7 +621,7 @@ def run(args, token):
                 last_halt_poll=now
                 halt_poll_busy.set()
                 threading.Thread(target=check_halt_receipt,daemon=True).start()
-            if now-last_execution_command_poll[0]>=3 and not execution_command_busy.is_set():
+            if local_cycle is None and now-last_execution_command_poll[0]>=3 and not execution_command_busy.is_set():
                 last_execution_command_poll[0]=now
                 execution_command_busy.set()
                 def check_execution_command():
@@ -615,7 +632,7 @@ def run(args, token):
                     finally:
                         execution_command_busy.clear()
                 threading.Thread(target=check_execution_command,daemon=True).start()
-            if now-last_event_observation_poll[0]>=3 and not event_observation_busy.is_set():
+            if local_cycle is None and now-last_event_observation_poll[0]>=3 and not event_observation_busy.is_set():
                 last_event_observation_poll[0]=now
                 event_observation_busy.set()
                 def check_event_observation():
@@ -646,7 +663,7 @@ def run(args, token):
                 last_output_probe=now
                 output_probe_busy.set()
                 threading.Thread(target=probe_output,daemon=True).start()
-            if now-last_mchs_observer_poll>=3 and not mchs_observer_busy.is_set():
+            if local_cycle is None and now-last_mchs_observer_poll>=3 and not mchs_observer_busy.is_set():
                 last_mchs_observer_poll=now
                 mchs_observer_busy.set()
                 threading.Thread(target=check_mchs_observer,daemon=True).start()
@@ -690,6 +707,67 @@ def run(args, token):
                 MCHS_AUDIO_STOP.set()
                 print('MCHS_LAB_AUTO_STOP_OBSERVER_STALE',flush=True)
 
+            # One operator-authorized, physically isolated cycle in THIS Agent.
+            # Controls only the Agent's VLC children and verified local WAV.
+            # It never sends START to Worker or to PA.
+            if local_cycle is not None and not local_cycle.terminal:
+                active_central=(primary is not None and primary.poll() is None
+                    and not relay.failed.is_set()
+                    and relay.packet_count>0 and now-relay.last_data<=4)
+                conflict=(trial_vlc is not None or MCHS_AUDIO_START.is_set()
+                    or MCHS_AUDIO_ARMED.is_set() or MCHS_LAB_AUTO_ACTIVE.is_set())
+                instruction=local_cycle.tick(
+                    now=now,central_ready=active_central and network_ok,
+                    authorized=not denied and now-last_authorized<15,
+                    conflicting=conflict,
+                    session=(local_cycle_session.status()
+                             if local_cycle.playing else None),
+                    returned=return_result)
+                if instruction in ('START_DANGER','START_ALL_CLEAR'):
+                    stage='DANGER' if instruction=='START_DANGER' else 'ALL_CLEAR'
+                    audio=cycle_assets[0] if stage=='DANGER' else cycle_assets[1]
+                    count=args.isolated_cycle_repeats if stage=='DANGER' else 1
+                    # Stop BOTH decks before opening the local training WAV.
+                    relay.intentional_disconnect.set()
+                    stop_vlc(primary)
+                    stop_vlc(fallback)
+                    primary=None
+                    fallback=None
+                    fallback_key=None
+                    relay.failed.set()
+                    started=local_cycle_session.start(
+                        event_id='isolated-central-'+stage.lower()+'-'+str(time.monotonic_ns()),
+                        file=audio['path'],repeats=count,authorized=True)
+                    local_cycle.started(stage,started.get('accepted') is True,now)
+                    print('MCHS_INTEGRATED_'+stage+'_START',
+                          'repeats='+str(count),started.get('reason'),flush=True)
+                    if not started.get('accepted'):
+                        network_ok=False
+                        last_probe=0.0
+                elif instruction in ('RESTORE_PROGRAM','RESTORE_FAULT'):
+                    if instruction=='RESTORE_FAULT':
+                        stopped=local_cycle_session.stop()
+                        print('MCHS_INTEGRATED_FAULT_STOP',
+                              stopped.get('stopConfirmed'),flush=True)
+                    # A fresh central packet is needed AFTER each local WAV.
+                    network_ok=False
+                    last_probe=0.0
+                    armed=central_return_monitor.arm(
+                        ended_at=time.monotonic(),
+                        packet_count=relay.packet_count,
+                        trial_exited=(local_cycle_session.status()['processRunning'] is False
+                                     and (instruction=='RESTORE_PROGRAM' or
+                                          stopped.get('stopConfirmed') is True)))
+                    local_cycle.restored(now=now,monitor_armed=armed)
+                    print('MCHS_INTEGRATED_RESTORE_REQUESTED',
+                          local_cycle.stage,armed,flush=True)
+                elif instruction in ('FINISHED','FAULT_RETURNED'):
+                    print('MCHS_INTEGRATED_CYCLE_'+
+                          ('COMPLETE' if instruction=='FINISHED' else 'FAILED'),
+                          'stages='+str(local_cycle.history),flush=True)
+                if local_cycle.terminal and local_cycle.failure:
+                    print('MCHS_INTEGRATED_CYCLE_FAILED',
+                          local_cycle.failure,flush=True)
             # Operator-only local trial on the SAME Windows output, with the PA
             # audio cable physically disconnected. No network action can arm this.
             trial_reason=None
@@ -843,6 +921,10 @@ def run(args, token):
                 sync_running.set()
                 threading.Thread(target=refresh,daemon=True).start()
                 next_sync=now+60
+            if local_cycle is not None and local_cycle.playing:
+                PLAYBACK_STATE['mode']='MCHS_ISOLATED_LOCAL_WAV'
+                STOP.wait(0.2)
+                continue
             if primary is None and network_ok:
                 # Stop local reserve before starting primary to avoid overlapping audio.
                 stop_vlc(fallback)
@@ -892,6 +974,8 @@ def run(args, token):
         if trial_relay is not None:
             trial_relay.closing.set()
         stop_vlc(trial_vlc)
+        if local_cycle_session is not None:
+            local_cycle_session.stop()
         if trial_relay is not None:
             trial_relay.shutdown()
             trial_relay.server_close()
@@ -908,6 +992,9 @@ def main():
     parser.add_argument('--data-dir',default='radio-agent-data')
     parser.add_argument('--vlc',required=True,help='Full path to vlc.exe')
     parser.add_argument('--enable-headphones-test',action='store_true')
+    parser.add_argument('--isolated-cycle-danger-wav')
+    parser.add_argument('--isolated-cycle-all-clear-wav')
+    parser.add_argument('--isolated-cycle-repeats',type=int,default=4)
     parser.add_argument('--offline-grace',type=int,default=900,
                         help='Maximum seconds without renewed server authorization, default 15 min')
     args=parser.parse_args()
@@ -918,6 +1005,22 @@ def main():
     executable=Path(args.vlc).resolve()
     if not executable.is_file() or executable.name.lower()!='vlc.exe':
         parser.error('Full path to vlc.exe required')
+    if args.isolated_cycle_danger_wav or args.isolated_cycle_all_clear_wav:
+        if not args.isolated_cycle_danger_wav or not args.isolated_cycle_all_clear_wav:
+            parser.error('Both isolated cycle WAV paths are required')
+        if not 1<=args.isolated_cycle_repeats<=5:
+            parser.error('isolated-cycle-repeats must be 1..5')
+        try:
+            danger=verify_local_training_wav(args.isolated_cycle_danger_wav)
+            clear=verify_local_training_wav(args.isolated_cycle_all_clear_wav)
+            if danger['sha256']==clear['sha256']:
+                raise ValueError('IDENTICAL_DANGER_AND_ALL_CLEAR')
+        except (OSError,ValueError) as error:
+            parser.error('Isolated training WAV invalid: '+str(error))
+        confirmation=input('AA-300 and ALL PA audio routes physically disconnected? Type ISOLATED: ')
+        if confirmation.strip()!='ISOLATED':
+            parser.error('PHYSICAL_OUTPUT_ISOLATION_REQUIRED')
+        args.isolated_cycle_assets=(danger,clear)
     token=os.environ.get('RADIO_AGENT_TOKEN','')
     if not token.startswith('rr_'):
         parser.error('RADIO_AGENT_TOKEN is required')
