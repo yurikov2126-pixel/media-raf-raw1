@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from standby_plan import standby_selection
 from sync_agent import sync
 from mchs_alarm_playback import AlarmPlaybackSession
+from mchs_stop_evidence import can_confirm_local_stop
 from esp32_local import send_heartbeat
 from audio_telemetry import playback_report, async_playback_report
 from audio_output_probe import inspect_outputs
@@ -720,7 +721,7 @@ def run(args, token):
             # Failed acknowledgements are retried on the next main-loop iteration.
             with MCHS_EXECUTION_RECEIPT_LOCK:
                 pending_stop=MCHS_EXECUTION_LAST_STATUS['pendingStop']
-            if pending_stop and trial_vlc is None and not MCHS_AUDIO_START.is_set():
+            if pending_stop and can_confirm_local_stop(trial_vlc,MCHS_AUDIO_START.is_set(),alarm_session):
                 try:
                     if send_mchs_device_stop_receipt(args.server,token,pending_stop):
                         with MCHS_EXECUTION_RECEIPT_LOCK:
