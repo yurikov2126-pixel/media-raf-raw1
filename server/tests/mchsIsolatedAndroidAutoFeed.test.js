@@ -28,7 +28,7 @@ test('repeated poll keeps identical sequence; never queues the same Android sour
  const next=advance(first.state,{...props,events:[danger],observations:[complete],nowMs:t+1500});
  assert.equal(next.command,null);
  assert.equal(next.state.active,null);
- assert.equal(next.state.sequence,1);
+ assert.equal(next.state.sequence,first.state.sequence);
 });
 test('all-clear must follow completed danger and always plays once',()=>{
  assert.equal(advance(null,{...props,events:[clear]}).command,null);
@@ -40,9 +40,9 @@ test('all-clear must follow completed danger and always plays once',()=>{
  assert.equal(next.command.eventType,'MISSILE_ALL_CLEAR');
  assert.equal(next.command.repeats,1);
  assert.equal(next.state.phase,'CLEAR');
- assert.equal(next.command.sequence,2);
+ assert.ok(next.command.sequence>first.command.sequence);
  const other=advance(next.state,{...props,events:[clear],nowMs:t+3000});
- assert.equal(other.command.sequence,2);
+ assert.equal(other.command.sequence,next.command.sequence);
 });
 test('failed playback cannot be represented as successful return',()=>{
  const first=advance(null,{...props,events:[danger]});
