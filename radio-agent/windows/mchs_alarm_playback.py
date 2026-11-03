@@ -22,11 +22,13 @@ class AlarmPlaybackSession:
         self._event_id=None
         self._status='IDLE'
         self._completed=0
+        self._failure_reason=None
 
     def status(self):
         with self._lock:
             return dict(eventId=self._event_id,state=self._status,
-                        completedRepeats=self._completed)
+                        completedRepeats=self._completed,
+                        failureReason=self._failure_reason)
 
     def start(self, *, event_id, file, repeats, authorized=False):
         if not self.isolation_verified or not authorized:
@@ -42,6 +44,7 @@ class AlarmPlaybackSession:
                 return {'accepted':False,'reason':'REPLAYED_EVENT'}
             self._event_id=event_id
             self._completed=0
+            self._failure_reason=None
             self._status='STARTING'
             self._cancel.clear()
             self._thread=threading.Thread(target=self._run,args=(file,repeats),daemon=True)
@@ -72,8 +75,9 @@ class AlarmPlaybackSession:
                     self._completed+=1
             with self._lock:
                 self._status='STOPPED' if self._cancel.is_set() else 'COMPLETED'
-        except Exception:
+        except Exception as error:
             with self._lock:
+                self._failure_reason=type(error).__name__
                 self._status='STOPPED'
         finally:
             with self._lock:
@@ -103,7 +107,8 @@ class AlarmPlaybackSession:
             if not still_running and self._status in ('STARTING','PLAYING'):
                 self._status='STOPPED'
             state=dict(eventId=self._event_id,state=self._status,
-                       completedRepeats=self._completed)
+                       completedRepeats=self._completed,
+                       failureReason=self._failure_reason)
             state['stopConfirmed']=not still_running and (
                 self._process is None or self._process.poll() is not None)
         return state
