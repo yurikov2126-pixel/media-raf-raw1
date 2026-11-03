@@ -15,7 +15,8 @@ import webbrowser
 import tkinter as tk
 from pathlib import Path
 from urllib.error import HTTPError
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
+from mchs_gui_isolated_session import prepare_isolated_gui_session
 
 from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK, MCHS_LAB_OBSERVED
 from updater import check_latest, stage_update, UpdateCheckError
@@ -28,7 +29,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.14'
+AGENT_VERSION = '0.5.15'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -134,6 +135,9 @@ class RadioAgentApp(tk.Tk):
         self.last_power_was_auto = False
         self.power_busy = False
         self.agreed = tk.BooleanVar(value=False)
+        self.isolated_session_enabled = tk.BooleanVar(value=False)
+        self.mchs_danger_wav = tk.StringVar(value=prefs.get('mchs_danger_wav','C:/MchsTest/alarm_missile_start_pcm16.wav'))
+        self.mchs_all_clear_wav = tk.StringVar(value=prefs.get('mchs_all_clear_wav','C:/MchsTest/alarm_missile_end_pcm16.wav'))
         self.pending_update = None
         self.update_running = False
 
@@ -180,9 +184,24 @@ class RadioAgentApp(tk.Tk):
         ttk.Label(air, textvariable=self.status, style="Main.TLabel").pack(anchor="w", pady=(0, 9))
         ttk.Checkbutton(air, text="Тест в наушниках · усилитель не включается",
                         variable=self.agreed).pack(anchor="w", pady=(0, 9))
+        isolated_box=ttk.LabelFrame(air,text="  АВТОМАТИЧЕСКОЕ ОПОВЕЩЕНИЕ МЧС · ТОЛЬКО НАУШНИКИ  ",
+                                    style="Status.TLabelframe",padding=12)
+        isolated_box.pack(fill="x",pady=(0,12))
+        ttk.Checkbutton(isolated_box,
+                        text="Принимать Android-события изолированно (не PA / не публичный эфир)",
+                        variable=self.isolated_session_enabled).pack(anchor="w",pady=(0,6))
+        ttk.Label(isolated_box,text="WAV «Ракетная опасность»",
+                  style="Status.TLabel").pack(anchor="w")
+        self.wav_path_row(isolated_box,self.mchs_danger_wav)
+        ttk.Label(isolated_box,text="WAV «Отбой ракетной опасности»",
+                  style="Status.TLabel").pack(anchor="w",pady=(8,0))
+        self.wav_path_row(isolated_box,self.mchs_all_clear_wav)
+        ttk.Label(isolated_box,text="Перед запуском требуется ввести ISOLATED. AA-300 и все линии PA должны быть физически отключены. Используются сохранённый токен и центральный поток.",
+                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(9,0))
+
         bar = ttk.Frame(air, style="Main.TFrame")
         bar.pack(fill="x", pady=(0, 10))
-        self.start_btn = ttk.Button(bar, text="▶ Включить эфир", command=self.start,style="Live.TButton")
+        self.start_btn = ttk.Button(bar, text="▶ Запустить агент", command=self.start,style="Live.TButton")
         self.start_btn.pack(side="left")
         self.stop_btn = ttk.Button(bar, text="■ Остановить эфир", command=self.stop, state="disabled",style="Stop.TButton")
         self.stop_btn.pack(side="left", padx=10)
@@ -203,13 +222,13 @@ class RadioAgentApp(tk.Tk):
         self.log.pack(fill="both", expand=True, pady=(6, 0))
 
         self.row(links, "Адрес сервера", self.server)
-        self.row(links, "Токен радиокомпьютера (не сохраняется)", self.token, secret=True)
+        self.row(links, "Токен радиокомпьютера (DPAPI при включённом сохранении)", self.token, secret=True)
         self.row(links, "Путь к VLC", self.vlc, browse=True)
         self.row(links, "Кэш радиостанции", self.data_dir, browse=True, directory=True)
         ttk.Separator(links).pack(fill="x", pady=15)
         ttk.Label(links, text="ESP32 · Студийная сеть", style="Title.TLabel").pack(anchor="w")
         self.row(links, "IP ESP32 в сети Studio", self.esp32_ip)
-        self.row(links, "Секрет сопряжения (не сохраняется)", self.esp32_secret, secret=True)
+        self.row(links, "Секрет сопряжения ESP32", self.esp32_secret, secret=True)
         linkbar = ttk.Frame(links, style="Main.TFrame")
         linkbar.pack(fill="x", pady=(9, 4))
         ttk.Button(linkbar, text="Проверить связь", command=self.test_esp32).pack(side="left")
@@ -240,7 +259,7 @@ class RadioAgentApp(tk.Tk):
         self.install_btn = ttk.Button(settings, text="Перезапустить обновлённую версию",
                                       command=self.install_update, state="disabled")
         self.install_btn.pack(anchor="w", pady=8)
-        ttk.Label(settings, text="Настройки сервера, IP и VLC сохраняются. Токены и секреты — только на текущий запуск.",
+        ttk.Label(settings, text="Пути к учебным WAV сохраняются без токенов. При выборе хранения секреты защищены Windows DPAPI. Изолированный MCHS-режим всегда запускается вручную.",
                   style="Main.TLabel", wraplength=620).pack(anchor="w", pady=(15, 0))
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(150, self.drain)
@@ -309,6 +328,17 @@ class RadioAgentApp(tk.Tk):
                     variable.set(result)
             ttk.Button(line, text="Выбрать", command=choose).pack(side="left", padx=(8, 0))
 
+    def wav_path_row(self, parent, variable):
+        line=ttk.Frame(parent,style="Main.TFrame")
+        line.pack(fill="x")
+        ttk.Entry(line,textvariable=variable).pack(side="left",fill="x",expand=True)
+        def browse_wav():
+            result=filedialog.askopenfilename(title="Выбрать учебный PCM WAV",
+                                              filetypes=[("PCM WAV","*.wav")])
+            if result:
+                variable.set(result)
+        ttk.Button(line,text="Выбрать WAV",command=browse_wav).pack(side="left",padx=(8,0))
+
     def start(self):
         if self.worker and self.worker.is_alive():
             return
@@ -323,14 +353,41 @@ class RadioAgentApp(tk.Tk):
         if not self.agreed.get():
             messagebox.showwarning("Безопасность", "Подтвердите тест только в наушниках")
             return
+        isolated = self.isolated_session_enabled.get()
+        if isolated:
+            # Never let the local headphones rehearsal inherit the GUI's
+            # amplifier power credentials, even if the operator has ESP32 paired.
+            if self.power_arm.get():
+                messagebox.showerror("Усилитель","Отключите управление реле перед запуском МЧС в наушниках.")
+                return
+            confirmation=simpledialog.askstring(
+                "Изолированное испытание",
+                "AA-300 и ВСЕ линии громкоговорителей физически отключены?\nВведите ISOLATED для запуска изолированного Agent.",
+                parent=self)
+            try:
+                options=prepare_isolated_gui_session(
+                    server=url,token=token,vlc=str(vlc),
+                    danger_wav=self.mchs_danger_wav.get().strip(),
+                    all_clear_wav=self.mchs_all_clear_wav.get().strip(),
+                    power_armed=self.power_arm.get(),
+                    operator_confirmation=confirmation)
+            except (OSError,ValueError,PermissionError) as error:
+                messagebox.showerror("МЧС — запуск отклонён",str(error))
+                return
+        else:
+            options={}
         self.save_preferences(silent=True)
-        args = Config(url, self.data_dir.get().strip(), str(vlc),esp32_host=self.esp32_ip.get().strip(),esp32_secret=self.esp32_secret.get().strip())
+        args = Config(url, self.data_dir.get().strip(), str(vlc),
+                      esp32_host='' if isolated else self.esp32_ip.get().strip(),
+                      esp32_secret='' if isolated else self.esp32_secret.get().strip())
+        for key,value in options.items():
+            setattr(args,key,value)
         STOP.clear()
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.status.set("Подключение к центральному эфиру…")
         self.broadcast_status.set("● Эфир запускается")
-        self.messages.put(("log", "Агент запущен вручную. Реле/ESP32 не задействованы."))
+        self.messages.put(("log", "MCHS_EVENT_BOUND_HEADPHONES_ONLY · GUI; PA не проверена, ESP32 не задействован." if isolated else "Агент запущен вручную."))
         # Never log tokens or put them in subprocess arguments.
         def task():
             saved = sys.stdout
@@ -348,7 +405,9 @@ class RadioAgentApp(tk.Tk):
     def save_preferences(self,silent=False):
         try:
             save_settings(default_data_dir(),{"server":self.server.get().strip(),
-                "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip(),"power_arm":self.power_arm.get()})
+                "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip(),"power_arm":self.power_arm.get(),
+                "mchs_danger_wav":self.mchs_danger_wav.get().strip(),
+                "mchs_all_clear_wav":self.mchs_all_clear_wav.get().strip()})
             if self.remember_credentials.get():
                 save_credentials(default_data_dir(),self.token.get().strip(),self.esp32_secret.get().strip())
             else:
