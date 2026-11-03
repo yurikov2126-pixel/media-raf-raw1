@@ -30,7 +30,12 @@ def validate_command(command, *, last_sequence=0, halted=True, now=None):
     if action == 'START':
         if halted:
             return False, 'HALT_ACTIVE'
-        if command.get('officialSourceVerified') is not True:
+        # A bridge-observed event may run *only* in the explicitly isolated
+        # headphones trial. This is not official provenance or PA permission.
+        trial_source=(command.get('trialOnly') is True and
+                      command.get('trialSourceAccepted') is True and
+                      command.get('officialSourceVerified') is False)
+        if command.get('officialSourceVerified') is not True and not trial_source:
             return False, 'SOURCE_NOT_VERIFIED'
         if not isinstance(command.get('assetId'), str) or not command['assetId']:
             return False, 'MISSING_AUDIO_ASSET'
