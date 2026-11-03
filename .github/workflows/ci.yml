@@ -55,6 +55,9 @@ jobs:
       - name: Isolated end-to-end ALARM playback and station-return scenarios
         run: node --test tests/mchsIsolatedCycleRehearsal.test.js tests/mchsStationResumeEvidence.test.js tests/mchsTwoChannelExecutor.test.js
 
+      - name: Real-service read-only headphones preflight regressions
+        run: node --test tests/mchsLiveAudioPreflight.test.js tests/mchsStationResumeEvidence.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
