@@ -40,6 +40,7 @@ import mentorAcademyRouter from './routes/mentorAcademy.js';
 import editorialRouter from './routes/editorial.js';
 import radioRouter from './routes/radio.js';
 import radioAgentRouter from './routes/radioAgent.js';
+import mchsAgentTrialReadinessRouter from './routes/mchsAgentTrialReadiness.js';
 import safetyIngestRouter from './routes/safetyIngest.js';
 import safetyRouter from './routes/safety.js';
 import editorialWorkflowRouter from './routes/editorialWorkflow.js';
@@ -179,6 +180,7 @@ const requireModule = (key) => async (_req, res, next) => {
 app.use('/api/reports', reportsRouter);
 app.use('/api/radio', radioRouter);
 app.use('/api/radio-agent', radioAgentRouter);
+app.use('/api/radio-agent', mchsAgentTrialReadinessRouter);
 app.use('/api/safety', safetyRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
