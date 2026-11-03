@@ -5,6 +5,7 @@ import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
 import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
+import {normalizeMchsAgentPlaybackReport} from '../lib/mchsAgentPlaybackReport.js';
 import {validateAudioReport,audioHealth} from '../lib/radioAgentAudioHealth.js';
 import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
@@ -786,18 +787,11 @@ router.post('/agent/mchs-playback-session-status',deviceAuth,safe(async(req,res)
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||
     req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
   return res.status(403).json({error:'DEVICE_NOT_BOUND'});
- const body=req.body||{};
- if(body.version!==1||
-    !['IDLE','STARTING','PLAYING','COMPLETED','STOPPED'].includes(body.state)||
-    (body.eventId!==null&&typeof body.eventId!=='string')||
-    (typeof body.eventId==='string'&&!/^[A-Za-z0-9_-]{1,128}$/.test(body.eventId))||
-    !Number.isInteger(body.completedRepeats)||body.completedRepeats<0||body.completedRepeats>5||
-    (body.state!=='IDLE'&&typeof body.eventId!=='string'))
-  return res.status(400).json({error:'INVALID_SESSION_STATUS'});
+ const report=normalizeMchsAgentPlaybackReport(req.body);
+ if(!report.accepted)
+  return res.status(400).json({error:report.reason});
  const key='mchs_agent_playback_session_status_v1_'+req.radioDevice.id;
- const value=JSON.stringify({version:1,eventId:body.eventId,
-  state:body.state,completedRepeats:body.completedRepeats,
-  reportedAt:new Date().toISOString(),
+ const value=JSON.stringify({...report.value,reportedAt:new Date().toISOString(),
   localProcessStateOnly:true,physicalPaOutputVerified:false,
   automaticPublicBroadcastAuthorized:false});
  await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
