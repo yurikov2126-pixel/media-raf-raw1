@@ -117,3 +117,17 @@ test('malformed START acknowledgement triggers verified STOP instead of replay',
  assert.equal(stops,1);
  assert.equal(active,false);
 });
+
+test('unknown START status and failed STOP do not permit a second event',async()=>{
+ let active=false,starts=0;
+ const request=async action=>{
+  if(action==='START'){active=true;starts++;return {httpStatus:200,data:{ok:true}};}
+  if(action==='STOP')return {httpStatus:200,data:{ok:true}};
+  return {httpStatus:200,data:{active,revision:10}};
+ };
+ const a=createMchsVerifiedWorkerTransport({request,isolatedOutputVerified:true});
+ assert.equal((await a.start(spec)).reason,'START_UNCERTAIN_STOP_UNCONFIRMED');
+ assert.equal((await a.start({...spec,eventId:'next'})).reason,'SESSION_ALREADY_RUNNING');
+ assert.equal(starts,1);
+ assert.equal((await a.stop(spec)).confirmed,false);
+});
