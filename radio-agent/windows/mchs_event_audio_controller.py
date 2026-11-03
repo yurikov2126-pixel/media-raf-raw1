@@ -97,6 +97,7 @@ class IsolatedEventAudioController:
         self.stop_requested=False
         self.state='STARTING'
         return ('START_AUDIO',{'eventId':self.event,'asset':asset['path'],
+                               'sha256':asset['sha256'],
                                'repeats':self.repeats,'eventType':kind})
 
     def started(self,accepted,*,now,duration):
