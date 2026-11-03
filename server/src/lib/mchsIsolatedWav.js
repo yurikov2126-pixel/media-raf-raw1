@@ -29,3 +29,33 @@ export function createIsolatedPcmWavStream(pcm,{chunkSize=3840}={}){
   }
  };
 }
+
+/** Deliberately non-alarm lab identification tone. No database or radio asset.
+ * 2 seconds of stereo PCM16 48 kHz: three quiet 660 Hz beeps.
+ */
+export function createIsolatedSelfTestPcm(){
+ const sampleRate=48000;
+ const seconds=2;
+ const size=sampleRate*seconds*4;
+ let closed=false;
+ return {size,
+  read(position,length){
+   if(closed)throw new Error('SELF_TEST_CLOSED');
+   if(!Number.isInteger(position)||position<0||position>size||
+      !Number.isInteger(length)||length<0)throw new RangeError('INVALID_PCM_RANGE');
+   const usable=Math.min(length,size-position);
+   const buffer=Buffer.alloc(usable);
+   const beeps=[0.15,0.8,1.45];
+   const frames=Math.floor(usable/4);
+   for(let i=0;i<frames;i++){
+    const t=(position/4+i)/sampleRate;
+    const inside=beeps.some(start=>t>=start&&t<start+0.18);
+    const amplitude=inside?Math.round(2200*Math.sin(2*Math.PI*660*t)):0;
+    buffer.writeInt16LE(amplitude,i*4);
+    buffer.writeInt16LE(amplitude,i*4+2);
+   }
+   return buffer;
+  },
+  close(){closed=true;}
+ };
+}
