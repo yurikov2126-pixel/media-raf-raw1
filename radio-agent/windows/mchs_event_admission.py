@@ -53,10 +53,11 @@ class EventAdmissionLedger:
         if not accepted:
             return {'accepted':False,'reason':reason,'audioStarted':False}
         event_id=command['eventId']
-        if event_id in self.data['seen']:
-            return {'accepted':False,'reason':'REPLAYED_EVENT','audioStarted':False}
         action=command['action']
         event_type=command['eventType']
+        marker=action+':'+event_id
+        if marker in self.data['seen']:
+            return {'accepted':False,'reason':'REPLAYED_EVENT','audioStarted':False}
         if action=='START':
             if not execution_enabled:
                 return {'accepted':False,'reason':'EXECUTION_DISABLED','audioStarted':False}
@@ -75,7 +76,7 @@ class EventAdmissionLedger:
             self.data['dangerEvent']=None
             self.data['phase']='STOPPED'
         self.data['lastSequence']=command['sequence']
-        self.data['seen']=(self.data['seen']+[event_id])[-self.max_events:]
+        self.data['seen']=(self.data['seen']+[marker])[-self.max_events:]
         self._save()
         return {'accepted':True,'reason':'METADATA_ONLY',
                 'eventId':event_id,'eventType':event_type,
