@@ -214,7 +214,23 @@ def poll_mchs_execution_command(server, token, alarm_session=None):
                         print('MCHS_EXECUTION_START_ASSET_REJECTED',reason,flush=True)
                     elif alarm_session is None:
                         print('MCHS_EXECUTION_START_REJECTED_NO_ISOLATED_SESSION',flush=True)
+                    elif MCHS_AUDIO_STOP.is_set() or STOP.is_set():
+                        # A STOP may arrive while the ALARM download is in flight.
+                        print('MCHS_EXECUTION_START_REJECTED_STOP_RACE',flush=True)
                     else:
+                        # Fetch the latest HALT after the potentially slow download.
+                        # The original pre-download server snapshot is not a
+                        # durable permission to launch a new local process.
+                        try:
+                            fresh_req=Request(base+'/api/radio-agent/agent/mchs-dispatch-halt',
+                                headers={'Authorization':'Bearer '+token})
+                            with urlopen(fresh_req,timeout=3) as fresh_response:
+                                fresh_halt=json.load(fresh_response)
+                        except (HTTPError,URLError,OSError,ValueError):
+                            fresh_halt={'halted':True}
+                        if fresh_halt.get('halted') is not False or fresh_halt.get('executionEnabled') is not True:
+                            print('MCHS_EXECUTION_START_REJECTED_POST_DOWNLOAD_HALT',flush=True)
+                            return state
                         outcome=alarm_session.start(
                             event_id=command['eventId'],file=verified_file,
                             repeats=command['repeats'],
