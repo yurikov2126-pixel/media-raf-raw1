@@ -109,6 +109,7 @@ class RadioAgentApp(tk.Tk):
             pass
         self.messages = queue.Queue()
         self.worker = None
+        self.active_isolated_mode = False
         self.status = tk.StringVar(value="Остановлен · оборудование не управляется")
         self.server = tk.StringVar(value="https://mediarafraw.ru")
         self.vlc = tk.StringVar(value=find_vlc())
@@ -383,6 +384,7 @@ class RadioAgentApp(tk.Tk):
         for key,value in options.items():
             setattr(args,key,value)
         STOP.clear()
+        self.active_isolated_mode = isolated
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.status.set("Подключение к центральному эфиру…")
@@ -465,6 +467,10 @@ class RadioAgentApp(tk.Tk):
         self.after(6500,self.report_esp32_status)
 
     def set_power_arm(self):
+        if self.active_isolated_mode and self.worker and self.worker.is_alive():
+            self.power_arm.set(False)
+            messagebox.showwarning("Безопасность", "Нельзя включать реле ESP32 во время изолированного МЧС-испытания.")
+            return
         if self.power_arm.get() and not messagebox.askyesno("Усилитель 220 В",
             "Подтвердите: HIGH включает реле GPIO13; силовой узел, защитный автомат, драйвер и OFF при сбросе проверены. Разрешить управление физическим питанием?"):
             self.power_arm.set(False)
@@ -494,7 +500,7 @@ class RadioAgentApp(tk.Tk):
             secret=self.esp32_secret.get().strip()
             server=self.server.get().strip()
             token=self.token.get().strip()
-            armed=self.power_arm.get()
+            armed=self.power_arm.get() and not self.active_isolated_mode
             def job():
                 permit=False
                 started=time.monotonic()
@@ -808,6 +814,7 @@ class RadioAgentApp(tk.Tk):
                     self.update_running = False
                     self.update_btn.configure(state="normal")
                 elif action == "stopped":
+                    self.active_isolated_mode = False
                     self.status.set("Остановлен · оборудование не управляется")
                     self.broadcast_status.set("● Эфир выключен")
                     self.audio_status.set("● Источник: остановлен")
