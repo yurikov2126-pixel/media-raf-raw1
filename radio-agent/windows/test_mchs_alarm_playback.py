@@ -64,4 +64,26 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.status()['completedRepeats'],0)
         self.assertIsNotNone(processes[0].returncode)
 
+    def test_completed_event_cannot_replay_after_poll_retry(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(),isolation_verified=True,
+                                     sleep=lambda _:None)
+        self.assertTrue(session.start(event_id='same',file=self.file,
+                                      repeats=1,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        self.assertEqual(session.status()['state'],'COMPLETED')
+        self.assertEqual(session.start(event_id='same',file=self.file,
+                                       repeats=1,authorized=True)['reason'],'REPLAYED_EVENT')
+        self.assertTrue(session.start(event_id='next',file=self.file,
+                                      repeats=1,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        self.assertEqual(session.status()['state'],'COMPLETED')
+    def test_stop_reports_confirmed_exit(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(),isolation_verified=True,
+                                     sleep=lambda _:None)
+        self.assertTrue(session.start(event_id='stop1',file=self.file,
+                                      repeats=1,authorized=True)['accepted'])
+        result=session.stop()
+        self.assertTrue(result['stopConfirmed'])
+        self.assertIn(result['state'],('STOPPED','COMPLETED'))
+
 if __name__=='__main__':unittest.main()
