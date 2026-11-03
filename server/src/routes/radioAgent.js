@@ -7,6 +7,7 @@ import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
 import {normalizeMchsAgentPlaybackReport} from '../lib/mchsAgentPlaybackReport.js';
 import {normalizeMchsEventExecutionObservation} from '../lib/mchsEventExecutionObservation.js';
+import {appendMchsExecutionObservation,readMchsExecutionObservationHistory} from '../lib/mchsExecutionObservationHistory.js';
 import {validateAudioReport,audioHealth} from '../lib/radioAgentAudioHealth.js';
 import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
@@ -808,10 +809,31 @@ router.post('/agent/mchs-event-execution-observation',deviceAuth,safe(async(req,
  const report=normalizeMchsEventExecutionObservation(req.body);
  if(!report.accepted)return res.status(400).json({error:report.reason});
  const key='mchs_agent_event_execution_observation_v1_'+req.radioDevice.id;
- const value=JSON.stringify({...report.value,receivedAt:new Date().toISOString()});
- await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ const historyKey='mchs_agent_event_execution_history_v1_'+req.radioDevice.id;
+ await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581476)`;
+  const existing=await tx.setting.findUnique({where:{key:historyKey}});
+  const history=appendMchsExecutionObservation(
+    readMchsExecutionObservationHistory(existing?.value),report.value,new Date().toISOString());
+  await tx.setting.upsert({where:{key:historyKey},create:{key:historyKey,value:JSON.stringify(history)},
+     update:{value:JSON.stringify(history)}});
+  const value=JSON.stringify({...report.value,receivedAt:history[history.length-1].receivedAt});
+  await tx.setting.upsert({where:{key},create:{key,value},update:{value}});
+ });
  res.json({accepted:true,localProcessObservationOnly:true,
   physicalPaOutputVerified:false,publicPlaybackAuthorized:false});
+}));
+// Existing admin workspace reads local evidence. This does not provide a
+// second incident journal, issue a command, or attest output in PA.
+router.get('/mchs-agent-event-execution-observations',...admin,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID;
+ if(!deviceId)return res.json({bound:false,items:[],localOnly:true});
+ const key='mchs_agent_event_execution_history_v1_'+deviceId;
+ const row=await prisma.setting.findUnique({where:{key}});
+ const items=readMchsExecutionObservationHistory(row?.value).reverse();
+ res.json({bound:true,items,localOnly:true,physicalPaOutputVerified:false,
+  publicPlaybackAuthorized:false});
 }));
 // Read-only loopback self-test for explicitly bound headphones pilot devices.
 // There is no command queue, no public output, no arbitrary asset ID or URL.

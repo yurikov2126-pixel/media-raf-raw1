@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import MchsEventJournal from '../../../components/MchsEventJournal.jsx';
+import MchsAgentExecutionObservations from './MchsAgentExecutionObservations.jsx';
 import MchsEventTypeRules from './MchsEventTypeRules.jsx';
 import MchsDispatchPreview from './MchsDispatchPreview.jsx';
 import MchsQueueMonitor from './MchsQueueMonitor.jsx';
@@ -113,7 +114,10 @@ export default function SafetyMchs({ token }) {
     
     {pane === 'delivery' && <div className="space-y-4"><MchsDeliveryReliability token={token} onOpen={switchPane}/><MchsQueueMonitor token={token} view={searchParams.has('incident')?'incidents':'delivery'}/><MchsQueueMonitor token={token} view="queue"/></div>}
 
-    {pane === "events" && <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />}
+    {pane === "events" && <div className="space-y-4">
+      <MchsAgentExecutionObservations token={token} />
+      <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />
+    </div>}
     {pane === "rules" && data && <div className="space-y-4">
       <nav aria-label="Разделы правил МЧС" className="mchs-subtabs flex flex-wrap gap-2">
         {[
