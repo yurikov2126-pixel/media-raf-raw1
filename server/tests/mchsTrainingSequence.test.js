@@ -69,5 +69,6 @@ test('if session changes mid-track, stop and do not play all-clear',async()=>{
  assert.equal(result.ok,false);
  assert.equal(result.reason,'WORKER_SESSION_CHANGED_DANGER');
  assert.equal(starts,1);
- assert.equal(stops,1);
+ // Stop verification retries when the mocked Worker keeps reporting active.
+ assert.equal(stops,3);
 });
