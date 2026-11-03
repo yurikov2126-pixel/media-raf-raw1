@@ -5,7 +5,8 @@ import {assessMchsIntegrationProbe} from '../lib/mchsIntegrationProbe.js';
 import {assessMchsTransportChain} from '../lib/mchsTransportChainDiagnostics.js';
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispatchCommand,recordMchsDispatchDryRunAck,haltMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
-import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents,stageAndroidExecutionIntents} from '../lib/mchsAndroidIntentLedger.js';
+import {MCHS_ANDROID_INTENTS_KEY} from '../lib/mchsAndroidIntentLedger.js';
+import {bindAndroidAlarmCandidates,stageBoundAndroidIntents} from '../lib/mchsAndroidAlarmBinding.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
 import {reconcilePersistedAlarmAfterRestart,MCHS_SEEN_EVENT_IDS_KEY,recordAndroidEventId} from '../lib/mchsExecutionRecovery.js';
@@ -79,14 +80,23 @@ async function tickMchsAndroidMonitor(){
    let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
    const result=observeAndroidEvents(normalizeAndroidMonitor(saved),observations);
    if(result.newEntries.length){
-    const [intentRow,repeatRow]=await Promise.all([
+    const [intentRow,repeatRow,ruleRow,assets]=await Promise.all([
      tx.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}}),
-     tx.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}})
+     tx.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}}),
+     tx.setting.findUnique({where:{key:'mchs_four_type_rules_v1'}}),
+     tx.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},
+      select:{id:true,category:true,mimeType:true,durationMs:true}})
     ]);
-    let savedIntents;try{savedIntents=JSON.parse(intentRow?.value||'null');}catch{}
-    // Never grant dispatch: persist only reviewed candidates, not audio commands.
-    const staged=stageAndroidExecutionIntents(savedIntents,result.newEntries,{
-     dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
+    let savedIntents,rawRules;
+    try{savedIntents=JSON.parse(intentRow?.value||'null');}catch{}
+    try{rawRules=JSON.parse(ruleRow?.value||'{}');}catch{}
+    const bound=bindAndroidAlarmCandidates({
+     entries:result.newEntries,observations,assets,
+     rules:rawRules||{},dangerRepeats:normalizeDangerRepeats(
+      Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))
+    });
+    // Staging only: no official-source attestation or dispatch authorization.
+    const staged=stageBoundAndroidIntents(savedIntents,bound.eligible);
     if(staged.added.length)await tx.setting.upsert({where:{key:MCHS_ANDROID_INTENTS_KEY},
      create:{key:MCHS_ANDROID_INTENTS_KEY,value:JSON.stringify(staged.ledger)},
      update:{value:JSON.stringify(staged.ledger)}});
