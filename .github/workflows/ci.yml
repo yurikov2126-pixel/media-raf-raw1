@@ -49,6 +49,9 @@ jobs:
       - name: ALARM natural dual-channel lifecycle tests
         run: node --test tests/mchsTwoChannelExecutor.test.js tests/mchsIsolatedEventDispatcher.test.js tests/mchsVerifiedWorkerTransport.test.js
 
+      - name: Post-ALARM station return and two-channel lifecycle tests
+        run: node --test tests/mchsStationResumeEvidence.test.js tests/mchsTwoChannelExecutor.test.js tests/mchsNaturalCompletionEvidence.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 

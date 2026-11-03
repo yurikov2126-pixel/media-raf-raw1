@@ -7,6 +7,7 @@ import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispat
 import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
 import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {assessMchsNaturalCompletion} from '../lib/mchsNaturalCompletionEvidence.js';
+import {assessMchsStationResume} from '../lib/mchsStationResumeEvidence.js';
 import {bindAndroidAlarmCandidates,stageBoundAndroidIntents} from '../lib/mchsAndroidAlarmBinding.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
@@ -1279,6 +1280,37 @@ router.get('/missile-session-lifecycle',requireRole('ADMIN'),async (_req,res,nex
  * A shared Worker overlay status has no event-bound revision record, so it
  * cannot be used as positive evidence of a genuine emergency broadcast.
  */
+/** Observe existing software telemetry after isolated ALARM, without
+ * inferring that loudspeakers were audible or changing playout. */
+router.get('/missile-station-resume',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [workerOverlayResult,stationHealth,agentRow,agentAudioRow]=await Promise.all([
+   trainingStreamRequest().catch(()=>null),
+   workerRequest('GET','/health').catch(()=>null),
+   deviceId?prisma.setting.findUnique({
+    where:{key:'mchs_agent_playback_session_status_v1_'+deviceId}}):null,
+   deviceId?prisma.setting.findUnique({
+    where:{key:'radio_agent_audio_v1_'+deviceId}}):null
+  ]);
+  let agentReport,agentAudio;
+  try{agentReport=JSON.parse(agentRow?.value||'null');}catch{}
+  try{agentAudio=JSON.parse(agentAudioRow?.value||'null');}catch{}
+  const workerOverlay=workerOverlayResult?.httpStatus===200?workerOverlayResult.data:null;
+  const receipt=workerOverlay?.lastTrainingEvent||null;
+  const result=assessMchsStationResume({
+   eventId:receipt?.eventId||null,
+   workerReceipt:receipt,workerOverlay,workerHealth:stationHealth,
+   agentReport,agentAudio
+  });
+  res.set('Cache-Control','no-store').json({
+   checkedAt:new Date().toISOString(),...result,
+   agentConfigured:!!deviceId,
+   isolatedTrainingOnly:true,executionEnabled:false,
+   physicalAudibilityVerified:false
+  });
+ }catch(error){next(error);}
+});
 router.get('/missile-natural-completion',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
