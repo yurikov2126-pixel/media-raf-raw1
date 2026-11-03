@@ -4,7 +4,7 @@ import {stageSyntheticHeadphonesCycle as stage,advanceSyntheticHeadphonesCycle a
  from '../src/lib/mchsSyntheticHeadphonesCycle.js';
 
 const now=Date.parse('2026-11-04T12:00:00Z');
-const ready={fresh:true,operatorIsolationAttested:true,
+const ready={fresh:true,operatorIsolationAttested:true,isolatedTrialSourceAdmission:true,
  centralPacketsConfirmed:true,
  assets:{MISSILE_DANGER:'a'.repeat(64),MISSILE_ALL_CLEAR:'b'.repeat(64)}};
 const id='synthetic_'+'a'.repeat(24);
@@ -64,6 +64,19 @@ test('failed playback, missing confirmed return and duplicated staging do not ad
  assert.equal(failed.command,null);
 });
 
+test('old Agent without trial-source admission cannot arm or dispatch',()=>{
+ const old={...ready,isolatedTrialSourceAdmission:false};
+ assert.equal(stage({id,readiness:old,nowMs:now}).reason,'WINDOWS_AGENT_UPDATE_REQUIRED');
+ assert.equal(advance(started.state,{readiness:old,nowMs:now+1}).reason,'WINDOWS_AGENT_UPDATE_REQUIRED');
+});
+test('unanswered delivery expires as FAILED, never initiates all-clear',()=>{
+ const d=advance(started.state,{readiness:ready,nowMs:now+1});
+ const ended=advance(d.state,{readiness:ready,nowMs:now+61001});
+ assert.equal(ended.state.phase,'FAILED');
+ assert.equal(ended.state.failReason,'AGENT_COMPLETION_TIMEOUT');
+ assert.equal(ended.command,null);
+ assert.equal(stage({state:ended.state,readiness:ready,nowMs:now+62000,id}).ok,true);
+});
 test('no fresh Agent -> no WAV command and no replay',()=>{
  const no=advance(started.state,{readiness:{...ready,fresh:false},nowMs:now+1});
  assert.equal(no.command,null);
