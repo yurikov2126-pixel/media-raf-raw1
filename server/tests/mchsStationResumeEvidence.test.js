@@ -80,3 +80,11 @@ test('schedule and live program sources remain acceptable when confirmed',()=>{
   assert.equal(assess({...good,workerHealth:{mode,lastError:null}}).workerReturnedToProgram,true);
  }
 });
+
+test('Agent central audio packet between Worker and Agent completion is not restoration',()=>{
+ const result=assess({...good,agentAudio:{...agentAudio,
+  receivedAt:new Date(now-4500).toISOString()}});
+ assert.equal(result.agentReturnedToCentral,false);
+ assert.equal(result.bothSoftwareChannelsResumed,false);
+ assert.ok(result.holds.includes('AGENT_AUDIO_NOT_FRESH_AFTER_ALARM'));
+});

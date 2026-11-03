@@ -48,7 +48,12 @@ export function assessMchsStationResume({
     agentAudio.lastPacketAgeMs>5000||
     agentAudio.lastPacketAgeMs<0)
   add('AGENT_CENTRAL_AUDIO_NOT_CONFIRMED');
- if(!Number.isFinite(audioAt)||audioAt>nowMs||audioAt<finishMs||
+ // Fresh CENTRAL packets must be reported only *after both* audio
+ // channels finished. A packet arriving between Worker and Agent completion
+ // must not be mistaken for the restored station program.
+ const latestCompletion=Math.max(finishMs,agentTime);
+ if(!Number.isFinite(audioAt)||audioAt>nowMs||
+    !Number.isFinite(latestCompletion)||audioAt<latestCompletion||
     nowMs-audioAt>20000)
   add('AGENT_AUDIO_NOT_FRESH_AFTER_ALARM');
  return {eventId:eventId||null,
