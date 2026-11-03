@@ -2,7 +2,6 @@ import {fetchIsolatedHeadphonesSelfTest} from '../lib/mchsHeadphonesSelfTestRela
 import {selectMchsAgentCommand} from '../lib/mchsAgentCommandSelection.js';
 import {advanceIsolatedAndroidAutoFeed} from '../lib/mchsIsolatedAndroidAutoFeed.js';
 import {readMchsAgentReadiness} from '../lib/mchsAgentIsolatedReadiness.js';
-import {readMchsExecutionObservationHistory} from '../lib/mchsExecutionObservationHistory.js';
 import {advanceMchsDeviceCommand} from '../lib/mchsDeviceCommandLedger.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
