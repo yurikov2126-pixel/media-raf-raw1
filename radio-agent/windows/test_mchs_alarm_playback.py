@@ -34,6 +34,33 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(s.status()['state'],'COMPLETED')
         self.assertEqual(s.status()['completedRepeats'],3)
         self.assertEqual(len(calls),3)
+    def test_natural_completion_requires_no_manual_stop(self):
+        calls=[]
+        session=AlarmPlaybackSession(lambda file:(calls.append(file),FakeProcess())[1],
+                                     isolation_verified=True,sleep=lambda _:None)
+        self.assertTrue(session.start(event_id='danger',file=self.file,
+                                      repeats=5,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        self.assertEqual(session.status()['state'],'COMPLETED')
+        self.assertEqual(session.status()['completedRepeats'],5)
+        self.assertIsNone(session.status()['failureReason'])
+        self.assertEqual(len(calls),5)
+        self.assertTrue(session.start(event_id='clear',file=self.file,
+                                      repeats=1,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        self.assertEqual(session.status()['state'],'COMPLETED')
+        self.assertEqual(session.status()['completedRepeats'],1)
+
+    def test_player_failure_never_claims_natural_completion(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(code=1),
+                                     isolation_verified=True,sleep=lambda _:None)
+        self.assertTrue(session.start(event_id='failed',file=self.file,
+                                      repeats=3,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        self.assertEqual(session.status()['state'],'STOPPED')
+        self.assertEqual(session.status()['completedRepeats'],0)
+        self.assertEqual(session.status()['failureReason'],'RuntimeError')
+
     def test_watchdog_aborts_before_launch(self):
         s=AlarmPlaybackSession(lambda _:self.fail('MUST_NOT_LAUNCH'),
                                isolation_verified=True,heartbeat=lambda:False)
