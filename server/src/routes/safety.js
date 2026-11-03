@@ -563,6 +563,35 @@ async function getTypeRules() {
   try { const parsed = JSON.parse(row?.value || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed; } catch {}
   return Object.fromEntries(MCHS_EVENT_TYPES.map(type => [type.id, { ...emptyTypeRule(), ...(stored[type.id] || {}), repeats: normalizeMchsTypeRepeats(stored[type.id]?.repeats), executable: false }]));
 }
+/** Read-only Android -> configured ALARM media linkage; no audio dispatch. */
+router.get('/android-alarm-bindings',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [observations,monitorRow,ruleRow,repeatRow,assets,intentRow]=await Promise.all([
+   prisma.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+    orderBy:{receivedAt:'desc'},take:100,
+    select:{id:true,title:true,body:true,source:true,sourceEventId:true,
+     verified:true,region:true,occurredAt:true,receivedAt:true}}),
+   prisma.setting.findUnique({where:{key:MCHS_MONITOR_KEY}}),
+   prisma.setting.findUnique({where:{key:TYPE_RULE_KEY}}),
+   prisma.setting.findUnique({where:{key:MCHS_ALARM_REPEATS_KEY}}),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},
+    select:{id:true,category:true,mimeType:true,durationMs:true}}),
+   prisma.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}})
+  ]);
+  let monitor,rules,intents;
+  try{monitor=JSON.parse(monitorRow?.value||'null');}catch{}
+  try{rules=JSON.parse(ruleRow?.value||'{}');}catch{}
+  try{intents=JSON.parse(intentRow?.value||'null');}catch{}
+  const entries=normalizeAndroidMonitor(monitor).entries;
+  const bound=bindAndroidAlarmCandidates({entries,observations,rules:rules||{},assets,
+   dangerRepeats:normalizeDangerRepeats(Number(repeatRow?.value||DEFAULT_DANGER_REPEATS))});
+  res.set('Cache-Control','no-store').json({
+   checkedAt:new Date().toISOString(),...bound,
+   persistedProposals:Array.isArray(intents?.items)?intents.items.slice(-50):[],
+   executionEnabled:false,officialSourceVerified:false,output:'PLANNED_ONLY'
+  });
+ }catch(error){next(error);}
+});
 router.get('/event-type-rules', canView, async (_req, res, next) => {
   try {
     const [rules, assets] = await Promise.all([getTypeRules(),
