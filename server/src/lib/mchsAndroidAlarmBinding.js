@@ -65,6 +65,11 @@ export function stageBoundAndroidIntents(raw,eligible,{now=new Date().toISOStrin
      candidate.dispatchAuthorized!==false||
      !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(candidate.eventType)||
      !/^[A-Za-z0-9_-]{1,128}$/.test(candidate.audioAssetId||'')||
+     !Number.isInteger(candidate.repetitions)||candidate.repetitions<1||
+     candidate.repetitions>5||
+     (candidate.eventType==='MISSILE_ALL_CLEAR'&&candidate.repetitions!==1)||
+     !Number.isSafeInteger(candidate.expectedDurationMs)||
+     candidate.expectedDurationMs<=0||
      typeof candidate.sourceEventId!=='string'||!candidate.sourceEventId||
      seen.has(candidate.sourceEventId))continue;
   const intent={sourceEventId:candidate.sourceEventId,eventId:candidate.eventId,
