@@ -7,7 +7,7 @@ import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
 import {normalizeMchsAgentPlaybackReport} from '../lib/mchsAgentPlaybackReport.js';
 import {normalizeMchsEventExecutionObservation} from '../lib/mchsEventExecutionObservation.js';
-import {appendMchsExecutionObservation,readMchsExecutionObservationHistory} from '../lib/mchsExecutionObservationHistory.js';
+import {appendMchsExecutionObservation,readMchsExecutionObservationHistory,mergeLegacyMchsExecutionObservation} from '../lib/mchsExecutionObservationHistory.js';
 import {validateAudioReport,audioHealth} from '../lib/radioAgentAudioHealth.js';
 import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
@@ -830,10 +830,18 @@ router.get('/mchs-agent-event-execution-observations',...admin,safe(async(req,re
  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID;
  if(!deviceId)return res.json({bound:false,items:[],localOnly:true});
  const key='mchs_agent_event_execution_history_v1_'+deviceId;
- const row=await prisma.setting.findUnique({where:{key}});
- const items=readMchsExecutionObservationHistory(row?.value).reverse();
- res.json({bound:true,items,localOnly:true,physicalPaOutputVerified:false,
-  publicPlaybackAuthorized:false});
+ const legacyKey='mchs_agent_event_execution_observation_v1_'+deviceId;
+ const [row,legacy]=await Promise.all([
+  prisma.setting.findUnique({where:{key}}),
+  prisma.setting.findUnique({where:{key:legacyKey}})
+ ]);
+ const items=mergeLegacyMchsExecutionObservation(
+  readMchsExecutionObservationHistory(row?.value),legacy?.value)
+  .sort((a,b)=>Date.parse(b.receivedAt)-Date.parse(a.receivedAt));
+ res.json({bound:true,items,localOnly:true,
+  hasStoredAgentObservation:!!legacy?.value||items.length>0,
+  newestObservationAt:items[0]?.receivedAt||null,
+  physicalPaOutputVerified:false,publicPlaybackAuthorized:false});
 }));
 // Read-only loopback self-test for explicitly bound headphones pilot devices.
 // There is no command queue, no public output, no arbitrary asset ID or URL.
