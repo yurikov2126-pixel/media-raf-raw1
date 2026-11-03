@@ -1,3 +1,4 @@
+import {selectMchsAgentCommand} from '../lib/mchsAgentCommandSelection.js';
 import {advanceMchsDeviceCommand} from '../lib/mchsDeviceCommandLedger.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
@@ -264,11 +265,12 @@ router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
  try{raw=JSON.parse(haltRow?.value||'null');}catch{}
  const state=normalizeMchsDispatchProtocol(raw);
  const delivered=advanceMchsDeviceCommand(ledger||{}, {type:'DELIVER'});
- // Never send a START while active HOLD is latched.
- const command=delivered.command?.action==='STOP'?delivered.command:null;
- res.json({version:1,command,halted:true,haltEpoch:state.haltEpoch,
-  executionEnabled:false,automaticPlaybackEnabled:false,
-  reason:'STOP_ONLY_NO_PUBLIC_START'});
+ const selected=selectMchsAgentCommand({
+  delivered,ledger,dispatch:state,
+  isolatedTrialEnabled:process.env.MCHS_ISOLATED_AGENT_TRIAL_START_ENABLED==='true',
+  deviceTrialBound:req.radioDevice.id===process.env.MCHS_AGENT_LAB_DEVICE_ID
+ });
+ res.json({version:1,...selected,haltEpoch:state.haltEpoch});
 }));
 router.post('/agent/mchs-execution-command-receipt',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
