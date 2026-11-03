@@ -8,6 +8,7 @@ import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetr
 import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {assessMchsNaturalCompletion} from '../lib/mchsNaturalCompletionEvidence.js';
 import {assessMchsStationResume} from '../lib/mchsStationResumeEvidence.js';
+import {assessMchsLiveAudioPreflight} from '../lib/mchsLiveAudioPreflight.js';
 import {bindAndroidAlarmCandidates,stageBoundAndroidIntents} from '../lib/mchsAndroidAlarmBinding.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
@@ -1282,6 +1283,29 @@ router.get('/missile-session-lifecycle',requireRole('ADMIN'),async (_req,res,nex
  */
 /** Observe existing software telemetry after isolated ALARM, without
  * inferring that loudspeakers were audible or changing playout. */
+/** Read-only evidence from the actual Worker and the configured Windows Agent.
+ * This is not an authorization to start the shared station PCM overlay. */
+router.get('/missile-live-audio-preflight',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [overlayResult,workerHealth,agentAudioRow]=await Promise.all([
+   trainingStreamRequest().catch(()=>null),
+   workerRequest('GET','/health').catch(()=>null),
+   deviceId?prisma.setting.findUnique({
+    where:{key:'radio_agent_audio_v1_'+deviceId}}).catch(()=>null):null
+  ]);
+  let agentAudio=null;
+  try{agentAudio=JSON.parse(agentAudioRow?.value||'null');}catch{}
+  const workerOverlay=overlayResult?.httpStatus===200?overlayResult.data:null;
+  const assessed=assessMchsLiveAudioPreflight({
+   workerHealth,workerOverlay,agentAudio,deviceBound:!!deviceId
+  });
+  res.set('Cache-Control','no-store').json({
+   checkedAt:new Date().toISOString(),...assessed,
+   isolatedTrialOnly:true,physicalAudibilityVerified:false
+  });
+ }catch(error){next(error);}
+});
 router.get('/missile-station-resume',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
