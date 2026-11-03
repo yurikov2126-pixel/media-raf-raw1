@@ -12,23 +12,41 @@ const failureLabel={
  SERVER_STOP:'Остановка по команде сервера',
  SERVER_HALT:'Исполнение заблокировано сервером'
 };
+const readinessLabels={
+ DEVICE_NOT_BOUND:'Не привязано учебное устройство Windows Agent',
+ TRIAL_DISABLED:'Серверный режим изолированного испытания выключен',
+ DISPATCH_HALTED:'Общий протокол исполнения заблокирован',
+ DEVICE_LEDGER_HALTED:'Очередь устройства заблокирована',
+ COMMAND_PENDING:'В очереди уже есть команда',
+ LOCAL_OUTPUT_ISOLATION_NOT_ATTESTED:'Сервер не имеет подтверждения физической изоляции громкоговорителей',
+ LOCAL_WAV_DIGEST_NOT_BOUND:'Локальный WAV ещё не привязан по SHA-256',
+ VERIFIED_ANDROID_EVENT_MISSING:'Нет подтверждённого Android-события',
+ ANDROID_EVENT_NOT_FRESH:'Последнее Android-событие устарело'
+};
 const tone=phase=>phase==='COMPLETE'
  ?'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-100'
  :'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-400/30 dark:bg-rose-400/10 dark:text-rose-100';
 
 export default function MchsAgentExecutionObservations({token}){
  const [data,setData]=useState(null),[error,setError]=useState('');
+ const [readiness,setReadiness]=useState(null),[readinessError,setReadinessError]=useState('');
  const refresh=useCallback(async()=>{
   try{
    const result=await api('/radio-agent/mchs-agent-event-execution-observations',{token});
    setData(result);setError('');
   }catch(e){setError(e.message||'Не удалось получить результаты Windows Agent');}
  },[token]);
+ const refreshReadiness=useCallback(async()=>{
+  try{
+   const result=await api('/radio-agent/mchs-agent-trial-start-readiness',{token});
+   setReadiness(result);setReadinessError('');
+  }catch(e){setReadinessError(e.message||'Не удалось проверить готовность учебного START');}
+ },[token]);
  useEffect(()=>{
-  void refresh();
-  const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},15000);
+  void refresh();void refreshReadiness();
+  const timer=setInterval(()=>{if(document.visibilityState==='visible'){void refresh();void refreshReadiness();}},15000);
   return()=>clearInterval(timer);
- },[refresh]);
+ },[refresh,refreshReadiness]);
  return <section aria-label="Результаты Windows Radio Agent" className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/15 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-3">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div>
@@ -37,7 +55,7 @@ export default function MchsAgentExecutionObservations({token}){
      Диагностика локального звука в наушниках и возврата центрального эфира. Не подтверждает работу громкоговорителей.
     </p>
    </div>
-   <button type="button" onClick={()=>void refresh()} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
+   <button type="button" onClick={()=>{void refresh();void refreshReadiness();}} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Обновить</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   {!data&&!error&&<p className="text-sm">Загрузка результатов…</p>}
@@ -47,6 +65,19 @@ export default function MchsAgentExecutionObservations({token}){
    <p>Успешное воспроизведение в наушниках само по себе не создаёт запись. Убедитесь, что запущена полная версия Agent не ниже #975, а в его журнале после завершения события есть <code>MCHS_EVENT_OBSERVATION_ACCEPTED</code>.</p>
    <p>Если видна метка <code>MCHS_EVENT_OBSERVATION_RETRY</code>, отчёт не принят сервером: нужно проверить ответ API и авторизацию устройства. Не запускайте настоящую тревогу ради проверки.</p>
   </div>}
+  <div aria-label="Готовность учебного START" className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2 text-sm">
+   <p className="font-semibold">Готовность отправки учебного события в Windows Agent</p>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Проверка только читает состояние. Она не запускает ALARM, Radio Worker или громкоговорители.</p>
+   {readinessError&&<p role="alert" className="text-red-700 dark:text-red-300">{readinessError}</p>}
+   {!readiness&&!readinessError&&<p>Проверка готовности…</p>}
+   {readiness&&<div className="space-y-2">
+    <p>Учебный START: <strong>{readiness.ready?'Готов':'Пока недоступен'}</strong>. В очередь не поставлен.</p>
+    <ul className="list-disc pl-5 space-y-1">
+     {(readiness.reasons||[]).map(reason=><li key={reason}>{readinessLabels[reason]||reason}</li>)}
+    </ul>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Это серверная диагностика, не подтверждение физической изоляции. Не используйте реальную тревогу для теста.</p>
+   </div>}
+  </div>
   {data?.newestObservationAt&&<p className="text-xs text-slate-600 dark:text-slate-300">Последний полученный отчёт Agent: {when(data.newestObservationAt)}</p>}
   {data?.items?.length>0&&<div className="space-y-2">
    {data.items.map((item,index)=><article key={item.eventId+'-'+index} className="rounded-xl border border-slate-200 dark:border-white/15 p-3 sm:p-4 space-y-2">
