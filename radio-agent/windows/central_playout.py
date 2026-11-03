@@ -772,25 +772,39 @@ def run(args, token):
                             envelope,now=now,baseline=fresh_central and network_ok,
                             authorized=not denied and now-last_authorized<15)
                         if action=='START_AUDIO':
-                            # Only the Agent-owned VLC decks are stopped.
-                            relay.intentional_disconnect.set()
-                            stop_vlc(primary)
-                            stop_vlc(fallback)
-                            primary=None
-                            fallback=None
-                            fallback_key=None
-                            relay.failed.set()
-                            started=event_audio_session.start(
-                                event_id=detail['eventId'],
-                                file=detail['asset'],repeats=detail['repeats'],
-                                authorized=True)
-                            event_audio.started(
-                                started['accepted'],now=now,
-                                duration=args.isolated_event_assets[detail['eventType']]['duration'])
-                            network_ok=False
-                            last_probe=0.0
-                            print('MCHS_EVENT_AUDIO_START',
-                                  detail['eventId'],json.dumps(started),flush=True)
+                            # Recheck the on-disk WAV immediately before START.
+                            # The operator-selected file may have been replaced
+                            # after startup validation, and an event cannot
+                            # authorize new bytes by path alone.
+                            try:
+                                current=verify_local_training_wav(detail['asset'])
+                                asset_unchanged=(current['sha256']==detail['sha256'])
+                            except (OSError,ValueError):
+                                asset_unchanged=False
+                            if not asset_unchanged:
+                                event_audio.started(False,now=now,duration=0)
+                                print('MCHS_EVENT_AUDIO_LOCAL_ASSET_CHANGED',
+                                      detail['eventId'],flush=True)
+                            else:
+                                # Only the Agent-owned VLC decks are stopped.
+                                relay.intentional_disconnect.set()
+                                stop_vlc(primary)
+                                stop_vlc(fallback)
+                                primary=None
+                                fallback=None
+                                fallback_key=None
+                                relay.failed.set()
+                                started=event_audio_session.start(
+                                    event_id=detail['eventId'],
+                                    file=detail['asset'],repeats=detail['repeats'],
+                                    authorized=True)
+                                event_audio.started(
+                                    started['accepted'],now=now,
+                                    duration=current['duration'])
+                                network_ok=False
+                                last_probe=0.0
+                                print('MCHS_EVENT_AUDIO_START',
+                                      detail['eventId'],json.dumps(started),flush=True)
                         elif action not in ('NO_ACTION','REJECTED'):
                             print('MCHS_EVENT_AUDIO_COMMAND',action,str(detail),flush=True)
                         elif action=='REJECTED' and detail not in ('INVALID_OR_REPLAYED_COMMAND','REPLAYED_EVENT'):
