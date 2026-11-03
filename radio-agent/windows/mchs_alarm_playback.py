@@ -6,6 +6,7 @@ the event, prove output isolation, and keep the watchdog heartbeat alive.
 import subprocess
 import threading
 import time
+from collections import deque
 
 class AlarmPlaybackSession:
     def __init__(self, launch, *, heartbeat=lambda: True, isolation_verified=False,
@@ -23,12 +24,22 @@ class AlarmPlaybackSession:
         self._status='IDLE'
         self._completed=0
         self._failure_reason=None
+        self._expected_repeats=0
+        self._recent_event_ids=deque(maxlen=250)
+        self._recent_event_set=set()
 
     def status(self):
         with self._lock:
             return dict(eventId=self._event_id,state=self._status,
                         completedRepeats=self._completed,
-                        failureReason=self._failure_reason)
+                        failureReason=self._failure_reason,
+                        expectedRepeats=self._expected_repeats,
+                        naturalCompletion=(self._status=='COMPLETED' and
+                                           self._completed==self._expected_repeats and
+                                           self._failure_reason is None and
+                                           self._process is None),
+                        processRunning=(self._process is not None and
+                                        self._process.poll() is None))
 
     def start(self, *, event_id, file, repeats, authorized=False):
         if not self.isolation_verified or not authorized:
@@ -40,10 +51,15 @@ class AlarmPlaybackSession:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return {'accepted':False,'reason':'BUSY'}
-            if self._event_id == event_id:
+            if event_id in self._recent_event_set:
                 return {'accepted':False,'reason':'REPLAYED_EVENT'}
+            if len(self._recent_event_ids)==self._recent_event_ids.maxlen:
+                self._recent_event_set.discard(self._recent_event_ids.popleft())
+            self._recent_event_ids.append(event_id)
+            self._recent_event_set.add(event_id)
             self._event_id=event_id
             self._completed=0
+            self._expected_repeats=repeats
             self._failure_reason=None
             self._status='STARTING'
             self._cancel.clear()
@@ -108,7 +124,14 @@ class AlarmPlaybackSession:
                 self._status='STOPPED'
             state=dict(eventId=self._event_id,state=self._status,
                        completedRepeats=self._completed,
-                       failureReason=self._failure_reason)
+                       failureReason=self._failure_reason,
+                       expectedRepeats=self._expected_repeats,
+                       naturalCompletion=(self._status=='COMPLETED' and
+                                          self._completed==self._expected_repeats and
+                                          self._failure_reason is None and
+                                          not still_running),
+                       processRunning=(self._process is not None and
+                                       self._process.poll() is None))
             state['stopConfirmed']=not still_running and (
                 self._process is None or self._process.poll() is not None)
         return state
