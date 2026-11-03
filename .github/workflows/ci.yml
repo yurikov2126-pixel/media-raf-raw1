@@ -31,6 +31,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Android ALARM event-binding regression tests
+        run: node --test tests/mchsAndroidAlarmBinding.test.js tests/mchsAndroidObservationMonitor.test.js tests/mchsAndroidIntentLedger.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
