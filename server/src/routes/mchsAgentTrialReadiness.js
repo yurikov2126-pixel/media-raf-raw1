@@ -11,6 +11,8 @@ import {summarizeMchsTrialStartReadiness} from '../lib/mchsAgentTrialReadiness.j
 const router=Router();
 const settingsKey=id=>'mchs_agent_device_commands_v1_'+id;
 const readyKey=id=>'mchs_agent_isolated_readiness_v1_'+id;
+const syntheticKey=id=>'mchs_agent_synthetic_cycle_v1_'+id;
+const androidKey=id=>'mchs_agent_isolated_android_auto_v1_'+id;
 
 // Device-authenticated heartbeat, *only* for the bound headphone pilot.
 // This does not approve START, change HALT, or attest physical speaker wiring.
@@ -42,7 +44,7 @@ router.get('/mchs-agent-trial-start-readiness',auth,requireRole('ADMIN'),async(r
   res.setHeader('Cache-Control','no-store');
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID;
   const trialEnabled=process.env.MCHS_ISOLATED_AGENT_TRIAL_START_ENABLED==='true';
-  const [dispatchRow,deviceRow,readyRow,event]=await Promise.all([
+  const [dispatchRow,deviceRow,readyRow,event,syntheticRow,androidRow]=await Promise.all([
    prisma.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}}),
    deviceId?prisma.setting.findUnique({where:{key:settingsKey(deviceId)}}):null,
    deviceId?prisma.setting.findUnique({where:{key:readyKey(deviceId)}}):null,
@@ -50,11 +52,16 @@ router.get('/mchs-agent-trial-start-readiness',auth,requireRole('ADMIN'),async(r
     where:{source:'MCHS_ANDROID',verified:true},
     orderBy:{receivedAt:'desc'},
     select:{id:true,source:true,verified:true,occurredAt:true,title:true,body:true}
-   })
+   }),
+   deviceId?prisma.setting.findUnique({where:{key:syntheticKey(deviceId)}}):null,
+   deviceId?prisma.setting.findUnique({where:{key:androidKey(deviceId)}}):null
   ]);
   let dispatchRaw,deviceState;
   try{dispatchRaw=JSON.parse(dispatchRow?.value||'null');}catch{dispatchRaw=null;}
   try{deviceState=JSON.parse(deviceRow?.value||'null');}catch{deviceState=null;}
+  let synthetic,android;
+  try{synthetic=JSON.parse(syntheticRow?.value||'null');}catch{}
+  try{android=JSON.parse(androidRow?.value||'null');}catch{}
   const dispatch=normalizeMchsDispatchProtocol(dispatchRaw);
   const agentReadiness=readMchsAgentReadiness(readyRow?.value);
   res.json({...summarizeMchsTrialStartReadiness({
@@ -64,6 +71,17 @@ router.get('/mchs-agent-trial-start-readiness',auth,requireRole('ADMIN'),async(r
   }),isolatedAndroidAutoTrialEnabled:
    process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED==='true',
    isolatedAndroidAutoTrialOnly:true,
+   isolatedHeadphonesTrial:{
+    enabled:process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED==='true',
+    ready:!!deviceId&&!dispatch.haltEpoch&&!!agentReadiness?.centralPacketsConfirmed&&
+     agentReadiness?.operatorIsolationAttested===true&&
+     agentReadiness?.isolatedTrialSourceAdmission===true,
+    blockedByGlobalHalt:!!dispatch.haltEpoch,
+    syntheticPhase:typeof synthetic?.phase==='string'?synthetic.phase:'NOT_STARTED',
+    syntheticFailure:typeof synthetic?.failReason==='string'?synthetic.failReason:null,
+    androidPhase:['DANGER','CLEAR'].includes(android?.phase)?android.phase:'CLEAR',
+    androidActive:!!android?.active
+   },
    androidChannelAllowlistConfigured:!!(process.env.MCHS_MISSILE_TRUSTED_CHANNEL_IDS||'').trim(),
    agentReadiness:agentReadiness?{
    fresh:true,mode:agentReadiness.mode,
