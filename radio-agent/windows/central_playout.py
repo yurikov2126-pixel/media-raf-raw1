@@ -39,6 +39,7 @@ from mchs_lab_end_evidence import assess_lab_trial_end
 from mchs_integrated_headphones_cycle import IntegratedHeadphonesCycle
 from mchs_event_admission import EventAdmissionLedger
 from mchs_event_audio_controller import IsolatedEventAudioController
+from mchs_event_observation import make_event_observation, post_event_observation
 from mchs_two_stage_headphones_pilot import verify_local_training_wav
 
 STOP = threading.Event()
@@ -480,6 +481,9 @@ def run(args, token):
     event_audio=None
     event_audio_session=None
     last_event_audio_poll=0.0
+    last_event_receipt_retry=0.0
+    pending_event_receipts=[]
+    reported_event_receipts=set()
     if getattr(args,'isolated_event_audio',False):
         event_audio=IsolatedEventAudioController(event_ledger,args.isolated_event_assets)
         event_audio_session=AlarmPlaybackSession(
@@ -840,6 +844,32 @@ def run(args, token):
                 elif transition in ('RETURN_CONFIRMED','RETURN_FAILED'):
                     print('MCHS_EVENT_AUDIO_RESULT',
                           json.dumps(event_audio.snapshot(),ensure_ascii=False),flush=True)
+                # Observations never govern playback or the Worker. Once per
+                # (event,terminal state), queue a local-only receipt. A failed
+                # network POST is retried; no unconfirmed status becomes success.
+                state_snapshot=event_audio.snapshot()
+                event_key=(state_snapshot['eventId'],state_snapshot['state'])
+                if (state_snapshot['state'] in ('COMPLETE','FAILED') and
+                        state_snapshot['eventId'] and
+                        event_key not in reported_event_receipts):
+                    report=make_event_observation(
+                        event_audio,event_audio_session.status())
+                    if report is not None:
+                        reported_event_receipts.add(event_key)
+                        pending_event_receipts.append(report)
+                        if len(pending_event_receipts)>50:
+                            pending_event_receipts.pop(0)
+                if pending_event_receipts and now-last_event_receipt_retry>=5:
+                    last_event_receipt_retry=now
+                    receipt=pending_event_receipts[0]
+                    try:
+                        if post_event_observation(args.server,token,receipt):
+                            pending_event_receipts.pop(0)
+                            print('MCHS_EVENT_OBSERVATION_ACCEPTED',
+                                  receipt['eventId'],receipt['phase'],flush=True)
+                    except (HTTPError,URLError,OSError,ValueError) as error:
+                        print('MCHS_EVENT_OBSERVATION_RETRY',
+                              type(error).__name__,flush=True)
             # One operator-authorized, physically isolated cycle in THIS Agent.
             # Controls only the Agent's VLC children and verified local WAV.
             # It never sends START to Worker or to PA.
