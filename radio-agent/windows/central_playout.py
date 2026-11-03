@@ -37,6 +37,7 @@ from mchs_agent_stop_evidence import trial_stop_evidence
 from mchs_central_return_monitor import CentralReturnMonitor
 from mchs_lab_end_evidence import assess_lab_trial_end
 from mchs_integrated_headphones_cycle import IntegratedHeadphonesCycle
+from mchs_event_admission import EventAdmissionLedger
 from mchs_two_stage_headphones_pilot import verify_local_training_wav
 
 STOP = threading.Event()
@@ -217,6 +218,12 @@ def poll_mchs_execution_command(server, token, alarm_session=None):
                 if not accepted:
                     print('MCHS_EXECUTION_START_REJECTED',reason,flush=True)
                 else:
+                    # Default Agent is deliberately NOT authorized for alarm audio.
+                    # Do not download an asset destined for an isolated session
+                    # that was never locally armed by the operator.
+                    if alarm_session is None or alarm_session.isolation_verified is not True:
+                        print('MCHS_EXECUTION_START_BLOCKED_NO_LOCAL_ISOLATION',flush=True)
+                        return state
                     cache_root=Path(os.environ.get('RADIO_AGENT_DATA_DIR','radio-agent-data'))/'mchs-alarm-cache'
                     verified_file,reason=cache_verified_alarm(command,cache_root,server,token)
                     if reason is not None:
@@ -267,6 +274,26 @@ def poll_mchs_execution_command(server, token, alarm_session=None):
         except (HTTPError,URLError,OSError,ValueError):
             print('MCHS_SESSION_STATUS_REPORT_UNAVAILABLE',flush=True)
     return state
+
+
+def poll_mchs_event_admission(server,token,ledger):
+    """Only authenticated event metadata. Never calls VLC or the asset API."""
+    headers={'Authorization':'Bearer '+token}
+    request=Request(server.rstrip('/')+'/api/radio-agent/agent/mchs-execution-command',
+                    headers=headers)
+    with urlopen(request,timeout=3) as response:
+        state=json.load(response)
+    if state.get('version')!=1:
+        raise ValueError('MCHS_EXECUTION_PROTOCOL_MISMATCH')
+    command=state.get('command')
+    if command is None:
+        return None
+    outcome=ledger.observe(
+        command,halted=state.get('halted') is not False,
+        execution_enabled=state.get('executionEnabled') is True,
+        physical_isolation=True)
+    print('MCHS_EVENT_ADMISSION',json.dumps(outcome,ensure_ascii=False),flush=True)
+    return outcome
 
 
 MCHS_EVENT_RECEIPT_LAST = {'id': None}
@@ -446,6 +473,8 @@ def run(args, token):
     central_return_monitor=CentralReturnMonitor()
     local_cycle=None
     local_cycle_session=None
+    event_ledger=(EventAdmissionLedger(base/'mchs-event-admission.json')
+                  if getattr(args,'isolated_event_admission',False) else None)
     cycle_assets=getattr(args,'isolated_cycle_assets',None)
     if cycle_assets is not None:
         danger,clear=cycle_assets
@@ -626,7 +655,10 @@ def run(args, token):
                 execution_command_busy.set()
                 def check_execution_command():
                     try:
-                        poll_mchs_execution_command(args.server,token,alarm_session)
+                        if event_ledger is not None:
+                            poll_mchs_event_admission(args.server,token,event_ledger)
+                        else:
+                            poll_mchs_execution_command(args.server,token,alarm_session)
                     except (HTTPError,OSError,ValueError):
                         print('MCHS_EXECUTION_COMMAND_CHANNEL_UNAVAILABLE',flush=True)
                     finally:
@@ -992,6 +1024,8 @@ def main():
     parser.add_argument('--data-dir',default='radio-agent-data')
     parser.add_argument('--vlc',required=True,help='Full path to vlc.exe')
     parser.add_argument('--enable-headphones-test',action='store_true')
+    parser.add_argument('--isolated-event-admission',action='store_true',
+                        help='Operator-isolated event metadata rehearsal; never starts alarm playback')
     parser.add_argument('--isolated-cycle-danger-wav')
     parser.add_argument('--isolated-cycle-all-clear-wav')
     parser.add_argument('--isolated-cycle-repeats',type=int,default=4)
@@ -1005,6 +1039,12 @@ def main():
     executable=Path(args.vlc).resolve()
     if not executable.is_file() or executable.name.lower()!='vlc.exe':
         parser.error('Full path to vlc.exe required')
+    if args.isolated_event_admission and (args.isolated_cycle_danger_wav or args.isolated_cycle_all_clear_wav):
+        parser.error('Event admission and audio-cycle modes are mutually exclusive')
+    if args.isolated_event_admission:
+        confirmation=input('No PA route connected; metadata-only event rehearsal? Type ISOLATED: ')
+        if confirmation.strip()!='ISOLATED':
+            parser.error('PHYSICAL_OUTPUT_ISOLATION_REQUIRED')
     if args.isolated_cycle_danger_wav or args.isolated_cycle_all_clear_wav:
         if not args.isolated_cycle_danger_wav or not args.isolated_cycle_all_clear_wav:
             parser.error('Both isolated cycle WAV paths are required')
