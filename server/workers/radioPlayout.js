@@ -1,5 +1,5 @@
-import {createIsolatedPcmWavStream} from '../src/lib/mchsIsolatedWav.js';
 #!/usr/bin/env node
+import {createIsolatedPcmWavStream} from '../src/lib/mchsIsolatedWav.js';
 import {assessTrainingAudioQuality} from '../src/lib/mchsTrainingAudioQuality.js';
 import {createAlarmPcmClock} from '../src/lib/mchsAlarmPcmClock.js';
 import {createMissileAlarmExecutorGuard} from '../src/lib/mchsMissileAlarmExecutorGuard.js';
