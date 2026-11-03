@@ -49,3 +49,24 @@ Remove-Item Env:\RADIO_AGENT_TOKEN
 Если при тесте звук слышен в публичном `/radio/live`, немедленно остановить
 локальный сеанс и прекратить испытание. Не подключать усилитель до завершения
 всех проверок изоляции.
+
+## Режим естественного завершения (PR #965)
+
+Для испытания всех повторов без ручного STOP используйте:
+
+```powershell
+python .\mchs_headphones_trial.py --server https://mediarafraw.ru --vlc "C:\Program Files\VideoLAN\VLC\vlc.exe" --repeats 4 --natural --completion-timeout 60
+```
+
+После подтверждения `ISOLATED` дождитесь `LOCAL_COMPLETE`:
+`state=COMPLETED`, `naturalCompletion=True`,
+`completedRepeats=expectedRepeats=4`, `processRunning=False`.
+Этот режим естественно завершает отдельный VLC после каждого проигрывания,
+не отправляя STOP при успешном окончании. При тайм-ауте или ошибке
+выполняется локальная остановка с `LOCAL_FAULT_STOP`. Для прежнего
+ручного теста просто не указывайте `--natural`.
+
+Ограничение: это **локальное воспроизведение тестового WAV**, а не
+реальный сигнал опасности, не общий Worker overlay и не автоматическая
+двухканальная тревога. Действующий Radio Agent не переключается:
+тестовый VLC может звучать одновременно с обычной музыкой.
