@@ -35,9 +35,31 @@ export function advanceMchsDeviceCommand(state={},input,{nowMs=Date.now()}={}){
     createdAt:new Date(nowMs).toISOString(),expiresAt:new Date(nowMs+15000).toISOString()}}};
  }
  if(input?.type==='QUEUE_START'){
-  // There is no safe automatic START until the public authorization and
-  // genuine event-to-asset proof can be established end-to-end.
-  return fail('REAL_EVENT_AUTOMATIC_START_NOT_AUTHORIZED');
+  // START can be staged only inside a separately authorized, physically
+  // isolated trial. A normal device ledger is permanently halted by default.
+  // The live device route still enforces STOP-only delivery.
+  if(current.halted)return fail('HALT_ACTIVE');
+  if(current.pending)return fail('COMMAND_ALREADY_PENDING');
+  const a=input.authorization;
+  if(!a||a.mode!=='ISOLATED_TRIAL'||a.approved!==true||
+     a.publicStreamAllowed!==false||a.amplifierAllowed!==false||
+     a.outputIsolationVerified!==true)return fail('ISOLATION_NOT_VERIFIED');
+  if(input.sourceOfficiallyVerified!==true)return fail('SOURCE_NOT_VERIFIED');
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(input.eventId||'')||
+     !/^[A-Za-z0-9_-]{1,128}$/.test(input.assetId||'')||
+     !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(input.eventType)||
+     !/^[a-f0-9]{64}$/.test(input.sha256||'')||
+     !Number.isInteger(input.repeats)||input.repeats<1||input.repeats>5||
+     (input.eventType==='MISSILE_ALL_CLEAR'&&input.repeats!==1))
+    return fail('INVALID_EVENT_AUDIO');
+  const sequence=current.sequence+1;
+  return {ok:true,state:{...current,sequence,pending:{
+   version:1,sequence,action:'START',eventId:input.eventId,
+   eventType:input.eventType,assetId:input.assetId,
+   sha256:input.sha256,repeats:input.repeats,officialSourceVerified:true,
+   trialOnly:true,createdAt:new Date(nowMs).toISOString(),
+   expiresAt:new Date(nowMs+10000).toISOString()
+  }}};
  }
  if(input?.type==='DELIVER'){
   if(!current.pending)return {ok:true,state:current,command:null};
