@@ -1301,6 +1301,10 @@ router.get('/missile-natural-completion',requireRole('ADMIN'),async (_req,res,ne
    worker:shared});
   res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),
    ...evaluation,workerSharedStatusAvailable:!!shared,
+   // Event-bound PCM receipts here are isolated training only; never infer
+   // that a real MCHS notification was broadcast from this historical log.
+   isolatedTrainingReceipt:shared?.lastTrainingEvent||null,
+   isolatedTrainingActiveEvent:shared?.trainingEvent||null,
    agentReportVersion:agent?.version||null,deviceConfigured:!!deviceId,
    executionEnabled:false,physicalAudibilityVerified:false});
  }catch(error){next(error);}
