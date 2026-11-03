@@ -76,6 +76,17 @@ class IsolatedEventAudioController:
         if state.get('executionEnabled') is not True:
             return ('REJECTED','EXECUTION_DISABLED')
         if self.busy:
+            # Delivery is at-least-once until the server receives a terminal
+            # observation. An exact replay of the active START is a harmless
+            # acknowledgement, not a second request to launch VLC.
+            if (command.get('eventId')==self.event and
+                    isinstance(self.last_receipt,dict) and
+                    command.get('sequence')==self.last_receipt.get('sequence') and
+                    command.get('eventType')==self.event_type and
+                    command.get('repeats')==self.repeats and
+                    command.get('sha256')==self.assets.get(self.event_type,{}).get('sha256') and
+                    command.get('action')=='START'):
+                return ('NO_ACTION','ACTIVE_EVENT_ALREADY_RUNNING')
             return ('REJECTED','EVENT_AUDIO_BUSY')
         if not authorized or not baseline:
             return ('REJECTED','CENTRAL_BASELINE_REQUIRED')

@@ -67,6 +67,9 @@ jobs:
       - name: Agent capability and synthetic timeout regression
         run: node --test tests/mchsSyntheticHeadphonesCycle.test.js tests/mchsAgentIsolatedReadiness.test.js
 
+      - name: Isolated Android channel and danger/all-clear event admission regression
+        run: node --test tests/mchsIsolatedAndroidAutoFeed.test.js tests/mchsSyntheticHeadphonesCycle.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 

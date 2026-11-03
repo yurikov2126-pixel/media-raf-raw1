@@ -81,3 +81,32 @@ test('temporary loss of central heartbeat during a locally running WAV does not 
  assert.equal(paused.command,null);
  assert.equal(paused.state.active.command.eventId,danger.id);
 });
+
+test('new allowed channel event is local-only and all-clear follows confirmed return',()=>{
+ const entry={...danger,channelId:'emercom_channel'};
+ const end={...clear,channelId:'emercom_channel'};
+ const opts={...props,allowedChannels:['emercom_channel']};
+ const start=advance(null,{...opts,events:[entry]});
+ assert.equal(start.command.trialOnly,true);
+ assert.equal(start.command.officialSourceVerified,false);
+ assert.equal(start.command.eventId,entry.id);
+ assert.equal(start.command.assetId,'isolated_danger');
+ assert.equal(advance(null,{...opts,events:[{...entry,channelId:'other'}]}).command,null);
+ assert.equal(advance(null,{...opts,events:[end]}).command,null);
+ const complete={eventId:entry.id,phase:'COMPLETE',naturalCompletion:true,
+  centralReturnConfirmed:true,processRunning:false,
+  completedRepeats:3,expectedRepeats:3};
+ const finish=advance(start.state,{...opts,nowMs:t+1000,events:[entry,end],
+  observations:[complete]});
+ assert.equal(finish.command.eventType,'MISSILE_ALL_CLEAR');
+ assert.equal(finish.command.repeats,1);
+ assert.equal(finish.command.sha256,readiness.assets.MISSILE_ALL_CLEAR);
+});
+
+test('old or uncapable Agent must not receive new Android START',()=>{
+ const opts={...props,events:[danger]};
+ assert.equal(advance(null,{...opts,readiness:{...readiness,
+  isolatedTrialSourceAdmission:false}}).reason,'WINDOWS_AGENT_UPDATE_REQUIRED');
+ assert.equal(advance(null,{...opts,readiness:{...readiness,
+  centralPacketsConfirmed:false}}).reason,'ISOLATED_AGENT_NOT_READY');
+});
