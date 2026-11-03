@@ -148,7 +148,9 @@ class IsolatedEventAudioController:
         if self.state!='RESTORING':
             raise RuntimeError('UNEXPECTED_RESTORE_ARM')
         if not confirmed:
-            self.failure=self.failure or 'LOCAL_AUDIO_STOP_UNCONFIRMED'
+            # Unconfirmed process exit is the primary safety failure even
+            # when an earlier timeout/STOP triggered the recovery.
+            self.failure='LOCAL_AUDIO_STOP_UNCONFIRMED'
             self.state='FAILED'
             return
         self.deadline=now+32
