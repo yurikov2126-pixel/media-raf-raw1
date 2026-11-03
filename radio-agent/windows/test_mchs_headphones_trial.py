@@ -29,7 +29,7 @@ def fixture():
         w.setnchannels(2)
         w.setsampwidth(2)
         w.setframerate(48000)
-        w.writeframes(b'\\x01\\x00\\x01\\x00'*96000)
+        w.writeframes(b'\x01\x00\x01\x00'*96000)
     return stream.getvalue()
 
 class HeadphonesTrialTests(unittest.TestCase):
