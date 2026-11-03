@@ -125,7 +125,8 @@ export async function runMchsTwoChannelExecution({
   return {ok:true,reason:'NATURAL_COMPLETION_CONFIRMED',
    startEvidence:evidence,
    completionEvidence:{worker:results[0].value,agent:results[1].value},
-   normalProgramExpected:true,manualStopRequired:false,
+   normalProgramExpected:true,normalProgramVerified:false,
+   resumeEvidenceRequired:true,manualStopRequired:false,
    automaticBroadcastEnabled:false};
  }catch{
   await stopBoth();
