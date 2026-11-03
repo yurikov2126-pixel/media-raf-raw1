@@ -1,5 +1,7 @@
 import {fetchIsolatedHeadphonesSelfTest} from '../lib/mchsHeadphonesSelfTestRelay.js';
 import {selectMchsAgentCommand} from '../lib/mchsAgentCommandSelection.js';
+import {advanceIsolatedAndroidAutoFeed} from '../lib/mchsIsolatedAndroidAutoFeed.js';
+import {readMchsAgentReadiness} from '../lib/mchsAgentIsolatedReadiness.js';
 import {advanceMchsDeviceCommand} from '../lib/mchsDeviceCommandLedger.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
 import http from 'node:http';
@@ -274,6 +276,45 @@ router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
   isolatedTrialEnabled:process.env.MCHS_ISOLATED_AGENT_TRIAL_START_ENABLED==='true',
   deviceTrialBound:req.radioDevice.id===process.env.MCHS_AGENT_LAB_DEVICE_ID
  });
+ // Separate, explicitly opted-in headphone test. Never replaces STOP/HALT,
+ // grants public playback, or upgrades Android bridge auth to official provenance.
+ if(process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED==='true'&&
+    selected.reason==='NO_START_QUEUED'&&!state.haltEpoch){
+  const channels=(process.env.MCHS_MISSILE_TRUSTED_CHANNEL_IDS||'').split(',')
+   .map(x=>x.trim()).filter(Boolean);
+  const auto=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581493)`;
+   const autoKey='mchs_agent_isolated_android_auto_v1_'+req.radioDevice.id;
+   const [autoRow,readyRow,historyRow,events]=await Promise.all([
+    tx.setting.findUnique({where:{key:autoKey}}),
+    tx.setting.findUnique({where:{key:'mchs_agent_isolated_readiness_v1_'+req.radioDevice.id}}),
+    tx.setting.findUnique({where:{key:'mchs_agent_event_execution_history_v1_'+req.radioDevice.id}}),
+    tx.safetyMchsEvent.findMany({where:{source:'MCHS_ANDROID'},
+     orderBy:{receivedAt:'desc'},take:40,
+     select:{id:true,source:true,sourceEventId:true,channelId:true,
+      title:true,body:true,occurredAt:true,region:true}})
+   ]);
+   let prior;try{prior=JSON.parse(autoRow?.value||'null');}catch{prior=null;}
+   const ready=readMchsAgentReadiness(readyRow?.value);
+   const observations=readMchsExecutionObservationHistory(historyRow?.value);
+   const result=advanceIsolatedAndroidAutoFeed(prior,{
+    events,observations,readiness:ready,allowedChannels:channels,
+    dangerRepeats:Number(process.env.MCHS_ISOLATED_DANGER_REPEATS||1)
+   });
+   // Persist replay state transactionally, never requeue a delivered event.
+   const value=JSON.stringify(result.state);
+   await tx.setting.upsert({where:{key:autoKey},
+    create:{key:autoKey,value},update:{value}});
+   return result;
+  });
+  if(auto.command)return res.json({version:1,command:auto.command,
+   halted:false,executionEnabled:true,automaticPlaybackEnabled:false,
+   reason:auto.reason,isolatedHeadphonesOnly:true,haltEpoch:state.haltEpoch});
+  if(['ALREADY_QUEUED','AWAITING_LOCAL_COMPLETION','NO_NEW_ANDROID_EVENT'].includes(auto.reason))
+   return res.json({version:1,command:null,halted:false,
+    executionEnabled:false,automaticPlaybackEnabled:false,
+    reason:auto.reason,isolatedHeadphonesOnly:true,haltEpoch:state.haltEpoch});
+ }
  res.json({version:1,...selected,haltEpoch:state.haltEpoch});
 }));
 router.post('/agent/mchs-execution-command-receipt',deviceAuth,safe(async(req,res)=>{

@@ -72,6 +72,11 @@ export default function MchsAgentExecutionObservations({token}){
    {!readiness&&!readinessError&&<p>Проверка готовности…</p>}
    {readiness&&<div className="space-y-2">
     <p>Учебный START: <strong>{readiness.ready?'Готов':'Пока недоступен'}</strong>. В очередь не поставлен.</p>
+    <p>Автоматическое Android-испытание (только наушники): <strong>
+     {readiness.isolatedAndroidAutoTrialEnabled?'Включено на сервере':'Отключено на сервере'}
+    </strong>. Реальное вещание не затрагивается.</p>
+    {readiness.isolatedAndroidAutoTrialEnabled&&!readiness.androidChannelAllowlistConfigured&&
+     <p className="text-amber-700 dark:text-amber-300">Не указан разрешённый канал Android-уведомлений: автоматическое испытание не начнётся.</p>}
     {readiness.agentReadiness?<p className="text-xs text-slate-600 dark:text-slate-300">
      Windows Agent: изолированный режим подтверждён самим Agent; локальные WAV заявлены,
      центральные аудиопакеты: <strong>{readiness.agentReadiness.centralPacketsConfirmed?'получены':'не подтверждены'}</strong>.
