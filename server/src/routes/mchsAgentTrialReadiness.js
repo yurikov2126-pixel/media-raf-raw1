@@ -1,5 +1,6 @@
 import {Router} from 'express';
 import {createHash} from 'node:crypto';
+import {parseRadioAgentBearerToken} from '../lib/radioAgentBearerToken.js';
 import {normalizeMchsAgentReadiness,readMchsAgentReadiness} from '../lib/mchsAgentIsolatedReadiness.js';
 import {auth,requireRole} from '../middleware/auth.js';
 import {prisma} from '../lib/prisma.js';
@@ -16,7 +17,7 @@ const readyKey=id=>'mchs_agent_isolated_readiness_v1_'+id;
 router.post('/agent/mchs-isolated-readiness',async(req,res,next)=>{
  try{
   res.setHeader('Cache-Control','no-store');
-  const token=/^Bearer (\\S+)$/.exec(req.headers.authorization||'')?.[1];
+  const token=parseRadioAgentBearerToken(req.headers.authorization);
   if(!token||!/^rr_[a-f0-9]{64}$/.test(token))
    return res.status(401).json({error:'DEVICE_TOKEN_REQUIRED'});
   const device=await prisma.radioDevice.findUnique({where:{
