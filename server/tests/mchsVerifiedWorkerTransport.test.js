@@ -131,3 +131,44 @@ test('unknown START status and failed STOP do not permit a second event',async()
  assert.equal(starts,1);
  assert.equal((await a.stop(spec)).confirmed,false);
 });
+
+
+test('bound trial sends identity once and verifies actual Worker completion receipt',async()=>{
+ const event={...spec,eventId:'bound-1',repeats:3};
+ let active=false,seen=0,starts=0,binding=null;
+ const request=async(action,assetId,repeats,meta)=>{
+  if(action==='START'){
+   starts++;active=true;binding=meta;return {httpStatus:200,data:{ok:true,revision:21}};
+  }
+  if(action==='STOP'){active=false;return {httpStatus:200,data:{ok:true}};}
+  if(!active)return {httpStatus:200,data:{active:false,revision:20}};
+  seen++;
+  if(seen===1)return {httpStatus:200,data:{active:true,revision:21,
+   repeats:3,assetId:event.assetId,trainingEvent:{eventId:event.eventId,
+    eventType:event.eventType,startRevision:21}}};
+  return {httpStatus:200,data:{active:false,revision:22,repeats:3,completedRepeats:3,
+   lastStopReason:'FILE_COMPLETED',lastTrainingEvent:{eventId:event.eventId,
+    eventType:event.eventType,assetId:event.assetId,startRevision:21,
+    revision:22,trialOnly:true,naturalCompletion:true}}};
+ };
+ const adapter=createMchsVerifiedWorkerTransport({
+  request,isolatedOutputVerified:true,eventBindingRequired:true,
+  sleep:async()=>{},pollMs:1});
+ assert.equal((await adapter.start(event)).confirmed,true);
+ assert.deepEqual(binding,{eventId:event.eventId,eventType:event.eventType,trialOnly:true});
+ assert.equal((await adapter.waitUntilCompleted(event)).completed,true);
+ assert.equal(starts,1);
+});
+test('unbound shared Worker completion never satisfies strict event receipt',async()=>{
+ const event={...spec,eventId:'bound-2',repeats:2};
+ let active=false;
+ const request=async(action)=>{
+  if(action==='START'){active=true;return {httpStatus:200,data:{ok:true,revision:10}};}
+  if(action==='STOP'){active=false;return {httpStatus:200,data:{ok:true}};}
+  return {httpStatus:200,data:{active,revision:active?10:9,
+   assetId:event.assetId,repeats:2,completedRepeats:0}};
+ };
+ const adapter=createMchsVerifiedWorkerTransport({
+  request,isolatedOutputVerified:true,eventBindingRequired:true});
+ assert.equal((await adapter.start(event)).reason,'START_UNCONFIRMED');
+});

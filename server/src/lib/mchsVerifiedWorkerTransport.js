@@ -5,7 +5,7 @@ import {stopAndVerifyMchsWorker} from './mchsWorkerStopVerification.js';
  * adapter is NEVER authorized to automatically dispatch public alerts.
  */
 export function createMchsVerifiedWorkerTransport({
- request,isolatedOutputVerified=false,pollMs=500,trackTimeoutMs=300000,
+ request,isolatedOutputVerified=false,eventBindingRequired=false,pollMs=500,trackTimeoutMs=300000,
  now=()=>Date.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))
 }={}){
  if(typeof request!=='function')throw new TypeError('WORKER_REQUEST_REQUIRED');
@@ -25,7 +25,8 @@ export function createMchsVerifiedWorkerTransport({
     return reject('WORKER_BUSY_OR_UNAVAILABLE');
    // The Worker owns all repetitions. Never issue a second START for a repeat:
    // that would release the station mixer and leak music between repetitions.
-   const start=await request('START',spec.assetId,spec.repeats);
+   const start=await request('START',spec.assetId,spec.repeats,
+    {eventId:spec.eventId,eventType:spec.eventType,trialOnly:true});
    if(start?.httpStatus!==200||start.data?.ok!==true)
     return reject('START_REJECTED');
    if(!Number.isInteger(start.data?.revision)){
@@ -45,7 +46,11 @@ export function createMchsVerifiedWorkerTransport({
     if(active?.httpStatus!==200||active.data?.active!==true||
        active.data?.assetId!==spec.assetId||
        active.data?.revision!==session.revision||
-       active.data?.repeats!==spec.repeats)
+       active.data?.repeats!==spec.repeats||
+       (eventBindingRequired&&(
+        active.data.trainingEvent?.eventId!==spec.eventId||
+        active.data.trainingEvent?.eventType!==spec.eventType||
+        active.data.trainingEvent?.startRevision!==session.revision)))
      throw Error('START_UNCONFIRMED');
     return {eventId:spec.eventId,eventType:spec.eventType,action:'START',
      confirmed:true,playbackState:'ACTIVE',confirmedAt:new Date(now()).toISOString()};
@@ -81,6 +86,15 @@ export function createMchsVerifiedWorkerTransport({
       current.completedRepeats=snapshot.completedRepeats;
       continue;
      }
+     const receipt=snapshot.lastTrainingEvent;
+     if(eventBindingRequired&&(
+        receipt?.eventId!==current.eventId||
+        receipt?.eventType!==current.eventType||
+        receipt?.assetId!==current.assetId||
+        receipt?.startRevision!==current.revision||
+        receipt?.revision!==current.revision+1||
+        receipt?.naturalCompletion!==true||
+        receipt?.trialOnly!==true))throw Error('EVENT_COMPLETION_NOT_BOUND');
      if(snapshot.active!==false||
         snapshot.revision!==current.revision+1||
         snapshot.lastStopReason!=='FILE_COMPLETED'||

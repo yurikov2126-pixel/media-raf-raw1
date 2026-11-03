@@ -19,6 +19,7 @@ import {createMchsLabPcmStream} from '../src/lib/mchsWorkerLabPcmStream.js';
 import {makeMchsLabSessionChunk} from '../src/lib/mchsWorkerLabSessionAudio.js';
 import http from 'node:http';
 import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
+import {createMchsWorkerEventJournal} from '../src/lib/mchsWorkerEventJournal.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -335,6 +336,7 @@ const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUF
 // 48kHz stereo PCM16LE recording on the server and explicitly enable this mode.
 const trainingEnabled=process.env.RADIO_MCHS_TRAINING_STREAM_ENABLED==='true';
 const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled});
+const trainingEventJournal=createMchsWorkerEventJournal();
 let trainingAssetId=null;
 let trainingCommandEpoch=0;
 let trainingPreparing=false;
@@ -393,6 +395,7 @@ function invalidateTrainingSource(reason){
 }
 function trainingStatus(){
  const state=trainingOverlay.snapshot();
+ trainingEventJournal.observe(state);
  if(state.active!==trainingAudioWasActive){
   trainingAudioWasActive=state.active;
   invalidateTrainingSource(state.active?'PREEMPT':'RESELECT_CURRENT_AUTHORITY');
@@ -2124,12 +2127,14 @@ const server=http.createServer((req,res)=>{
       res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
       const overlay=trainingStatus();
       res.end(JSON.stringify({...overlay,assetId:overlay.active?trainingAssetId:null,
+       trainingEvent:trainingEventJournal.current(),lastTrainingEvent:trainingEventJournal.last(),
        audioQuality:assessTrainingAudioQuality({clock:lastTrainingPcmClock,overlay}),
        lastPcmClock:lastTrainingPcmClock}));return;
     }
     let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
     req.on('end',async()=>{
-      let action,assetId,repeats;try{({action,assetId,repeats}=JSON.parse(raw));}catch{}
+      let action,assetId,repeats,eventId,eventType,trialOnly;
+      try{({action,assetId,repeats,eventId,eventType,trialOnly}=JSON.parse(raw));}catch{}
       if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
       let result;
       if(action==='STOP'){trainingCommandEpoch++;result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
@@ -2140,7 +2145,37 @@ const server=http.createServer((req,res)=>{
           const epoch=++trainingCommandEpoch;
           const pcm=await loadTrainingAlarm(assetId);
           if(epoch!==trainingCommandEpoch){pcm.close();result={ok:false,reason:'CANCELLED_BY_STOP',...trainingOverlay.snapshot()};}
-          else {result=trainingOverlay.startWith(pcm,{repeats:repeats??1});if(!result.ok)pcm.close();if(result.ok){trainingAssetId=assetId;trainingStatus();}}
+          else {
+           // Explicitly bound sessions require an isolated-trial identity.
+           // An unbound manual training request never becomes event evidence.
+           const bindingRequested=eventId!==undefined||eventType!==undefined||trialOnly!==undefined;
+           const invalidBinding=bindingRequested&&(
+            trialOnly!==true||typeof eventId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(eventId)||
+            !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(eventType)||
+            (eventType==='MISSILE_ALL_CLEAR'&&(repeats??1)!==1)||
+            trainingEventJournal.current()!==null||
+            trainingEventJournal.get(eventId)!==null
+           );
+           if(invalidBinding){
+            pcm.close();
+            result={ok:false,reason:'INVALID_OR_REPLAYED_TRAINING_EVENT',...trainingOverlay.snapshot()};
+           }else{
+            result=trainingOverlay.startWith(pcm,{repeats:repeats??1});
+            if(!result.ok)pcm.close();
+            if(result.ok){
+             trainingAssetId=assetId;
+             if(bindingRequested){
+              const bound=trainingEventJournal.begin({eventId,eventType,assetId,
+               repeats:repeats??1,revision:result.revision,trialOnly:true});
+              if(!bound.ok){
+               result={ok:false,reason:bound.reason,...trainingOverlay.stop('INVALID_TRIAL_BINDING')};
+               trainingStatus();
+              }
+             }
+             if(result.ok)trainingStatus();
+            }
+           }
+          }
         }
         catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
         finally{trainingPreparing=false;}
