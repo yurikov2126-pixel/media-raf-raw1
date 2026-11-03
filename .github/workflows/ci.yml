@@ -46,6 +46,9 @@ jobs:
       - name: Worker ALARM event journal regression tests
         run: node --test tests/mchsWorkerEventJournal.test.js tests/mchsVerifiedWorkerTransport.test.js tests/radioMchsTrainingOverlay.test.js
 
+      - name: ALARM natural dual-channel lifecycle tests
+        run: node --test tests/mchsTwoChannelExecutor.test.js tests/mchsIsolatedEventDispatcher.test.js tests/mchsVerifiedWorkerTransport.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
