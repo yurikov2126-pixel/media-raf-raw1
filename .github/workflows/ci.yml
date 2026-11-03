@@ -76,7 +76,7 @@ jobs:
           python-version: '3.12'
       - name: Headphones natural completion and fault recovery
         working-directory: radio-agent/windows
-        run: python -m unittest -v test_mchs_headphones_trial test_mchs_local_handover test_mchs_vlc_handover_pilot test_mchs_central_return_monitor test_mchs_lab_end_evidence test_mchs_two_stage_headphones_pilot test_mchs_integrated_headphones_cycle test_mchs_event_admission
+        run: python -m unittest -v test_mchs_headphones_trial test_mchs_local_handover test_mchs_vlc_handover_pilot test_mchs_central_return_monitor test_mchs_lab_end_evidence test_mchs_two_stage_headphones_pilot test_mchs_integrated_headphones_cycle test_mchs_event_admission test_mchs_event_audio_controller
 
   client:
     name: Client — build
