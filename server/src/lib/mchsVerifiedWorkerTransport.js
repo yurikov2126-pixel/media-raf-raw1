@@ -26,9 +26,15 @@ export function createMchsVerifiedWorkerTransport({
    // The Worker owns all repetitions. Never issue a second START for a repeat:
    // that would release the station mixer and leak music between repetitions.
    const start=await request('START',spec.assetId,spec.repeats);
-   if(start?.httpStatus!==200||start.data?.ok!==true||
-      !Number.isInteger(start.data?.revision))
-    return reject('START_REJECTED_OR_REVISION_MISSING');
+   if(start?.httpStatus!==200||start.data?.ok!==true)
+    return reject('START_REJECTED');
+   if(!Number.isInteger(start.data?.revision)){
+    // START may have succeeded even with a malformed reply: stop it before
+    // considering a new event.
+    const stopped=await stopAndVerifyMchsWorker({request});
+    if(!stopped.confirmed)return reject('START_UNCERTAIN_STOP_UNCONFIRMED');
+    return reject('START_REVISION_MISSING');
+   }
    session={...spec,revision:start.data.revision,aborted:false,
     startedAt:now(),completedRepeats:0};
    try{
