@@ -54,3 +54,12 @@ test('expired STOP may be requeued, stale receipt cannot confirm newer STOP',()=
  assert.equal(advance(second.state,{type:'RECEIPT',receipt:stale},
   {nowMs:t+16001}).reason,'COMMAND_RECEIPT_MISMATCH');
 });
+
+test('unacknowledged STOP for one event cannot be silently overwritten by another',()=>{
+ const first=advance({},event,{nowMs:t});
+ const second=advance(first.state,{type:'QUEUE_STOP',eventId:'different',
+  eventType:'MISSILE_ALL_CLEAR'},{nowMs:t+1000});
+ assert.equal(second.ok,false);
+ assert.equal(second.reason,'PRIOR_STOP_NOT_ACKNOWLEDGED');
+ assert.equal(second.state.pending.eventId,event.eventId);
+});
