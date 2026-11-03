@@ -99,6 +99,33 @@ class TwoStageHeadphonesTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     run_isolated_two_stage_pilot(**args)
 
+    def test_110_second_pcm16_stereo_wav_is_accepted_above_old_20_mib_limit(self):
+        with tempfile.TemporaryDirectory() as td:
+            file=Path(td)/'long-clear.wav'
+            second=b'\\x01\\x00' * 2 * 48000
+            with wave.open(str(file),'wb') as out:
+                out.setnchannels(2)
+                out.setsampwidth(2)
+                out.setframerate(48000)
+                for _ in range(110):
+                    out.writeframesraw(second)
+            self.assertGreater(file.stat().st_size,20*1024*1024)
+            result=verify_local_training_wav(file)
+            self.assertEqual(result['duration'],110)
+
+    def test_duration_above_two_minutes_rejected_even_under_size_cap(self):
+        with tempfile.TemporaryDirectory() as td:
+            file=Path(td)/'over-120.wav'
+            second=b'\\x01\\x00' * 48000
+            with wave.open(str(file),'wb') as out:
+                out.setnchannels(1)
+                out.setsampwidth(2)
+                out.setframerate(48000)
+                for _ in range(121):
+                    out.writeframesraw(second)
+            with self.assertRaisesRegex(ValueError,'WAV_DURATION_OUT_OF_RANGE'):
+                verify_local_training_wav(file)
+
     def test_invalid_wav_content_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             file=Path(td)/'bad.wav'
