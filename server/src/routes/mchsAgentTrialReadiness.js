@@ -61,7 +61,11 @@ router.get('/mchs-agent-trial-start-readiness',auth,requireRole('ADMIN'),async(r
    deviceBound:!!deviceId,trialEnabled,
    dispatchHalted:dispatch.halted,deviceLedgerHalted:deviceState?.halted!==false,
    pendingAction:deviceState?.pending?.action||null,event
-  }),agentReadiness:agentReadiness?{
+  }),isolatedAndroidAutoTrialEnabled:
+   process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED==='true',
+   isolatedAndroidAutoTrialOnly:true,
+   androidChannelAllowlistConfigured:!!(process.env.MCHS_MISSILE_TRUSTED_CHANNEL_IDS||'').trim(),
+   agentReadiness:agentReadiness?{
    fresh:true,mode:agentReadiness.mode,
    centralPacketsConfirmed:agentReadiness.centralPacketsConfirmed,
    operatorIsolationAttested:agentReadiness.operatorIsolationAttested,
