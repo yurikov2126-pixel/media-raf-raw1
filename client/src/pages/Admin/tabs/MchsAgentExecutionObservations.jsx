@@ -72,6 +72,13 @@ export default function MchsAgentExecutionObservations({token}){
    {!readiness&&!readinessError&&<p>Проверка готовности…</p>}
    {readiness&&<div className="space-y-2">
     <p>Учебный START: <strong>{readiness.ready?'Готов':'Пока недоступен'}</strong>. В очередь не поставлен.</p>
+    {readiness.agentReadiness?<p className="text-xs text-slate-600 dark:text-slate-300">
+     Windows Agent: изолированный режим подтверждён самим Agent; локальные WAV заявлены,
+     центральные аудиопакеты: <strong>{readiness.agentReadiness.centralPacketsConfirmed?'получены':'не подтверждены'}</strong>.
+     Отчёт: {when(readiness.agentReadiness.receivedAt)}. Это сообщение устройства, не проверка проводки PA.
+    </p>:<p className="text-xs text-slate-600 dark:text-slate-300">
+     Нет свежего сообщения об изолированном режиме Windows Agent (не старше 30 секунд).
+    </p>}
     <ul className="list-disc pl-5 space-y-1">
      {(readiness.reasons||[]).map(reason=><li key={reason}>{readinessLabels[reason]||reason}</li>)}
     </ul>
