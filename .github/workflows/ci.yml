@@ -37,6 +37,9 @@ jobs:
       - name: Single-session ALARM Worker transport regressions
         run: node --test tests/mchsVerifiedWorkerTransport.test.js tests/radioMchsTrainingOverlay.test.js tests/mchsTrainingSequence.test.js
 
+      - name: Windows Agent ALARM completion-report contract tests
+        run: node --test tests/mchsAgentPlaybackReport.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
