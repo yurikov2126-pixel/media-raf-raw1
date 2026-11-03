@@ -10,7 +10,7 @@ function fakeWorker({complete=true,wrongRevision=false,shortRepeats=false,
  let starts=0,stops=0,polls=0;
  const request=async(action,id,count)=>{
   if(action==='START'){
-   starts++;active=true;assetId=id;repeats=count;completedRepeats=0;
+   starts++;active=true;assetId=id;repeats=count;completedRepeats=0;polls=0;
    revision++;return {httpStatus:200,data:{ok:true,revision}};
   }
   if(action==='STOP'){
