@@ -35,6 +35,7 @@ from mchs_lab_resume import should_stop_auto_lab
 from mchs_lab_observer_failsafe import observer_failsafe
 from mchs_agent_stop_evidence import trial_stop_evidence
 from mchs_central_return_monitor import CentralReturnMonitor
+from mchs_lab_end_evidence import assess_lab_trial_end
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -706,7 +707,22 @@ def run(args, token):
             if trial_reason is not None or MCHS_AUDIO_STOP.is_set():
                 if trial_reason:
                     print('MCHS_AUDIO_TRIAL_STOP_REASON',trial_reason,flush=True)
+                requested_stop=MCHS_AUDIO_STOP.is_set()
                 MCHS_AUDIO_STOP.clear()
+                lab_end_evidence=None
+                if trial_vlc is not None and trial_relay is not None:
+                    with trial_relay.metrics_lock:
+                        eof_at=trial_relay.stream_eof_at
+                        forwarded=trial_relay.bytes_forwarded
+                        stream_failed=trial_relay.stream_failed
+                        stream_capped=trial_relay.stream_capped
+                    lab_end_evidence=assess_lab_trial_end(
+                        stop_reason=trial_reason,
+                        vlc_exit_code=trial_vlc.poll(),pcm_eof_at=eof_at,
+                        bytes_forwarded=forwarded,stream_failed=stream_failed,
+                        capped=stream_capped,stopped_by_operator=requested_stop)
+                    print('MCHS_LAB_PCM_END_EVIDENCE',
+                          lab_end_evidence['classification'],flush=True)
                 if trial_relay is not None:
                     trial_relay.closing.set()
                 stopped_process=trial_vlc
@@ -723,7 +739,9 @@ def run(args, token):
                 if stopped_process is not None:
                     evidence={'mode':'LAB_PROCESS_ONLY','kind':'TRIAL_VLC_STOP',
                               **trial_stop_evidence(stopped_process,relay_closed),
-                              'reason':'OPERATOR_STOP' if not trial_reason else 'WATCHDOG'}
+                              'reason':'OPERATOR_STOP' if requested_stop else (
+                                  'PCM_EOF_OBSERVED' if lab_end_evidence and
+                                  lab_end_evidence['naturalPcmEndObserved'] else 'WATCHDOG')}
                     threading.Thread(target=report_trial_stop,args=(evidence,),daemon=True).start()
                     if evidence['stopConfirmed']:
                         threading.Thread(target=report_trial_vlc_state,
