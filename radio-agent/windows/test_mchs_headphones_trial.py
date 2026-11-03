@@ -84,18 +84,11 @@ class HeadphonesTrialTests(unittest.TestCase):
             vlc=Path(td)/'vlc.exe'
             vlc.write_bytes(b'fixture')
             logs=[]
-            class Completed:
-                def status(self):
-                    return dict(state='COMPLETED',naturalCompletion=True,
-                        completedRepeats=3,expectedRepeats=3,
-                        processRunning=False,failureReason=None)
             result=run_local_trial('https://station.example','rr_example',vlc,
                 repeats=3,natural_completion=True,
                 opener=lambda req,timeout:FakeResponse(fixture()),
                 ask=lambda prompt:'ISOLATED',output=lambda *x:logs.append(x),
-                launch=lambda path:FakeProcess(),
-                wait_completion=lambda session,timeout_s:wait_for_natural_completion(
-                    Completed(),clock=lambda:0,sleep=lambda _:None))
+                launch=lambda path:FakeProcess())
             self.assertTrue(result['naturalCompletion'])
             self.assertTrue(any(x[0]=='LOCAL_COMPLETE' for x in logs))
             self.assertFalse(any(x[0]=='LOCAL_STOP' for x in logs))
