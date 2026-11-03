@@ -46,8 +46,29 @@ def verify_self_test(file):
             raise ValueError('SILENT_SELF_TEST')
     return hashlib.sha256(file.read_bytes()).hexdigest()
 
+def wait_for_natural_completion(session, *, timeout_s=60,
+                                clock=time.monotonic, sleep=time.sleep):
+    """Require completed process exits for every repeat; never infer success from START."""
+    if not isinstance(timeout_s,(int,float)) or timeout_s<=0 or timeout_s>600:
+        raise ValueError('INVALID_COMPLETION_TIMEOUT')
+    deadline=clock()+timeout_s
+    while clock()<deadline:
+        state=session.status()
+        if (state['state']=='COMPLETED' and
+            state['naturalCompletion'] is True and
+            state['completedRepeats']==state['expectedRepeats'] and
+            state['processRunning'] is False):
+            return state
+        if state['state']=='STOPPED' or state['failureReason']:
+            raise RuntimeError('LOCAL_COMPLETION_FAILED_'+str(state['failureReason']))
+        sleep(0.1)
+    raise TimeoutError('LOCAL_COMPLETION_TIMEOUT')
+
+
 def run_local_trial(server,token,vlc,*,repeats=5,opener=urlopen,
-                    ask=input,output=print,launch=None):
+                    ask=input,output=print,launch=None,
+                    natural_completion=False,completion_timeout_s=60,
+                    wait_completion=wait_for_natural_completion):
     if type(repeats) is not int or repeats not in range(1,6):
         raise ValueError('INVALID_REPEATS')
     executable=Path(vlc).resolve()
@@ -76,6 +97,19 @@ def run_local_trial(server,token,vlc,*,repeats=5,opener=urlopen,
         if not result['accepted']:
             raise RuntimeError('LOCAL_START_DENIED_'+str(result['reason']))
         output('LOCAL_START',session.status())
+        if natural_completion:
+            try:
+                completed=wait_completion(session,timeout_s=completion_timeout_s)
+                output('LOCAL_COMPLETE',completed)
+                return completed
+            except BaseException:
+                # On timeout, interruption, or failed playback ensure no local
+                # VLC process remains before bubbling the failure to operator.
+                stopped=session.stop()
+                output('LOCAL_FAULT_STOP',stopped)
+                if not stopped.get('stopConfirmed'):
+                    raise RuntimeError('LOCAL_STOP_NOT_CONFIRMED')
+                raise
         try:
             ask('Press Enter to STOP the test playback: ')
         finally:
@@ -90,9 +124,14 @@ def main():
     parser.add_argument('--server',default='https://mediarafraw.ru')
     parser.add_argument('--vlc',required=True)
     parser.add_argument('--repeats',type=int,default=5)
+    parser.add_argument('--natural',action='store_true',
+                        help='Wait for every WAV repeat to finish naturally')
+    parser.add_argument('--completion-timeout',type=float,default=60)
     args=parser.parse_args()
     run_local_trial(args.server,os.environ.get('RADIO_AGENT_TOKEN',''),
-                    args.vlc,repeats=args.repeats)
+                    args.vlc,repeats=args.repeats,
+                    natural_completion=args.natural,
+                    completion_timeout_s=args.completion_timeout)
 
 if __name__=='__main__':
     main()

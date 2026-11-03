@@ -66,6 +66,18 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:unused@localhost:5432/unused
 
+  windows-agent-tests:
+    name: Windows Agent — isolated headphone playback
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Headphones natural completion and fault recovery
+        working-directory: radio-agent/windows
+        run: python -m unittest -v test_mchs_headphones_trial
+
   client:
     name: Client — build
     runs-on: ubuntu-latest
