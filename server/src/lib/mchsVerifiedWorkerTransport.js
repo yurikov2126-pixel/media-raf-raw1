@@ -32,7 +32,10 @@ export function createMchsVerifiedWorkerTransport({
     // START may have succeeded even with a malformed reply: stop it before
     // considering a new event.
     const stopped=await stopAndVerifyMchsWorker({request});
-    if(!stopped.confirmed)return reject('START_UNCERTAIN_STOP_UNCONFIRMED');
+    if(!stopped.confirmed){
+     session={...spec,revision:null,aborted:true,startedAt:now(),completedRepeats:0};
+     return reject('START_UNCERTAIN_STOP_UNCONFIRMED');
+    }
     return reject('START_REVISION_MISSING');
    }
    session={...spec,revision:start.data.revision,aborted:false,
