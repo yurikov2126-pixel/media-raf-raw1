@@ -41,15 +41,20 @@ class IsolatedEventAudioController:
         if not isinstance(state,dict) or state.get('version')!=1:
             return ('REJECTED','INVALID_PROTOCOL')
         command=state.get('command')
-        if state.get('halted') is True:
+        # STOP is processed even if the server simultaneously enters HALT,
+        # preserving the event-bound command audit and replay fence.
+        if isinstance(command,dict) and command.get('action')=='STOP':
+            action='STOP'
+        elif state.get('halted') is True:
             if self.playing:
                 self.failure='SERVER_HALT'
                 self.stop_requested=True
                 return ('STOP_AUDIO','SERVER_HALT')
             return ('NO_ACTION','HALTED')
-        if not isinstance(command,dict):
+        elif not isinstance(command,dict):
             return ('NO_ACTION','NO_COMMAND')
-        action=command.get('action')
+        else:
+            action=command.get('action')
         if action=='STOP':
             # A STOP for an unrelated event must not hijack the active WAV.
             if self.busy and command.get('eventId')!=self.event:
