@@ -34,6 +34,9 @@ jobs:
       - name: Android ALARM event-binding regression tests
         run: node --test tests/mchsAndroidAlarmBinding.test.js tests/mchsAndroidObservationMonitor.test.js tests/mchsAndroidIntentLedger.test.js
 
+      - name: Single-session ALARM Worker transport regressions
+        run: node --test tests/mchsVerifiedWorkerTransport.test.js tests/radioMchsTrainingOverlay.test.js tests/mchsTrainingSequence.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
