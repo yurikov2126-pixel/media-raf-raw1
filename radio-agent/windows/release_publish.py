@@ -95,15 +95,23 @@ def publish(*, repo, commit_sha, asset_path, tagged=False):
         args += ['--title', f'MEDIA RAF RAW - Radio Agent {version}',
                  '--notes', f'Windows Radio Agent {version}. VLC required. '
                  'Amplifier/PA output remains separately controlled.']
-        # No asset in create: a partially created release can be recovered with
-        # the separately retried and SHA-checked upload below.
-        code, _, err = gh(*args)
-        if code:
-            # Creation may have succeeded even when GitHub returned HTTP 500.
-            time.sleep(3)
-        release = lookup_release(repo, tag)
-        if not release:
-            raise PublishFailure('GitHub release was not created: ' + err[-500:])
+        # GitHub may return HTTP 500 before OR after creating the release.
+        # Re-read release-by-tag after every attempt and retry only if missing.
+        # Never replace an existing immutable release or its published asset.
+        last_error = ''
+        for attempt in range(6):
+            code, _, err = gh(*args)
+            last_error = err
+            release = lookup_release(repo, tag)
+            if release:
+                print('RELEASE_CREATE_CONFIRMED', tag, 'attempt', attempt + 1)
+                break
+            if code and not any(x.lower() in err.lower() for x in RETRYABLE):
+                raise PublishFailure('GitHub Release creation rejected: ' + err[-500:])
+            if attempt == 5:
+                raise PublishFailure(
+                    'GitHub Release creation failed after 6 attempts: ' + last_error[-500:])
+            time.sleep(min(30, 3 * (attempt + 1)))
     if release.get('draft') or release.get('prerelease'):
         raise PublishFailure('Unexpected draft/prerelease: manual review required')
     if release.get('tag_name') != tag:
