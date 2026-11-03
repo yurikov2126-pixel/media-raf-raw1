@@ -98,3 +98,22 @@ test('session-mismatched completion request cannot consume another event',async(
  assert.equal((await a.waitUntilCompleted({...spec,eventId:'other'})).reason,'SESSION_MISMATCH');
  assert.equal((await a.waitUntilCompleted(spec)).completed,true);
 });
+
+test('malformed START acknowledgement triggers verified STOP instead of replay',async()=>{
+ let active=false,stops=0,starts=0;
+ const request=async action=>{
+  if(action==='START'){
+   starts++;active=true;return {httpStatus:200,data:{ok:true}};
+  }
+  if(action==='STOP'){
+   stops++;active=false;return {httpStatus:200,data:{ok:true}};
+  }
+  return {httpStatus:200,data:{active,revision:2,
+   lastStopReason:active?null:'OPERATOR_STOP'}};
+ };
+ const a=createMchsVerifiedWorkerTransport({request,isolatedOutputVerified:true});
+ assert.equal((await a.start(spec)).reason,'START_REVISION_MISSING');
+ assert.equal(starts,1);
+ assert.equal(stops,1);
+ assert.equal(active,false);
+});
