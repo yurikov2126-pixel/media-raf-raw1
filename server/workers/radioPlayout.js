@@ -1,3 +1,4 @@
+import {createIsolatedPcmWavStream} from '../src/lib/mchsIsolatedWav.js';
 #!/usr/bin/env node
 import {assessTrainingAudioQuality} from '../src/lib/mchsTrainingAudioQuality.js';
 import {createAlarmPcmClock} from '../src/lib/mchsAlarmPcmClock.js';
@@ -2076,6 +2077,43 @@ const server=http.createServer((req,res)=>{
       res.writeHead(result.ok===false?400:200,{'Content-Type':'application/json','Cache-Control':'no-store'});
       res.end(JSON.stringify({...result,playbackStarted:false}));
     });return;
+  }
+  // Separate read-only test output. This path bypasses the public MP3
+  // encoder and the station training overlay altogether.
+  if(req.method==='GET'&&req.url?.startsWith('/mchs-isolated-wav/')){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    if(process.env.RADIO_MCHS_ISOLATED_WAV_ENABLED!=='true'){
+      res.writeHead(404).end();return;
+    }
+    const assetId=req.url.slice('/mchs-isolated-wav/'.length);
+    if(!/^[A-Za-z0-9_-]{1,120}$/.test(assetId)){
+      res.writeHead(400).end();return;
+    }
+    void (async()=>{
+      let wav;
+      try{
+        const pcm=await loadTrainingAlarm(assetId);
+        try{wav=createIsolatedPcmWavStream(pcm);}catch(error){pcm.close();throw error;}
+        res.writeHead(200,{'Content-Type':'audio/wav','Cache-Control':'no-store',
+          'Content-Length':wav.header.length+pcm.size,'X-Content-Type-Options':'nosniff'});
+        res.write(wav.header);
+        const tick=setInterval(()=>{
+          try{
+            if(res.destroyed){clearInterval(tick);wav.close();return;}
+            const frame=wav.next();
+            if(!frame){clearInterval(tick);res.end();return;}
+            if(!res.write(frame)){clearInterval(tick);wav.close();res.destroy();}
+          }catch{clearInterval(tick);wav.close();res.destroy();}
+        },20);
+        res.on('close',()=>{clearInterval(tick);wav.close();});
+      }catch(error){
+        if(wav)wav.close();
+        if(!res.headersSent)res.writeHead(404,{'Cache-Control':'no-store'});
+        res.end();
+        console.warn('MCHS_ISOLATED_WAV_DENIED',error?.message||'UNAVAILABLE');
+      }
+    })();
+    return;
   }
   if(req.url==='/mchs-training-stream' && ['GET','POST'].includes(req.method)){
     if(!authorized(req)){res.writeHead(403).end();return;}
