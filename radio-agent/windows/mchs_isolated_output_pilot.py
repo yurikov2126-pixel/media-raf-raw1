@@ -39,6 +39,10 @@ class LocalMonitor(ThreadingHTTPServer):
         self.active = threading.Event()
         self.connected_at = None
         self.last_pcm_at = None
+        self.stream_eof_at = None
+        self.bytes_forwarded = 0
+        self.stream_failed = False
+        self.stream_capped = False
         self.metrics_lock = threading.Lock()
         super().__init__(("127.0.0.1", 0), Handler)
 
@@ -55,6 +59,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(409)
             return
         self.server.active.set()
+        with self.server.metrics_lock:
+            self.server.connected_at = None
+            self.server.last_pcm_at = None
+            self.server.stream_eof_at = None
+            self.server.bytes_forwarded = 0
+            self.server.stream_failed = False
+            self.server.stream_capped = False
         request = Request(
             self.server.server_url + "/api/radio-agent/agent/mchs-lab-pcm",
             headers={"Authorization": "Bearer " + self.server.token},
@@ -78,12 +89,20 @@ class Handler(BaseHTTPRequestHandler):
                 while not STOP.is_set() and total < MAX_PCM_BYTES:
                     block = upstream.read(min(1920, MAX_PCM_BYTES - total))
                     if not block:
+                        with self.server.metrics_lock:
+                            self.server.stream_eof_at = time.monotonic()
                         break
                     self.wfile.write(block)
                     with self.server.metrics_lock:
                         self.server.last_pcm_at = time.monotonic()
+                        self.server.bytes_forwarded += len(block)
                     total += len(block)
+                if total >= MAX_PCM_BYTES:
+                    with self.server.metrics_lock:
+                        self.server.stream_capped = True
         except HTTPError as error:
+            with self.server.metrics_lock:
+                self.server.stream_failed = True
             # Operator can distinguish a 403 device/flag issue from unavailable PCM.
             if not self.server.closing.is_set():
                 print("LAB_STREAM_HTTP_ERROR", error.code, flush=True)
@@ -92,6 +111,8 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
         except (OSError, ValueError, URLError) as error:
+            with self.server.metrics_lock:
+                self.server.stream_failed = True
             if self.server.closing.is_set() or STOP.is_set():
                 print("LAB_STREAM_CLOSED_BY_OPERATOR", flush=True)
             else:
