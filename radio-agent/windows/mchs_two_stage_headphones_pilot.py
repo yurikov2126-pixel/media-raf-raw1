@@ -18,8 +18,10 @@ from mchs_local_handover import run_isolated_handover
 from mchs_vlc_handover_pilot import LocalVlcProgram
 
 
-MAX_WAV_BYTES = 20 * 1024 * 1024
 MAX_WAV_SECONDS = 120
+# PCM16 48 kHz stereo occupies 23,040,000 bytes over 120 seconds.
+# Allow a bounded header/metadata margin without rejecting valid WAV.
+MAX_WAV_BYTES = 32 * 1024 * 1024
 
 
 def verify_local_training_wav(path):
@@ -27,8 +29,10 @@ def verify_local_training_wav(path):
     if path.suffix.lower()!='.wav' or not path.is_file():
         raise ValueError('LOCAL_WAV_REQUIRED')
     size=path.stat().st_size
-    if size<=44 or size>MAX_WAV_BYTES:
-        raise ValueError('INVALID_WAV_LENGTH')
+    if size<=44:
+        raise ValueError('EMPTY_WAV_FILE')
+    if size>MAX_WAV_BYTES:
+        raise ValueError('WAV_FILE_TOO_LARGE')
     with wave.open(str(path),'rb') as source:
         channels=source.getnchannels()
         rate=source.getframerate()
@@ -37,9 +41,10 @@ def verify_local_training_wav(path):
         duration=frames/rate if rate else 0
         if (channels not in (1,2) or rate not in (24000,48000)
                 or width!=2 or source.getcomptype()!='NONE'
-                or not 0<duration<=MAX_WAV_SECONDS
                 or frames*channels*width>size):
             raise ValueError('INVALID_WAV_FORMAT')
+        if not 0<duration<=MAX_WAV_SECONDS:
+            raise ValueError('WAV_DURATION_OUT_OF_RANGE')
         if not any(source.readframes(min(frames,4096))):
             raise ValueError('SILENT_TRAINING_WAV')
     return {'path':path,'duration':duration,
