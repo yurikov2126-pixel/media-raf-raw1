@@ -15,10 +15,9 @@ export function advanceIsolatedAndroidAutoFeed(raw,{events=[],observations=[],
   phase:['CLEAR','DANGER'].includes(old.phase)?old.phase:'CLEAR',
   active:old.active&&typeof old.active==='object'?old.active:null,
   seen:Array.isArray(old.seen)?old.seen.filter(x=>typeof x==='string').slice(-250):[]};
- if(!readiness?.fresh||!readiness.operatorIsolationAttested||
-    !readiness.centralPacketsConfirmed)return deny(state,'ISOLATED_AGENT_NOT_READY');
- if(!Array.isArray(allowedChannels)||!allowedChannels.length)
-  return deny(state,'ANDROID_CHANNEL_ALLOWLIST_EMPTY');
+ // Existing playback cannot be cancelled merely because the central-deck
+ // heartbeat goes stale while VLC is intentionally playing the local WAV.
+ // Explicit emergency HALT remains enforced by the calling route.
  if(state.active){
   const command=state.active.command;
   const result=observations.find(x=>x.eventId===command?.eventId);
@@ -29,10 +28,15 @@ export function advanceIsolatedAndroidAutoFeed(raw,{events=[],observations=[],
      result.centralReturnConfirmed===true&&result.processRunning===false&&
      result.completedRepeats===result.expectedRepeats){
    state.active=null;
-  }else if(command&&Date.parse(command.expiresAt)>nowMs){
+  }else if(command&&Date.parse(command.expiresAt)>nowMs&&
+           readiness?.fresh&&readiness.centralPacketsConfirmed){
    return {state,command,reason:'ALREADY_QUEUED'};
   }else return deny(state,'AWAITING_LOCAL_COMPLETION');
  }
+ if(!readiness?.fresh||!readiness.operatorIsolationAttested||
+    !readiness.centralPacketsConfirmed)return deny(state,'ISOLATED_AGENT_NOT_READY');
+ if(!Array.isArray(allowedChannels)||!allowedChannels.length)
+  return deny(state,'ANDROID_CHANNEL_ALLOWLIST_EMPTY');
  const ordered=[...events].sort((a,b)=>Date.parse(a.occurredAt)-Date.parse(b.occurredAt));
  for(const event of ordered){
   if(event?.source!=='MCHS_ANDROID'||!ID.test(event.id||'')||
