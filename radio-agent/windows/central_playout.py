@@ -34,6 +34,7 @@ from mchs_auto_trial_fence import queued_auto_trial_current
 from mchs_lab_resume import should_stop_auto_lab
 from mchs_lab_observer_failsafe import observer_failsafe
 from mchs_agent_stop_evidence import trial_stop_evidence
+from mchs_central_return_monitor import CentralReturnMonitor
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -304,6 +305,7 @@ class Relay(ThreadingHTTPServer):
         self.server_url=server.rstrip('/')
         self.token=token
         self.last_data=0.0
+        self.packet_count=0
         self.failed=threading.Event()
         self.intentional_disconnect=threading.Event()
         super().__init__(('127.0.0.1',0),RelayHandler)
@@ -333,6 +335,7 @@ class RelayHandler(BaseHTTPRequestHandler):
                         break
                     self.wfile.write(block)
                     self.server.last_data=time.monotonic()
+                    self.server.packet_count+=1
         except (OSError,HTTPError,URLError,RuntimeError) as error:
             if self.server.intentional_disconnect.is_set() or STOP.is_set():
                 print('RELAY_CLOSED_FOR_HANDOVER',flush=True)
@@ -437,6 +440,7 @@ def run(args, token):
     trial_vlc=None
     trial_relay=None
     trial_started_at=0.0
+    central_return_monitor=CentralReturnMonitor()
     output_probe={'state':'UNKNOWN','name':None,'count':None}
     last_output_probe=0.0
     output_probe_busy=threading.Event()
@@ -622,7 +626,16 @@ def run(args, token):
                         event_observation_busy.clear()
                 threading.Thread(target=check_event_observation,daemon=True).start()
             # Playback health is independent from a power-intent HTTP request.
-            active_audio=(primary is not None and primary.poll() is None and
+            primary_alive=primary is not None and primary.poll() is None
+            reserve_alive=fallback is not None and fallback.poll() is None
+            return_result=central_return_monitor.observe(
+                now=now,packet_count=relay.packet_count,
+                last_packet_at=relay.last_data,primary_alive=primary_alive,
+                relay_failed=relay.failed.is_set(),reserve_alive=reserve_alive)
+            if return_result and return_result['status'] in ('CONFIRMED','UNCONFIRMED'):
+                print('MCHS_CENTRAL_RETURN_'+return_result['status'],
+                      return_result.get('reason','FRESH_CENTRAL_PACKETS'),flush=True)
+            active_audio=(primary_alive and
                           not relay.failed.is_set() and now-relay.last_data<=4)
             reserve_audio=fallback is not None and fallback.poll() is None
             PLAYBACK_STATE['mode']='CENTRAL' if active_audio else 'LOCAL_RESERVE' if reserve_audio else 'STOPPED'
@@ -720,6 +733,11 @@ def run(args, token):
                 MCHS_AUDIO_START.clear()
                 network_ok=False  # trigger fresh normal stream probe/reconnect
                 last_probe=0.0
+                if stopped_process is not None and stopped_process.poll() is not None:
+                    if central_return_monitor.arm(
+                            ended_at=time.monotonic(),packet_count=relay.packet_count,
+                            trial_exited=True):
+                        print('MCHS_CENTRAL_RETURN_MONITOR_ARMED',flush=True)
                 print('MCHS_AUDIO_TRIAL_STOPPED_RETURN_TO_PROGRAM',flush=True)
             # Report actual process exit, not merely receipt of a STOP request.
             # Failed acknowledgements are retried on the next main-loop iteration.
