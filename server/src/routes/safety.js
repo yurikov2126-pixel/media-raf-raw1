@@ -5,7 +5,7 @@ import {assessMchsIntegrationProbe} from '../lib/mchsIntegrationProbe.js';
 import {assessMchsTransportChain} from '../lib/mchsTransportChainDiagnostics.js';
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispatchCommand,recordMchsDispatchDryRunAck,haltMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
-import {MCHS_ANDROID_INTENTS_KEY} from '../lib/mchsAndroidIntentLedger.js';
+import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents} from '../lib/mchsAndroidIntentLedger.js';
 import {bindAndroidAlarmCandidates,stageBoundAndroidIntents} from '../lib/mchsAndroidAlarmBinding.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
