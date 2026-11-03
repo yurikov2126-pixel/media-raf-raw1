@@ -63,3 +63,30 @@ test('unacknowledged STOP for one event cannot be silently overwritten by anothe
  assert.equal(second.reason,'PRIOR_STOP_NOT_ACKNOWLEDGED');
  assert.equal(second.state.pending.eventId,event.eventId);
 });
+
+test('isolated START can be staged only with explicit evidence and no HALT',()=>{
+ const a={mode:'ISOLATED_TRIAL',approved:true,publicStreamAllowed:false,
+  amplifierAllowed:false,outputIsolationVerified:true};
+ const input={type:'QUEUE_START',eventId:'evt-safe',eventType:'MISSILE_DANGER',
+  assetId:'alarm1',sha256:'a'.repeat(64),repeats:2,
+  sourceOfficiallyVerified:true,authorization:a};
+ assert.equal(advance({},input,{nowMs:t}).reason,'HALT_ACTIVE');
+ assert.equal(advance({halted:false}, {...input,authorization:{...a,outputIsolationVerified:false}},
+  {nowMs:t}).reason,'ISOLATION_NOT_VERIFIED');
+ const staged=advance({halted:false},input,{nowMs:t});
+ assert.equal(staged.ok,true);
+ assert.equal(staged.state.pending.action,'START');
+ assert.equal(staged.state.pending.trialOnly,true);
+ assert.equal(staged.state.pending.expiresAt,new Date(t+10000).toISOString());
+ assert.equal(advance(staged.state,input,{nowMs:t+1}).reason,'COMMAND_ALREADY_PENDING');
+ const cancelled=advance(staged.state,{type:'HALT'},{nowMs:t+2});
+ assert.equal(cancelled.state.pending,null);
+ assert.equal(cancelled.state.halted,true);
+});
+test('all-clear START with multiple repeats is rejected even during isolated trial',()=>{
+ const attempt=advance({halted:false},{type:'QUEUE_START',eventId:'evt',
+  eventType:'MISSILE_ALL_CLEAR',assetId:'alarm',sha256:'b'.repeat(64),repeats:2,
+  sourceOfficiallyVerified:true,authorization:{mode:'ISOLATED_TRIAL',approved:true,
+  publicStreamAllowed:false,amplifierAllowed:false,outputIsolationVerified:true}},{nowMs:t});
+ assert.equal(attempt.reason,'INVALID_EVENT_AUDIO');
+});
