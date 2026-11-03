@@ -19,7 +19,7 @@ function mockRequest({status=200,body=fixture(),contentType='audio/wav'}={}){
   const req=new EventEmitter();
   req.setTimeout=()=>{};
   req.end=()=>{
-   queueMicrotask(()=>{
+   Promise.resolve().then(()=>{
     const res=new EventEmitter();
     res.statusCode=status;
     res.headers={'content-type':contentType,'content-length':String(body.length)};
