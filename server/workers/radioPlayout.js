@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {createIsolatedPcmWavStream} from '../src/lib/mchsIsolatedWav.js';
+import {createIsolatedPcmWavStream,createIsolatedSelfTestPcm} from '../src/lib/mchsIsolatedWav.js';
 import {assessTrainingAudioQuality} from '../src/lib/mchsTrainingAudioQuality.js';
 import {createAlarmPcmClock} from '../src/lib/mchsAlarmPcmClock.js';
 import {createMissileAlarmExecutorGuard} from '../src/lib/mchsMissileAlarmExecutorGuard.js';
@@ -2092,7 +2092,10 @@ const server=http.createServer((req,res)=>{
     void (async()=>{
       let wav;
       try{
-        const pcm=await loadTrainingAlarm(assetId);
+        // Reserved non-alarm self-test. No database asset or file ID required.
+        const pcm=assetId==='self-test'
+          ?createIsolatedSelfTestPcm()
+          :await loadTrainingAlarm(assetId);
         try{wav=createIsolatedPcmWavStream(pcm);}catch(error){pcm.close();throw error;}
         res.writeHead(200,{'Content-Type':'audio/wav','Cache-Control':'no-store',
           'Content-Length':wav.header.length+pcm.size,'X-Content-Type-Options':'nosniff'});

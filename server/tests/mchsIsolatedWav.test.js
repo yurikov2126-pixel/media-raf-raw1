@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createIsolatedPcmWavStream,wavHeader} from '../src/lib/mchsIsolatedWav.js';
+import {createIsolatedPcmWavStream,wavHeader,createIsolatedSelfTestPcm} from '../src/lib/mchsIsolatedWav.js';
 test('WAV header declares PCM stereo 48kHz and exact payload length',()=>{
  const h=wavHeader(7680);
  assert.equal(h.toString('ascii',0,4),'RIFF');
@@ -31,4 +31,20 @@ test('truncated PCM is rejected and source closed',()=>{
 test('invalid PCM sizes rejected',()=>{
  assert.throws(()=>wavHeader(3),/INVALID_PCM_LENGTH/);
  assert.throws(()=>wavHeader(0),/INVALID_PCM_LENGTH/);
+});
+
+test('self-test WAV can be generated without database asset and has correct duration',()=>{
+ const pcm=createIsolatedSelfTestPcm();
+ assert.equal(pcm.size,384000);
+ const wav=createIsolatedPcmWavStream(pcm);
+ assert.equal(wav.header.readUInt32LE(40),384000);
+ let total=0,nonZero=0,frame;
+ while((frame=wav.next())!==null){
+  total+=frame.length;
+  for(let i=0;i<frame.length;i+=2)
+   if(frame.readInt16LE(i)!==0)nonZero++;
+ }
+ assert.equal(total,384000);
+ assert.ok(nonZero>0,'identification beeps present');
+ assert.throws(()=>pcm.read(0,4),/SELF_TEST_CLOSED/);
 });
