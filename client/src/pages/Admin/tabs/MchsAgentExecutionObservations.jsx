@@ -23,6 +23,16 @@ const readinessLabels={
  VERIFIED_ANDROID_EVENT_MISSING:'Нет подтверждённого Android-события',
  ANDROID_EVENT_NOT_FRESH:'Последнее Android-событие устарело'
 };
+const isolatedPhaseLabel={
+ NOT_STARTED:'Ещё не запускался',
+ DANGER_PENDING:'Ожидается запуск ALARM',
+ DANGER_WAIT:'ALARM выполняется или ожидается отчёт',
+ CLEAR_PENDING:'ALARM завершён, ожидается отбой',
+ CLEAR_WAIT:'Отбой выполняется или ожидается отчёт',
+ COMPLETE:'ALARM и отбой завершены',
+ FAILED:'Учебный цикл завершён с ошибкой'
+};
+const androidPhaseLabel={DANGER:'Опасность зарегистрирована',CLEAR:'Ожидание нового уведомления'};
 const tone=phase=>phase==='COMPLETE'
  ?'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-100'
  :'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-400/30 dark:bg-rose-400/10 dark:text-rose-100';
@@ -85,7 +95,27 @@ export default function MchsAgentExecutionObservations({token}){
    {readinessError&&<p role="alert" className="text-red-700 dark:text-red-300">{readinessError}</p>}
    {!readiness&&!readinessError&&<p>Проверка готовности…</p>}
    {readiness&&<div className="space-y-2">
-    <p>Учебный START: <strong>{readiness.ready?'Готов':'Пока недоступен'}</strong>. В очередь не поставлен.</p>
+    <p>Изолированное испытание Windows Agent: <strong>
+     {readiness.isolatedHeadphonesTrial?.ready?'Готово к учебному воспроизведению':
+      'Пока недоступно'}
+    </strong>. Только наушники, не громкоговорители.</p>
+    <p>Последний синтетический цикл: <strong>
+     {isolatedPhaseLabel[readiness.isolatedHeadphonesTrial?.syntheticPhase]||
+      'Нет данных'}
+    </strong>
+    {readiness.isolatedHeadphonesTrial?.syntheticFailure&&
+     <span className="text-red-700 dark:text-red-300">
+      {' · '+readiness.isolatedHeadphonesTrial.syntheticFailure}
+     </span>}
+    </p>
+    <p>Автоматическая обработка Android: <strong>
+     {readiness.isolatedHeadphonesTrial?.androidActive?'Выполняется событие':
+      androidPhaseLabel[readiness.isolatedHeadphonesTrial?.androidPhase]||'Нет данных'}
+    </strong>.</p>
+    {readiness.isolatedHeadphonesTrial?.blockedByGlobalHalt&&
+     <p className="text-red-700 dark:text-red-300">
+      Действует глобальная блокировка. Даже изолированный START запрещён.
+     </p>}
     <p>Автоматическое Android-испытание (только наушники): <strong>
      {readiness.isolatedAndroidAutoTrialEnabled?'Включено на сервере':'Отключено на сервере'}
     </strong>. Реальное вещание не затрагивается.</p>
@@ -109,10 +139,13 @@ export default function MchsAgentExecutionObservations({token}){
     </p>:<p className="text-xs text-slate-600 dark:text-slate-300">
      Нет свежего сообщения об изолированном режиме Windows Agent (не старше 30 секунд).
     </p>}
-    <ul className="list-disc pl-5 space-y-1">
-     {(readiness.reasons||[]).map(reason=><li key={reason}>{readinessLabels[reason]||reason}</li>)}
-    </ul>
-    <p className="text-xs text-slate-600 dark:text-slate-300">Это серверная диагностика, не подтверждение физической изоляции. Не используйте реальную тревогу для теста.</p>
+    <details className="text-xs text-slate-600 dark:text-slate-300">
+     <summary className="cursor-pointer">Блокировки общего протокола START (не относятся к изолированному испытанию)</summary>
+     <ul className="list-disc pl-5 space-y-1 mt-2">
+      {(readiness.reasons||[]).map(reason=><li key={reason}>{readinessLabels[reason]||reason}</li>)}
+     </ul>
+    </details>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Только серверная диагностика и отчёт самого Agent. Реальную тревогу для проверки не запускайте.</p>
    </div>}
   </div>
   {data?.newestObservationAt&&<p className="text-xs text-slate-600 dark:text-slate-300">Последний полученный отчёт Agent: {when(data.newestObservationAt)}</p>}
