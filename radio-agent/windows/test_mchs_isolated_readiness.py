@@ -10,6 +10,7 @@ class IsolatedReadinessTests(unittest.TestCase):
         result=make_isolated_readiness(ASSETS,True)
         self.assertEqual(result['mode'],'ISOLATED_EVENT_AUDIO')
         self.assertTrue(result['centralPacketsConfirmed'])
+        self.assertTrue(result['isolatedTrialSourceAdmission'])
         self.assertNotIn('physicalPaVerified',result)
         self.assertNotIn('command',result)
         self.assertEqual(result['assets']['MISSILE_DANGER'],'a'*64)
