@@ -2129,7 +2129,7 @@ const server=http.createServer((req,res)=>{
     }
     let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
     req.on('end',async()=>{
-      let action,assetId;try{({action,assetId}=JSON.parse(raw));}catch{}
+      let action,assetId,repeats;try{({action,assetId,repeats}=JSON.parse(raw));}catch{}
       if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
       let result;
       if(action==='STOP'){trainingCommandEpoch++;result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
@@ -2140,7 +2140,7 @@ const server=http.createServer((req,res)=>{
           const epoch=++trainingCommandEpoch;
           const pcm=await loadTrainingAlarm(assetId);
           if(epoch!==trainingCommandEpoch){pcm.close();result={ok:false,reason:'CANCELLED_BY_STOP',...trainingOverlay.snapshot()};}
-          else {result=trainingOverlay.startWith(pcm);if(!result.ok)pcm.close();if(result.ok){trainingAssetId=assetId;trainingStatus();}}
+          else {result=trainingOverlay.startWith(pcm,{repeats:repeats??1});if(!result.ok)pcm.close();if(result.ok){trainingAssetId=assetId;trainingStatus();}}
         }
         catch(error){result={ok:false,reason:error.message||'ASSET_UNAVAILABLE',...trainingOverlay.snapshot()};}
         finally{trainingPreparing=false;}
