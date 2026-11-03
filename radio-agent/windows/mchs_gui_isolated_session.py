@@ -13,9 +13,13 @@ TOKEN_PATTERN = re.compile(r'rr_[a-f0-9]{64}\Z')
 
 def prepare_isolated_gui_session(*, server, token, vlc, danger_wav,
                                  all_clear_wav, power_armed=False,
-                                 operator_confirmation=''):
+                                 operator_confirmation='', relay_pilot=False,
+                                 relay_confirmation=''):
     if power_armed:
-        raise ValueError('AMPLIFIER_POWER_MUST_BE_DISARMED')
+        if not relay_pilot or relay_confirmation!='ISOLATED RELAY':
+            raise ValueError('AMPLIFIER_POWER_MUST_BE_DISARMED')
+    if relay_pilot and not power_armed:
+        raise ValueError('RELAY_PILOT_REQUIRES_OPERATOR_ARM')
     if operator_confirmation != 'ISOLATED':
         raise PermissionError('PHYSICAL_PA_DISCONNECTION_NOT_CONFIRMED')
     if not isinstance(server, str) or not server.startswith('https://'):

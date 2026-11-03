@@ -1109,6 +1109,10 @@ def run(args, token):
                 PLAYBACK_STATE['mode']='MCHS_ISOLATED_LOCAL_WAV'
                 STOP.wait(0.2)
                 continue
+            # Expose only the current locally admitted event to the GUI's
+            # supervised relay pilot. Clear it at every nonplaying boundary.
+            PLAYBACK_STATE['mchsIsolatedEventId']=(event_audio.event
+                if event_audio is not None and event_audio.playing else None)
             if event_audio is not None and event_audio.playing:
                 PLAYBACK_STATE['mode']='MCHS_EVENT_ISOLATED_LOCAL_WAV'
                 STOP.wait(0.2)
@@ -1156,7 +1160,7 @@ def run(args, token):
                     fallback_key=None
             STOP.wait(0.5)
     finally:
-        PLAYBACK_STATE.update(mode='STOPPED',broadcastRunning=False,streamLastSeen=0.0)
+        PLAYBACK_STATE.update(mode='STOPPED',broadcastRunning=False,streamLastSeen=0.0,mchsIsolatedEventId=None)
         threading.Thread(target=async_playback_report,args=(args.server,token,
             {'playback':'STOPPED','outputDevice':'VLC (устройство вывода не подтверждено)',
              'lastPacketAgeMs':None,'error':''}),daemon=True).start()

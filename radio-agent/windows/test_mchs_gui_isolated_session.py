@@ -53,6 +53,17 @@ class IntegratedMchsGuiStartTests(unittest.TestCase):
                 with self.assertRaises(reason):
                     prepare_isolated_gui_session(**{**self.settings,**changes})
 
+    def test_operator_authorized_relay_pilot_requires_separate_exact_phrase(self):
+        base={**self.settings, 'power_armed':True,'relay_pilot':True,
+              'relay_confirmation':'ISOLATED RELAY'}
+        prepared=prepare_isolated_gui_session(**base)
+        self.assertTrue(prepared['isolated_event_audio'])
+        self.assertEqual(prepared['esp32_host'],'')
+        for change in [{'relay_confirmation':''},{'relay_confirmation':'ISOLATED'},
+                       {'relay_pilot':False}]:
+            with self.subTest(change=change),self.assertRaises(ValueError):
+                prepare_isolated_gui_session(**{**base,**change})
+
     def test_server_token_and_vlc_are_validated(self):
         for changes in [
             {'server':'http://mediarafraw.ru'}, {'token':'bad'},
