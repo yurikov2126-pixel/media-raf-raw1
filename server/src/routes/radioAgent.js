@@ -6,6 +6,7 @@ import http from 'node:http';
 import { Router } from 'express';
 import {summarizeRadioAgents} from '../lib/radioAgentHeartbeat.js';
 import {normalizeMchsAgentPlaybackReport} from '../lib/mchsAgentPlaybackReport.js';
+import {normalizeMchsEventExecutionObservation} from '../lib/mchsEventExecutionObservation.js';
 import {validateAudioReport,audioHealth} from '../lib/radioAgentAudioHealth.js';
 import { validLanIpv4 } from '../lib/radioEsp32Address.js';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
@@ -796,6 +797,21 @@ router.post('/agent/mchs-playback-session-status',deviceAuth,safe(async(req,res)
   automaticPublicBroadcastAuthorized:false});
  await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
  res.json({accepted:true,localProcessStateOnly:true,publicPlaybackAuthorized:false});
+}));
+// Event-scoped local headphones observation. This endpoint does not
+// unlock START, advance an emergency state, or attest physical PA delivery.
+router.post('/agent/mchs-event-execution-observation',deviceAuth,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||
+    req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
+  return res.status(403).json({error:'DEVICE_NOT_BOUND'});
+ const report=normalizeMchsEventExecutionObservation(req.body);
+ if(!report.accepted)return res.status(400).json({error:report.reason});
+ const key='mchs_agent_event_execution_observation_v1_'+req.radioDevice.id;
+ const value=JSON.stringify({...report.value,receivedAt:new Date().toISOString()});
+ await prisma.setting.upsert({where:{key},create:{key,value},update:{value}});
+ res.json({accepted:true,localProcessObservationOnly:true,
+  physicalPaOutputVerified:false,publicPlaybackAuthorized:false});
 }));
 // Read-only loopback self-test for explicitly bound headphones pilot devices.
 // There is no command queue, no public output, no arbitrary asset ID or URL.

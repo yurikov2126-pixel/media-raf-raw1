@@ -12,6 +12,7 @@ class IsolatedEventAudioController:
         self.assets=assets  # eventType -> {'path','sha256','duration'}
         self.state='IDLE'
         self.event=None
+        self.event_type=None
         self.repeats=0
         self.deadline=None
         self.failure=None
@@ -91,6 +92,7 @@ class IsolatedEventAudioController:
             return ('REJECTED',receipt['reason'])
         self.last_receipt=receipt
         self.event=command['eventId']
+        self.event_type=kind
         self.repeats=command['repeats']
         self.deadline=None
         self.failure=None
