@@ -40,6 +40,7 @@ from mchs_integrated_headphones_cycle import IntegratedHeadphonesCycle
 from mchs_event_admission import EventAdmissionLedger
 from mchs_event_audio_controller import IsolatedEventAudioController
 from mchs_event_observation import make_event_observation, post_event_observation
+from mchs_isolated_readiness import make_isolated_readiness, post_isolated_readiness
 from mchs_two_stage_headphones_pilot import verify_local_training_wav
 
 STOP = threading.Event()
@@ -481,6 +482,7 @@ def run(args, token):
     event_audio=None
     event_audio_session=None
     last_event_audio_poll=0.0
+    last_isolated_ready_report=0.0
     last_event_receipt_retry=0.0
     pending_event_receipts=[]
     reported_event_receipts=set()
@@ -763,6 +765,17 @@ def run(args, token):
                     and not relay.failed.is_set() and
                     relay.packet_count>0 and now-relay.last_data<=4)
                 authorized=not denied and now-last_authorized<15
+                if now-last_isolated_ready_report>=15:
+                    last_isolated_ready_report=now
+                    try:
+                        readiness=make_isolated_readiness(
+                            args.isolated_event_assets,
+                            fresh_central and network_ok and authorized)
+                        if post_isolated_readiness(args.server,token,readiness):
+                            print('MCHS_ISOLATED_READY_REPORTED',flush=True)
+                    except (HTTPError,URLError,OSError,ValueError,KeyError) as error:
+                        print('MCHS_ISOLATED_READY_REPORT_UNAVAILABLE',
+                              type(error).__name__,flush=True)
                 if now-last_event_audio_poll>=3:
                     last_event_audio_poll=now
                     try:
