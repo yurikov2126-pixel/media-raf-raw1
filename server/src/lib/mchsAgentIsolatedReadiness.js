@@ -14,6 +14,7 @@ export function normalizeMchsAgentReadiness(input){
  return {ok:true,value:{
   version:1,mode:'ISOLATED_EVENT_AUDIO',
   operatorIsolationAttested:true,
+  isolatedTrialSourceAdmission:input.isolatedTrialSourceAdmission===true,
   centralPacketsConfirmed:input.centralPacketsConfirmed,
   assets:{MISSILE_DANGER:input.assets.MISSILE_DANGER,
    MISSILE_ALL_CLEAR:input.assets.MISSILE_ALL_CLEAR},
