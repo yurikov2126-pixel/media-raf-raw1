@@ -6,6 +6,7 @@ import {assessMchsTransportChain} from '../lib/mchsTransportChainDiagnostics.js'
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol,stageMchsDispatchCommand,recordMchsDispatchDryRunAck,haltMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 import {assessMchsAgentDispatchTelemetry} from '../lib/mchsAgentDispatchTelemetry.js';
 import {MCHS_ANDROID_INTENTS_KEY,normalizeAndroidIntents} from '../lib/mchsAndroidIntentLedger.js';
+import {assessMchsNaturalCompletion} from '../lib/mchsNaturalCompletionEvidence.js';
 import {bindAndroidAlarmCandidates,stageBoundAndroidIntents} from '../lib/mchsAndroidAlarmBinding.js';
 import {buildMchsDryRunExecution} from '../lib/mchsAutomaticExecutionDryRun.js';
 import {MCHS_MONITOR_KEY,normalizeAndroidMonitor,observeAndroidEvents} from '../lib/mchsAndroidObservationMonitor.js';
@@ -1272,6 +1273,36 @@ router.get('/missile-session-lifecycle',requireRole('ADMIN'),async (_req,res,nex
    event:{id:event?.id,eventType},halted:true});
   res.set('Cache-Control','no-store').json({...result,checkedAt:new Date().toISOString(),
    haltEpoch:normalized.haltEpoch||null,recorded:false,publicBroadcastAuthorized:false});
+ }catch(error){next(error);}
+});
+/** Event-bound natural completion visibility only; does not dispatch audio.
+ * A shared Worker overlay status has no event-bound revision record, so it
+ * cannot be used as positive evidence of a genuine emergency broadcast.
+ */
+router.get('/missile-natural-completion',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [intentRow,workerResponse,agentRow]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}}),
+   trainingStreamRequest().catch(()=>null),
+   deviceId?prisma.setting.findUnique({
+    where:{key:'mchs_agent_playback_session_status_v1_'+deviceId}}):null
+  ]);
+  let rawIntents,agent;
+  try{rawIntents=JSON.parse(intentRow?.value||'null');}catch{}
+  try{agent=JSON.parse(agentRow?.value||'null');}catch{}
+  const recent=normalizeAndroidIntents(rawIntents).items.slice(-1)[0]||null;
+  const intent=recent?{eventId:recent.eventId,eventType:recent.eventType,
+   assetId:recent.assetId,repetitions:recent.repetitions}:null;
+  const shared=workerResponse?.httpStatus===200?workerResponse.data:null;
+  const evaluation=assessMchsNaturalCompletion({intent,agent,
+   // The existing shared Worker GET response has no event ID or start
+   // revision, and must not be passed off as authoritative event evidence.
+   worker:shared});
+  res.set('Cache-Control','no-store').json({checkedAt:new Date().toISOString(),
+   ...evaluation,workerSharedStatusAvailable:!!shared,
+   agentReportVersion:agent?.version||null,deviceConfigured:!!deviceId,
+   executionEnabled:false,physicalAudibilityVerified:false});
  }catch(error){next(error);}
 });
 router.get('/missile-two-channel-session',requireRole('ADMIN'),async (_req,res,next)=>{

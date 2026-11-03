@@ -40,6 +40,9 @@ jobs:
       - name: Windows Agent ALARM completion-report contract tests
         run: node --test tests/mchsAgentPlaybackReport.test.js
 
+      - name: Dual-channel ALARM natural-completion evidence tests
+        run: node --test tests/mchsNaturalCompletionEvidence.test.js tests/mchsAgentPlaybackReport.test.js tests/mchsVerifiedWorkerTransport.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
