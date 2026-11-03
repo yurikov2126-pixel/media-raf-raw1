@@ -113,4 +113,65 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(result['stopConfirmed'])
         self.assertIn(result['state'],('STOPPED','COMPLETED'))
 
+
+    def test_natural_completion_report_is_event_scoped(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(),isolation_verified=True,
+                                     sleep=lambda _:None)
+        self.assertTrue(session.start(event_id='danger',file=self.file,
+                                      repeats=5,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        state=session.status()
+        self.assertEqual(state['eventId'],'danger')
+        self.assertEqual(state['state'],'COMPLETED')
+        self.assertEqual(state['expectedRepeats'],5)
+        self.assertEqual(state['completedRepeats'],5)
+        self.assertTrue(state['naturalCompletion'])
+        self.assertFalse(state['processRunning'])
+        self.assertIsNone(state['failureReason'])
+
+    def test_failed_process_does_not_claim_natural_completion(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(code=2),
+                                     isolation_verified=True,sleep=lambda _:None)
+        self.assertTrue(session.start(event_id='broken',file=self.file,
+                                      repeats=3,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+        state=session.status()
+        self.assertEqual(state['state'],'STOPPED')
+        self.assertFalse(state['naturalCompletion'])
+        self.assertEqual(state['expectedRepeats'],3)
+        self.assertEqual(state['completedRepeats'],0)
+        self.assertEqual(state['failureReason'],'RuntimeError')
+
+    def test_prior_event_cannot_replay_after_different_event(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(),isolation_verified=True,
+                                     sleep=lambda _:None)
+        for event_id in ('danger','clear'):
+            self.assertTrue(session.start(event_id=event_id,file=self.file,
+                                          repeats=1,authorized=True)['accepted'])
+            session._thread.join(timeout=2)
+        self.assertEqual(session.start(event_id='danger',file=self.file,
+                                       repeats=1,authorized=True)['reason'],'REPLAYED_EVENT')
+
+    def test_denied_start_is_not_added_to_event_history(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(),isolation_verified=True,
+                                     sleep=lambda _:None)
+        self.assertEqual(session.start(event_id='event',file=self.file,
+                                       repeats=1,authorized=False)['reason'],
+                         'ISOLATION_OR_AUTHORIZATION_MISSING')
+        self.assertTrue(session.start(event_id='event',file=self.file,
+                                      repeats=1,authorized=True)['accepted'])
+        session._thread.join(timeout=2)
+
+    def test_event_history_is_bounded(self):
+        session=AlarmPlaybackSession(lambda _:FakeProcess(),isolation_verified=True,
+                                     sleep=lambda _:None)
+        for number in range(251):
+            self.assertTrue(session.start(event_id=f'event-{number}',file=self.file,
+                                          repeats=1,authorized=True)['accepted'])
+            session._thread.join(timeout=2)
+        self.assertEqual(len(session._recent_event_ids),250)
+        self.assertEqual(len(session._recent_event_set),250)
+        self.assertEqual(session.start(event_id='event-1',file=self.file,
+                                       repeats=1,authorized=True)['reason'],'REPLAYED_EVENT')
+
 if __name__=='__main__':unittest.main()
