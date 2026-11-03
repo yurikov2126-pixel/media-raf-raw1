@@ -64,6 +64,9 @@ jobs:
       - name: Synthetic isolated Agent danger to all-clear full cycle
         run: node --test tests/mchsSyntheticHeadphonesCycle.test.js tests/mchsIsolatedAndroidAutoFeed.test.js
 
+      - name: Agent capability and synthetic timeout regression
+        run: node --test tests/mchsSyntheticHeadphonesCycle.test.js tests/mchsAgentIsolatedReadiness.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
@@ -87,6 +90,10 @@ jobs:
       - name: Isolated Android auto START Windows admission regression
         working-directory: radio-agent/windows
         run: python -m unittest -v test_mchs_isolated_android_auto_command test_mchs_event_admission test_mchs_event_audio_controller
+
+      - name: Windows isolated capability heartbeat regression
+        working-directory: radio-agent/windows
+        run: python -m unittest -v test_mchs_isolated_readiness test_mchs_isolated_android_auto_command
 
   client:
     name: Client — build
