@@ -13,6 +13,13 @@ export function advanceMchsDeviceCommand(state={},input,{nowMs=Date.now()}={}){
    cancelledEventId:pending?.action==='START'?pending.eventId:null};
  }
  if(input?.type==='QUEUE_STOP'){
+  // Never silently replace a pending STOP for a different event: the Agent
+  // must first receive the earlier emergency stop, or it must expire.
+  if(current.pending?.action==='STOP'&&
+     (current.pending.eventId!==input.eventId||
+      current.pending.eventType!==input.eventType)&&
+     Date.parse(current.pending.expiresAt)>nowMs)
+   return fail('PRIOR_STOP_NOT_ACKNOWLEDGED');
   if(!/^[A-Za-z0-9_-]{1,128}$/.test(input.eventId||'')||
    !['MISSILE_DANGER','MISSILE_ALL_CLEAR'].includes(input.eventType))return fail('INVALID_EVENT');
   // Retrying the same emergency STOP must not invalidate an in-flight
