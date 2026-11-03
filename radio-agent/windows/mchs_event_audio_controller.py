@@ -80,6 +80,7 @@ class IsolatedEventAudioController:
             # observation. An exact replay of the active START is a harmless
             # acknowledgement, not a second request to launch VLC.
             if (command.get('eventId')==self.event and
+                    isinstance(self.last_receipt,dict) and
                     command.get('sequence')==self.last_receipt.get('sequence') and
                     command.get('eventType')==self.event_type and
                     command.get('repeats')==self.repeats and
