@@ -79,6 +79,30 @@ class EventBoundAudioTests(unittest.TestCase):
         self.assertEqual(self.send(event(1),authorized=False)[1],'CENTRAL_BASELINE_REQUIRED')
         self.assertEqual(self.send(event(1),baseline=False)[1],'CENTRAL_BASELINE_REQUIRED')
 
+    def test_exact_redelivery_during_wav_is_idempotent(self):
+        command=event(1)
+        self.assertEqual(self.send(command)[0],'START_AUDIO')
+        self.ctrl.started(True,now=1,duration=3)
+        decision,reason=self.send(command)
+        self.assertEqual((decision,reason),
+                         ('NO_ACTION','ACTIVE_EVENT_ALREADY_RUNNING'))
+        self.assertEqual(self.ctrl.state,'PLAYING')
+        self.assertEqual(self.ledger.data['lastSequence'],1)
+        self.assertEqual(len(self.ledger.data['seen']),1)
+
+    def test_unrelated_or_changed_start_during_wav_still_rejected(self):
+        command=event(1)
+        self.send(command)
+        self.ctrl.started(True,now=1,duration=3)
+        for changed in (
+                event(2,event_id='other-danger'),
+                event(2),
+                event(1,digest='b'*64),
+                event(1,repeats=2)):
+            self.assertEqual(self.send(changed),
+                             ('REJECTED','EVENT_AUDIO_BUSY'))
+        self.assertEqual(self.ledger.data['lastSequence'],1)
+
     def test_replayed_start_rejected_after_restart(self):
         self.assertEqual(self.send(event(1))[0],'START_AUDIO')
         second=IsolatedEventAudioController(EventAdmissionLedger(self.ledger.path),
