@@ -102,7 +102,7 @@ class TwoStageHeadphonesTests(unittest.TestCase):
     def test_110_second_pcm16_stereo_wav_is_accepted_above_old_20_mib_limit(self):
         with tempfile.TemporaryDirectory() as td:
             file=Path(td)/'long-clear.wav'
-            second=b'\\x01\\x00' * 2 * 48000
+            second=bytes((1,0)) * 2 * 48000
             with wave.open(str(file),'wb') as out:
                 out.setnchannels(2)
                 out.setsampwidth(2)
@@ -116,7 +116,7 @@ class TwoStageHeadphonesTests(unittest.TestCase):
     def test_duration_above_two_minutes_rejected_even_under_size_cap(self):
         with tempfile.TemporaryDirectory() as td:
             file=Path(td)/'over-120.wav'
-            second=b'\\x01\\x00' * 48000
+            second=bytes((1,0)) * 48000
             with wave.open(str(file),'wb') as out:
                 out.setnchannels(1)
                 out.setsampwidth(2)
