@@ -30,6 +30,7 @@ const tone=phase=>phase==='COMPLETE'
 export default function MchsAgentExecutionObservations({token}){
  const [data,setData]=useState(null),[error,setError]=useState('');
  const [readiness,setReadiness]=useState(null),[readinessError,setReadinessError]=useState('');
+ const [cycleBusy,setCycleBusy]=useState(false),[cycleNotice,setCycleNotice]=useState('');
  const refresh=useCallback(async()=>{
   try{
    const result=await api('/radio-agent/mchs-agent-event-execution-observations',{token});
@@ -42,6 +43,19 @@ export default function MchsAgentExecutionObservations({token}){
    setReadiness(result);setReadinessError('');
   }catch(e){setReadinessError(e.message||'Не удалось проверить готовность учебного START');}
  },[token]);
+ const runSyntheticCycle=async()=>{
+  if(!window.confirm('Все линии PA и усилитель AA-300 физически отключены? Запустить ОДИН учебный цикл только в наушниках Windows Agent?'))return;
+  setCycleBusy(true);setCycleNotice('');
+  try{
+   const result=await api('/radio-agent/mchs-agent-isolated-synthetic-cycle',{
+    method:'POST',token,body:{confirmation:'HEADPHONES_ONLY_PA_DISCONNECTED'}
+   });
+   setCycleNotice('Учебный цикл поставлен в очередь: '+result.cycleId+
+    '. Сначала ALARM, после подтверждённого возврата музыки — отбой.');
+   void refresh();void refreshReadiness();
+  }catch(e){setCycleNotice('Учебный цикл не запущен: '+(e.message||'ошибка'));}
+  finally{setCycleBusy(false);}
+ };
  useEffect(()=>{
   void refresh();void refreshReadiness();
   const timer=setInterval(()=>{if(document.visibilityState==='visible'){void refresh();void refreshReadiness();}},15000);
@@ -77,6 +91,15 @@ export default function MchsAgentExecutionObservations({token}){
     </strong>. Реальное вещание не затрагивается.</p>
     {readiness.isolatedAndroidAutoTrialEnabled&&!readiness.androidChannelAllowlistConfigured&&
      <p className="text-amber-700 dark:text-amber-300">Не указан разрешённый канал Android-уведомлений: автоматическое испытание не начнётся.</p>}
+    {readiness.isolatedAndroidAutoTrialEnabled&&<div className="flex flex-wrap gap-2 items-center">
+     <button type="button" disabled={cycleBusy||!readiness.agentReadiness?.centralPacketsConfirmed}
+      onClick={()=>void runSyntheticCycle()}
+      className="rounded-xl border border-amber-500 dark:border-amber-400/60 px-3 py-2 font-semibold disabled:opacity-50">
+      {cycleBusy?'Запуск учебного цикла…':'Проверить цикл ALARM → отбой в наушниках'}
+     </button>
+     <span className="text-xs text-slate-600 dark:text-slate-300">Синтетический сценарий без Android-уведомления и без вещания через PA</span>
+    </div>}
+    {cycleNotice&&<p role="status" className="text-sm">{cycleNotice}</p>}
     {readiness.agentReadiness?<p className="text-xs text-slate-600 dark:text-slate-300">
      Windows Agent: изолированный режим подтверждён самим Agent; локальные WAV заявлены,
      центральные аудиопакеты: <strong>{readiness.agentReadiness.centralPacketsConfirmed?'получены':'не подтверждены'}</strong>.

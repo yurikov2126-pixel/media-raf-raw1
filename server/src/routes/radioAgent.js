@@ -1,6 +1,7 @@
 import {fetchIsolatedHeadphonesSelfTest} from '../lib/mchsHeadphonesSelfTestRelay.js';
 import {selectMchsAgentCommand} from '../lib/mchsAgentCommandSelection.js';
 import {advanceIsolatedAndroidAutoFeed} from '../lib/mchsIsolatedAndroidAutoFeed.js';
+import {stageSyntheticHeadphonesCycle,advanceSyntheticHeadphonesCycle} from '../lib/mchsSyntheticHeadphonesCycle.js';
 import {readMchsAgentReadiness} from '../lib/mchsAgentIsolatedReadiness.js';
 import {advanceMchsDeviceCommand} from '../lib/mchsDeviceCommandLedger.js';
 import {workerMchsSessionRequest} from '../lib/mchsWorkerLabSessionProxy.js';
@@ -258,6 +259,51 @@ router.post('/agent/mchs-event-observation-received',deviceAuth,safe(async(req,r
 // issued while the real-event authorization and audio binding are unverified.
 // STOP is an actionable local trial cancellation, not a proof of PA silence.
 // STOP-only device command polling; public START still requires production evidence.
+// Explicit operator-approved rehearsal: does NOT manufacture an Android event.
+// Its 2 synthetic WAV commands are delivered exclusively to the bound,
+// already isolated Windows Agent, never to Worker, public MP3, or ESP32.
+router.post('/mchs-agent-isolated-synthetic-cycle',...admin,safe(async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');
+ if(process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED!=='true')
+  return res.status(409).json({error:'ISOLATED_TRIAL_DISABLED'});
+ if(req.body?.confirmation!=='HEADPHONES_ONLY_PA_DISCONNECTED')
+  return res.status(400).json({error:'PHYSICAL_ISOLATION_CONFIRMATION_REQUIRED'});
+ const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID;
+ if(!deviceId)return res.status(409).json({error:'DEVICE_NOT_BOUND'});
+ const outcome=await prisma.$transaction(async tx=>{
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581493)`;
+  const cycleKey='mchs_agent_synthetic_cycle_v1_'+deviceId;
+  const [cycleRow,readyRow,haltRow,deviceRow,autoRow]=await Promise.all([
+   tx.setting.findUnique({where:{key:cycleKey}}),
+   tx.setting.findUnique({where:{key:'mchs_agent_isolated_readiness_v1_'+deviceId}}),
+   tx.setting.findUnique({where:{key:MCHS_DISPATCH_PROTOCOL_KEY}}),
+   tx.setting.findUnique({where:{key:'mchs_agent_device_commands_v1_'+deviceId}}),
+   tx.setting.findUnique({where:{key:'mchs_agent_isolated_android_auto_v1_'+deviceId}})
+  ]);
+  let cycle,halt,device,auto;
+  try{cycle=JSON.parse(cycleRow?.value||'null');}catch{}
+  try{halt=JSON.parse(haltRow?.value||'null');}catch{}
+  try{device=JSON.parse(deviceRow?.value||'null');}catch{}
+  try{auto=JSON.parse(autoRow?.value||'null');}catch{}
+  if(normalizeMchsDispatchProtocol(halt).haltEpoch)
+   return {ok:false,reason:'GLOBAL_HALT_ACTIVE'};
+  if(device?.pending)return {ok:false,reason:'DEVICE_COMMAND_PENDING'};
+  if(auto?.active)return {ok:false,reason:'ANDROID_EVENT_IN_PROGRESS'};
+  const ready=readMchsAgentReadiness(readyRow?.value);
+  const result=stageSyntheticHeadphonesCycle({
+   state:cycle,readiness:ready,id:'synthetic_'+randomBytes(12).toString('hex')
+  });
+  if(!result.ok)return result;
+  const value=JSON.stringify(result.state);
+  await tx.setting.upsert({where:{key:cycleKey},
+   create:{key:cycleKey,value},update:{value}});
+  return {ok:true,cycleId:result.state.baseId,phase:result.state.phase};
+ });
+ if(!outcome.ok)return res.status(409).json({error:outcome.reason});
+ res.status(202).json({...outcome,synthetic:true,headphonesOnly:true,
+  publicPlaybackAuthorized:false,physicalPaOutputVerified:false});
+}));
+
 router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
  if(!process.env.MCHS_AGENT_LAB_DEVICE_ID||req.radioDevice.id!==process.env.MCHS_AGENT_LAB_DEVICE_ID)
@@ -276,6 +322,38 @@ router.get('/agent/mchs-execution-command',deviceAuth,safe(async(req,res)=>{
   isolatedTrialEnabled:process.env.MCHS_ISOLATED_AGENT_TRIAL_START_ENABLED==='true',
   deviceTrialBound:req.radioDevice.id===process.env.MCHS_AGENT_LAB_DEVICE_ID
  });
+ // Operator-staged SYNTHETIC rehearsal is separate from Android records.
+ // Real STOP and dispatch HALT always win. One locked cycle per device.
+ if(process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED==='true'&&
+    selected.reason==='NO_START_QUEUED'&&!state.haltEpoch){
+  const rehearsal=await prisma.$transaction(async tx=>{
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581493)`;
+   const syntheticKey='mchs_agent_synthetic_cycle_v1_'+req.radioDevice.id;
+   const [row,readyRow,historyRow]=await Promise.all([
+    tx.setting.findUnique({where:{key:syntheticKey}}),
+    tx.setting.findUnique({where:{key:'mchs_agent_isolated_readiness_v1_'+req.radioDevice.id}}),
+    tx.setting.findUnique({where:{key:'mchs_agent_event_execution_history_v1_'+req.radioDevice.id}})
+   ]);
+   let prior;try{prior=JSON.parse(row?.value||'null');}catch{}
+   if(!prior||!['DANGER_PENDING','DANGER_WAIT','CLEAR_PENDING','CLEAR_WAIT'].includes(prior.phase))
+    return null;
+   const result=advanceSyntheticHeadphonesCycle(prior,{
+    readiness:readMchsAgentReadiness(readyRow?.value),
+    observations:readMchsExecutionObservationHistory(historyRow?.value)
+   });
+   const value=JSON.stringify(result.state);
+   await tx.setting.upsert({where:{key:syntheticKey},
+    create:{key:syntheticKey,value},update:{value}});
+   return result;
+  });
+  if(rehearsal){
+   return res.json({version:1,command:rehearsal.command,
+    halted:false,executionEnabled:!!rehearsal.command,
+    automaticPlaybackEnabled:false,reason:rehearsal.reason,
+    syntheticTraining:true,isolatedHeadphonesOnly:true,
+    haltEpoch:state.haltEpoch});
+  }
+ }
  // Separate, explicitly opted-in headphone test. Never replaces STOP/HALT,
  // grants public playback, or upgrades Android bridge auth to official provenance.
  if(process.env.MCHS_ISOLATED_ANDROID_AUTO_TRIAL_ENABLED==='true'&&

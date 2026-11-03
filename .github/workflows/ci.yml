@@ -61,6 +61,9 @@ jobs:
       - name: Isolated Android automatic playback state and replay regressions
         run: node --test tests/mchsIsolatedAndroidAutoFeed.test.js tests/mchsAgentIsolatedReadiness.test.js
 
+      - name: Synthetic isolated Agent danger to all-clear full cycle
+        run: node --test tests/mchsSyntheticHeadphonesCycle.test.js tests/mchsIsolatedAndroidAutoFeed.test.js
+
       - name: Prisma generate
         run: npx prisma generate
 
