@@ -24,6 +24,48 @@ class ReleasePublishingTests(unittest.TestCase):
         return {'name': publisher.ASSET_NAME, 'state': 'uploaded',
                 'size': self.asset.stat().st_size, 'digest': 'sha256:' + (sha or self.sha)}
 
+    def test_creation_http_500_then_succeeds_on_next_attempt(self):
+        state = {'release': None, 'creates': 0, 'uploads': 0}
+        def fake_gh(*args):
+            if args[:2] == ('release', 'create'):
+                state['creates'] += 1
+                if state['creates'] == 1:
+                    return 1, '', 'HTTP 500 while creating release'
+                state['release'] = dict(self.release)
+                return 0, '', ''
+            if args[:2] == ('release', 'upload'):
+                state['uploads'] += 1
+                state['release']['assets'] = [self.asset_entry()]
+                return 0, '', ''
+            self.fail('unexpected gh call: ' + str(args))
+        with patch.object(publisher, 'app_version', return_value='0.5.14'), \\
+             patch.object(publisher, 'lookup_release', side_effect=lambda *_: state['release']), \\
+             patch.object(publisher, 'gh', side_effect=fake_gh), \\
+             patch.object(publisher.time, 'sleep', return_value=None):
+            publisher.publish(repo='owner/repo', commit_sha='deadbeef',
+                              asset_path=str(self.asset))
+        self.assertEqual(state['creates'], 2)
+        self.assertEqual(state['uploads'], 1)
+
+    def test_creation_http_500_but_server_created_release(self):
+        state = {'release': None, 'creates': 0}
+        def fake_gh(*args):
+            if args[:2] == ('release', 'create'):
+                state['creates'] += 1
+                state['release'] = dict(self.release)
+                return 1, '', 'HTTP 500 after release was created'
+            if args[:2] == ('release', 'upload'):
+                state['release']['assets'] = [self.asset_entry()]
+                return 0, '', ''
+            self.fail('unexpected gh call')
+        with patch.object(publisher, 'app_version', return_value='0.5.14'), \\
+             patch.object(publisher, 'lookup_release', side_effect=lambda *_: state['release']), \\
+             patch.object(publisher, 'gh', side_effect=fake_gh), \\
+             patch.object(publisher.time, 'sleep', return_value=None):
+            publisher.publish(repo='owner/repo', commit_sha='deadbeef',
+                              asset_path=str(self.asset))
+        self.assertEqual(state['creates'], 1)
+
     def test_incomplete_release_is_repaired_with_asset_upload(self):
         state = {'release': dict(self.release), 'uploaded': 0}
         def mock_gh(*args):
