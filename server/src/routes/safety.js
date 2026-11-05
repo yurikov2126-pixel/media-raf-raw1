@@ -56,6 +56,7 @@ import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {selectNextMchsStationIntent,settleMchsStationAttempt} from '../lib/mchsStationSequentialQueue.js';
+import {reconcileMchsStationClaims} from '../lib/mchsStationClaimRecovery.js';
 import {MCHS_STATION_RECEIPTS_KEY,normalizeStationReceipts,registerStationDispatch,reconcileStationReceiptHistory} from '../lib/mchsStationExecutionReceipts.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
@@ -120,6 +121,7 @@ async function tickMchsAndroidMonitor(){
   // Select and claim at most one fresh persisted intent per monitor tick.
   // The database claim prevents a concurrent API process from issuing the same START.
   let selected=null;
+  let recoveredDispatches=[];
   if(process.env.MCHS_ANDROID_MAIN_STATION_DISPATCH_ENABLED==='true'){
    let workerStatus=null;
    try{workerStatus=await requestMchsStationSession({action:'STATUS'});}
@@ -128,29 +130,34 @@ async function tickMchsAndroidMonitor(){
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581453)`;
     const row=await tx.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}});
     let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
-    const {items,changed,candidate,blocked}=selectNextMchsStationIntent(saved,{
-     workerStatus,nowMs:Date.now()});
+    const recovered=reconcileMchsStationClaims(saved?.items,workerStatus,{nowMs:Date.now()});
+    recoveredDispatches=recovered.recovered;
+    const {items,changed,candidate,blocked}=selectNextMchsStationIntent({
+     ...saved,items:recovered.items},{workerStatus,nowMs:Date.now()});
     if(candidate){
      const chosen=items.find(item=>item.eventId===candidate.eventId);
      chosen.status='DISPATCHING';chosen.claimedAt=new Date().toISOString();
      chosen.attempts=(chosen.attempts||0)+1;
     }
-    if(changed||candidate)await tx.setting.upsert({where:{key:MCHS_ANDROID_INTENTS_KEY},
+    if(recovered.changed||changed||candidate)await tx.setting.upsert({where:{key:MCHS_ANDROID_INTENTS_KEY},
      create:{key:MCHS_ANDROID_INTENTS_KEY,value:JSON.stringify({...saved,items})},
      update:{value:JSON.stringify({...saved,items})}});
     if(blocked)return null;
     return candidate?items.find(item=>item.eventId===candidate.eventId):null;
    });
   }
-  let dispatched={results:[]};
+  let dispatched={results:[...recoveredDispatches]};
   if(selected){
+   // The durable intent can outlive the monitor's recent-150-event window.
+   const original=await prisma.safetyMchsEvent.findUnique({where:{id:selected.eventId},
+    select:{id:true,source:true,sourceEventId:true,verified:true,region:true,occurredAt:true}});
    const attempts=await dispatchNewAndroidStationBindings({
     intents:[{...selected,status:'STAGED'}],
-    observations:outcome.observations,enabled:true,request:requestMchsStationSession
+    observations:original?[original]:[],enabled:true,request:requestMchsStationSession
    });
    // A transient BUSY response stays queued; do not register it as a final receipt.
-   dispatched={results:attempts.results.filter(r=>!(r.httpStatus===409&&
-    r.reason==='STATION_SOURCE_BUSY'))};
+   dispatched={results:[...recoveredDispatches,...attempts.results.filter(r=>!(r.httpStatus===409&&
+    r.reason==='STATION_SOURCE_BUSY'))]};
    const result=attempts.results[0]||{ok:false,reason:'NO_WORKER_RESULT',eventId:selected.eventId};
    await prisma.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581453)`;
