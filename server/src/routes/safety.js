@@ -55,6 +55,7 @@ import {evaluateAndroidMissileSequence} from '../lib/mchsAndroidSingleSource.js'
 import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
+import {MCHS_STATION_RECEIPTS_KEY,normalizeStationReceipts,registerStationDispatch,reconcileStationReceipts} from '../lib/mchsStationExecutionReceipts.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
 import {buildCorrelationReview,MCHS_CORRELATION_REVIEW_KEY} from '../lib/mchsCorrelationReview.js';
@@ -120,6 +121,33 @@ async function tickMchsAndroidMonitor(){
    enabled:process.env.MCHS_ANDROID_MAIN_STATION_DISPATCH_ENABLED==='true',
    request:requestMchsStationSession
   });
+  if(dispatched.results.length){
+   await prisma.$transaction(async tx=>{
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581452)`;
+    const row=await tx.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}});
+    let previous;try{previous=JSON.parse(row?.value||'null');}catch{}
+    const ledger=registerStationDispatch(previous,dispatched.results);
+    await tx.setting.upsert({where:{key:MCHS_STATION_RECEIPTS_KEY},
+     create:{key:MCHS_STATION_RECEIPTS_KEY,value:JSON.stringify(ledger)},
+     update:{value:JSON.stringify(ledger)}});
+   });
+  }
+  // Always reconcile pending PCM evidence, including when no new Android event arrived.
+  // GET/status remains read-only even when live START is disabled.
+  try{
+   const status=await requestMchsStationSession({action:'STATUS'});
+   await prisma.$transaction(async tx=>{
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581452)`;
+    const row=await tx.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}});
+    if(!row)return;
+    let previous;try{previous=JSON.parse(row.value||'null');}catch{}
+    const outcome=reconcileStationReceipts(previous,status);
+    if(outcome.changed)await tx.setting.update({where:{key:MCHS_STATION_RECEIPTS_KEY},
+     data:{value:JSON.stringify(outcome.ledger)}});
+   });
+  }catch(error){
+   console.warn('MCHS_STATION_RECEIPT_POLL_FAILED',JSON.stringify({reason:error.message}));
+  }
   if(dispatched.results.length)console.info('MCHS_ANDROID_STATION_DISPATCH',JSON.stringify({
    results:dispatched.results
   }));
@@ -1556,6 +1584,16 @@ router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,ne
   res.set('Cache-Control','no-store').json({...report,
    workerReachable:worker?.httpStatus===200,agentConfirmed:telemetry.confirmed,
    agentTelemetry:telemetry,trialStopConfirmation,transportChain});
+ }catch(error){next(error);}
+});
+/** Read-only persisted observations: START accepted is not counted as COMPLETE. */
+router.get('/missile-station-execution-receipts',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const row=await prisma.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}});
+  let data;try{data=JSON.parse(row?.value||'null');}catch{}
+  res.set('Cache-Control','no-store').json({
+   ledger:normalizeStationReceipts(data),readOnly:true,
+   workerPcmEvidenceOnly:true,physicalOutputConfirmed:false});
  }catch(error){next(error);}
 });
 router.get('/missile-android-execution-intents',requireRole('ADMIN'),async (_req,res,next)=>{
