@@ -412,6 +412,7 @@ class RadioAgentApp(tk.Tk):
                       esp32_secret='' if isolated else self.esp32_secret.get().strip())
         for key,value in options.items():
             setattr(args,key,value)
+        args.mchs_synthetic_relay_pilot=bool(isolated and relay_requested)
         STOP.clear()
         self.active_isolated_mode = isolated
         self.mchs_relay_trial_armed=bool(isolated and relay_requested)
@@ -574,7 +575,7 @@ class RadioAgentApp(tk.Tk):
                             if permit:
                                 self.power_off_candidate_since=None
                                 self.last_power_was_auto=intent.get("policyMode")=="AUTO"
-                            elif auto_transition:
+                            elif auto_transition and not self.active_isolated_mode:
                                 if self.power_off_candidate_since is None:
                                     self.power_off_candidate_since=now
                                 if now-self.power_off_candidate_since<12:
