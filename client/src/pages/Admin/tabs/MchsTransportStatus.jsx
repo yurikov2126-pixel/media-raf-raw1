@@ -1,112 +1,169 @@
 import {useCallback,useEffect,useState} from 'react';
 import {api} from '../../../api/client.js';
 
-const names={
- WORKER_NOT_REACHABLE:'Radio Worker не отвечает',
- AGENT_NOT_CONNECTED:'Windows Agent не подключён',
- TRIAL_STOP_NOT_CONFIRMED:'Остановка лабораторного VLC не подтверждена',
- ESP32_STATUS_STALE_OR_MISSING:'Нет свежей телеметрии ESP32',
- ESP32_STATUS_AMBIGUOUS:'Неоднозначная телеметрия ESP32',
- ESP32_STATUS_INVALID:'Данные ESP32 неполные или некорректны',
- ESP32_AGENT_DISCONNECTED:'ESP32 сообщает об отключении Windows Agent',
- ESP32_NO_VALID_CONTROL_LEASE:'ESP32 не имеет действующего разрешения управления',
- ESP32_HEARTBEAT_NOT_CONFIRMED:'Heartbeat ESP32 не подтверждён',
- ESP32_LEASE_NOT_CONFIRMED:'Разрешение ESP32 (lease) не подтверждено',
- PA_OUTPUT_NOT_INDEPENDENTLY_VERIFIED:'Физическое состояние громкоговорителей не подтверждено',
- WORKER_UNAVAILABLE:'Radio Worker недоступен',
- AGENT_UNCONFIRMED:'Нет подтверждения связи Windows Agent',
- STOP_NOT_CONFIRMED:'Остановка звукового процесса не подтверждена',
- ESP32_NOT_CONFIRMED:'Безопасное состояние ESP32 не подтверждено',
- ALARM_RULES_INCOMPLETE:'Настройки двух оповещений неполные',
- RULE_DISABLED:'Обработка события выключена',
- ALARM_AUDIO_MISSING:'Назначенный ALARM не найден',
- INVALID_REPEATS:'Некорректное число повторов'
+const reasonNames={
+ SIGNED_PERMIT_FALSE:'Отмена разрешения со стороны Windows Agent',
+ POWER_INTERLOCK_REJECTED:'Контроллер отказал во включении из-за блокировки',
+ WIFI_RECONNECT:'Повторное подключение Wi-Fi',
+ WIFI_LOST:'Пропала связь ESP32 с Wi-Fi',
+ HEARTBEAT_TIMEOUT:'Истёк срок heartbeat от Windows Agent',
+ POWER_LEASE_EXPIRED:'Истёк срок разрешения на питание (lease)',
+ SIGNED_MAINTENANCE_RESTART:'Авторизованный перезапуск ESP32',
+ SIGNED_FIRMWARE_UPDATE:'Обновление прошивки',
+ FIRMWARE_UPDATE_COMPLETED:'Завершение обновления прошивки',
+ SCHEDULED_REBOOT:'Перезапуск контроллера',
+ BOOT_SAFE_OFF:'Безопасное состояние после загрузки',
+ UNSPECIFIED_OFF:'Выключение без уточнённой причины'
 };
-const yesNo=value=>value===true?'Подтверждено':value===false?'Нет подтверждения':'Нет данных';
+const kinds={
+ FIRMWARE_RELAY_OFF:'ESP32: GPIO13 выключен',
+ FIRMWARE_RELAY_ON:'ESP32: GPIO13 включён',
+ FIRMWARE_REBOOT:'ESP32 перезагрузилась',
+ FIRMWARE_COUNTER_RESET:'Счётчик ESP32 сброшен',
+ COMMANDED_POWER_CHANGED:'Изменилось командное состояние усилителя',
+ LEASE_CHANGED:'Изменилось разрешение реле',
+ HEARTBEAT_CHANGED:'Изменился heartbeat',
+ HEARTBEAT_COUNTER_RESET:'Сбросился счётчик heartbeat',
+ TELEMETRY_GAP:'Пропуск телеметрии',
+ REPORTER_CHANGED:'Сменился Windows Agent',
+ AGENT_MODE_CHANGED:'Изменился режим Agent'
+};
+const eventLabels={MISSILE_DANGER:'Ракетная опасность',MISSILE_ALL_CLEAR:'Отбой ракетной опасности'};
+const boolText=v=>v===true?'Да':v===false?'Нет':'Нет данных';
+const stateText=v=>v||'Нет данных';
+
 export default function MchsTransportStatus({token}){
- const [data,setData]=useState(null);
+ const [station,setStation]=useState(null);
  const [preflight,setPreflight]=useState(null);
- const [lifecycle,setLifecycle]=useState(null);
- const [channels,setChannels]=useState(null);
+ const [intents,setIntents]=useState(null);
+ const [receipts,setReceipts]=useState(null);
  const [error,setError]=useState('');
  const [updated,setUpdated]=useState(null);
  const [loading,setLoading]=useState(false);
+ const load=useCallback(async()=>{
+  const [s,p,i,r]=await Promise.all([
+   api('/safety/missile-main-station-readiness',{token}),
+   api('/safety/missile-live-trial-preflight',{token}),
+   api('/safety/missile-android-execution-intents',{token}),
+   api('/safety/missile-station-execution-receipts',{token})
+  ]);
+  return {s,p,i,r};
+ },[token]);
  const refresh=useCallback(async()=>{
   setLoading(true);
   try{
-   const [result,checks,session,channelReport]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token}),api('/safety/missile-session-lifecycle',{token}),api('/safety/missile-two-channel-session',{token})]);
-   setData(result);setPreflight(checks);setLifecycle(session);setChannels(channelReport);setError('');setUpdated(new Date());
-  }catch(e){setData(null);setPreflight(null);setLifecycle(null);setChannels(null);setError(e.message||'Ошибка проверки состояния');}
+   const {s,p,i,r}=await load();
+   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);
+   setError('');setUpdated(new Date());
+  }catch(e){setError(e.message||'Ошибка получения состояния');}
   finally{setLoading(false);}
- },[token]);
+ },[load]);
  useEffect(()=>{
   let alive=true;
-  const read=async()=>{try{
-   const [result,checks,session,channelReport]=await Promise.all([api('/safety/missile-dispatch-readiness',{token}),api('/safety/missile-live-trial-preflight',{token}),api('/safety/missile-session-lifecycle',{token}),api('/safety/missile-two-channel-session',{token})]);
-   if(alive){setData(result);setPreflight(checks);setLifecycle(session);setChannels(channelReport);setError('');setUpdated(new Date());}
-  }catch(e){if(alive){setError(e.message||'Нет связи с диагностикой');setData(null);setPreflight(null);setLifecycle(null);setChannels(null);}}};
-  read();const timer=setInterval(read,15000);
+  const tick=async()=>{
+   try{
+    const {s,p,i,r}=await load();
+    if(alive){setStation(s);setPreflight(p);setIntents(i);setReceipts(r);
+     setError('');setUpdated(new Date());}
+   }catch(e){if(alive)setError(e.message||'Сервер диагностики недоступен');}
+  };
+  void tick();
+  const timer=setInterval(()=>{void tick();},15000);
   return ()=>{alive=false;clearInterval(timer);};
- },[token]);
- const chain=data?.transportChain;
+ },[load]);
+ const worker=station?.worker,agent=station?.agent,esp=station?.esp32;
+ const events=station?.esp32Transitions?.events||[];
+ const items=intents?.ledger?.items||[];
+ const records=receipts?.ledger?.items||[];
+ const counts={
+  waiting:items.filter(x=>['STAGED','QUEUED'].includes(x.status)).length,
+  processing:items.filter(x=>['DISPATCHING','START_ACCEPTED'].includes(x.status)).length,
+  uncertain:items.filter(x=>x.status==='UNKNOWN').length
+ };
  const cards=[
-  {label:'Radio Worker',value:chain?.worker?.reachable?'Доступен':'Нет подтверждения',detail:'Доступность сервиса'},
-  {label:'Windows Agent',value:chain?.agent?.connected?'Связь есть':'Нет подтверждения',detail:chain?.agent?.deviceBound?'Устройство привязано':'Устройство не привязано'},
-  {label:'Лабораторный VLC',value:chain?.trial?.status==='LAB_PROCESS_STOP_CONFIRMED'?'Процесс завершён':'STOP_NOT_CONFIRMED',detail:'Только учебный процесс, не весь эфир'},
-  {label:'ESP32',value:chain?.esp32?.fresh?'Телеметрия актуальна':'Нет свежих данных',detail:'Heartbeat: '+yesNo(chain?.esp32?.heartbeatFresh)+' · Lease: '+yesNo(chain?.esp32?.leaseValid)},
-  {label:'Усилитель',value:chain?.esp32?.amplifierPower||'UNKNOWN',detail:'Сообщённое состояние, без физической проверки'}
+  {name:'Radio Worker',value:worker?.reachable?'На связи':'Нет связи',detail:'Фаза: '+stateText(worker?.phase)+' · PCM-журнал: '+boolText(worker?.journalHealthy)},
+  {name:'Windows Agent',value:agent?.online?'В сети':'Нет связи',detail:'Устройство привязано: '+boolText(agent?.deviceBound)+' · Воспроизведение разрешено: '+boolText(agent?.playbackAllowed)},
+  {name:'ESP32',value:esp?.fresh?'Телеметрия актуальна':'Нет свежих данных',detail:'Heartbeat: '+boolText(esp?.heartbeatFresh)+' · Lease: '+boolText(esp?.leaseValid)},
+  {name:'GPIO13 / AA-300',value:stateText(esp?.amplifierPower),detail:'Только командное состояние, не измеренное питание'}
  ];
- return <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 sm:p-5 space-y-4" aria-label="Диагностика тракта оповещения">
-  <div className="flex flex-wrap items-center justify-between gap-3">
-   <div><h3 className="text-lg font-semibold">Тракт оповещения</h3><p className="text-sm text-slate-600 dark:text-slate-300">Только диагностика. Автоматическая тревога отключена, физическое состояние громкоговорителей не подтверждено.</p></div>
+ return <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 p-4 sm:p-5 space-y-4" aria-label="Диагностика основного тракта МЧС">
+  <div className="flex flex-wrap items-start justify-between gap-3">
+   <div>
+    <h3 className="text-lg font-semibold">Основной тракт экстренного оповещения</h3>
+    <p className="text-sm text-slate-600 dark:text-slate-300">Данные Radio Worker, Windows Agent и ESP32 без запуска оповещений и без команд управления усилителем.</p>
+   </div>
    <button type="button" onClick={refresh} disabled={loading} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">{loading?'Проверяем…':'Обновить'}</button>
   </div>
-  {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">Диагностика недоступна: {error}</p>}
-  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-   {cards.map(item=><div key={item.label} className="rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-white/5 p-3 min-w-0">
-    <div className="text-xs text-slate-600 dark:text-slate-300">{item.label}</div>
-    <strong className="block mt-1 text-sm break-words">{chain?item.value:'Ожидание данных'}</strong>
-    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.detail}</p>
+  {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">Не удалось обновить диагностику: {error}</p>}
+  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+   {cards.map(card=><div key={card.name} className="rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-white/5 p-3 min-w-0">
+    <div className="text-xs text-slate-600 dark:text-slate-300">{card.name}</div>
+    <strong className="block mt-1 text-sm break-words">{station?card.value:'Ожидание данных'}</strong>
+    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{card.detail}</p>
    </div>)}
   </div>
-  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Исполнительный контур МЧС">
-   <div><strong className="block text-sm">Двухканальный цикл оповещения</strong>
-    <p className="text-xs text-slate-600 dark:text-slate-300">Последнее настоящее Android-событие. Только наблюдение: подтверждения учебного VLC не равны воспроизведению ALARM.</p></div>
-   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-    {[
-     {name:'Событие',value:lifecycle?.eventId?lifecycle.eventId:'Не зарегистрировано'},
-     {name:'Состояние',value:lifecycle?.state||'Нет данных'},
-     {name:'START обоих каналов',value:channels?.started?.bothConfirmed===true?'Подтверждён':'Не подтверждён'},
-     {name:'STOP обоих каналов',value:channels?.stopped?.bothConfirmed===true?'Подтверждён':'Не подтверждён'}
-    ].map(item=><div key={item.name} className="rounded-lg bg-slate-50 dark:bg-white/5 p-3 min-w-0">
-     <span className="block text-xs text-slate-600 dark:text-slate-300">{item.name}</span>
-     <strong className="block mt-1 text-sm break-all">{item.value}</strong>
-    </div>)}
-   </div>
-   <p className="text-xs font-medium">Операторская блокировка: активна · Автоматический эфир: отключён</p>
-   {(channels?.holds||[]).length>0&&<details className="text-xs">
-    <summary className="cursor-pointer">Почему контур не готов ({channels.holds.length})</summary>
-    <ul className="mt-2 list-disc pl-5 space-y-1">{channels.holds.map((code,i)=><li key={code+i}>{names[code]||code}</li>)}</ul>
-   </details>}
-  </section>
   <div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 space-y-2">
-   <strong className="block text-sm">Разрешение на запуск: отсутствует</strong>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Даже полная телеметрия не разрешает автоматический ALARM и не подтверждает отсутствие звука в громкоговорителях.</p>
-   {chain?.holds?.length>0&&<ul className="list-disc pl-5 text-sm space-y-1">{chain.holds.map((code,i)=><li key={code+'-'+i}>{names[code]||code}</li>)}</ul>}
+   <strong className="block text-sm">Готовность физического оповещения: не подтверждена</strong>
+   <p className="text-xs text-slate-600 dark:text-slate-300">PCM на сервере, heartbeat Agent и команда ON не доказывают наличие звука в коридорах. Отчёт не разрешает включение реле.</p>
+   <div className="grid sm:grid-cols-3 gap-2 text-xs">
+    <span>Android → Worker: {boolText(station?.flags?.androidDispatch&&station?.flags?.coordinator&&station?.flags?.workerCommands)}</span>
+    <span>PCM подтверждений: {station?.stationReceipt?.confirmedCount??'—'}</span>
+    <span>Неподтверждённых требований: {station?.holds?.length??'—'}</span>
+   </div>
+   {!!station?.holds?.length&&<details className="text-xs">
+    <summary className="cursor-pointer">Причины ограничений ({station.holds.length})</summary>
+    <ul className="mt-2 list-disc pl-5 space-y-1">{station.holds.map((x,i)=><li key={x+i}>{x}</li>)}</ul>
+   </details>}
   </div>
-  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
-   <strong className="block text-sm">Предпроверка двух реальных уведомлений МЧС</strong>
-   <p className="text-xs text-slate-600 dark:text-slate-300">Проверяются текущие настройки и телеметрия реального оборудования. Никакое сообщение не генерируется и ALARM не включается.</p>
-   <div className="grid gap-2 sm:grid-cols-2">
-    {(preflight?.types||[]).map(item=><div key={item.type} className="rounded-lg border border-slate-200 dark:border-white/15 p-3">
-     <strong className="text-sm">{item.type==='MISSILE_DANGER'?'Ракетная опасность':'Отбой ракетной опасности'}</strong>
-     <p className="text-xs mt-1 break-all">ALARM: {item.audioAssetId||'Не выбран'} · Повторы: {item.repeats}</p>
-     <p className="text-xs mt-1">{item.configured?'Конфигурация заполнена':item.reasons.map(code=>names[code]||code).join('; ')}</p>
+  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Причины выключения GPIO13">
+   <div>
+    <strong className="text-sm">История управления усилителем</strong>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Счётчики ESP32 выявляют даже короткое OFF→ON между опросами. Все времена событий — время наблюдения сервером, не измерение на силовой линии.</p>
+   </div>
+   <div className="grid gap-2 sm:grid-cols-3 text-sm">
+    <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Включений GPIO13: <strong>{esp?.relayOnTransitions??'—'}</strong></div>
+    <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Выключений GPIO13: <strong>{esp?.relayOffTransitions??'—'}</strong></div>
+    <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Последняя причина OFF: <strong className="break-words">{reasonNames[esp?.lastRelayOffReason]||esp?.lastRelayOffReason||'Нет данных'}</strong></div>
+   </div>
+   {!esp?.firmwareEvidencePresent&&<p className="text-xs text-amber-700 dark:text-amber-300">Новая телеметрия прошивки ESP32 пока не получена. Требуется обновление прошивки и подключённый Windows Agent.</p>}
+   {events.length?<div className="max-h-72 overflow-auto space-y-2" aria-label="Журнал переходов ESP32">
+    {[...events].reverse().map((event,i)=><div key={event.at+event.kind+i} className="rounded-lg bg-slate-50 dark:bg-white/5 px-3 py-2 text-xs">
+     <strong>{kinds[event.kind]||event.kind}</strong>
+     <span className="ml-2 text-slate-600 dark:text-slate-300">{new Date(event.at).toLocaleString('ru-RU')}</span>
+     <span className="block mt-1 break-words">{event.kind==='FIRMWARE_RELAY_OFF'?
+      reasonNames[String(event.detail||'').split(':').slice(1).join(':')]||event.detail:event.detail}</span>
+    </div>)}
+   </div>:<p className="text-xs text-slate-600 dark:text-slate-300">За последние 10 минут изменений не зарегистрировано. Это не является доказательством отсутствия физических отключений.</p>}
+  </section>
+  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Очередь автоматических событий">
+   <strong className="text-sm">Очередь ALARM и отбоя</strong>
+   <p className="text-xs text-slate-600 dark:text-slate-300">Ожидают: {counts.waiting} · В обработке: {counts.processing} · Неопределённый результат: {counts.uncertain}</p>
+   <div className="space-y-2 max-h-52 overflow-auto">
+    {[...items].slice(-6).reverse().map(x=><div key={x.eventId||x.sourceEventId} className="flex flex-wrap justify-between gap-2 rounded-lg bg-slate-50 dark:bg-white/5 p-2 text-xs">
+     <span>{eventLabels[x.eventType]||x.eventType||'Событие'}</span>
+     <strong>{x.status||'—'}</strong>
+    </div>)}
+    {!items.length&&<p className="text-xs text-slate-600 dark:text-slate-300">Событий в очереди нет.</p>}
+   </div>
+   <strong className="block text-sm">Последние результаты PCM</strong>
+   <div className="space-y-1 text-xs">
+    {[...records].slice(-4).reverse().map(x=><div key={x.eventId} className="flex justify-between gap-2">
+     <span>{eventLabels[x.eventType]||x.eventType||'Событие'}</span>
+     <strong>{x.state}</strong>
+    </div>)}
+    {!records.length&&<p>Подтверждённых событий пока нет.</p>}
+   </div>
+  </section>
+  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+   <strong className="text-sm">Настройки двух уведомлений Тульской области</strong>
+   <div className="grid sm:grid-cols-2 gap-2">
+    {(preflight?.types||[]).map(x=><div key={x.type} className="rounded-lg bg-slate-50 dark:bg-white/5 p-3 text-xs">
+     <strong>{eventLabels[x.type]||x.type}</strong>
+     <p className="mt-1 break-all">ALARM: {x.audioAssetId||'Не выбран'} · Повторы: {x.repeats??'—'}</p>
+     <p>{x.configured?'Файл назначен':'Требуется настройка'}</p>
     </div>)}
    </div>
-   {preflight?.holds?.length>0&&<ul className="list-disc pl-5 text-xs space-y-1">{preflight.holds.map(code=><li key={code}>{names[code]||code}</li>)}</ul>}
-   <p className="text-xs font-medium">Автоматическая отправка ALARM: {preflight?.automaticPlaybackEnabled?'Включена':'Заблокирована'} · Разрешение на усилитель: отсутствует.</p>
-  </div>
-  <p className="text-xs text-slate-600 dark:text-slate-300">Последнее обновление: {updated?updated.toLocaleString('ru-RU'):'Нет данных'} · Автопроверка каждые 15 секунд.</p>
+  </section>
+  <p className="text-xs text-slate-600 dark:text-slate-300">Последнее обновление: {updated?updated.toLocaleString('ru-RU'):'Нет данных'} · Автоматическая проверка каждые 15 секунд.</p>
  </section>;
 }
