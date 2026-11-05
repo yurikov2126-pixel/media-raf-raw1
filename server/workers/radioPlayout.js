@@ -347,6 +347,7 @@ const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
 const mchsStationPcmExecutor=createMchsStationPcmExecutor();
 const mchsStationCommandsEnabled=process.env.RADIO_MCHS_STATION_COMMANDS_ENABLED==='true';
 let mchsStationPreparing=false;
+let mchsStationPreparingEventId=null;
 let mchsStationCommandEpoch=0;
 let trainingAssetId=null;
 let trainingCommandEpoch=0;
@@ -2184,6 +2185,10 @@ const server=http.createServer((req,res)=>{
       if(valid.action==='STOP'){
         // STOP is event-bound; old commands cannot cancel a newer session.
         const current=mchsStationPcmExecutor.snapshot();
+        if(mchsStationPreparing&&mchsStationPreparingEventId===valid.eventId){
+          mchsStationCommandEpoch++;
+          respond(200,{ok:true,reason:'PREPARATION_CANCEL_REQUESTED'});return;
+        }
         if(!current.session||current.session.eventId!==valid.eventId||
             !['PREEMPTING','PLAYING','RESUMING'].includes(current.phase)){
           respond(409,{ok:false,reason:'NO_MATCHING_ACTIVE_SESSION'});return;
@@ -2198,6 +2203,7 @@ const server=http.createServer((req,res)=>{
         respond(409,{ok:false,reason:'STATION_SOURCE_BUSY'});return;
       }
       mchsStationPreparing=true;
+      mchsStationPreparingEventId=valid.eventId;
       const epoch=++mchsStationCommandEpoch;
       let pcm=null;
       try{
@@ -2223,7 +2229,7 @@ const server=http.createServer((req,res)=>{
         if(pcm)pcm.close();
         respond(422,{ok:false,reason:'STATION_AUDIO_PREPARATION_FAILED',
           type:error?.name||'Error'});
-      }finally{mchsStationPreparing=false;}
+      }finally{mchsStationPreparing=false;mchsStationPreparingEventId=null;}
     });
     return;
   }
@@ -2251,7 +2257,7 @@ const server=http.createServer((req,res)=>{
         result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;
       }
       else {
-        if(!trainingEnabled||trainingOverlay.snapshot().active||trainingPreparing){result={ok:false,reason:'DISABLED_OR_ACTIVE_OR_PREPARING',...trainingOverlay.snapshot()};}
+        if(!trainingEnabled||trainingOverlay.snapshot().active||trainingPreparing||mchsStationPreparing||mchsStationPcmExecutor.snapshot().active){result={ok:false,reason:'DISABLED_OR_ACTIVE_OR_PREPARING',...trainingOverlay.snapshot()};}
         else try{
           trainingPreparing=true;
           const epoch=++trainingCommandEpoch;
