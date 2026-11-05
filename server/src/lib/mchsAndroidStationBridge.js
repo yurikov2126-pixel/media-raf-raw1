@@ -28,7 +28,7 @@ export async function dispatchNewAndroidStationBindings({
   const command={action:'START',eventId:item.eventId,eventType:item.eventType,
    assetId:item.assetId,repeats:item.repetitions,
    occurredAt:new Date(event.occurredAt).toISOString(),
-   admittedAt:item.createdAt};
+   ...(typeof item.createdAt==='string'?{admittedAt:item.createdAt}:{})};
   const validated=validateMchsStationCommand(command,{nowMs});
   if(!validated.ok){reject(validated.reason);continue;}
   try{
