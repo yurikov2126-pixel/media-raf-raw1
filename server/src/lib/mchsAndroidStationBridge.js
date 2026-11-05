@@ -33,7 +33,7 @@ export async function dispatchNewAndroidStationBindings({
   try{
    const response=await request(command);
    results.push({eventId:item.eventId,eventType:item.eventType,
-    ok:response?.ok===true,reason:response?.ok===true?null:
+    ok:response?.ok===true,httpStatus:response?.httpStatus||null,reason:response?.ok===true?null:
       response?.data?.reason||response?.reason||'WORKER_NOT_CONFIRMED',
     workerStatus:response?.data?.status||null});
   }catch(error){
