@@ -699,7 +699,11 @@ class RadioAgentApp(tk.Tk):
                         else:
                             state.update(mchsRelayAckEventId=None,mchsRelayFirstAckAt=None,mchsRelayLastAckAt=None)
                     record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
-                    self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
+                    if (self.active_isolated_mode and self.mchs_manual_pulse_until>time.monotonic()
+                            and not permit and local_reason=='SERVER_POWER_NOT_AUTHORIZED'):
+                        self.messages.put(("power_status","GPIO13 OFF · сервер не разрешил ручной тест. Проверьте запрос ВКЛ в эфирном пульте и права радиокомпьютера."))
+                    else:
+                        self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
                     # A failed/unknown ON cannot count as a power ready ACK.
                     # A fresh signed acknowledgment must restart the full
