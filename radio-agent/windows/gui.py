@@ -31,7 +31,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.17'
+AGENT_VERSION = '0.5.18'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -115,6 +115,7 @@ class RadioAgentApp(tk.Tk):
         self.active_isolated_mode = False
         self.mchs_relay_trial_armed = False
         self.mchs_relay_trial_deadline = 0.0
+        self.mchs_manual_pulse_until = 0.0
         self.mchs_relay_trial_requested = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Остановлен · оборудование не управляется")
         self.server = tk.StringVar(value="https://mediarafraw.ru")
@@ -203,6 +204,14 @@ class RadioAgentApp(tk.Tk):
         ttk.Label(isolated_box,
                   text="Реле питает усилитель 220 В. Нужны проверенная электропроводка, отключённая линия PA и разрешение питания в админке. Настоящие Android-события реле не включают.",
                   style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(4,8))
+        manual_row=ttk.Frame(isolated_box,style="Main.TFrame")
+        manual_row.pack(fill="x",pady=(0,8))
+        ttk.Button(manual_row,text="Проверить реле: ON до 8 секунд",
+                   command=self.manual_mchs_relay_on).pack(side="left",padx=(0,8))
+        ttk.Button(manual_row,text="Реле OFF",
+                   command=self.manual_mchs_relay_off).pack(side="left")
+        ttk.Label(isolated_box,text="Ручной аппаратный тест доступен только после запуска изолированного Agent, с серверным permit:true. Не является режимом реального оповещения.",
+                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(0,8))
         ttk.Label(isolated_box,text="WAV «Ракетная опасность»",
                   style="Status.TLabel").pack(anchor="w")
         self.wav_path_row(isolated_box,self.mchs_danger_wav)
@@ -412,10 +421,12 @@ class RadioAgentApp(tk.Tk):
                       esp32_secret='' if isolated else self.esp32_secret.get().strip())
         for key,value in options.items():
             setattr(args,key,value)
+        args.isolated_relay_trial=bool(isolated and relay_requested)
         STOP.clear()
         self.active_isolated_mode = isolated
         self.mchs_relay_trial_armed=bool(isolated and relay_requested)
         self.mchs_relay_trial_deadline=(time.monotonic()+600 if self.mchs_relay_trial_armed else 0.0)
+        self.mchs_manual_pulse_until=0.0
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.status.set("Подключение к центральному эфиру…")
@@ -507,11 +518,39 @@ class RadioAgentApp(tk.Tk):
                 threading.Thread(target=work,daemon=True).start()
         self.after(6500,self.report_esp32_status)
 
-    def set_power_arm(self):
-        if self.active_isolated_mode and self.worker and self.worker.is_alive():
-            self.power_arm.set(False)
-            messagebox.showwarning("Безопасность", "Нельзя включать реле ESP32 во время изолированного МЧС-испытания.")
+    def manual_mchs_relay_on(self):
+        if not (self.worker and self.worker.is_alive() and
+                self.active_isolated_mode and self.mchs_relay_trial_armed and
+                self.power_arm.get() and
+                time.monotonic()<self.mchs_relay_trial_deadline):
+            messagebox.showwarning("GPIO13","Сначала запустите ограниченный аппаратный МЧС-пилот. Серверное разрешение питания обязательно.")
             return
+        if (PLAYBACK_STATE.get("mchsIsolatedEventId") is not None or
+                PLAYBACK_STATE.get("mchsRelayPrepareEventId") is not None):
+            messagebox.showwarning("GPIO13","Во время оповещения ручное ON запрещено.")
+            return
+        if not messagebox.askyesno("Реле GPIO13 · 220 В",
+                "Подтвердите проверенную электросхему и отсоединённую аудиолинию PA. Подать запрос ON не более чем на 8 секунд при разрешении сервера?"):
+            return
+        self.mchs_manual_pulse_until=time.monotonic()+8
+        self.messages.put(("log","MCHS_RELAY_MANUAL_PULSE_REQUESTED · до 8 с; требуется server permit:true"))
+        if not self.power_busy:
+            self.power_tick(schedule_next=False)
+
+    def manual_mchs_relay_off(self):
+        self.mchs_manual_pulse_until=0.0
+        self.messages.put(("log","MCHS_RELAY_MANUAL_OFF_REQUESTED"))
+        if not self.power_busy:
+            self.power_tick(schedule_next=False)
+
+    def set_power_arm(self):
+        if self.active_isolated_mode and self.worker and self.worker.is_alive() and self.power_arm.get():
+            self.power_arm.set(False)
+            messagebox.showwarning("Безопасность", "Повторное включение GPIO13 во время изолированного пилота запрещено. Остановите Agent для нового допуска.")
+            return
+        if not self.power_arm.get():
+            self.mchs_relay_trial_armed=False
+            self.mchs_manual_pulse_until=0.0
         if self.power_arm.get() and not messagebox.askyesno("Усилитель 220 В",
             "Подтвердите: HIGH включает реле GPIO13; силовой узел, защитный автомат, драйвер и OFF при сбросе проверены. Разрешить управление физическим питанием?"):
             self.power_arm.set(False)
@@ -532,7 +571,7 @@ class RadioAgentApp(tk.Tk):
         except OSError as error:
             messagebox.showerror("Диагностика питания",type(error).__name__)
 
-    def power_tick(self):
+    def power_tick(self,schedule_next=True):
         # A failed fetch cannot create a fresh ON authorization. Relay self-OFF
         # occurs even if the Windows process is killed.
         if not self.power_busy and self.esp32_ip.get().strip() and len(self.esp32_secret.get().strip())>=32:
@@ -614,10 +653,14 @@ class RadioAgentApp(tk.Tk):
                     state=PLAYBACK_STATE
                     now=time.monotonic()
                     local_running=bool(state["broadcastRunning"])
+                    preparing_event=state.get("mchsRelayPrepareEventId")
                     if self.active_isolated_mode:
                         permit,local_reason=decide_synthetic_relay_pilot(
                             isolated=True,operator_armed=trial_armed,
-                            stop_requested=STOP.is_set(),event_id=state.get("mchsIsolatedEventId"),
+                            stop_requested=STOP.is_set(),
+                            event_id=preparing_event or state.get("mchsIsolatedEventId"),
+                            preparing_event_id=preparing_event,
+                            manual_test_until=self.mchs_manual_pulse_until,
                             audio_mode=state["mode"],server_permit=permit,
                             now=now,armed_until=self.mchs_relay_trial_deadline)
                         if not permit:
@@ -631,16 +674,51 @@ class RadioAgentApp(tk.Tk):
                     self.messages.put(("broadcast_status","● Эфир включён" if local_running else "● Эфир выключен"))
                     self.messages.put(("audio_status","● Звук: воспроизведение / переход" if audio_recent else "● Звук: нет подтверждения"))
                     phase="esp32_power"
-                    signed_power(host,secret,permit,8000 if permit else 0)
+                    # Re-check an operator OFF before physical IO: the async
+                    # worker may have been queued while a button was clicked.
+                    if self.active_isolated_mode:
+                        if (STOP.is_set() or not self.power_arm.get() or
+                                not self.mchs_relay_trial_armed or
+                                time.monotonic()>=self.mchs_relay_trial_deadline):
+                            permit=False
+                        if local_reason=='OPERATOR_MANUAL_RELAY_PULSE' and time.monotonic()>=self.mchs_manual_pulse_until:
+                            permit=False
+                        if local_reason=='SYNTHETIC_RELAY_PRE_ROLL' and preparing_event!=state.get("mchsRelayPrepareEventId"):
+                            permit=False
+                        if local_reason=='SYNTHETIC_LOCAL_WAV_POWER_TRIAL' and not state.get("mchsIsolatedEventId"):
+                            permit=False
+                    result=signed_power(host,secret,permit,8000 if permit else 0)
+                    if self.active_isolated_mode and preparing_event:
+                        if permit and local_reason=='SYNTHETIC_RELAY_PRE_ROLL' and state.get("mchsRelayPrepareEventId")==preparing_event:
+                            ack=time.monotonic()
+                            if state.get("mchsRelayAckEventId")!=preparing_event:
+                                state["mchsRelayFirstAckAt"]=ack
+                            state["mchsRelayAckEventId"]=preparing_event
+                            state["mchsRelayLastAckAt"]=ack
+                            self.messages.put(("log","MCHS_RELAY_ON_ACK "+preparing_event))
+                        else:
+                            state.update(mchsRelayAckEventId=None,mchsRelayFirstAckAt=None,mchsRelayLastAckAt=None)
                     record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
-                    self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
+                    if (self.active_isolated_mode and self.mchs_manual_pulse_until>time.monotonic()
+                            and not permit and local_reason=='SERVER_POWER_NOT_AUTHORIZED'):
+                        self.messages.put(("power_status","GPIO13 OFF · сервер не разрешил ручной тест. Проверьте запрос ВКЛ в эфирном пульте и права радиокомпьютера."))
+                    else:
+                        self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
+                    # A failed/unknown ON cannot count as a power ready ACK.
+                    # A fresh signed acknowledgment must restart the full
+                    # three-second amplifier warm-up.
+                    if self.active_isolated_mode and PLAYBACK_STATE.get("mchsRelayPrepareEventId"):
+                        PLAYBACK_STATE.update(mchsRelayAckEventId=None,
+                                              mchsRelayFirstAckAt=None,
+                                              mchsRelayLastAckAt=None)
                     record_power_event("POWER_ERROR",result="ERROR",durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
                     self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
                 finally:
                     self.messages.put(("power_done",None))
             threading.Thread(target=job,daemon=True).start()
-        self.after(3000,self.power_tick)
+        if schedule_next:
+            self.after(3000,self.power_tick)
 
     def flash_esp32(self):
         host=self.esp32_ip.get().strip()
@@ -871,6 +949,7 @@ class RadioAgentApp(tk.Tk):
                     self.active_isolated_mode = False
                     self.mchs_relay_trial_armed = False
                     self.mchs_relay_trial_deadline = 0.0
+                    self.mchs_manual_pulse_until = 0.0
                     self.status.set("Остановлен · оборудование не управляется")
                     self.broadcast_status.set("● Эфир выключен")
                     self.audio_status.set("● Источник: остановлен")

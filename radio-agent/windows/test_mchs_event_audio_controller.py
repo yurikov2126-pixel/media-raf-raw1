@@ -110,6 +110,29 @@ class EventBoundAudioTests(unittest.TestCase):
         self.assertEqual(second.command(envelope(event(2)),now=1,baseline=True,
                                              authorized=True)[1],'REPLAYED_EVENT')
 
+    def test_stop_or_halt_cancels_pre_roll_before_vlc(self):
+        self.assertEqual(self.send(event(1))[0],'START_AUDIO')
+        self.assertEqual(self.ctrl.state,'STARTING')
+        result=self.send(event(2,action='STOP'))
+        self.assertEqual(result,('STOP_ACCEPTED','PRE_ROLL_CANCELLED'))
+        self.assertEqual(self.ctrl.state,'FAILED')
+        self.assertEqual(self.ctrl.failure,'SERVER_STOP_DURING_PRE_ROLL')
+        self.ctrl=IsolatedEventAudioController(EventAdmissionLedger(
+            Path(self.temp.name)/'halt-ledger.json'),self.ctrl.assets)
+        self.assertEqual(self.send(event(1))[0],'START_AUDIO')
+        result=self.ctrl.command(envelope(None,halted=True,enabled=False),
+                                 now=2,baseline=False,authorized=False)
+        self.assertEqual(result,('NO_ACTION','SERVER_HALT_DURING_PRE_ROLL'))
+        self.assertEqual(self.ctrl.state,'FAILED')
+
+    def test_failed_power_pre_roll_never_reports_completed_wav(self):
+        self.assertEqual(self.send(event(1))[0],'START_AUDIO')
+        self.ctrl.started(False,now=17,duration=0,
+                          failure_reason='RELAY_PREROLL_TIMEOUT')
+        self.assertEqual(self.ctrl.state,'FAILED')
+        self.assertEqual(self.ctrl.snapshot()['failure'],'RELAY_PREROLL_TIMEOUT')
+        self.assertEqual(self.ctrl.history,[])
+
     def test_stop_during_audio_interrupts_then_waits_for_return(self):
         self.send(event(1));self.ctrl.started(True,now=1,duration=3)
         result=self.send(event(2,action='STOP'))
