@@ -15,7 +15,7 @@ export function selectNextMchsStationIntent(raw,{nowMs=Date.now(),workerStatus}=
   const occurredAt=item.occurredAt||item.createdAt;
   const valid=validateMchsStationCommand({action:'START',eventId:item.eventId,
    eventType:item.eventType,assetId:item.assetId,repeats:item.repetitions,
-   occurredAt},{nowMs});
+   occurredAt,admittedAt:item.createdAt},{nowMs});
   if(!valid.ok){
    item.status='EXPIRED';item.lastError=valid.reason;changed=true;
   }
