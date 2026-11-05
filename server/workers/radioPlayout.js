@@ -2164,7 +2164,8 @@ const server=http.createServer((req,res)=>{
     };
     if(req.method==='GET'){
       respond(200,{ok:true,enabled:mchsStationCommandsEnabled,
-        preparing:mchsStationPreparing,...mchsStationPcmExecutor.snapshot()});
+        preparing:mchsStationPreparing,...mchsStationPcmExecutor.snapshot(),
+        terminalHistory:mchsStationPcmExecutor.terminalHistory()});
       return;
     }
     if(!mchsStationCommandsEnabled){
