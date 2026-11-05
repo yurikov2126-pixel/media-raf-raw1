@@ -22,6 +22,7 @@ import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
 import {createMchsWorkerEventJournal} from '../src/lib/mchsWorkerEventJournal.js';
 import {createMchsWorkerPcmEvidence} from '../src/lib/mchsWorkerPcmEvidence.js';
 import {createMchsStationPcmExecutor} from '../src/lib/mchsStationPcmExecutor.js';
+import {validateMchsStationCommand} from '../src/lib/mchsStationCommandContract.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -344,6 +345,9 @@ const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
 // A dedicated production-source PCM handler, currently admission-disabled:
 // no live Android or HTTP caller can invoke prepare(), and no GPIO access.
 const mchsStationPcmExecutor=createMchsStationPcmExecutor();
+const mchsStationCommandsEnabled=process.env.RADIO_MCHS_STATION_COMMANDS_ENABLED==='true';
+let mchsStationPreparing=false;
+let mchsStationCommandEpoch=0;
 let trainingAssetId=null;
 let trainingCommandEpoch=0;
 let trainingPreparing=false;
@@ -2149,6 +2153,78 @@ const server=http.createServer((req,res)=>{
         console.warn('MCHS_ISOLATED_WAV_DENIED',error?.message||'UNAVAILABLE');
       }
     })();
+    return;
+  }
+  if(req.url==='/mchs-station-session' && ['GET','POST'].includes(req.method)){
+    if(!authorized(req)){res.writeHead(403).end();return;}
+    const respond=(status,result)=>{
+      res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end(JSON.stringify(result));
+    };
+    if(req.method==='GET'){
+      respond(200,{ok:true,enabled:mchsStationCommandsEnabled,
+        preparing:mchsStationPreparing,...mchsStationPcmExecutor.snapshot()});
+      return;
+    }
+    if(!mchsStationCommandsEnabled){
+      respond(503,{ok:false,reason:'STATION_COMMANDS_DISABLED'});return;
+    }
+    let body='',bytes=0,tooLarge=false;
+    req.on('data',chunk=>{
+      bytes+=chunk.length;
+      if(bytes>1024){tooLarge=true;req.destroy();return;}
+      body+=chunk;
+    });
+    req.on('end',async()=>{
+      if(tooLarge)return;
+      let command;
+      try{command=JSON.parse(body);}catch{respond(400,{ok:false,reason:'INVALID_JSON'});return;}
+      const valid=validateMchsStationCommand(command);
+      if(!valid.ok){respond(400,valid);return;}
+      if(valid.action==='STOP'){
+        // STOP is event-bound; old commands cannot cancel a newer session.
+        const current=mchsStationPcmExecutor.snapshot();
+        if(!current.session||current.session.eventId!==valid.eventId||
+            !['PREEMPTING','PLAYING','RESUMING'].includes(current.phase)){
+          respond(409,{ok:false,reason:'NO_MATCHING_ACTIVE_SESSION'});return;
+        }
+        mchsStationCommandEpoch++;
+        respond(200,{ok:true,...mchsStationPcmExecutor.abort('COMMAND_STOP')});
+        return;
+      }
+      if(valid.action!=='START'){respond(400,{ok:false,reason:'UNSUPPORTED_ACTION'});return;}
+      if(mchsStationPreparing||mchsStationPcmExecutor.snapshot().active||
+         trainingOverlay.snapshot().active||trainingPreparing){
+        respond(409,{ok:false,reason:'STATION_SOURCE_BUSY'});return;
+      }
+      mchsStationPreparing=true;
+      const epoch=++mchsStationCommandEpoch;
+      let pcm=null;
+      try{
+        // The same verified, category=ALARM source and bounded ffmpeg PCM
+        // decoder used by the existing station overlay, not an arbitrary path.
+        pcm=await loadTrainingAlarm(valid.assetId);
+        if(epoch!==mchsStationCommandEpoch){
+          pcm.close();respond(409,{ok:false,reason:'SESSION_CANCELLED'});return;
+        }
+        if(trainingOverlay.snapshot().active||trainingPreparing){
+          pcm.close();respond(409,{ok:false,reason:'STATION_SOURCE_BUSY'});return;
+        }
+        const result=mchsStationPcmExecutor.prepare({
+          eventId:valid.eventId,eventType:valid.eventType,
+          assetId:valid.assetId,repeats:valid.repeats,pcm
+        });
+        if(!result.ok)pcm.close();
+        if(result.ok)console.info('MCHS_STATION_SESSION_ADMITTED',JSON.stringify({
+          eventId:valid.eventId,eventType:valid.eventType,repeats:valid.repeats
+        }));
+        respond(result.ok?200:409,result);
+      }catch(error){
+        if(pcm)pcm.close();
+        respond(422,{ok:false,reason:'STATION_AUDIO_PREPARATION_FAILED',
+          type:error?.name||'Error'});
+      }finally{mchsStationPreparing=false;}
+    });
     return;
   }
   if(req.url==='/mchs-training-stream' && ['GET','POST'].includes(req.method)){
