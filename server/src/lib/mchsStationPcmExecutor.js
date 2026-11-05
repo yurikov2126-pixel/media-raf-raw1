@@ -44,6 +44,8 @@ export function createMchsStationPcmExecutor(){
     const chunk=source.read(position,size);
     if(!Buffer.isBuffer(chunk)||chunk.length!==size)throw new Error('PCM_SOURCE_READ_FAILED');
     chunk.copy(output,cursor);
+    if(lifecycle.snapshot().phase==='PREEMPTING')
+     lifecycle.preempted({eventId:bound.eventId,sourceSuspended:true});
     cursor+=size;position+=size;
     if(position===source.size){
      completedRepeats++;position=0;
@@ -56,9 +58,6 @@ export function createMchsStationPcmExecutor(){
     }
    }
    pcmFrames++;
-   if(lifecycle.snapshot().phase==='PREEMPTING'){
-    lifecycle.preempted({eventId:bound.eventId,sourceSuspended:true});
-   }
    return output;
   }catch{
    lifecycle.abort('PCM_SOURCE_READ_FAILED');
