@@ -13,7 +13,12 @@ export function recordEsp32Transition(raw,{deviceId,reporterId,observedAt,status
   power:clean(status.amplifierPower),mode:status.agentMode||'UNKNOWN',
   heartbeatFresh:status.heartbeatFresh===true,leaseValid:status.leaseValid===true,
   heartbeatCount:Number.isSafeInteger(status.heartbeatCount)?status.heartbeatCount:null,
-  relayOutputEnabled:status.relayOutputEnabled===true};
+  relayOutputEnabled:status.relayOutputEnabled===true,
+  bootNonce:typeof status.bootNonce==='string'?status.bootNonce:null,
+  relayOnTransitions:Number.isSafeInteger(status.relayOnTransitions)?status.relayOnTransitions:null,
+  relayOffTransitions:Number.isSafeInteger(status.relayOffTransitions)?status.relayOffTransitions:null,
+  lastRelayTransitionMs:Number.isSafeInteger(status.lastRelayTransitionMs)?status.lastRelayTransitionMs:null,
+  lastRelayOffReason:typeof status.lastRelayOffReason==='string'?status.lastRelayOffReason:null};
  const prev=devices[deviceId];
  const prevTime=Date.parse(prev?.observedAt||'');
  if(prev&&(!Number.isFinite(prevTime)||t<=prevTime))
@@ -28,6 +33,24 @@ export function recordEsp32Transition(raw,{deviceId,reporterId,observedAt,status
  if(prev&&prev.mode!==next.mode)add('AGENT_MODE_CHANGED',prev.mode+'_TO_'+next.mode);
  if(prev&&prev.heartbeatCount!==null&&next.heartbeatCount!==null&&
     next.heartbeatCount<prev.heartbeatCount)add('HEARTBEAT_COUNTER_RESET','ESP32_REBOOT_OR_COUNTER_RESET');
+ // Firmware counters detect transitions that occurred between two HTTP polls.
+ if(prev&&prev.bootNonce&&next.bootNonce&&prev.bootNonce!==next.bootNonce){
+  add('FIRMWARE_REBOOT','BOOT_NONCE_CHANGED');
+ }else if(prev&&prev.bootNonce&&prev.bootNonce===next.bootNonce){
+  if(next.relayOnTransitions!==null&&prev.relayOnTransitions!==null){
+   if(next.relayOnTransitions>prev.relayOnTransitions)
+    add('FIRMWARE_RELAY_ON',String(next.relayOnTransitions-prev.relayOnTransitions));
+   else if(next.relayOnTransitions<prev.relayOnTransitions)
+    add('FIRMWARE_COUNTER_RESET','ON_COUNTER_DECREASED');
+  }
+  if(next.relayOffTransitions!==null&&prev.relayOffTransitions!==null){
+   if(next.relayOffTransitions>prev.relayOffTransitions)
+    add('FIRMWARE_RELAY_OFF',String(next.relayOffTransitions-prev.relayOffTransitions)+':'+
+      (next.lastRelayOffReason||'UNKNOWN'));
+   else if(next.relayOffTransitions<prev.relayOffTransitions)
+    add('FIRMWARE_COUNTER_RESET','OFF_COUNTER_DECREASED');
+  }
+ }
  devices[deviceId]=next;
  return {state:{devices,events:[...events,...changes].slice(-MAX_EVENTS)},added:changes,reason:null};
 }
@@ -35,7 +58,8 @@ export function assessEsp32TransitionEvidence(raw,{deviceId,nowMs=Date.now(),win
  const entries=Array.isArray(raw?.events)?raw.events.filter(e=>e.deviceId===deviceId&&
   Number.isFinite(Date.parse(e.at))&&nowMs-Date.parse(e.at)>=0&&nowMs-Date.parse(e.at)<=windowMs):[];
  const suspect=entries.filter(e=>['COMMANDED_POWER_CHANGED','LEASE_CHANGED','TELEMETRY_GAP',
-  'HEARTBEAT_CHANGED','HEARTBEAT_COUNTER_RESET','REPORTER_CHANGED'].includes(e.kind));
+  'HEARTBEAT_CHANGED','HEARTBEAT_COUNTER_RESET','REPORTER_CHANGED',
+  'FIRMWARE_RELAY_OFF','FIRMWARE_COUNTER_RESET','FIRMWARE_REBOOT'].includes(e.kind));
  return {readOnly:true,windowMs,events:entries.slice(-70),suspectCount:suspect.length,
   stabilityConfirmed:false,actualMainsPowerVerified:false};
 }

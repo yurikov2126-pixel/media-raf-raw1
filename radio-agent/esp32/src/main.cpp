@@ -18,6 +18,8 @@ String lastMode="DISCONNECTED";
 String bootNonce;
 uint32_t lastHeartbeat=0,heartbeatCount=0,powerExpires=0,lastSequence=0,lastHeartbeatSequence=0;
 bool commandedOn=false;
+uint32_t relayOnTransitions=0,relayOffTransitions=0,lastRelayTransitionMs=0;
+String lastRelayOffReason="BOOT_SAFE_OFF",lastRelayOnReason="NONE";
 uint32_t lastWifiReconnect=0;
 uint32_t restartAt=0;
 bool otaAuthorized=false,otaCompleted=false;
@@ -25,10 +27,25 @@ String otaExpectedDigest;
 mbedtls_sha256_context otaDigest;
 
 
-void powerOff(){
+void powerOff(const char* reason="UNSPECIFIED_OFF"){
+  // Record actual firmware-controlled output transitions, not periodic lease renewals.
+  if(commandedOn){
+    relayOffTransitions++;
+    lastRelayTransitionMs=millis();
+    lastRelayOffReason=reason;
+  }
   digitalWrite(RELAY_GPIO,LOW);
   commandedOn=false;
   powerExpires=0;
+}
+void powerOn(){
+  if(!commandedOn){
+    relayOnTransitions++;
+    lastRelayTransitionMs=millis();
+    lastRelayOnReason="SIGNED_POWER_PERMIT";
+  }
+  digitalWrite(RELAY_GPIO,HIGH);
+  commandedOn=true;
 }
 void respond(int code,const String& body){
   server.sendHeader("Cache-Control","no-store");
@@ -73,6 +90,11 @@ void status(){
   doc["powerSequence"]=lastSequence;
   doc["heartbeatSequence"]=lastHeartbeatSequence;
   doc["bootNonce"]=bootNonce;
+  doc["relayOnTransitions"]=relayOnTransitions;
+  doc["relayOffTransitions"]=relayOffTransitions;
+  doc["lastRelayTransitionMs"]=lastRelayTransitionMs;
+  doc["lastRelayOffReason"]=lastRelayOffReason;
+  doc["lastRelayOnReason"]=lastRelayOnReason;
   String out;serializeJson(doc,out);respond(200,out);
 }
 void heartbeat(){
@@ -109,15 +131,14 @@ void powerRequest(){
   }
   lastSequence=sequence;
   if(!permit){
-    powerOff();
+    powerOff("SIGNED_PERMIT_FALSE");
     respond(200,"{\"ok\":true,\"amplifierPower\":\"OFF_COMMANDED\"}");return;
   }
   if(lease==0 || lease>POWER_LEASE_MAX_MS || !heartbeatFresh() || WiFi.status()!=WL_CONNECTED) {
-    powerOff();
+    powerOff("POWER_INTERLOCK_REJECTED");
     respond(409,"{\"error\":\"INTERLOCK_NOT_READY\"}");return;
   }
-  digitalWrite(RELAY_GPIO,HIGH);
-  commandedOn=true;
+  powerOn();
   powerExpires=millis()+lease;
   respond(200,"{\"ok\":true,\"amplifierPower\":\"ON_COMMANDED\"}");
 }
@@ -131,7 +152,7 @@ void restartRequest(){
     respond(403,R"({"error":"INVALID_SIGNATURE_OR_REPLAY"})");return;
   }
   lastSequence=seq;
-  powerOff(); // Always drop relay before a remote maintenance reboot.
+  powerOff("SIGNED_MAINTENANCE_RESTART"); // Always drop relay before a remote maintenance reboot.
   restartAt=millis()+500;
   respond(202,R"({"ok":true,"restarting":true})");
 }
@@ -151,7 +172,7 @@ void firmwareUpload(){
     }
     for(size_t i=0;i<64;i++)if(!isxdigit(digest[i]))return;
     lastSequence=seq;
-    powerOff();
+    powerOff("SIGNED_FIRMWARE_UPDATE");
     otaExpectedDigest=digest;
     mbedtls_sha256_init(&otaDigest);
     mbedtls_sha256_starts(&otaDigest,0);
@@ -182,7 +203,7 @@ void firmwareUpload(){
   }
 }
 void firmwareResult(){
-  powerOff();
+  powerOff("FIRMWARE_UPDATE_COMPLETED");
   if(!otaCompleted){respond(400,R"({"error":"INVALID_FIRMWARE_OR_SIGNATURE"})");return;}
   restartAt=millis()+800;
   respond(202,R"({"ok":true,"updating":true})");
@@ -215,17 +236,21 @@ void setup(){
 }
 void loop(){
   server.handleClient();
-  if(restartAt && (int32_t)(millis()-restartAt)>=0){powerOff();ESP.restart();}
+  if(restartAt && (int32_t)(millis()-restartAt)>=0){powerOff("SCHEDULED_REBOOT");ESP.restart();}
   // Recover stalled studio Wi-Fi after router/internet outages without a
   // physical power cycle. A reconnection is never authority to energize GPIO.
   if(WiFi.status()!=WL_CONNECTED && millis()-lastWifiReconnect>=15000){
     lastWifiReconnect=millis();
-    powerOff();
+    powerOff("WIFI_RECONNECT");
     WiFi.disconnect();
     WiFi.begin(RADIO_WIFI_SSID,RADIO_WIFI_PASSWORD);
   }
   if(WiFi.status()!=WL_CONNECTED || !heartbeatFresh() || !powerLeaseValid()) {
-    if(commandedOn)powerOff();
+    if(commandedOn){
+      const char* reason=WiFi.status()!=WL_CONNECTED?"WIFI_LOST":
+        !heartbeatFresh()?"HEARTBEAT_TIMEOUT":"POWER_LEASE_EXPIRED";
+      powerOff(reason);
+    }
   }
   if(lastHeartbeat && !heartbeatFresh()){lastMode="DISCONNECTED";}
   delay(2);

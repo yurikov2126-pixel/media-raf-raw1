@@ -90,6 +90,12 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
     heartbeatFresh:status.heartbeatFresh,heartbeatCount:Number(status.heartbeatCount)||0,
     leaseValid:status.leaseValid===true,relayOutputEnabled:status.relayOutputEnabled===true,
     amplifierPower:status.amplifierPower||'UNKNOWN',
+    bootNonce:typeof status.bootNonce==='string'?status.bootNonce.slice(0,32):null,
+    relayOnTransitions:Number.isSafeInteger(status.relayOnTransitions)?status.relayOnTransitions:null,
+    relayOffTransitions:Number.isSafeInteger(status.relayOffTransitions)?status.relayOffTransitions:null,
+    lastRelayTransitionMs:Number.isSafeInteger(status.lastRelayTransitionMs)?status.lastRelayTransitionMs:null,
+    lastRelayOffReason:typeof status.lastRelayOffReason==='string'?status.lastRelayOffReason.slice(0,64):null,
+    lastRelayOnReason:typeof status.lastRelayOnReason==='string'?status.lastRelayOnReason.slice(0,64):null,
     reporterId:req.radioDevice.id};
   await prisma.setting.upsert({where:{key:ESP32_STATUS_KEY},
     create:{key:ESP32_STATUS_KEY,value:JSON.stringify(last)},
