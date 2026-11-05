@@ -345,7 +345,8 @@ const trainingEventJournal=createMchsWorkerEventJournal();
 const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
 // A dedicated production-source PCM handler, currently admission-disabled:
 // no live Android or HTTP caller can invoke prepare(), and no GPIO access.
-const mchsStationTerminalJournal=createMchsStationTerminalJournal();
+const mchsStationTerminalJournal=createMchsStationTerminalJournal(
+  process.env.RADIO_MCHS_TERMINAL_JOURNAL_PATH || undefined);
 const mchsStationPcmExecutor=createMchsStationPcmExecutor({onTerminal:entry=>{
  const result=mchsStationTerminalJournal.append(entry);
  if(!result.ok)console.error('MCHS_STATION_JOURNAL_FAILURE',JSON.stringify({reason:result.reason,eventId:entry.eventId}));
