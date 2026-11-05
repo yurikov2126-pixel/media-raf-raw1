@@ -56,6 +56,7 @@ import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {assessMchsMainStationReadiness} from '../lib/mchsMainStationReadiness.js';
+import {MCHS_ESP32_TRANSITIONS_KEY,assessEsp32TransitionEvidence} from '../lib/mchsEsp32TransitionEvidence.js';
 import {selectNextMchsStationIntent,settleMchsStationAttempt} from '../lib/mchsStationSequentialQueue.js';
 import {reconcileMchsStationClaims} from '../lib/mchsStationClaimRecovery.js';
 import {MCHS_STATION_RECEIPTS_KEY,normalizeStationReceipts,registerStationDispatch,reconcileStationReceiptHistory} from '../lib/mchsStationExecutionReceipts.js';
@@ -1645,13 +1646,14 @@ router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,ne
 router.get('/missile-main-station-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
   const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
-  const [worker,device,espRow,receiptRow]=await Promise.all([
+  const [worker,device,espRow,receiptRow,transitionRow]=await Promise.all([
    requestMchsStationSession({action:'STATUS'}).catch(error=>({
     ok:false,reason:error?.code||'WORKER_UNAVAILABLE'})),
    deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},
     select:{id:true,name:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):Promise.resolve(null),
    prisma.setting.findUnique({where:{key:'radio_esp32_status_v1'}}),
-   prisma.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}})
+   prisma.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}}),
+   prisma.setting.findUnique({where:{key:MCHS_ESP32_TRANSITIONS_KEY}})
   ]);
   const parse=row=>{try{return JSON.parse(row?.value||'null');}catch{return null;}};
   const report=assessMchsMainStationReadiness({worker,device,
@@ -1661,8 +1663,12 @@ router.get('/missile-main-station-readiness',requireRole('ADMIN'),async (_req,re
     coordinator:process.env.MCHS_MAIN_STATION_COORDINATOR_ENABLED==='true',
     workerCommands:worker?.data?.enabled===true
    }});
+  const transitions=parse(transitionRow);
   res.set('Cache-Control','no-store').json({
-   checkedAt:new Date().toISOString(),...report
+   checkedAt:new Date().toISOString(),...report,
+   esp32Transitions:assessEsp32TransitionEvidence(transitions,{
+    deviceId:Object.entries(transitions?.devices||{}).find(([_,v])=>
+     v.reporterId===deviceId)?.[0]||null})
   });
  }catch(error){next(error);}
 });
