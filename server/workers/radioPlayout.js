@@ -20,6 +20,7 @@ import {makeMchsLabSessionChunk} from '../src/lib/mchsWorkerLabSessionAudio.js';
 import http from 'node:http';
 import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
 import {createMchsWorkerEventJournal} from '../src/lib/mchsWorkerEventJournal.js';
+import {createMchsWorkerPcmEvidence} from '../src/lib/mchsWorkerPcmEvidence.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -337,6 +338,8 @@ const loudnessMeter=createStationLufsMeter({ffmpeg,enabled:process.env.RADIO_LUF
 const trainingEnabled=process.env.RADIO_MCHS_TRAINING_STREAM_ENABLED==='true';
 const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled});
 const trainingEventJournal=createMchsWorkerEventJournal();
+// Event-bound PCM evidence on the real shared encoder; NO new START endpoint.
+const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
 let trainingAssetId=null;
 let trainingCommandEpoch=0;
 let trainingPreparing=false;
@@ -448,7 +451,14 @@ function startEncoder() {
     {stdio:['pipe','pipe','pipe']});
   // All program sources converge here, before MP3 encoding for both website and Agent.
   const originalWrite=encoder.stdin.write.bind(encoder.stdin);
-  encoder.stdin.write=(frame,...args)=>originalWrite((trainingStatus(),trainingOverlay.replace(frame)),...args);
+  encoder.stdin.write=(frame,...args)=>{
+    trainingStatus();
+    const before=trainingOverlay.snapshot();
+    const output=trainingOverlay.replace(frame);
+    const after=trainingStatus();
+    mchsWorkerPcmEvidence.observe({before,after,frame,output});
+    return originalWrite(output,...args);
+  };
   encoder.stdout.on('data',data=>{
     loudnessMeter.observe(data);
     state.frames+=1;
@@ -2129,7 +2139,8 @@ const server=http.createServer((req,res)=>{
       res.end(JSON.stringify({...overlay,assetId:overlay.active?trainingAssetId:null,
        trainingEvent:trainingEventJournal.current(),lastTrainingEvent:trainingEventJournal.last(),
        audioQuality:assessTrainingAudioQuality({clock:lastTrainingPcmClock,overlay}),
-       lastPcmClock:lastTrainingPcmClock}));return;
+       lastPcmClock:lastTrainingPcmClock,
+       priorityPcmEvidence:mchsWorkerPcmEvidence.snapshot()}));return;
     }
     let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
     req.on('end',async()=>{
@@ -2137,7 +2148,11 @@ const server=http.createServer((req,res)=>{
       try{({action,assetId,repeats,eventId,eventType,trialOnly}=JSON.parse(raw));}catch{}
       if(!['START','STOP'].includes(action)){res.writeHead(400).end();return;}
       let result;
-      if(action==='STOP'){trainingCommandEpoch++;result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;}
+      if(action==='STOP'){
+        trainingCommandEpoch++;
+        mchsWorkerPcmEvidence.abort('OPERATOR_STOP');
+        result=trainingOverlay.stop();trainingStatus();trainingAssetId=null;
+      }
       else {
         if(!trainingEnabled||trainingOverlay.snapshot().active||trainingPreparing){result={ok:false,reason:'DISABLED_OR_ACTIVE_OR_PREPARING',...trainingOverlay.snapshot()};}
         else try{
@@ -2170,6 +2185,15 @@ const server=http.createServer((req,res)=>{
               if(!bound.ok){
                result={ok:false,reason:bound.reason,...trainingOverlay.stop('INVALID_TRIAL_BINDING')};
                trainingStatus();
+              }else{
+               const priority=mchsWorkerPcmEvidence.begin({eventId,eventType,assetId,
+                 repeats:repeats??1});
+               if(!priority.accepted){
+                mchsWorkerPcmEvidence.abort(priority.reason);
+                result={ok:false,reason:'PRIORITY_EVIDENCE_REJECTED',
+                  ...trainingOverlay.stop('PRIORITY_EVIDENCE_REJECTED')};
+                trainingStatus();
+               }
               }
              }
              if(result.ok)trainingStatus();
