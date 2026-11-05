@@ -42,6 +42,7 @@ from mchs_event_audio_controller import IsolatedEventAudioController
 from mchs_event_observation import make_event_observation, post_event_observation
 from mchs_isolated_readiness import make_isolated_readiness, post_isolated_readiness
 from mchs_two_stage_headphones_pilot import verify_local_training_wav
+from mchs_relay_preroll import gate_synthetic_wav, SYNTHETIC_ID
 
 STOP = threading.Event()
 MCHS_AUDIO_START = threading.Event()
@@ -481,6 +482,7 @@ def run(args, token):
                       getattr(args,'isolated_event_audio',False)) else None)
     event_audio=None
     event_audio_session=None
+    pending_relay_start=None
     last_event_audio_poll=0.0
     last_isolated_ready_report=0.0
     isolated_ready_report_busy=threading.Event()
@@ -793,6 +795,16 @@ def run(args, token):
                         with urlopen(envelope_request,timeout=3) as envelope_response:
                             envelope=json.load(envelope_response)
                         now=time.monotonic()
+                        # A higher-priority HALT/STOP revokes any pre-roll.
+                        # START is never launched on a stale prior command.
+                        if pending_relay_start and (
+                                envelope.get('halted') is True or
+                                (isinstance(envelope.get('command'),dict) and
+                                 envelope['command'].get('action')=='STOP')):
+                            event_audio.started(False,now=now,duration=0)
+                            PLAYBACK_STATE['mchsRelayPrepEventId']=None
+                            pending_relay_start=None
+                            print('MCHS_RELAY_PREROLL_ABORT','SERVER_STOP_OR_HALT',flush=True)
                         action,detail=event_audio.command(
                             envelope,now=now,baseline=fresh_central and network_ok,
                             authorized=not denied and now-last_authorized<15)
@@ -810,8 +822,22 @@ def run(args, token):
                                 event_audio.started(False,now=now,duration=0)
                                 print('MCHS_EVENT_AUDIO_LOCAL_ASSET_CHANGED',
                                       detail['eventId'],flush=True)
+                            elif (getattr(args,'mchs_synthetic_relay_pilot',False)
+                                  and SYNTHETIC_ID.fullmatch(detail['eventId'])):
+                                # DO NOT stop central music or start local VLC yet.
+                                # GPIO13 gets an authenticated lease first, then
+                                # 3 full seconds are measured from the ON ACK.
+                                pending_relay_start={
+                                    'detail':detail,'duration':current['duration'],
+                                    'requestedAt':now}
+                                PLAYBACK_STATE['mchsRelayPrepEventId']=detail['eventId']
+                                PLAYBACK_STATE['mchsRelayPowerEventId']=None
+                                PLAYBACK_STATE['mchsRelayPowerOnAt']=None
+                                PLAYBACK_STATE['mchsRelayLastLeaseAt']=None
+                                print('MCHS_RELAY_PREROLL_ARMED',detail['eventId'],flush=True)
                             else:
-                                # Only the Agent-owned VLC decks are stopped.
+                                # Headphones-only trial without physical relay
+                                # or an Android event not eligible for GPIO13.
                                 relay.intentional_disconnect.set()
                                 stop_vlc(primary)
                                 stop_vlc(fallback)
@@ -837,6 +863,59 @@ def run(args, token):
                     except (HTTPError,URLError,OSError,ValueError) as error:
                         print('MCHS_EVENT_AUDIO_POLL_UNAVAILABLE',
                               type(error).__name__,flush=True)
+                if pending_relay_start is not None:
+                    detail=pending_relay_start['detail']
+                    decision,reason=gate_synthetic_wav(
+                        event_id=detail['eventId'],
+                        relay_event_id=PLAYBACK_STATE.get('mchsRelayPowerEventId'),
+                        relay_on_at=PLAYBACK_STATE.get('mchsRelayPowerOnAt'),
+                        last_lease_at=PLAYBACK_STATE.get('mchsRelayLastLeaseAt'),
+                        requested_at=pending_relay_start['requestedAt'],now=now,
+                        stop=STOP.is_set(),
+                        server_ok=not denied and now-last_authorized<15)
+                    if decision=='START':
+                        # Re-verify exact file bytes before audio; a file may
+                        # change while the amplifier is warming up.
+                        try:
+                            current=verify_local_training_wav(detail['asset'])
+                            file_ok=current['sha256']==detail['sha256']
+                        except (OSError,ValueError):
+                            file_ok=False
+                        if (not file_ok or
+                                PLAYBACK_STATE.get('mchsRelayPowerEventId')!=detail['eventId']):
+                            decision,reason='ABORT','LOCAL_ASSET_OR_RELAY_CHANGED'
+                        else:
+                            PLAYBACK_STATE['mchsRelayPrepEventId']=None
+                            PLAYBACK_STATE['mchsIsolatedEventId']=detail['eventId']
+                            PLAYBACK_STATE['mode']='MCHS_EVENT_ISOLATED_LOCAL_WAV'
+                            relay.intentional_disconnect.set()
+                            stop_vlc(primary)
+                            stop_vlc(fallback)
+                            primary=None
+                            fallback=None
+                            fallback_key=None
+                            relay.failed.set()
+                            started=event_audio_session.start(
+                                event_id=detail['eventId'],
+                                file=detail['asset'],repeats=detail['repeats'],
+                                authorized=True)
+                            event_audio.started(started['accepted'],now=now,
+                                                duration=current['duration'])
+                            network_ok=False
+                            last_probe=0.0
+                            print('MCHS_RELAY_PREROLL_COMPLETE',detail['eventId'],
+                                  'warmupSeconds=3',flush=True)
+                            print('MCHS_EVENT_AUDIO_START',
+                                  detail['eventId'],json.dumps(started),flush=True)
+                            pending_relay_start=None
+                    if decision=='ABORT':
+                        PLAYBACK_STATE['mchsRelayPrepEventId']=None
+                        PLAYBACK_STATE['mchsRelayPowerEventId']=None
+                        PLAYBACK_STATE['mchsRelayPowerOnAt']=None
+                        PLAYBACK_STATE['mchsRelayLastLeaseAt']=None
+                        event_audio.started(False,now=now,duration=0)
+                        pending_relay_start=None
+                        print('MCHS_RELAY_PREROLL_ABORT',reason,flush=True)
                 transition=event_audio.tick(
                     now=now,authorized=not denied and now-last_authorized<15,
                     session=(event_audio_session.status() if event_audio.playing else None),
