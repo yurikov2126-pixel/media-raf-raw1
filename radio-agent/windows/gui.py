@@ -535,13 +535,13 @@ class RadioAgentApp(tk.Tk):
         self.mchs_manual_pulse_until=time.monotonic()+8
         self.messages.put(("log","MCHS_RELAY_MANUAL_PULSE_REQUESTED · до 8 с; требуется server permit:true"))
         if not self.power_busy:
-            self.power_tick()
+            self.power_tick(schedule_next=False)
 
     def manual_mchs_relay_off(self):
         self.mchs_manual_pulse_until=0.0
         self.messages.put(("log","MCHS_RELAY_MANUAL_OFF_REQUESTED"))
         if not self.power_busy:
-            self.power_tick()
+            self.power_tick(schedule_next=False)
 
     def set_power_arm(self):
         if self.active_isolated_mode and self.worker and self.worker.is_alive() and self.power_arm.get():
@@ -571,7 +571,7 @@ class RadioAgentApp(tk.Tk):
         except OSError as error:
             messagebox.showerror("Диагностика питания",type(error).__name__)
 
-    def power_tick(self):
+    def power_tick(self,schedule_next=True):
         # A failed fetch cannot create a fresh ON authorization. Relay self-OFF
         # occurs even if the Windows process is killed.
         if not self.power_busy and self.esp32_ip.get().strip() and len(self.esp32_secret.get().strip())>=32:
@@ -697,7 +697,8 @@ class RadioAgentApp(tk.Tk):
                 finally:
                     self.messages.put(("power_done",None))
             threading.Thread(target=job,daemon=True).start()
-        self.after(3000,self.power_tick)
+        if schedule_next:
+            self.after(3000,self.power_tick)
 
     def flash_esp32(self):
         host=self.esp32_ip.get().strip()
