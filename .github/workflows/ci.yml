@@ -43,6 +43,9 @@ jobs:
       - name: Dormant main-station MCHS PCM executor regression
         run: node --test tests/mchsStationPcmExecutor.test.js tests/mchsStationPrioritySession.test.js tests/mchsWorkerPcmEvidence.test.js
 
+      - name: MCHS durable Worker terminal journal across restart
+        run: node --test tests/mchsStationDurableJournal.test.js tests/mchsStationTerminalHistory.test.js tests/mchsStationExecutionReceipts.test.js
+
       - name: MCHS short-lived terminal PCM receipt history
         run: node --test tests/mchsStationTerminalHistory.test.js tests/mchsStationExecutionReceipts.test.js
 
