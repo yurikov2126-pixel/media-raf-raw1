@@ -57,3 +57,24 @@ export function reconcileStationReceipts(raw,status,{at=new Date().toISOString()
  });
  return {ledger:{items,updatedAt:changed?at:prior.updatedAt},changed,reason:null};
 }
+
+/** Match every short-lived terminal event before inspecting current Worker phase.
+ * The Worker ring is volatile; only matched API receipts are persisted.
+ */
+export function reconcileStationReceiptHistory(raw,status,{at=new Date().toISOString()}={}){
+ let ledger=normalizeStationReceipts(raw),changed=false;
+ if(!status||status.ok!==true||!status.data)
+  return {ledger,changed:false,reason:'STATUS_UNAVAILABLE'};
+ const entries=Array.isArray(status.data.terminalHistory)?
+  status.data.terminalHistory.slice(-128):[];
+ for(const entry of entries){
+  if(!entry||!['COMPLETE','FAILED'].includes(entry.phase)||
+     typeof entry.eventId!=='string')continue;
+  const result=reconcileStationReceipts(ledger,{
+   ok:true,data:{phase:entry.phase,session:entry}},{at});
+  ledger=result.ledger;
+  changed=changed||result.changed;
+ }
+ const current=reconcileStationReceipts(ledger,status,{at});
+ return {ledger:current.ledger,changed:changed||current.changed,reason:null};
+}
