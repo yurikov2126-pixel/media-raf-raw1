@@ -44,3 +44,33 @@ test('different reporters, invalid input, and unrelated ESP32 stay scoped',()=>{
  assert.equal(none.events.length,0);
  assert.equal(recordEsp32Transition(next.state,{deviceId:null}).reason,'INVALID_OBSERVATION');
 });
+
+test('firmware counts hidden OFF/ON pair even when snapshots both say ON',()=>{
+ const status={bootNonce:'boot-A',relayOnTransitions:1,relayOffTransitions:0,
+  lastRelayTransitionMs:1000,lastRelayOffReason:'BOOT_SAFE_OFF'};
+ const first=recordEsp32Transition(null,mk(base,status));
+ const next=recordEsp32Transition(first.state,mk('2026-11-05T20:00:03.000Z',{
+  ...status,relayOnTransitions:2,relayOffTransitions:1,
+  lastRelayTransitionMs:2300,lastRelayOffReason:'POWER_LEASE_EXPIRED'}));
+ assert.deepEqual(next.added.map(e=>e.kind),['FIRMWARE_RELAY_ON','FIRMWARE_RELAY_OFF']);
+ assert.equal(next.added[1].detail,'1:POWER_LEASE_EXPIRED');
+ assert.equal(next.state.devices.esp1.power,'ON_COMMANDED');
+ const report=assessEsp32TransitionEvidence(next.state,{deviceId:'esp1',
+  nowMs:Date.parse('2026-11-05T20:00:04.000Z')});
+ assert.equal(report.suspectCount,1);
+ assert.equal(report.actualMainsPowerVerified,false);
+});
+test('firmware reboot changes boot nonce and does not count reset counters as GPIO transitions',()=>{
+ const first=recordEsp32Transition(null,mk(base,{bootNonce:'boot-A',
+  relayOnTransitions:15,relayOffTransitions:14}));
+ const reboot=recordEsp32Transition(first.state,mk('2026-11-05T20:00:03.000Z',{
+  bootNonce:'boot-B',relayOnTransitions:0,relayOffTransitions:0,
+  amplifierPower:'OFF_COMMANDED'}));
+ assert.ok(reboot.added.some(e=>e.kind==='FIRMWARE_REBOOT'));
+ assert.ok(!reboot.added.some(e=>e.kind==='FIRMWARE_RELAY_OFF'));
+});
+test('older ESP32 firmware with no transition fields stays compatible',()=>{
+ const first=recordEsp32Transition(null,mk(base));
+ const second=recordEsp32Transition(first.state,mk('2026-11-05T20:00:03.000Z'));
+ assert.equal(second.added.length,0);
+});
