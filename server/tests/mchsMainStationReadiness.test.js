@@ -66,3 +66,23 @@ test('missing bound Agent gives a clear blocker rather than infer it from anothe
  assert.equal(r.esp32.fresh,false);
  assert.ok(r.holds.includes('WINDOWS_AGENT_NOT_ONLINE_OR_UNAUTHORIZED'));
 });
+
+test('read-only station readiness reveals firmware GPIO13 OFF reason and counters',()=>{
+ const extended={esp1:{...esp.esp1,relayOnTransitions:8,relayOffTransitions:7,
+  lastRelayOffReason:'POWER_LEASE_EXPIRED',lastRelayTransitionMs:123456}};
+ const r=assessMchsMainStationReadiness({worker:status,device,
+  esp32Status:extended,deviceId:'agent1',nowMs});
+ assert.equal(r.esp32.firmwareEvidencePresent,true);
+ assert.equal(r.esp32.relayOnTransitions,8);
+ assert.equal(r.esp32.relayOffTransitions,7);
+ assert.equal(r.esp32.lastRelayOffReason,'POWER_LEASE_EXPIRED');
+ assert.equal(r.readyForLivePA,false);
+ assert.equal(r.physicalOutputConfirmed,false);
+});
+test('legacy ESP32 telemetry shows no firmware counters without guessing',()=>{
+ const r=assessMchsMainStationReadiness({worker:status,device,
+  esp32Status:esp,deviceId:'agent1',nowMs});
+ assert.equal(r.esp32.firmwareEvidencePresent,false);
+ assert.equal(r.esp32.relayOnTransitions,null);
+ assert.equal(r.esp32.lastRelayOffReason,null);
+});
