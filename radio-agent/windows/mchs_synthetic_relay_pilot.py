@@ -21,7 +21,8 @@ def decide_synthetic_relay_pilot(*, isolated, operator_armed, stop_requested,
         return False, 'TRIAL_WINDOW_EXPIRED'
     if not server_permit:
         return False, 'SERVER_POWER_NOT_AUTHORIZED'
-    if isinstance(manual_test_until,(int,float)) and now<manual_test_until:
+    if (isinstance(manual_test_until,(int,float)) and now<manual_test_until and
+            event_id is None and preparing_event_id is None):
         return True, 'OPERATOR_MANUAL_RELAY_PULSE'
     if (isinstance(preparing_event_id,str) and
             SYNTHETIC_EVENT.fullmatch(preparing_event_id) and
