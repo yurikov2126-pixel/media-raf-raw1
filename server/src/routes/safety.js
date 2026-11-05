@@ -148,7 +148,9 @@ async function tickMchsAndroidMonitor(){
     intents:[{...selected,status:'STAGED'}],
     observations:outcome.observations,enabled:true,request:requestMchsStationSession
    });
-   dispatched={results:attempts.results};
+   // A transient BUSY response stays queued; do not register it as a final receipt.
+   dispatched={results:attempts.results.filter(r=>!(r.httpStatus===409&&
+    r.reason==='STATION_SOURCE_BUSY'))};
    const result=attempts.results[0]||{ok:false,reason:'NO_WORKER_RESULT',eventId:selected.eventId};
    await prisma.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581453)`;
