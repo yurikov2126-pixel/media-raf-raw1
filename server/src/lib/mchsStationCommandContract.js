@@ -5,11 +5,12 @@
  */
 const ID=/^[A-Za-z0-9_-]{1,128}$/;
 const TYPES=new Set(['MISSILE_DANGER','MISSILE_ALL_CLEAR']);
+const QUEUED_MAX_AGE_MS=4*60*60*1000;
 
 export function validateMchsStationCommand(command,{nowMs=Date.now()}={}){
  if(!command||typeof command!=='object'||Array.isArray(command))
   return {ok:false,reason:'INVALID_COMMAND'};
- const {action,eventId,eventType,assetId,repeats,occurredAt}=command;
+ const {action,eventId,eventType,assetId,repeats,occurredAt,admittedAt}=command;
  if(action==='STATUS')return {ok:true,action};
  if(action==='STOP'){
   if(typeof eventId!=='string'||!ID.test(eventId))
@@ -24,7 +25,16 @@ export function validateMchsStationCommand(command,{nowMs=Date.now()}={}){
   return {ok:false,reason:'INVALID_EVENT_BINDING'};
  if(typeof occurredAt!=='string')return {ok:false,reason:'INVALID_EVENT_TIME'};
  const issued=Date.parse(occurredAt);
- if(!Number.isFinite(issued)||issued>nowMs+5000||nowMs-issued>120000)
+ if(!Number.isFinite(issued)||issued>nowMs+5000)
   return {ok:false,reason:'EVENT_NOT_FRESH'};
+ if(admittedAt!==undefined){
+  if(typeof admittedAt!=='string')return {ok:false,reason:'INVALID_ADMISSION_TIME'};
+  const admitted=Date.parse(admittedAt);
+  if(!Number.isFinite(admitted)||admitted>nowMs+5000||admitted<issued-5000||
+     admitted-issued>120000||nowMs-admitted>QUEUED_MAX_AGE_MS)
+   return {ok:false,reason:'QUEUE_ADMISSION_NOT_FRESH'};
+  return {ok:true,action,eventId,eventType,assetId,repeats,occurredAt,admittedAt};
+ }
+ if(nowMs-issued>120000)return {ok:false,reason:'EVENT_NOT_FRESH'};
  return {ok:true,action,eventId,eventType,assetId,repeats,occurredAt};
 }
