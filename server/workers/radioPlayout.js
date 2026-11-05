@@ -21,6 +21,7 @@ import http from 'node:http';
 import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
 import {createMchsWorkerEventJournal} from '../src/lib/mchsWorkerEventJournal.js';
 import {createMchsWorkerPcmEvidence} from '../src/lib/mchsWorkerPcmEvidence.js';
+import {createMchsStationPcmExecutor} from '../src/lib/mchsStationPcmExecutor.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -340,6 +341,9 @@ const trainingOverlay=createTrainingOverlay({enabled:trainingEnabled});
 const trainingEventJournal=createMchsWorkerEventJournal();
 // Event-bound PCM evidence on the real shared encoder; NO new START endpoint.
 const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
+// A dedicated production-source PCM handler, currently admission-disabled:
+// no live Android or HTTP caller can invoke prepare(), and no GPIO access.
+const mchsStationPcmExecutor=createMchsStationPcmExecutor();
 let trainingAssetId=null;
 let trainingCommandEpoch=0;
 let trainingPreparing=false;
@@ -454,9 +458,15 @@ function startEncoder() {
   encoder.stdin.write=(frame,...args)=>{
     trainingStatus();
     const before=trainingOverlay.snapshot();
-    const output=trainingOverlay.replace(frame);
+    const priorityWasActive=mchsStationPcmExecutor.snapshot().active;
+    const sourceFrame=priorityWasActive?mchsStationPcmExecutor.replace(frame):frame;
+    const output=priorityWasActive?sourceFrame:trainingOverlay.replace(sourceFrame);
     const after=trainingStatus();
-    mchsWorkerPcmEvidence.observe({before,after,frame,output});
+    if(!priorityWasActive){
+      mchsWorkerPcmEvidence.observe({before,after,frame,output});
+      if(!before.active&&!after.active)
+        mchsStationPcmExecutor.observeProgram(output);
+    }
     return originalWrite(output,...args);
   };
   encoder.stdout.on('data',data=>{
@@ -953,8 +963,18 @@ async function run() {
   let alarmClockActive=false,lastAlarmGapLogAt=0;
   startEncoder();
   while(!stopping) {
-    // ALARM owns the shared encoder clock. Do not select/advance music beneath it.
-    // Its PCM is injected by trainingOverlay.replace() into these silent frames.
+    // The dedicated event-bound priority source, when later admitted by
+    // a verified coordinator, owns the station encoder clock before live
+    // mic, schedule, AutoDJ or hourly signals.
+    if(mchsStationPcmExecutor.snapshot().active){
+      if(!alarmClockActive){alarmPcmClock.reset();alarmClockActive=true;lastAlarmGapLogAt=0;}
+      await alarmPcmClock.pace();
+      if(!encoder.stdin.write(Buffer.alloc(3840)))
+        await new Promise(resolve=>encoder.stdin.once('drain',resolve));
+      continue;
+    }
+    // Existing isolated-training overlay is independent of the
+    // admission-disabled main-station priority source.
     if(trainingOverlay.snapshot().active){
       if(!alarmClockActive){alarmPcmClock.reset();alarmClockActive=true;lastAlarmGapLogAt=0;}
       await alarmPcmClock.pace();
@@ -2140,7 +2160,8 @@ const server=http.createServer((req,res)=>{
        trainingEvent:trainingEventJournal.current(),lastTrainingEvent:trainingEventJournal.last(),
        audioQuality:assessTrainingAudioQuality({clock:lastTrainingPcmClock,overlay}),
        lastPcmClock:lastTrainingPcmClock,
-       priorityPcmEvidence:mchsWorkerPcmEvidence.snapshot()}));return;
+       priorityPcmEvidence:mchsWorkerPcmEvidence.snapshot(),
+       stationPriorityStatus:mchsStationPcmExecutor.snapshot()}));return;
     }
     let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>512)req.destroy();});
     req.on('end',async()=>{
