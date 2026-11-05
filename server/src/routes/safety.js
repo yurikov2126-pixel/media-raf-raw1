@@ -55,6 +55,7 @@ import {evaluateAndroidMissileSequence} from '../lib/mchsAndroidSingleSource.js'
 import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
+import {assessMchsMainStationReadiness} from '../lib/mchsMainStationReadiness.js';
 import {selectNextMchsStationIntent,settleMchsStationAttempt} from '../lib/mchsStationSequentialQueue.js';
 import {reconcileMchsStationClaims} from '../lib/mchsStationClaimRecovery.js';
 import {MCHS_STATION_RECEIPTS_KEY,normalizeStationReceipts,registerStationDispatch,reconcileStationReceiptHistory} from '../lib/mchsStationExecutionReceipts.js';
@@ -1636,6 +1637,33 @@ router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,ne
   res.set('Cache-Control','no-store').json({...report,
    workerReachable:worker?.httpStatus===200,agentConfirmed:telemetry.confirmed,
    agentTelemetry:telemetry,trialStopConfirmation,transportChain});
+ }catch(error){next(error);}
+});
+/** Main radio + Windows Agent + ESP32 readiness is observation only.
+ * Does not issue START, relay power requests or write to any setting.
+ */
+router.get('/missile-main-station-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const [worker,device,espRow,receiptRow]=await Promise.all([
+   requestMchsStationSession({action:'STATUS'}).catch(error=>({
+    ok:false,reason:error?.code||'WORKER_UNAVAILABLE'})),
+   deviceId?prisma.radioDevice.findUnique({where:{id:deviceId},
+    select:{id:true,name:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):Promise.resolve(null),
+   prisma.setting.findUnique({where:{key:'radio_esp32_status_v1'}}),
+   prisma.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}})
+  ]);
+  const parse=row=>{try{return JSON.parse(row?.value||'null');}catch{return null;}};
+  const report=assessMchsMainStationReadiness({worker,device,
+   esp32Status:parse(espRow),receipts:parse(receiptRow),deviceId,
+   flags:{
+    dispatch:process.env.MCHS_ANDROID_MAIN_STATION_DISPATCH_ENABLED==='true',
+    coordinator:process.env.MCHS_MAIN_STATION_COORDINATOR_ENABLED==='true',
+    workerCommands:worker?.data?.enabled===true
+   }});
+  res.set('Cache-Control','no-store').json({
+   checkedAt:new Date().toISOString(),...report
+  });
  }catch(error){next(error);}
 });
 /** Read-only persisted observations: START accepted is not counted as COMPLETE. */

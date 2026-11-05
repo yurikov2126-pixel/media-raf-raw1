@@ -43,6 +43,9 @@ jobs:
       - name: Dormant main-station MCHS PCM executor regression
         run: node --test tests/mchsStationPcmExecutor.test.js tests/mchsStationPrioritySession.test.js tests/mchsWorkerPcmEvidence.test.js
 
+      - name: MCHS main station read-only readiness and PA proof boundaries
+        run: node --test tests/mchsMainStationReadiness.test.js tests/mchsTransportChainDiagnostics.test.js
+
       - name: MCHS queued admission and uncertain restart claim recovery
         run: node --test tests/mchsStationQueuedAdmissionRecovery.test.js tests/mchsStationSequentialQueue.test.js tests/mchsStationCommandContract.test.js tests/mchsAndroidStationBridge.test.js
 
