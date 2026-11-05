@@ -49,7 +49,13 @@ export function assessMchsMainStationReadiness({
   agent:{deviceBound:!!deviceId,online:agent?.status==='ONLINE',
    playbackAllowed:agent?.playbackAllowed===true,heartbeatAgeMs:agent?.ageMs??null},
   esp32:{fresh:!!esp,heartbeatFresh:esp?.heartbeatFresh===true,
-   leaseValid:esp?.leaseValid===true,amplifierPower:esp?.amplifierPower||'UNKNOWN'},
+   leaseValid:esp?.leaseValid===true,amplifierPower:esp?.amplifierPower||'UNKNOWN',
+   relayOnTransitions:Number.isSafeInteger(esp?.relayOnTransitions)?esp.relayOnTransitions:null,
+   relayOffTransitions:Number.isSafeInteger(esp?.relayOffTransitions)?esp.relayOffTransitions:null,
+   lastRelayOffReason:typeof esp?.lastRelayOffReason==='string'?esp.lastRelayOffReason:null,
+   lastRelayTransitionMs:Number.isSafeInteger(esp?.lastRelayTransitionMs)?esp.lastRelayTransitionMs:null,
+   firmwareEvidencePresent:!!esp&&Number.isSafeInteger(esp.relayOnTransitions)&&
+    Number.isSafeInteger(esp.relayOffTransitions)},
   stationReceipt:{confirmedCount:confirmed.length,lastEventId:latest?.eventId||null},
   checks,holds:checks.filter(c=>!c.ok).map(c=>c.reason)};
 }
