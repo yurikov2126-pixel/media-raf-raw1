@@ -55,7 +55,7 @@ import {evaluateAndroidMissileSequence} from '../lib/mchsAndroidSingleSource.js'
 import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
-import {MCHS_STATION_RECEIPTS_KEY,normalizeStationReceipts,registerStationDispatch,reconcileStationReceipts} from '../lib/mchsStationExecutionReceipts.js';
+import {MCHS_STATION_RECEIPTS_KEY,normalizeStationReceipts,registerStationDispatch,reconcileStationReceiptHistory} from '../lib/mchsStationExecutionReceipts.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
 import {buildCorrelationReview,MCHS_CORRELATION_REVIEW_KEY} from '../lib/mchsCorrelationReview.js';
@@ -141,7 +141,7 @@ async function tickMchsAndroidMonitor(){
     const row=await tx.setting.findUnique({where:{key:MCHS_STATION_RECEIPTS_KEY}});
     if(!row)return;
     let previous;try{previous=JSON.parse(row.value||'null');}catch{}
-    const outcome=reconcileStationReceipts(previous,status);
+    const outcome=reconcileStationReceiptHistory(previous,status);
     if(outcome.changed)await tx.setting.update({where:{key:MCHS_STATION_RECEIPTS_KEY},
      data:{value:JSON.stringify(outcome.ledger)}});
    });
