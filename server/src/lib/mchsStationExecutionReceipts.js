@@ -65,6 +65,8 @@ export function reconcileStationReceiptHistory(raw,status,{at=new Date().toISOSt
  let ledger=normalizeStationReceipts(raw),changed=false;
  if(!status||status.ok!==true||!status.data)
   return {ledger,changed:false,reason:'STATUS_UNAVAILABLE'};
+ if(status.data.terminalJournal?.healthy===false)
+  return {ledger,changed:false,reason:'WORKER_TERMINAL_JOURNAL_UNHEALTHY'};
  const entries=Array.isArray(status.data.terminalHistory)?
   status.data.terminalHistory.slice(-128):[];
  for(const entry of entries){
