@@ -38,14 +38,24 @@ test('unknown transport result remains failed, not a successful broadcast',()=>{
  assert.equal(result.status,'START_REJECTED');
  assert.equal(result.lastError,'WORKER_TIMEOUT');
 });
-test('expired queued commands are never re-issued with a fake recent timestamp',()=>{
- const row={items:[intent('old'),intent('fresh','MISSILE_ALL_CLEAR',
-  new Date(Date.parse(occurredAt)+170000).toISOString())]};
- const out=selectNextMchsStationIntent(row,{nowMs:Date.parse(occurredAt)+185000,
-  workerStatus:status()});
+test('a correctly admitted all-clear waits beyond 120 seconds for long ALARM',()=>{
+ const row={items:[intent('danger'),intent('clear','MISSILE_ALL_CLEAR',
+  new Date(Date.parse(occurredAt)+10000).toISOString())]};
+ const now=Date.parse(occurredAt)+185000;
+ const out=selectNextMchsStationIntent(row,{nowMs:now,workerStatus:status()});
+ assert.equal(out.items[0].status,'STAGED');
+ assert.equal(out.candidate.eventId,'danger');
+ const after=selectNextMchsStationIntent({items:[
+  {...row.items[0],status:'START_ACCEPTED'},row.items[1]
+ ]},{nowMs:now,workerStatus:status()});
+ assert.equal(after.candidate.eventId,'clear');
+});
+test('admission window expiry prevents arbitrarily old queued commands',()=>{
+ const row={items:[intent('old')]};
+ const out=selectNextMchsStationIntent(row,{
+  nowMs:Date.parse(occurredAt)+4*3600*1000+1000,workerStatus:status()});
  assert.equal(out.items[0].status,'EXPIRED');
- assert.equal(out.candidate.eventId,'fresh');
- assert.equal(out.items[0].lastError,'EVENT_NOT_FRESH');
+ assert.equal(out.items[0].lastError,'QUEUE_ADMISSION_NOT_FRESH');
 });
 test('unavailable or unhealthy Worker cannot admit even one queued event',()=>{
  const rows={items:[intent('danger')]};
