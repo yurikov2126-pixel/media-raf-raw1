@@ -14,13 +14,13 @@ export function reconcileMchsStationClaims(items,workerStatus,{nowMs=Date.now(),
  const recovered=[];
  let changed=false;
  for(const item of rows){
-  if(item.status!=='DISPATCHING')continue;
+  if(!['DISPATCHING','UNKNOWN'].includes(item.status))continue;
   if(evidence.has(item.eventId)){
    item.status='START_ACCEPTED';item.lastError=null;
    item.updatedAt=new Date(nowMs).toISOString();
    recovered.push({eventId:item.eventId,eventType:item.eventType,ok:true});
    changed=true;
-  }else{
+  }else if(item.status==='DISPATCHING'){
    const claimed=Date.parse(item.claimedAt||'');
    if(Number.isFinite(claimed)&&nowMs-claimed>=uncertainAfterMs){
     item.status='UNKNOWN';item.lastError='UNCONFIRMED_START_AFTER_RESTART';
