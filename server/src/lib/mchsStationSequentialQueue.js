@@ -15,7 +15,7 @@ export function selectNextMchsStationIntent(raw,{nowMs=Date.now(),workerStatus}=
   const occurredAt=item.occurredAt||item.createdAt;
   const valid=validateMchsStationCommand({action:'START',eventId:item.eventId,
    eventType:item.eventType,assetId:item.assetId,repeats:item.repetitions,
-   occurredAt},{nowMs});
+   occurredAt,admittedAt:item.createdAt},{nowMs});
   if(!valid.ok){
    item.status='EXPIRED';item.lastError=valid.reason;changed=true;
   }
@@ -36,6 +36,8 @@ export function settleMchsStationAttempt(item,response,{now=new Date().toISOStri
  const accepted=response?.ok===true;
  const reason=accepted?null:data.reason||response?.reason||'WORKER_UNCONFIRMED';
  const busy=response?.httpStatus===409&&RETRYABLE.has(reason);
- return {...item,status:accepted?'START_ACCEPTED':busy?'QUEUED':'START_REJECTED',
+ const ambiguous=!accepted&&!busy&&
+  ['WORKER_TIMEOUT','WORKER_TRANSPORT_ERROR','NO_WORKER_RESULT','WORKER_UNCONFIRMED'].includes(reason);
+ return {...item,status:accepted?'START_ACCEPTED':busy?'QUEUED':ambiguous?'DISPATCHING':'START_REJECTED',
   lastAttemptAt:now,lastError:reason,updatedAt:now};
 }
