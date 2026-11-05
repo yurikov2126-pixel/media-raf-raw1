@@ -47,6 +47,10 @@ class IsolatedEventAudioController:
         if isinstance(command,dict) and command.get('action')=='STOP':
             action='STOP'
         elif state.get('halted') is True:
+            if self.state=='STARTING':
+                self.failure='SERVER_HALT_DURING_PRE_ROLL'
+                self.state='FAILED'
+                return ('NO_ACTION','SERVER_HALT_DURING_PRE_ROLL')
             if self.playing:
                 self.failure='SERVER_HALT'
                 self.stop_requested=True
@@ -66,6 +70,10 @@ class IsolatedEventAudioController:
             if not receipt['accepted']:
                 return ('REJECTED',receipt['reason'])
             self.last_receipt=receipt
+            if self.state=='STARTING':
+                self.failure='SERVER_STOP_DURING_PRE_ROLL'
+                self.state='FAILED'
+                return ('STOP_ACCEPTED','PRE_ROLL_CANCELLED')
             if self.playing:
                 self.failure='SERVER_STOP'
                 self.stop_requested=True
@@ -113,11 +121,11 @@ class IsolatedEventAudioController:
                                'sha256':asset['sha256'],
                                'repeats':self.repeats,'eventType':kind})
 
-    def started(self,accepted,*,now,duration):
+    def started(self,accepted,*,now,duration,failure_reason='VLC_START_REJECTED'):
         if self.state!='STARTING':
             raise RuntimeError('UNEXPECTED_START_RESULT')
         if not accepted:
-            self.failure='VLC_START_REJECTED'
+            self.failure=failure_reason
             self.state='FAILED'
             return
         self.state='PLAYING'
