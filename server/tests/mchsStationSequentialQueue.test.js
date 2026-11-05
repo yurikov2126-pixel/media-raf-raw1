@@ -32,10 +32,10 @@ test('Worker busy rejection returns to queue rather than disappearing',()=>{
   {nowMs,workerStatus:status('COMPLETE')});
  assert.equal(after.candidate.eventId,'clear');
 });
-test('unknown transport result remains failed, not a successful broadcast',()=>{
+test('unknown transport result remains uncertain, not a successful or rejected broadcast',()=>{
  const row={...intent('danger'),status:'DISPATCHING'};
  const result=settleMchsStationAttempt(row,{ok:false,reason:'WORKER_TIMEOUT'});
- assert.equal(result.status,'START_REJECTED');
+ assert.equal(result.status,'DISPATCHING');
  assert.equal(result.lastError,'WORKER_TIMEOUT');
 });
 test('a correctly admitted all-clear waits beyond 120 seconds for long ALARM',()=>{
