@@ -3,7 +3,7 @@ import {createMchsStationPrioritySession} from './mchsStationPrioritySession.js'
 // Pure event-bound PCM source for the shared 48kHz stereo PCM16 encoder.
 // It does not fetch Android data, issue commands, or control GPIO. A verified
 // coordinator will be added in a separate stage. No public start route exists.
-export function createMchsStationPcmExecutor(){
+export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
  const lifecycle=createMchsStationPrioritySession();
  let source=null,position=0,completedRepeats=0,bound=null;
  let pcmFrames=0,programFrames=0;
@@ -60,7 +60,8 @@ export function createMchsStationPcmExecutor(){
    pcmFrames++;
    return output;
   }catch{
-   lifecycle.abort('PCM_SOURCE_READ_FAILED');
+   const failed=lifecycle.abort('PCM_SOURCE_READ_FAILED');
+   if(failed.accepted)try{onTerminal({...lifecycle.snapshot().session,phase:'FAILED'});}catch{}
    release();
    return Buffer.alloc(frame.length);
   }
@@ -71,11 +72,13 @@ export function createMchsStationPcmExecutor(){
       frame.some(byte=>byte!==0)){
    programFrames++;
    lifecycle.restored({eventId:state.session.eventId,programAudioConfirmed:true});
+   try{onTerminal({...lifecycle.snapshot().session,phase:'COMPLETE'});}catch{}
   }
   return snap();
  }
  function abort(reason='ABORTED'){
-  lifecycle.abort(reason);
+  const accepted=lifecycle.abort(reason);
+  if(accepted.accepted)try{onTerminal({...lifecycle.snapshot().session,phase:'FAILED'});}catch{}
   release();
   return snap();
  }
