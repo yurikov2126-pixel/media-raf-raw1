@@ -22,6 +22,7 @@ from mchs_synthetic_relay_pilot import decide_synthetic_relay_pilot
 from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK, MCHS_LAB_OBSERVED
 from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat, restart_esp32, upload_firmware
+from esp32_heartbeat_ownership import gui_owns_esp32_heartbeat
 from esp32_telemetry import report_status
 from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
@@ -30,7 +31,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.16'
+AGENT_VERSION = '0.5.17'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -110,6 +111,7 @@ class RadioAgentApp(tk.Tk):
             pass
         self.messages = queue.Queue()
         self.worker = None
+        self.gui_heartbeat_busy = False
         self.active_isolated_mode = False
         self.mchs_relay_trial_armed = False
         self.mchs_relay_trial_deadline = 0.0
@@ -457,18 +459,28 @@ class RadioAgentApp(tk.Tk):
             messagebox.showerror("Автозапуск",str(error))
 
     def idle_esp32_heartbeat(self):
-        # The Windows app remains alive outside a playback session. A STOPPED
-        # heartbeat proves connectivity but never grants amplifier permission.
-        if not (self.worker and self.worker.is_alive()):
+        # Exactly one owner: the audio runner transmits heartbeat in standard
+        # mode, but never receives ESP32 secrets in isolated MCHS mode.
+        # The GUI keeps the firmware watchdog fresh with STOPPED/false/false;
+        # heartbeat does NOT authorize a relay ON lease.
+        running=bool(self.worker and self.worker.is_alive())
+        if (gui_owns_esp32_heartbeat(worker_alive=running,
+                                      isolated_mode=self.active_isolated_mode)
+                and not self.gui_heartbeat_busy):
             host=self.esp32_ip.get().strip()
             secret=self.esp32_secret.get().strip()
-            if host and secret:
+            if host and len(secret)>=32:
+                self.gui_heartbeat_busy=True
                 def task():
                     try:
                         send_heartbeat(host,secret,"STOPPED",False,False)
                         self.messages.put(("idle_esp32_ok",None))
                     except Exception as error:
-                        self.messages.put(("idle_esp32_error",type(error).__name__))
+                        code=getattr(error,"code",None)
+                        detail=("HTTP "+str(code)) if code else type(error).__name__
+                        self.messages.put(("idle_esp32_error",detail))
+                    finally:
+                        self.messages.put(("gui_esp32_heartbeat_done",None))
                 threading.Thread(target=task,daemon=True).start()
         self.after(3000,self.idle_esp32_heartbeat)
 
@@ -681,7 +693,7 @@ class RadioAgentApp(tk.Tk):
         def task():
             try:
                 send_heartbeat(host,secret,"STOPPED",False,False)
-                self.messages.put(("esp32_ok","Связь подтверждена · SAFE_PILOT"))
+                self.messages.put(("esp32_ok","Связь подтверждена · подписанный heartbeat"))
             except Exception as error:
                 self.messages.put(("esp32_error",type(error).__name__+(": неверный секрет (403)" if getattr(error,"code",None)==403 else "")))
         threading.Thread(target=task,daemon=True).start()
@@ -809,9 +821,11 @@ class RadioAgentApp(tk.Tk):
                         self.log.delete("1.0", "60.0")
                     self.log.configure(state="disabled")
                 elif action == "idle_esp32_ok":
-                    self.esp32_status.set("На связи · SAFE_PILOT")
+                    self.esp32_status.set("На связи · ESP32 heartbeat подтверждён")
                 elif action == "idle_esp32_error":
-                    self.esp32_status.set("Нет связи: "+value)
+                    self.esp32_status.set("Нет связи ESP32: "+value)
+                elif action == "gui_esp32_heartbeat_done":
+                    self.gui_heartbeat_busy=False
                 elif action == "esp32_report_ok":
                     self.esp32_platform_status.set("Передано на сайт")
                 elif action == "esp32_report_state":
