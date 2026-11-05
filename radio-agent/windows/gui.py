@@ -676,8 +676,17 @@ class RadioAgentApp(tk.Tk):
                     phase="esp32_power"
                     # Re-check an operator OFF before physical IO: the async
                     # worker may have been queued while a button was clicked.
-                    if self.active_isolated_mode and local_reason=='OPERATOR_MANUAL_RELAY_PULSE' and time.monotonic()>=self.mchs_manual_pulse_until:
-                        permit=False
+                    if self.active_isolated_mode:
+                        if (STOP.is_set() or not self.power_arm.get() or
+                                not self.mchs_relay_trial_armed or
+                                time.monotonic()>=self.mchs_relay_trial_deadline):
+                            permit=False
+                        if local_reason=='OPERATOR_MANUAL_RELAY_PULSE' and time.monotonic()>=self.mchs_manual_pulse_until:
+                            permit=False
+                        if local_reason=='SYNTHETIC_RELAY_PRE_ROLL' and preparing_event!=state.get("mchsRelayPrepareEventId"):
+                            permit=False
+                        if local_reason=='SYNTHETIC_LOCAL_WAV_POWER_TRIAL' and not state.get("mchsIsolatedEventId"):
+                            permit=False
                     result=signed_power(host,secret,permit,8000 if permit else 0)
                     if self.active_isolated_mode and preparing_event:
                         if permit and local_reason=='SYNTHETIC_RELAY_PRE_ROLL' and state.get("mchsRelayPrepareEventId")==preparing_event:
@@ -692,6 +701,13 @@ class RadioAgentApp(tk.Tk):
                     record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
                     self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
+                    # A failed/unknown ON cannot count as a power ready ACK.
+                    # A fresh signed acknowledgment must restart the full
+                    # three-second amplifier warm-up.
+                    if self.active_isolated_mode and PLAYBACK_STATE.get("mchsRelayPrepareEventId"):
+                        PLAYBACK_STATE.update(mchsRelayAckEventId=None,
+                                              mchsRelayFirstAckAt=None,
+                                              mchsRelayLastAckAt=None)
                     record_power_event("POWER_ERROR",result="ERROR",durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
                     self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
                 finally:
