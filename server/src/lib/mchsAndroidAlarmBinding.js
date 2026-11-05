@@ -45,6 +45,7 @@ export function bindAndroidAlarmCandidates({
   const repeats=type==='MISSILE_ALL_CLEAR'?1:normalizeDangerRepeats(dangerRepeats);
   eligible.push({eventId:event.id,sourceEventId:event.sourceEventId,
    eventType:type,result:'OBSERVED',audioAssetId:asset.id,repetitions:repeats,
+   occurredAt:event.occurredAt,
    expectedDurationMs:asset.durationMs*repeats,
    officialSourceVerified:false,dispatchAuthorized:false});
  }
@@ -76,7 +77,8 @@ export function stageBoundAndroidIntents(raw,eligible,{now=new Date().toISOStrin
    eventType:candidate.eventType,assetId:candidate.audioAssetId,
    repetitions:candidate.eventType==='MISSILE_ALL_CLEAR'?1:candidate.repetitions,
    expectedDurationMs:candidate.expectedDurationMs,
-   status:'STAGED',createdAt:now,officialSourceVerified:false,
+   status:'STAGED',createdAt:now,occurredAt:candidate.occurredAt,
+   officialSourceVerified:false,
    dispatchAuthorized:false};
   seen.add(candidate.sourceEventId);added.push(intent);items.push(intent);
  }
