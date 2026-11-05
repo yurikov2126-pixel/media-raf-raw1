@@ -11,7 +11,7 @@ SYNTHETIC_EVENT = re.compile(r'synthetic_[a-f0-9]{24}_(?:danger|clear)\Z')
 
 def decide_synthetic_relay_pilot(*, isolated, operator_armed, stop_requested,
                                  event_id, audio_mode, server_permit,
-                                 now, armed_until):
+                                 now, armed_until, preparing=False):
     if not isolated or not operator_armed:
         return False, 'NOT_ARMED'
     if stop_requested:
@@ -20,7 +20,8 @@ def decide_synthetic_relay_pilot(*, isolated, operator_armed, stop_requested,
         return False, 'TRIAL_WINDOW_EXPIRED'
     if not server_permit:
         return False, 'SERVER_POWER_NOT_AUTHORIZED'
-    if audio_mode!='MCHS_EVENT_ISOLATED_LOCAL_WAV':
+    if not (audio_mode=='MCHS_EVENT_ISOLATED_LOCAL_WAV' or
+            (preparing and audio_mode in ('CENTRAL','LOCAL_RESERVE','STOPPED'))):
         return False, 'LOCAL_WAV_NOT_PLAYING'
     if not isinstance(event_id,str) or not SYNTHETIC_EVENT.fullmatch(event_id):
         return False, 'NOT_SYNTHETIC_EVENT'
