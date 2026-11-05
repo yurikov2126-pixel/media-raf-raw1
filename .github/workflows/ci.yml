@@ -43,6 +43,9 @@ jobs:
       - name: Dormant main-station MCHS PCM executor regression
         run: node --test tests/mchsStationPcmExecutor.test.js tests/mchsStationPrioritySession.test.js tests/mchsWorkerPcmEvidence.test.js
 
+      - name: ESP32 boot-scoped GPIO event history and lost-event regression
+        run: node --test tests/mchsEsp32FirmwareHistory.test.js tests/mchsEsp32TransitionEvidence.test.js
+
       - name: MCHS ESP32 firmware relay counters and boot epoch evidence
         run: node --test tests/mchsEsp32TransitionEvidence.test.js tests/mchsMainStationReadiness.test.js
 
