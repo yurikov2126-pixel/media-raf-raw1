@@ -20,6 +20,16 @@ uint32_t lastHeartbeat=0,heartbeatCount=0,powerExpires=0,lastSequence=0,lastHear
 bool commandedOn=false;
 uint32_t relayOnTransitions=0,relayOffTransitions=0,lastRelayTransitionMs=0;
 String lastRelayOffReason="BOOT_SAFE_OFF",lastRelayOnReason="NONE";
+// Fixed-size boot-local GPIO command transition ring. No heap allocations or secrets.
+struct RelayTransition {uint32_t seq;uint32_t uptimeMs;bool on;const char* reason;};
+constexpr uint8_t RELAY_TRANSITION_HISTORY_SIZE=12;
+RelayTransition relayTransitionHistory[RELAY_TRANSITION_HISTORY_SIZE]={};
+uint32_t relayTransitionSequence=0;
+void recordRelayTransition(bool on,const char* reason){
+  const uint32_t seq=++relayTransitionSequence;
+  RelayTransition& event=relayTransitionHistory[(seq-1)%RELAY_TRANSITION_HISTORY_SIZE];
+  event={seq,millis(),on,reason};
+}
 uint32_t lastWifiReconnect=0;
 uint32_t restartAt=0;
 bool otaAuthorized=false,otaCompleted=false;
@@ -33,6 +43,7 @@ void powerOff(const char* reason="UNSPECIFIED_OFF"){
     relayOffTransitions++;
     lastRelayTransitionMs=millis();
     lastRelayOffReason=reason;
+    recordRelayTransition(false,reason);
   }
   digitalWrite(RELAY_GPIO,LOW);
   commandedOn=false;
@@ -43,6 +54,7 @@ void powerOn(){
     relayOnTransitions++;
     lastRelayTransitionMs=millis();
     lastRelayOnReason="SIGNED_POWER_PERMIT";
+    recordRelayTransition(true,"SIGNED_POWER_PERMIT");
   }
   digitalWrite(RELAY_GPIO,HIGH);
   commandedOn=true;
@@ -95,6 +107,18 @@ void status(){
   doc["lastRelayTransitionMs"]=lastRelayTransitionMs;
   doc["lastRelayOffReason"]=lastRelayOffReason;
   doc["lastRelayOnReason"]=lastRelayOnReason;
+  doc["relayTransitionSequence"]=relayTransitionSequence;
+  JsonArray history=doc["relayTransitionHistory"].to<JsonArray>();
+  const uint32_t first=relayTransitionSequence>RELAY_TRANSITION_HISTORY_SIZE?
+    relayTransitionSequence-RELAY_TRANSITION_HISTORY_SIZE+1:1;
+  for(uint32_t seq=first;seq<=relayTransitionSequence;seq++){
+    const RelayTransition& e=relayTransitionHistory[(seq-1)%RELAY_TRANSITION_HISTORY_SIZE];
+    JsonObject item=history.add<JsonObject>();
+    item["seq"]=e.seq;
+    item["uptimeMs"]=e.uptimeMs;
+    item["on"]=e.on;
+    item["reason"]=e.reason;
+  }
   String out;serializeJson(doc,out);respond(200,out);
 }
 void heartbeat(){
