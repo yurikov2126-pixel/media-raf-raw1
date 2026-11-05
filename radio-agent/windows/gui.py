@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from mchs_gui_isolated_session import prepare_isolated_gui_session
-from mchs_synthetic_relay_pilot import decide_synthetic_relay_pilot
+from mchs_synthetic_relay_pilot import decide_synthetic_relay_pilot, decide_isolated_manual_relay_test
 
 from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK, MCHS_LAB_OBSERVED
 from updater import check_latest, stage_update, UpdateCheckError
@@ -115,6 +115,7 @@ class RadioAgentApp(tk.Tk):
         self.active_isolated_mode = False
         self.mchs_relay_trial_armed = False
         self.mchs_relay_trial_deadline = 0.0
+        self.mchs_relay_manual_until = 0.0
         self.mchs_relay_trial_requested = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Остановлен · оборудование не управляется")
         self.server = tk.StringVar(value="https://mediarafraw.ru")
@@ -211,6 +212,14 @@ class RadioAgentApp(tk.Tk):
         self.wav_path_row(isolated_box,self.mchs_all_clear_wav)
         ttk.Label(isolated_box,text="Перед запуском требуется ввести ISOLATED. AA-300 и все линии PA должны быть физически отключены. Используются сохранённый токен и центральный поток.",
                   style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(9,0))
+        manual_bar=ttk.Frame(isolated_box,style="Main.TFrame")
+        manual_bar.pack(fill="x",pady=(8,0))
+        ttk.Button(manual_bar,text="GPIO13: ручной ВКЛ · до 10 сек",
+                   command=self.manual_relay_on).pack(side="left")
+        ttk.Button(manual_bar,text="GPIO13: ручной ВЫКЛ",
+                   command=self.manual_relay_off).pack(side="left",padx=8)
+        ttk.Label(isolated_box,text="Ручное испытание требует того же разрешения сервера на питание, что и эфирный пульт. Галочка GPIO13 сама по себе не включает реле.",
+                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(5,0))
 
         bar = ttk.Frame(air, style="Main.TFrame")
         bar.pack(fill="x", pady=(0, 10))
@@ -352,6 +361,27 @@ class RadioAgentApp(tk.Tk):
                 variable.set(result)
         ttk.Button(line,text="Выбрать WAV",command=browse_wav).pack(side="left",padx=(8,0))
 
+    def manual_relay_on(self):
+        if not (self.worker and self.worker.is_alive() and self.active_isolated_mode
+                and self.mchs_relay_trial_armed and self.power_arm.get()):
+            messagebox.showwarning("GPIO13","Сначала запустите изолированный аппаратный пилот с подтверждением ISOLATED RELAY.")
+            return
+        if PLAYBACK_STATE.get('mchsRelayPrepEventId') or PLAYBACK_STATE.get('mchsIsolatedEventId'):
+            messagebox.showwarning("GPIO13","Во время ALARM, отбоя или подготовки к нему ручное питание запрещено.")
+            return
+        if not messagebox.askyesno("GPIO13 · ручной тест 220 В",
+              "Включить реле усилителя не более чем на 10 секунд?\n"
+              "Физическое отсоединение аудиолинии PA и безопасность силового монтажа подтверждены.\n"
+              "Без разрешения питания от сервера команда останется OFF."):
+            return
+        self.mchs_relay_manual_until=time.monotonic()+10
+        self.messages.put(("log","MCHS_GPIO13_MANUAL_ON_REQUESTED_10S · ожидается разрешение сервера"))
+
+    def manual_relay_off(self):
+        self.mchs_relay_manual_until=0.0
+        self.messages.put(("log","MCHS_GPIO13_MANUAL_OFF_REQUESTED · команда OFF в очередном цикле управления"))
+        self.power_status.set("GPIO13 · запрос ВЫКЛ, ждём подтверждения ESP32")
+
     def start(self):
         if self.worker and self.worker.is_alive():
             return
@@ -416,6 +446,7 @@ class RadioAgentApp(tk.Tk):
         STOP.clear()
         self.active_isolated_mode = isolated
         self.mchs_relay_trial_armed=bool(isolated and relay_requested)
+        self.mchs_relay_manual_until=0.0
         PLAYBACK_STATE['mchsRelayPilotActive']=self.mchs_relay_trial_armed
         PLAYBACK_STATE['mchsRelayPrepEventId']=None
         PLAYBACK_STATE['mchsRelayPowerEventId']=None
@@ -624,12 +655,22 @@ class RadioAgentApp(tk.Tk):
                         prep_event=state.get("mchsRelayPrepEventId")
                         actual_event=state.get("mchsIsolatedEventId")
                         relay_event=prep_event or actual_event
-                        permit,local_reason=decide_synthetic_relay_pilot(
-                            isolated=True,operator_armed=trial_armed,
-                            stop_requested=STOP.is_set(),event_id=relay_event,
-                            audio_mode=state["mode"],server_permit=permit,
-                            now=now,armed_until=self.mchs_relay_trial_deadline,
-                            preparing=bool(prep_event))
+                        if (not relay_event and self.mchs_relay_manual_until>now):
+                            permit,local_reason=decide_isolated_manual_relay_test(
+                                isolated=True,operator_armed=trial_armed,
+                                manual_requested=True,server_permit=permit,
+                                stop_requested=STOP.is_set(),audio_event_active=False,
+                                now=now,requested_until=self.mchs_relay_manual_until,
+                                trial_until=self.mchs_relay_trial_deadline)
+                        else:
+                            permit,local_reason=decide_synthetic_relay_pilot(
+                                isolated=True,operator_armed=trial_armed,
+                                stop_requested=STOP.is_set(),event_id=relay_event,
+                                audio_mode=state["mode"],server_permit=permit,
+                                now=now,armed_until=self.mchs_relay_trial_deadline,
+                                preparing=bool(prep_event))
+                        if relay_event:
+                            self.mchs_relay_manual_until=0.0
                         if not permit:
                             decision=local_reason
                     else:
@@ -905,6 +946,7 @@ class RadioAgentApp(tk.Tk):
                     PLAYBACK_STATE['mchsRelayLastLeaseAt']=None
                     self.mchs_relay_trial_armed = False
                     self.mchs_relay_trial_deadline = 0.0
+                    self.mchs_relay_manual_until = 0.0
                     self.status.set("Остановлен · оборудование не управляется")
                     self.broadcast_status.set("● Эфир выключен")
                     self.audio_status.set("● Источник: остановлен")
