@@ -36,9 +36,8 @@ export function settleMchsStationAttempt(item,response,{now=new Date().toISOStri
  const accepted=response?.ok===true;
  const reason=accepted?null:data.reason||response?.reason||'WORKER_UNCONFIRMED';
  const busy=response?.httpStatus===409&&RETRYABLE.has(reason);
- const ambiguous=!accepted&&!busy&&(
-  !Number.isInteger(response?.httpStatus)||response.httpStatus===0||
-  ['WORKER_TIMEOUT','WORKER_TRANSPORT_ERROR','NO_WORKER_RESULT','WORKER_UNCONFIRMED'].includes(reason));
+ const ambiguous=!accepted&&!busy&&
+  ['WORKER_TIMEOUT','WORKER_TRANSPORT_ERROR','NO_WORKER_RESULT','WORKER_UNCONFIRMED'].includes(reason);
  return {...item,status:accepted?'START_ACCEPTED':busy?'QUEUED':ambiguous?'DISPATCHING':'START_REJECTED',
   lastAttemptAt:now,lastError:reason,updatedAt:now};
 }
