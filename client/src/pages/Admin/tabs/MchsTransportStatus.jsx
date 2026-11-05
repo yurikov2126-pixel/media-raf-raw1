@@ -16,7 +16,10 @@ const reasonNames={
  UNSPECIFIED_OFF:'Выключение без уточнённой причины'
 };
 const kinds={
- FIRMWARE_RELAY_OFF:'ESP32: GPIO13 выключен',
+ FIRMWARE_RELAY_OFF:'ESP32: счётчик выключений вырос',
+ FIRMWARE_GPIO_OFF:'ESP32: GPIO13 выключен (событие прошивки)',
+ FIRMWARE_GPIO_ON:'ESP32: GPIO13 включён (событие прошивки)',
+ FIRMWARE_HISTORY_OVERFLOW:'ESP32: промежуточные события потеряны',
  FIRMWARE_RELAY_ON:'ESP32: GPIO13 включён',
  FIRMWARE_REBOOT:'ESP32 перезагрузилась',
  FIRMWARE_COUNTER_RESET:'Счётчик ESP32 сброшен',
@@ -131,7 +134,10 @@ export default function MchsTransportStatus({token}){
      <strong>{kinds[event.kind]||event.kind}</strong>
      <span className="ml-2 text-slate-600 dark:text-slate-300">{new Date(event.at).toLocaleString('ru-RU')}</span>
      <span className="block mt-1 break-words">{event.kind==='FIRMWARE_RELAY_OFF'?
-      reasonNames[String(event.detail||'').split(':').slice(1).join(':')]||event.detail:event.detail}</span>
+      reasonNames[String(event.detail||'').split(':').slice(1).join(':')]||event.detail:
+      event.kind==='FIRMWARE_GPIO_OFF'||event.kind==='FIRMWARE_GPIO_ON'?
+       (reasonNames[event.detail]||event.detail)+' · #'+event.seq+' · '+event.uptimeMs+' мс от запуска':
+       event.detail}</span>
     </div>)}
    </div>:<p className="text-xs text-slate-600 dark:text-slate-300">За последние 10 минут изменений не зарегистрировано. Это не является доказательством отсутствия физических отключений.</p>}
   </section>
