@@ -40,6 +40,9 @@ jobs:
       - name: Shared station encoder MCHS priority PCM evidence
         run: node --test tests/mchsWorkerPcmEvidence.test.js tests/mchsStationPrioritySession.test.js tests/mchsProductionReadiness.test.js
 
+      - name: Dormant main-station MCHS PCM executor regression
+        run: node --test tests/mchsStationPcmExecutor.test.js tests/mchsStationPrioritySession.test.js tests/mchsWorkerPcmEvidence.test.js
+
       - name: Windows Agent ALARM completion-report contract tests
         run: node --test tests/mchsAgentPlaybackReport.test.js
 
