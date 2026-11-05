@@ -22,6 +22,7 @@ import {createTrainingOverlay} from '../src/lib/radioMchsTrainingOverlay.js';
 import {createMchsWorkerEventJournal} from '../src/lib/mchsWorkerEventJournal.js';
 import {createMchsWorkerPcmEvidence} from '../src/lib/mchsWorkerPcmEvidence.js';
 import {createMchsStationPcmExecutor} from '../src/lib/mchsStationPcmExecutor.js';
+import {createMchsStationTerminalJournal} from '../src/lib/mchsStationTerminalJournal.js';
 import {validateMchsStationCommand} from '../src/lib/mchsStationCommandContract.js';
 import {createStationLufsMeter} from '../src/lib/radioStationLufsMeter.js';
 import { spawn } from 'node:child_process';
@@ -344,7 +345,11 @@ const trainingEventJournal=createMchsWorkerEventJournal();
 const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
 // A dedicated production-source PCM handler, currently admission-disabled:
 // no live Android or HTTP caller can invoke prepare(), and no GPIO access.
-const mchsStationPcmExecutor=createMchsStationPcmExecutor();
+const mchsStationTerminalJournal=createMchsStationTerminalJournal();
+const mchsStationPcmExecutor=createMchsStationPcmExecutor({onTerminal:entry=>{
+ const result=mchsStationTerminalJournal.append(entry);
+ if(!result.ok)console.error('MCHS_STATION_JOURNAL_FAILURE',JSON.stringify({reason:result.reason,eventId:entry.eventId}));
+}});
 const mchsStationCommandsEnabled=process.env.RADIO_MCHS_STATION_COMMANDS_ENABLED==='true';
 let mchsStationPreparing=false;
 let mchsStationPreparingEventId=null;
@@ -2165,7 +2170,8 @@ const server=http.createServer((req,res)=>{
     if(req.method==='GET'){
       respond(200,{ok:true,enabled:mchsStationCommandsEnabled,
         preparing:mchsStationPreparing,...mchsStationPcmExecutor.snapshot(),
-        terminalHistory:mchsStationPcmExecutor.terminalHistory()});
+        terminalHistory:mchsStationTerminalJournal.history(),
+        terminalJournal:mchsStationTerminalJournal.status()});
       return;
     }
     if(!mchsStationCommandsEnabled){
@@ -2199,6 +2205,9 @@ const server=http.createServer((req,res)=>{
         return;
       }
       if(valid.action!=='START'){respond(400,{ok:false,reason:'UNSUPPORTED_ACTION'});return;}
+      if(!mchsStationTerminalJournal.status().healthy||mchsStationTerminalJournal.hasEvent(valid.eventId)){
+        respond(503,{ok:false,reason:'TERMINAL_JOURNAL_UNAVAILABLE_OR_REPLAY'});return;
+      }
       if(mchsStationPreparing||mchsStationPcmExecutor.snapshot().active||
          trainingOverlay.snapshot().active||trainingPreparing){
         respond(409,{ok:false,reason:'STATION_SOURCE_BUSY'});return;
