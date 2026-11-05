@@ -41,13 +41,13 @@ test('STOP is always bound to a specific event',()=>{
 });
 
 test('coordinator refuses START without environment permission, even with valid event',async()=>{
- const result=await requestMchsStationSession(base,{enabled:false,
+ const result=await requestMchsStationSession({...base,occurredAt:new Date().toISOString()},{enabled:false,
   port:4105,secret:'x'.repeat(32)});
  assert.deepEqual(result,{ok:false,reason:'COORDINATOR_DISABLED'});
 });
 
 test('invalid commands never contact Worker',async()=>{
- const result=await requestMchsStationSession({...base,eventType:'OTHER'},
+ const result=await requestMchsStationSession({...base,eventType:'OTHER',occurredAt:new Date().toISOString()},
   {enabled:true,port:4105,secret:'x'.repeat(32)});
  assert.equal(result.reason,'INVALID_EVENT_BINDING');
 });
