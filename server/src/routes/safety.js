@@ -53,6 +53,8 @@ import {assessMissileAutoEvent,missileNextState} from '../lib/mchsMissileAutoGat
 import {classifyAutomaticAlarmCandidate} from '../lib/mchsAutomaticAlarmCandidate.js';
 import {evaluateAndroidMissileSequence} from '../lib/mchsAndroidSingleSource.js';
 import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
+import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
+import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {fetchRegionalOfficialFeed,REGIONAL_OFFICIAL_FEED_URL} from '../lib/mchsRegionalOfficialFeed.js';
 import {correlateMissileBulletins} from '../lib/mchsBulletinCorrelation.js';
 import {buildCorrelationReview,MCHS_CORRELATION_REVIEW_KEY} from '../lib/mchsCorrelationReview.js';
@@ -82,6 +84,7 @@ async function tickMchsAndroidMonitor(){
    ]);
    let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
    const result=observeAndroidEvents(normalizeAndroidMonitor(saved),observations);
+   let addedDispatchIntents=[];
    if(result.newEntries.length){
     const [intentRow,repeatRow,ruleRow,assets]=await Promise.all([
      tx.setting.findUnique({where:{key:MCHS_ANDROID_INTENTS_KEY}}),
@@ -100,6 +103,7 @@ async function tickMchsAndroidMonitor(){
     });
     // Staging only: no official-source attestation or dispatch authorization.
     const staged=stageBoundAndroidIntents(savedIntents,bound.eligible);
+    addedDispatchIntents=staged.added;
     if(staged.added.length)await tx.setting.upsert({where:{key:MCHS_ANDROID_INTENTS_KEY},
      create:{key:MCHS_ANDROID_INTENTS_KEY,value:JSON.stringify(staged.ledger)},
      update:{value:JSON.stringify(staged.ledger)}});
@@ -107,8 +111,18 @@ async function tickMchsAndroidMonitor(){
    if(result.newEntries.length||!row)await tx.setting.upsert({where:{key:MCHS_MONITOR_KEY},
     create:{key:MCHS_MONITOR_KEY,value:JSON.stringify(result.state)},
     update:{value:JSON.stringify(result.state)}});
-   return result;
+   return {...result,dispatchIntents:addedDispatchIntents,observations};
   });
+  // Do not replay stored Android notifications after process restart.
+  // Live START requires three independent configuration gates.
+  const dispatched=await dispatchNewAndroidStationBindings({
+   intents:outcome.dispatchIntents,observations:outcome.observations,
+   enabled:process.env.MCHS_ANDROID_MAIN_STATION_DISPATCH_ENABLED==='true',
+   request:requestMchsStationSession
+  });
+  if(dispatched.results.length)console.info('MCHS_ANDROID_STATION_DISPATCH',JSON.stringify({
+   results:dispatched.results
+  }));
   if(outcome.newEntries.length)console.info('MCHS_ANDROID_AUTOMATIC_OBSERVATION',JSON.stringify({
    count:outcome.newEntries.length,decisions:outcome.newEntries.map(x=>({
     eventId:x.eventId,eventType:x.eventType,result:x.result,reason:x.reason}))}));
