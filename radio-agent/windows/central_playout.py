@@ -39,6 +39,7 @@ from mchs_lab_end_evidence import assess_lab_trial_end
 from mchs_integrated_headphones_cycle import IntegratedHeadphonesCycle
 from mchs_event_admission import EventAdmissionLedger
 from mchs_event_audio_controller import IsolatedEventAudioController
+from mchs_relay_preroll import SYNTHETIC, preroll_decision
 from mchs_event_observation import make_event_observation, post_event_observation
 from mchs_isolated_readiness import make_isolated_readiness, post_isolated_readiness
 from mchs_two_stage_headphones_pilot import verify_local_training_wav
@@ -482,6 +483,9 @@ def run(args, token):
     event_audio=None
     event_audio_session=None
     last_event_audio_poll=0.0
+    pending_relay_audio=None
+    PLAYBACK_STATE.update(mchsRelayPrepareEventId=None,mchsRelayAckEventId=None,
+                          mchsRelayFirstAckAt=None,mchsRelayLastAckAt=None)
     last_isolated_ready_report=0.0
     isolated_ready_report_busy=threading.Event()
     last_event_receipt_retry=0.0
@@ -662,6 +666,42 @@ def run(args, token):
     last_execution_command_poll=[0.0]
     event_observation_busy=threading.Event()
     last_event_observation_poll=[0.0]
+    def launch_event_audio(detail,now):
+        nonlocal primary,fallback,fallback_key,network_ok,last_probe
+        # Recheck the on-disk WAV immediately before START.
+        # The operator-selected file may have been replaced
+        # after startup validation, and an event cannot
+        # authorize new bytes by path alone.
+        try:
+            current=verify_local_training_wav(detail['asset'])
+            asset_unchanged=(current['sha256']==detail['sha256'])
+        except (OSError,ValueError):
+            asset_unchanged=False
+        if not asset_unchanged:
+            event_audio.started(False,now=now,duration=0)
+            print('MCHS_EVENT_AUDIO_LOCAL_ASSET_CHANGED',
+                  detail['eventId'],flush=True)
+        else:
+            # Only the Agent-owned VLC decks are stopped.
+            relay.intentional_disconnect.set()
+            stop_vlc(primary)
+            stop_vlc(fallback)
+            primary=None
+            fallback=None
+            fallback_key=None
+            relay.failed.set()
+            started=event_audio_session.start(
+                event_id=detail['eventId'],
+                file=detail['asset'],repeats=detail['repeats'],
+                authorized=True)
+            event_audio.started(
+                started['accepted'],now=now,
+                duration=current['duration'])
+            network_ok=False
+            last_probe=0.0
+            print('MCHS_EVENT_AUDIO_START',
+                  detail['eventId'],json.dumps(started),flush=True)
+
     print('WINDOWS HEADPHONES PILOT; NO AMP/ESP32. Stop with Ctrl+C.',flush=True)
     try:
         while not STOP.is_set():
@@ -772,39 +812,28 @@ def run(args, token):
                     isolated_ready_report_busy.set()
                     readiness=make_isolated_readiness(
                         args.isolated_event_assets,
-                        fresh_central and network_ok and authorized)
-                    def send_isolated_readiness(report=readiness):
-                        try:
-                            if post_isolated_readiness(args.server,token,report):
-                                print('MCHS_ISOLATED_READY_REPORTED',flush=True)
-                        except (HTTPError,URLError,OSError,ValueError) as error:
-                            print('MCHS_ISOLATED_READY_REPORT_UNAVAILABLE',
-                                  type(error).__name__,flush=True)
-                        finally:
-                            isolated_ready_report_busy.clear()
-                    threading.Thread(target=send_isolated_readiness,
-                                     daemon=True).start()
-                if now-last_event_audio_poll>=3:
-                    last_event_audio_poll=now
-                    try:
-                        envelope_request=Request(
-                            args.server.rstrip('/')+'/api/radio-agent/agent/mchs-execution-command',
-                            headers={'Authorization':'Bearer '+token})
-                        with urlopen(envelope_request,timeout=3) as envelope_response:
-                            envelope=json.load(envelope_response)
-                        now=time.monotonic()
-                        action,detail=event_audio.command(
-                            envelope,now=now,baseline=fresh_central and network_ok,
-                            authorized=not denied and now-last_authorized<15)
-                        if action=='START_AUDIO':
-                            # Recheck the on-disk WAV immediately before START.
-                            # The operator-selected file may have been replaced
-                            # after startup validation, and an event cannot
-                            # authorize new bytes by path alone.
-                            try:
-                                current=verify_local_training_wav(detail['asset'])
-                                asset_unchanged=(current['sha256']==detail['sha256'])
-                            except (OSError,ValueError):
+                                                if action=='START_AUDIO':
+                            if (getattr(args,'isolated_relay_trial',False) and
+                                    SYNTHETIC.fullmatch(detail['eventId'])):
+                                # Acknowledged local START enters a sound-muted
+                                # warm-up phase before any WAV process is created.
+                                pending_relay_audio={'detail':detail,'requestedAt':now}
+                                PLAYBACK_STATE.update(
+                                    mchsRelayPrepareEventId=detail['eventId'],
+                                    mchsRelayAckEventId=None,
+                                    mchsRelayFirstAckAt=None,mchsRelayLastAckAt=None)
+                                relay.intentional_disconnect.set()
+                                stop_vlc(primary)
+                                stop_vlc(fallback)
+                                primary=None
+                                fallback=None
+                                fallback_key=None
+                                relay.failed.set()
+                                print('MCHS_RELAY_PREROLL_ARMED',
+                                      detail['eventId'],flush=True)
+                            else:
+                                launch_event_audio(detail,now)
+ueError):
                                 asset_unchanged=False
                             if not asset_unchanged:
                                 event_audio.started(False,now=now,duration=0)
@@ -837,6 +866,41 @@ def run(args, token):
                     except (HTTPError,URLError,OSError,ValueError) as error:
                         print('MCHS_EVENT_AUDIO_POLL_UNAVAILABLE',
                               type(error).__name__,flush=True)
+                if pending_relay_audio is not None:
+                    detail=pending_relay_audio['detail']
+                    if event_audio.state!='STARTING':
+                        print('MCHS_RELAY_PREROLL_CANCELLED',
+                              detail['eventId'],event_audio.state,flush=True)
+                        pending_relay_audio=None
+                        PLAYBACK_STATE['mchsRelayPrepareEventId']=None
+                    else:
+                        phase=preroll_decision(
+                            event_id=detail['eventId'],
+                            requested_at=pending_relay_audio['requestedAt'],
+                            now=time.monotonic(),
+                            ack_event_id=PLAYBACK_STATE.get('mchsRelayAckEventId'),
+                            first_ack_at=PLAYBACK_STATE.get('mchsRelayFirstAckAt'),
+                            last_ack_at=PLAYBACK_STATE.get('mchsRelayLastAckAt'),
+                            authorized=not denied and
+                                time.monotonic()-last_authorized<15,
+                            stopped=STOP.is_set())
+                        if phase=='READY':
+                            # The 3s window begins at signed ON ACK, never at
+                            # Android receipt. Keep relay lease renewed while WAV plays.
+                            PLAYBACK_STATE['mchsRelayPrepareEventId']=None
+                            pending_relay_audio=None
+                            print('MCHS_RELAY_PREROLL_READY',
+                                  detail['eventId'],flush=True)
+                            launch_event_audio(detail,time.monotonic())
+                        elif phase in ('TIMEOUT','DENIED','NOT_SYNTHETIC',
+                                       'INVALID_REQUEST'):
+                            event_audio.started(False,now=time.monotonic(),
+                                                duration=0,
+                                                failure_reason='RELAY_PREROLL_'+phase)
+                            PLAYBACK_STATE['mchsRelayPrepareEventId']=None
+                            pending_relay_audio=None
+                            print('MCHS_RELAY_PREROLL_FAILED',
+                                  detail['eventId'],phase,flush=True)
                 transition=event_audio.tick(
                     now=now,authorized=not denied and now-last_authorized<15,
                     session=(event_audio_session.status() if event_audio.playing else None),
@@ -1113,6 +1177,12 @@ def run(args, token):
             # supervised relay pilot. Clear it at every nonplaying boundary.
             PLAYBACK_STATE['mchsIsolatedEventId']=(event_audio.event
                 if event_audio is not None and event_audio.playing else None)
+            if pending_relay_audio is not None:
+                # Keep central audio muted throughout warm-up; do not
+                # reconnect the VLC deck until ALARM or terminal failure.
+                PLAYBACK_STATE['mode']='MCHS_RELAY_PRE_ROLL'
+                STOP.wait(0.2)
+                continue
             if event_audio is not None and event_audio.playing:
                 PLAYBACK_STATE['mode']='MCHS_EVENT_ISOLATED_LOCAL_WAV'
                 STOP.wait(0.2)
@@ -1160,7 +1230,9 @@ def run(args, token):
                     fallback_key=None
             STOP.wait(0.5)
     finally:
-        PLAYBACK_STATE.update(mode='STOPPED',broadcastRunning=False,streamLastSeen=0.0,mchsIsolatedEventId=None)
+        PLAYBACK_STATE.update(mode='STOPPED',broadcastRunning=False,streamLastSeen=0.0,mchsIsolatedEventId=None,
+                              mchsRelayPrepareEventId=None,mchsRelayAckEventId=None,
+                              mchsRelayFirstAckAt=None,mchsRelayLastAckAt=None)
         threading.Thread(target=async_playback_report,args=(args.server,token,
             {'playback':'STOPPED','outputDevice':'VLC (устройство вывода не подтверждено)',
              'lastPacketAgeMs':None,'error':''}),daemon=True).start()
