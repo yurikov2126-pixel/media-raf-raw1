@@ -813,7 +813,31 @@ def run(args, token):
                     isolated_ready_report_busy.set()
                     readiness=make_isolated_readiness(
                         args.isolated_event_assets,
-                                                if action=='START_AUDIO':
+                        fresh_central and network_ok and authorized)
+                    def send_isolated_readiness(report=readiness):
+                        try:
+                            if post_isolated_readiness(args.server,token,report):
+                                print('MCHS_ISOLATED_READY_REPORTED',flush=True)
+                        except (HTTPError,URLError,OSError,ValueError) as error:
+                            print('MCHS_ISOLATED_READY_REPORT_UNAVAILABLE',
+                                  type(error).__name__,flush=True)
+                        finally:
+                            isolated_ready_report_busy.clear()
+                    threading.Thread(target=send_isolated_readiness,
+                                     daemon=True).start()
+                if now-last_event_audio_poll>=3:
+                    last_event_audio_poll=now
+                    try:
+                        envelope_request=Request(
+                            args.server.rstrip('/')+'/api/radio-agent/agent/mchs-execution-command',
+                            headers={'Authorization':'Bearer '+token})
+                        with urlopen(envelope_request,timeout=3) as envelope_response:
+                            envelope=json.load(envelope_response)
+                        now=time.monotonic()
+                        action,detail=event_audio.command(
+                            envelope,now=now,baseline=fresh_central and network_ok,
+                            authorized=not denied and now-last_authorized<15)
+                        if action=='START_AUDIO':
                             if (getattr(args,'isolated_relay_trial',False) and
                                     SYNTHETIC.fullmatch(detail['eventId'])):
                                 pending_relay_audio={'detail':detail,'requestedAt':now}
@@ -1151,8 +1175,6 @@ def run(args, token):
             PLAYBACK_STATE['mchsIsolatedEventId']=(event_audio.event
                 if event_audio is not None and event_audio.playing else None)
             if pending_relay_audio is not None:
-                # Keep central audio muted throughout warm-up; do not
-                # reconnect the VLC deck until ALARM or terminal failure.
                 PLAYBACK_STATE['mode']='MCHS_RELAY_PRE_ROLL'
                 STOP.wait(0.2)
                 continue
