@@ -31,7 +31,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.17'
+AGENT_VERSION = '0.5.18'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -415,6 +415,11 @@ class RadioAgentApp(tk.Tk):
         STOP.clear()
         self.active_isolated_mode = isolated
         self.mchs_relay_trial_armed=bool(isolated and relay_requested)
+        PLAYBACK_STATE['mchsRelayPilotActive']=self.mchs_relay_trial_armed
+        PLAYBACK_STATE['mchsRelayPrepEventId']=None
+        PLAYBACK_STATE['mchsRelayPowerEventId']=None
+        PLAYBACK_STATE['mchsRelayPowerOnAt']=None
+        PLAYBACK_STATE['mchsRelayLastLeaseAt']=None
         self.mchs_relay_trial_deadline=(time.monotonic()+600 if self.mchs_relay_trial_armed else 0.0)
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
@@ -615,11 +620,15 @@ class RadioAgentApp(tk.Tk):
                     now=time.monotonic()
                     local_running=bool(state["broadcastRunning"])
                     if self.active_isolated_mode:
+                        prep_event=state.get("mchsRelayPrepEventId")
+                        actual_event=state.get("mchsIsolatedEventId")
+                        relay_event=prep_event or actual_event
                         permit,local_reason=decide_synthetic_relay_pilot(
                             isolated=True,operator_armed=trial_armed,
-                            stop_requested=STOP.is_set(),event_id=state.get("mchsIsolatedEventId"),
+                            stop_requested=STOP.is_set(),event_id=relay_event,
                             audio_mode=state["mode"],server_permit=permit,
-                            now=now,armed_until=self.mchs_relay_trial_deadline)
+                            now=now,armed_until=self.mchs_relay_trial_deadline,
+                            preparing=bool(prep_event))
                         if not permit:
                             decision=local_reason
                     else:
@@ -631,10 +640,29 @@ class RadioAgentApp(tk.Tk):
                     self.messages.put(("broadcast_status","● Эфир включён" if local_running else "● Эфир выключен"))
                     self.messages.put(("audio_status","● Звук: воспроизведение / переход" if audio_recent else "● Звук: нет подтверждения"))
                     phase="esp32_power"
-                    signed_power(host,secret,permit,8000 if permit else 0)
+                    power_result=signed_power(host,secret,permit,8000 if permit else 0)
+                    if self.active_isolated_mode:
+                        # Only a returned ESP32 power ACK marks the beginning
+                        # of the hardware warmup. Subsequent leases renew it.
+                        stamp=time.monotonic()
+                        event=relay_event if permit else None
+                        if event and power_result.get('amplifierPower')=='ON_COMMANDED':
+                            if state.get('mchsRelayPowerEventId')!=event:
+                                state['mchsRelayPowerOnAt']=stamp
+                            state['mchsRelayPowerEventId']=event
+                            state['mchsRelayLastLeaseAt']=stamp
+                        else:
+                            state['mchsRelayPowerOnAt']=None
+                            state['mchsRelayLastLeaseAt']=None
+                            state['mchsRelayPowerEventId']=None
                     record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
                     self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
+                    if self.active_isolated_mode:
+                        # No old acknowledgment survives an uncertain lease.
+                        PLAYBACK_STATE['mchsRelayPowerEventId']=None
+                        PLAYBACK_STATE['mchsRelayPowerOnAt']=None
+                        PLAYBACK_STATE['mchsRelayLastLeaseAt']=None
                     record_power_event("POWER_ERROR",result="ERROR",durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
                     self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
                 finally:
@@ -869,6 +897,11 @@ class RadioAgentApp(tk.Tk):
                     self.update_btn.configure(state="normal")
                 elif action == "stopped":
                     self.active_isolated_mode = False
+                    PLAYBACK_STATE['mchsRelayPilotActive']=False
+                    PLAYBACK_STATE['mchsRelayPrepEventId']=None
+                    PLAYBACK_STATE['mchsRelayPowerEventId']=None
+                    PLAYBACK_STATE['mchsRelayPowerOnAt']=None
+                    PLAYBACK_STATE['mchsRelayLastLeaseAt']=None
                     self.mchs_relay_trial_armed = False
                     self.mchs_relay_trial_deadline = 0.0
                     self.status.set("Остановлен · оборудование не управляется")
