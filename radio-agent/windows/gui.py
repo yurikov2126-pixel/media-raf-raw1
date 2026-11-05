@@ -18,6 +18,7 @@ from urllib.error import HTTPError
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from mchs_gui_isolated_session import prepare_isolated_gui_session
 from mchs_synthetic_relay_pilot import decide_synthetic_relay_pilot
+from mchs_relay_transition_evidence import describe_power_transition
 
 from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK, MCHS_LAB_OBSERVED
 from updater import check_latest, stage_update, UpdateCheckError
@@ -31,7 +32,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.18'
+AGENT_VERSION = '0.5.19'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -52,7 +53,7 @@ def record_power_event(event,**fields):
     safe={}
     for key in ("result","durationMs","httpStatus","permit","reason","policyMode",
                 "mode","intentAgeSeconds","authorizationAgeSeconds","errorType",
-                "armed","leaseMs","phase"):
+                "armed","leaseMs","phase","eventId","transition","serverReason","manualPending"):
         value=fields.get(key)
         if value is not None:
             safe[key]=str(value)[:120] if isinstance(value,str) else value
@@ -142,6 +143,7 @@ class RadioAgentApp(tk.Tk):
         self.power_off_candidate_since = None
         self.last_power_was_auto = False
         self.power_busy = False
+        self.last_esp32_relay_ack = None
         self.agreed = tk.BooleanVar(value=False)
         self.isolated_session_enabled = tk.BooleanVar(value=False)
         self.mchs_danger_wav = tk.StringVar(value=prefs.get('mchs_danger_wav','C:/MchsTest/alarm_missile_start_pcm16.wav'))
@@ -533,12 +535,17 @@ class RadioAgentApp(tk.Tk):
                 "Подтвердите проверенную электросхему и отсоединённую аудиолинию PA. Подать запрос ON не более чем на 8 секунд при разрешении сервера?"):
             return
         self.mchs_manual_pulse_until=time.monotonic()+8
+        self.power_status.set("GPIO13 · ручной ON запрошен; ожидается разрешение сервера")
+        record_power_event("MANUAL_ON_REQUESTED",manualPending=True,
+                           phase=PLAYBACK_STATE.get("mode"),armed=True)
         self.messages.put(("log","MCHS_RELAY_MANUAL_PULSE_REQUESTED · до 8 с; требуется server permit:true"))
         if not self.power_busy:
             self.power_tick(schedule_next=False)
 
     def manual_mchs_relay_off(self):
         self.mchs_manual_pulse_until=0.0
+        self.power_status.set("GPIO13 · ручной OFF запрошен; ожидается подтверждение ESP32")
+        record_power_event("MANUAL_OFF_REQUESTED",phase=PLAYBACK_STATE.get("mode"))
         self.messages.put(("log","MCHS_RELAY_MANUAL_OFF_REQUESTED"))
         if not self.power_busy:
             self.power_tick(schedule_next=False)
@@ -687,7 +694,24 @@ class RadioAgentApp(tk.Tk):
                             permit=False
                         if local_reason=='SYNTHETIC_LOCAL_WAV_POWER_TRIAL' and not state.get("mchsIsolatedEventId"):
                             permit=False
+                    current_event=preparing_event or state.get("mchsIsolatedEventId")
                     result=signed_power(host,secret,permit,8000 if permit else 0)
+                    acknowledged=result.get("amplifierPower")
+                    if acknowledged in ("ON_COMMANDED","OFF_COMMANDED"):
+                        observed=acknowledged=="ON_COMMANDED"
+                        transition=describe_power_transition(
+                            previous=self.last_esp32_relay_ack,requested=observed,
+                            server_permit=intent.get("permit") if 'intent' in locals() else None,
+                            reason=local_reason,phase=state.get("mode"),event_id=current_event)
+                        self.last_esp32_relay_ack=observed
+                        if transition:
+                            record_power_event("RELAY_TRANSITION",
+                                transition=transition["transition"],phase=transition["phase"],
+                                reason=transition["reason"],eventId=transition["event"],
+                                serverReason=intent.get("reason") if 'intent' in locals() else None,
+                                permit=observed)
+                            self.messages.put(("log","GPIO13 "+transition["transition"]+
+                                " · "+transition["reason"]+" · "+transition["phase"]))
                     if self.active_isolated_mode and preparing_event:
                         if permit and local_reason=='SYNTHETIC_RELAY_PRE_ROLL' and state.get("mchsRelayPrepareEventId")==preparing_event:
                             ack=time.monotonic()
@@ -701,7 +725,11 @@ class RadioAgentApp(tk.Tk):
                     record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
                     if (self.active_isolated_mode and self.mchs_manual_pulse_until>time.monotonic()
                             and not permit and local_reason=='SERVER_POWER_NOT_AUTHORIZED'):
-                        self.messages.put(("power_status","GPIO13 OFF · сервер не разрешил ручной тест. Проверьте запрос ВКЛ в эфирном пульте и права радиокомпьютера."))
+                        server_reason=(intent.get("reason") if 'intent' in locals() else "нет ответа сервера")
+                        record_power_event("MANUAL_ON_DENIED",reason=local_reason,
+                                           serverReason=server_reason,manualPending=True)
+                        self.messages.put(("power_status","GPIO13 OFF · сервер отказал: "+str(server_reason)[:110]+
+                                           " · требуется MANUAL / Запрос ВКЛ в эфирном пульте"))
                     else:
                         self.messages.put(("power_status","GPIO13 · "+("ON (команда подтверждена)" if permit else "OFF (команда подтверждена)")))
                 except Exception as error:
@@ -712,7 +740,8 @@ class RadioAgentApp(tk.Tk):
                         PLAYBACK_STATE.update(mchsRelayAckEventId=None,
                                               mchsRelayFirstAckAt=None,
                                               mchsRelayLastAckAt=None)
-                    record_power_event("POWER_ERROR",result="ERROR",durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
+                    record_power_event("POWER_ERROR",result="ERROR",eventId=PLAYBACK_STATE.get("mchsIsolatedEventId") or PLAYBACK_STATE.get("mchsRelayPrepareEventId"),durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
+                    self.last_esp32_relay_ack=None
                     self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
                 finally:
                     self.messages.put(("power_done",None))
