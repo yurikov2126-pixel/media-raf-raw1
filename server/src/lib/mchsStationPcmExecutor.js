@@ -79,5 +79,6 @@ export function createMchsStationPcmExecutor(){
   release();
   return snap();
  }
- return {prepare,replace,observeProgram,abort,snapshot:snap};
+ return {prepare,replace,observeProgram,abort,snapshot:snap,
+  terminalHistory:()=>lifecycle.history()};
 }

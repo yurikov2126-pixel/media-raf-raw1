@@ -43,6 +43,9 @@ jobs:
       - name: Dormant main-station MCHS PCM executor regression
         run: node --test tests/mchsStationPcmExecutor.test.js tests/mchsStationPrioritySession.test.js tests/mchsWorkerPcmEvidence.test.js
 
+      - name: MCHS short-lived terminal PCM receipt history
+        run: node --test tests/mchsStationTerminalHistory.test.js tests/mchsStationExecutionReceipts.test.js
+
       - name: MCHS priority Worker internal command transport
         run: node --test tests/mchsStationCommandContract.test.js tests/mchsStationPcmExecutor.test.js tests/mchsStationPrioritySession.test.js
 
