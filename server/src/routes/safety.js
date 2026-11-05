@@ -156,8 +156,9 @@ async function tickMchsAndroidMonitor(){
     observations:original?[original]:[],enabled:true,request:requestMchsStationSession
    });
    // A transient BUSY response stays queued; do not register it as a final receipt.
-   dispatched={results:[...recoveredDispatches,...attempts.results.filter(r=>!(r.httpStatus===409&&
-    r.reason==='STATION_SOURCE_BUSY'))]};
+   dispatched={results:[...recoveredDispatches,...attempts.results.filter(r=>
+    !(r.httpStatus===409&&r.reason==='STATION_SOURCE_BUSY')&&
+    !['WORKER_TIMEOUT','WORKER_TRANSPORT_ERROR','NO_WORKER_RESULT','WORKER_UNCONFIRMED'].includes(r.reason))]};
    const result=attempts.results[0]||{ok:false,reason:'NO_WORKER_RESULT',eventId:selected.eventId};
    await prisma.$transaction(async tx=>{
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581453)`;
