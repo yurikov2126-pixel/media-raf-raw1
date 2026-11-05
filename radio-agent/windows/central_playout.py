@@ -697,6 +697,7 @@ def run(args, token):
             event_audio.started(
                 started['accepted'],now=now,
                 duration=current['duration'])
+            PLAYBACK_STATE['mchsIsolatedEventId']=(detail['eventId'] if started['accepted'] else None)
             network_ok=False
             last_probe=0.0
             print('MCHS_EVENT_AUDIO_START',
@@ -859,11 +860,11 @@ def run(args, token):
                         if phase=='READY':
                             # The 3s window begins at signed ON ACK, never at
                             # Android receipt. Keep relay lease renewed while WAV plays.
-                            PLAYBACK_STATE['mchsRelayPrepareEventId']=None
                             pending_relay_audio=None
                             print('MCHS_RELAY_PREROLL_READY',
                                   detail['eventId'],flush=True)
                             launch_event_audio(detail,time.monotonic())
+                            PLAYBACK_STATE['mchsRelayPrepareEventId']=None
                         elif phase in ('TIMEOUT','DENIED','NOT_SYNTHETIC',
                                        'INVALID_REQUEST'):
                             event_audio.started(False,now=time.monotonic(),
