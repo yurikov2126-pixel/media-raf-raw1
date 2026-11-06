@@ -47,26 +47,28 @@ export default function MchsTransportStatus({token}){
  const [savingBinding,setSavingBinding]=useState(false);
  const [bindingMessage,setBindingMessage]=useState('');
  const [preflight,setPreflight]=useState(null);
+ const [production,setProduction]=useState(null);
  const [intents,setIntents]=useState(null);
  const [receipts,setReceipts]=useState(null);
  const [error,setError]=useState('');
  const [updated,setUpdated]=useState(null);
  const [loading,setLoading]=useState(false);
  const load=useCallback(async()=>{
-  const [s,p,i,r,b]=await Promise.all([
+  const [s,p,i,r,b,a]=await Promise.all([
    api('/safety/missile-main-station-readiness',{token}),
    api('/safety/missile-live-trial-preflight',{token}),
    api('/safety/missile-android-execution-intents',{token}),
    api('/safety/missile-station-execution-receipts',{token}),
-   api('/safety/missile-main-station-agent-binding',{token})
+   api('/safety/missile-main-station-agent-binding',{token}),
+   api('/safety/missile-production-auto-readiness',{token})
   ]);
-  return {s,p,i,r,b};
+  return {s,p,i,r,b,a};
  },[token]);
  const refresh=useCallback(async()=>{
   setLoading(true);
   try{
-   const {s,p,i,r,b}=await load();
-   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);
+   const {s,p,i,r,b,a}=await load();
+   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
    setSelectedAgentId(b.binding?.deviceId||'');
    setError('');setUpdated(new Date());
   }catch(e){setError(e.message||'Ошибка получения состояния');}
@@ -127,6 +129,35 @@ export default function MchsTransportStatus({token}){
    <button type="button" onClick={refresh} disabled={loading} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">{loading?'Проверяем…':'Обновить'}</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">Не удалось обновить диагностику: {error}</p>}
+  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Готовность автоматических оповещений">
+   <div>
+    <strong className="block text-sm">Готовность автоматических ALARM и ALL-CLEAR</strong>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Проверка настроек и связи без запуска тревоги. Наличие всех зелёных проверок не доказывает звук в громкоговорителях.</p>
+   </div>
+   <p className="text-sm font-semibold">{production?.configurationReady?'Настройки и соединения подтверждены':'Требуется проверка конфигурации'}</p>
+   <div className="grid gap-2 sm:grid-cols-2">
+    {(production?.checks||[]).map(x=><div key={x.id} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 dark:bg-white/5 p-2 text-xs">
+      <span>{({
+       ANDROID_INGEST:'Приём Android с HMAC',
+       TRUSTED_CHANNEL:'Разрешённый Android-канал',
+       ANDROID_BRIDGE_ONLINE:'Связь с Android-мостом',
+       MISSILE_DANGER:'Файл «Ракетная опасность»',
+       MISSILE_ALL_CLEAR:'Файл «Отбой»',
+       API_DISPATCH:'Автоматическая очередь API',
+       API_WORKER_COORDINATOR:'Связь API → Worker',
+       WORKER_AVAILABLE:'Radio Worker на связи',
+       WORKER_COMMANDS:'Приём команд основным Worker',
+       WORKER_JOURNAL:'Журнал завершения Worker',
+       AGENT_PRODUCTION_BINDING:'Рабочий Windows Agent выбран',
+       AGENT_HEARTBEAT:'Windows Agent на связи',
+       ESP32_TELEMETRY:'Данные ESP32'
+      })[x.id]||x.id}</span>
+      <strong className={x.ok?'text-emerald-700 dark:text-emerald-300':'text-amber-700 dark:text-amber-300'}>{x.ok?'Да':'Нет'}</strong>
+     </div>)}
+   </div>
+   {(production?.audio||[]).map(x=><p key={x.type} className="text-xs">{eventLabels[x.type]||x.type}: {x.assetName||'Файл не выбран'} · повторений: {x.repeats??'—'}</p>)}
+   <p className="text-xs text-slate-600 dark:text-slate-300">Разрешённых Android-каналов: {production?.channelAllowlistCount??'—'}. Никаких команд воспроизведения и GPIO этот экран не посылает.</p>
+  </section>
   <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Привязка рабочего радиокомпьютера">
    <div><strong className="block text-sm">Рабочий Windows Radio Agent</strong>
     <p className="text-xs text-slate-600 dark:text-slate-300">Выбор компьютера для отображения диагностики ESP32 и радио. Не меняет режим вещания, состояние реле или права на оповещение.</p></div>
