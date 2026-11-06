@@ -56,6 +56,7 @@ import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {assessMchsMainStationReadiness} from '../lib/mchsMainStationReadiness.js';
+import {resolveMchsProductionAgentBinding,selectMchsBoundEsp32Evidence} from '../lib/mchsProductionAgentBinding.js';
 import {MCHS_ESP32_TRANSITIONS_KEY,assessEsp32TransitionEvidence} from '../lib/mchsEsp32TransitionEvidence.js';
 import {selectNextMchsStationIntent,settleMchsStationAttempt} from '../lib/mchsStationSequentialQueue.js';
 import {reconcileMchsStationClaims} from '../lib/mchsStationClaimRecovery.js';
@@ -1645,7 +1646,8 @@ router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,ne
  */
 router.get('/missile-main-station-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
-  const deviceId=process.env.MCHS_AGENT_LAB_DEVICE_ID||null;
+  const binding=resolveMchsProductionAgentBinding(process.env);
+  const deviceId=binding.deviceId;
   const [worker,device,espRow,receiptRow,transitionRow]=await Promise.all([
    requestMchsStationSession({action:'STATUS'}).catch(error=>({
     ok:false,reason:error?.code||'WORKER_UNAVAILABLE'})),
@@ -1664,11 +1666,15 @@ router.get('/missile-main-station-readiness',requireRole('ADMIN'),async (_req,re
     workerCommands:worker?.data?.enabled===true
    }});
   const transitions=parse(transitionRow);
+  const scopedEsp32=selectMchsBoundEsp32Evidence(transitions,{deviceId});
   res.set('Cache-Control','no-store').json({
    checkedAt:new Date().toISOString(),...report,
+   agentBinding:{source:binding.source,configured:binding.configured,
+    legacy:binding.legacy,deviceBound:!!device,deviceId:device?.id||null},
+   esp32EvidenceBinding:{reason:scopedEsp32.reason,
+    ambiguous:scopedEsp32.ambiguous,matched:!!scopedEsp32.deviceId},
    esp32Transitions:assessEsp32TransitionEvidence(transitions,{
-    deviceId:Object.entries(transitions?.devices||{}).find(([_,v])=>
-     v.reporterId===deviceId)?.[0]||null})
+    deviceId:scopedEsp32.deviceId})
   });
  }catch(error){next(error);}
 });
