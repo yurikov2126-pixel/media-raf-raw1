@@ -161,7 +161,10 @@ async function ampDecision(){
   const alertPower=policy.mode==='AUTO'&&alert.active;
   const requested=policy.emergencyOff?false:policy.mode==='MANUAL'?policy.manualOn:
     Boolean(alertPower||nextSlot||autoDj.enabled);
-  return {policy,requested,mchsPcmActive:alert.active,mchsPowerEventId:alertPower?alert.eventId:null,
+  return {policy,requested,mchsPcmActive:alert.active,
+    mchsPreRollActive:alertPower&&station?.data?.preRollActive===true,
+    mchsPreRollRemainingMs:alertPower?station?.data?.preRollRemainingMs||0:0,
+    mchsPowerEventId:alertPower?alert.eventId:null,
     reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':alertPower?
     'Основное оповещение МЧС':nextSlot?'Окно расписания (подготовка / эфир / задержка отключения)':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
     connection:connected?'ONLINE':'OFFLINE',agentMode:fresh?telemetry.agentMode:null,
@@ -179,6 +182,8 @@ router.get('/agent/amplifier-intent',deviceAuth,safe(async(req,res)=>{
   res.json({permit,leaseMs:permit?8000:0,esp32Ip:devices.length===1?devices[0].ip:null,
     reason:result.reason,policyMode:result.mchsPowerEventId?'MCHS':result.policy.mode,
     mchsEventId:permit?result.mchsPowerEventId:null,
+    mchsPreRollActive:permit&&result.mchsPreRollActive===true,
+    mchsPreRollRemainingMs:permit?result.mchsPreRollRemainingMs:0,
     emergencyOff:result.policy.emergencyOff===true,hardwareExpected:'POWER_CONTROL_V1',
     evaluatedAt:new Date().toISOString()});
 }));
