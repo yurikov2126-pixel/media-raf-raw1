@@ -78,8 +78,8 @@ export default function MchsTransportStatus({token}){
   let alive=true;
   const tick=async()=>{
    try{
-    const {s,p,i,r,b}=await load();
-    if(alive){setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);
+    const {s,p,i,r,b,a}=await load();
+    if(alive){setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
      setSelectedAgentId(current=>current||b.binding?.deviceId||'');
      setError('');setUpdated(new Date());}
    }catch(e){if(alive)setError(e.message||'Сервер диагностики недоступен');}
@@ -95,8 +95,8 @@ export default function MchsTransportStatus({token}){
    await api('/safety/missile-main-station-agent-binding',{
     token,method:'PUT',body:{deviceId:selectedAgentId}
    });
-   const {s,p,i,r,b}=await load();
-   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);
+   const {s,p,i,r,b,a}=await load();
+   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
    setSelectedAgentId(b.binding?.deviceId||'');
    setBindingMessage('Рабочий радиокомпьютер сохранён для диагностики.');
    setUpdated(new Date());
@@ -115,7 +115,7 @@ export default function MchsTransportStatus({token}){
   uncertain:items.filter(x=>x.status==='UNKNOWN').length
  };
  const cards=[
-  {name:'Radio Worker',value:worker?.reachable?'На связи':'Нет связи',detail:'Фаза: '+stateText(worker?.phase)+' · PCM-журнал: '+boolText(worker?.journalHealthy)},
+  {name:'Radio Worker',value:worker?.reachable?'На связи':'Нет связи',detail:'Фаза: '+stateText(worker?.phase)+' · PCM-журнал: '+boolText(worker?.journalHealthy)+(worker?.diagnosticReason?' · Причина: '+worker.diagnosticReason:'')},
   {name:'Windows Agent',value:agent?.online?'В сети':'Нет связи',detail:'Устройство привязано: '+boolText(agent?.deviceBound)+' · Воспроизведение разрешено: '+boolText(agent?.playbackAllowed)},
   {name:'ESP32',value:esp?.fresh?'Телеметрия актуальна':'Нет свежих данных',detail:'Heartbeat: '+boolText(esp?.heartbeatFresh)+' · Lease: '+boolText(esp?.leaseValid)},
   {name:'GPIO13 / AA-300',value:stateText(esp?.amplifierPower),detail:'Только командное состояние, не измеренное питание'}
@@ -134,7 +134,8 @@ export default function MchsTransportStatus({token}){
     <strong className="block text-sm">Готовность автоматических ALARM и ALL-CLEAR</strong>
     <p className="text-xs text-slate-600 dark:text-slate-300">Проверка настроек и связи без запуска тревоги. Наличие всех зелёных проверок не доказывает звук в громкоговорителях.</p>
    </div>
-   <p className="text-sm font-semibold">{production?.configurationReady?'Настройки и соединения подтверждены':'Требуется проверка конфигурации'}</p>
+   <p className="text-sm font-semibold">{!production?'Получаем результаты проверок…':production.configurationReady?'Настройки и соединения подтверждены':'Требуется проверка конфигурации'}</p>
+   {production&&production.holds?.length>0&&<p className="text-xs text-amber-700 dark:text-amber-300">Непройденных пунктов: {production.holds.length}. Откройте соответствующие настройки или проверьте службы.</p>}
    <div className="grid gap-2 sm:grid-cols-2">
     {(production?.checks||[]).map(x=><div key={x.id} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 dark:bg-white/5 p-2 text-xs">
       <span>{({
@@ -172,7 +173,9 @@ export default function MchsTransportStatus({token}){
      </select>
     </label>
     <button type="button" onClick={saveBinding}
-     disabled={savingBinding||bindingSettings?.envLocked||!selectedAgentId||selectedAgentId===station?.agentBinding?.deviceId}
+     disabled={savingBinding||bindingSettings?.envLocked||!selectedAgentId||
+      (selectedAgentId===station?.agentBinding?.deviceId&&
+       ['PRODUCTION_EXPLICIT','ADMIN_BOUND'].includes(station?.agentBinding?.source))}
      className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">
      {savingBinding?'Сохраняем…':'Сохранить'}
     </button>

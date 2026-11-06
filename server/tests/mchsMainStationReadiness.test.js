@@ -86,3 +86,16 @@ test('legacy ESP32 telemetry shows no firmware counters without guessing',()=>{
  assert.equal(r.esp32.relayOnTransitions,null);
  assert.equal(r.esp32.lastRelayOffReason,null);
 });
+
+test('unreachable station transport reports actionable technical reason without claiming PA',()=>{
+ const r=assessMchsMainStationReadiness({worker:{ok:false,reason:'WORKER_NOT_CONFIGURED'},
+  device,esp32Status:esp,deviceId:'agent1',nowMs});
+ assert.equal(r.worker.reachable,false);
+ assert.equal(r.worker.diagnosticReason,'WORKER_NOT_CONFIGURED');
+ assert.equal(r.readyForLivePA,false);
+});
+test('a healthy worker never inherits a failure reason',()=>{
+ const r=assessMchsMainStationReadiness({worker:{...status,reason:'OLD_FAILURE'},
+  device,esp32Status:esp,deviceId:'agent1',nowMs});
+ assert.equal(r.worker.diagnosticReason,null);
+});

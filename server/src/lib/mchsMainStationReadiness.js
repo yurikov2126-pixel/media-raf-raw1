@@ -45,7 +45,8 @@ export function assessMchsMainStationReadiness({
    androidDispatch:flags.dispatch===true,coordinator:flags.coordinator===true,
    workerCommands:flags.workerCommands===true
   },worker:{reachable:!!status,phase:stationPhase,busy:stationBusy,
-   journalHealthy:status?.terminalJournal?.healthy===true},
+   journalHealthy:status?.terminalJournal?.healthy===true,
+   diagnosticReason:status?null:(worker?.reason||worker?.data?.reason||'WORKER_STATUS_UNAVAILABLE')},
   agent:{deviceBound:!!deviceId,online:agent?.status==='ONLINE',
    playbackAllowed:agent?.playbackAllowed===true,heartbeatAgeMs:agent?.ageMs??null},
   esp32:{fresh:!!esp,heartbeatFresh:esp?.heartbeatFresh===true,
