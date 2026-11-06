@@ -52,6 +52,9 @@ jobs:
       - name: Production automatic missile ALARM configuration readiness
         run: node --test tests/mchsProductionAutoReadiness.test.js tests/mchsAndroidBridgeAdmission.test.js
 
+      - name: Four-event Android MCHS Web Push and FCM outbox regressions
+        run: node --test tests/mchsFourEventPushEligibility.test.js tests/mchsPushOutbox.test.js
+
       - name: Authenticated Android missile notification admission and queue staging
         run: node --test tests/mchsAndroidBridgeAdmission.test.js tests/mchsAndroidStationBridge.test.js tests/mchsAndroidObservationMonitor.test.js
 
