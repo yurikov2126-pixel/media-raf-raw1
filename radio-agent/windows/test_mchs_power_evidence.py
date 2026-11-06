@@ -35,7 +35,7 @@ class TestPowerEvidence(unittest.TestCase):
         now=datetime(2026,11,6,8,0,0).astimezone().astimezone(timezone.utc)
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"power-diagnostics.log"
-            path.write_text("\\n".join([
+            path.write_text("\n".join([
                 '2026-11-06 07:59:59,000 INTENT_RESPONSE '+json.dumps({
                     "permit":True,"eventId":"cmw5ip1fo0024jxavw0528uus",
                     "phase":"MCHS_PCM","token":"rr_private"}),
@@ -45,7 +45,7 @@ class TestPowerEvidence(unittest.TestCase):
                 '2026-11-06 07:59:59,200 POWER_ERROR '+json.dumps({
                     "permit":True,"eventId":"bad id with spaces",
                     "headers":{"Authorization":"secret"}}),
-            ])+"\\n",encoding="utf-8")
+            ])+"\n",encoding="utf-8")
             rows=read_power_evidence(path,now=now)
             self.assertEqual([r.get("eventId") for r in rows],
                              ["cmw5ip1fo0024jxavw0528uus",
