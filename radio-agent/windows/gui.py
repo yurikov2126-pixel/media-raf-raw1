@@ -603,7 +603,7 @@ class RadioAgentApp(tk.Tk):
                         try:
                             intent=fetch_intent(server,token)
                             self.messages.put(("api_status","● Сервер: разрешение получено"))
-                            record_power_event("INTENT_RESPONSE",result="OK",durationMs=round((time.monotonic()-started)*1000),permit=intent.get("permit"),reason=intent.get("reason"),policyMode=intent.get("policyMode"),mode=PLAYBACK_STATE["mode"])
+                            record_power_event("INTENT_RESPONSE",result="OK",durationMs=round((time.monotonic()-started)*1000),permit=intent.get("permit"),reason=intent.get("reason"),policyMode=intent.get("policyMode"),mode=PLAYBACK_STATE["mode"],eventId=intent.get("mchsEventId"),phase="MCHS_PRE_ROLL" if intent.get("mchsPreRollActive") else "MCHS_PCM" if intent.get("policyMode")=="MCHS" else None)
                             if intent.get("esp32Ip")!=host:
                                 raise ValueError("ESP32 is not registered for this agent")
                             permit=intent.get("permit") is True and intent.get("hardwareExpected")=="POWER_CONTROL_V1"
@@ -721,7 +721,7 @@ class RadioAgentApp(tk.Tk):
                     if not self.power_arm.get():
                         permit=False
                         decision="OPERATOR_HARDWARE_DISARMED"
-                    current_event=preparing_event or state.get("mchsIsolatedEventId")
+                    current_event=(intent.get("mchsEventId") if "intent" in locals() and mchs_authorized else None) or preparing_event or state.get("mchsIsolatedEventId")
                     result=signed_power(host,secret,permit,8000 if permit else 0)
                     acknowledged=result.get("amplifierPower")
                     if acknowledged in ("ON_COMMANDED","OFF_COMMANDED"):
