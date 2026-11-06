@@ -115,7 +115,7 @@ export default function MchsTransportStatus({token}){
   uncertain:items.filter(x=>x.status==='UNKNOWN').length
  };
  const cards=[
-  {name:'Radio Worker',value:worker?.reachable?'На связи':'Нет связи',detail:'Фаза: '+stateText(worker?.phase)+' · PCM-журнал: '+boolText(worker?.journalHealthy)},
+  {name:'Radio Worker',value:worker?.reachable?'На связи':'Нет связи',detail:'Фаза: '+stateText(worker?.phase)+' · PCM-журнал: '+boolText(worker?.journalHealthy)+(worker?.diagnosticReason?' · Причина: '+worker.diagnosticReason:'')},
   {name:'Windows Agent',value:agent?.online?'В сети':'Нет связи',detail:'Устройство привязано: '+boolText(agent?.deviceBound)+' · Воспроизведение разрешено: '+boolText(agent?.playbackAllowed)},
   {name:'ESP32',value:esp?.fresh?'Телеметрия актуальна':'Нет свежих данных',detail:'Heartbeat: '+boolText(esp?.heartbeatFresh)+' · Lease: '+boolText(esp?.leaseValid)},
   {name:'GPIO13 / AA-300',value:stateText(esp?.amplifierPower),detail:'Только командное состояние, не измеренное питание'}
