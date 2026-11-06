@@ -721,7 +721,7 @@ class RadioAgentApp(tk.Tk):
                     if not self.power_arm.get():
                         permit=False
                         decision="OPERATOR_HARDWARE_DISARMED"
-                    current_event=(intent.get("mchsEventId") if "intent" in locals() and mchs_authorized else None) or preparing_event or state.get("mchsIsolatedEventId")
+                    current_event=(intent.get("mchsEventId") if "intent" in locals() and locals().get("mchs_authorized", False) else None) or preparing_event or state.get("mchsIsolatedEventId")
                     result=signed_power(host,secret,permit,8000 if permit else 0)
                     acknowledged=result.get("amplifierPower")
                     if acknowledged in ("ON_COMMANDED","OFF_COMMANDED"):
