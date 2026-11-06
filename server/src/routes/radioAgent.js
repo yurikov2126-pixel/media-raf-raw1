@@ -48,6 +48,7 @@ const ESP32_REGISTRY_KEY='radio_esp32_registry_v1';
 const ESP32_STATUS_KEY='radio_esp32_status_v1';
 import {MCHS_ESP32_TRANSITIONS_KEY,recordEsp32Transition} from '../lib/mchsEsp32TransitionEvidence.js';
 import {mergeAgentPowerEvidence} from '../lib/mchsAgentPowerCorrelation.js';
+import {buildEsp32ReportSnapshot} from '../lib/mchsEsp32ReportSnapshot.js';
 async function readEsp32Registry(){
   const row=await prisma.setting.findUnique({where:{key:ESP32_REGISTRY_KEY}});
   try{
@@ -106,17 +107,10 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
       return; // No stale snapshot and no duplicate transition history.
     const agent=mergeAgentPowerEvidence(outcome.state,{deviceId:device.id,
       reporterId:req.radioDevice.id,observations:req.body?.agentPowerEvidence||[]});
-  snapshots[device.id]={observedAt,agentMode:status.agentMode,
-    heartbeatFresh:status.heartbeatFresh,heartbeatCount:Number(status.heartbeatCount)||0,
-    leaseValid:status.leaseValid===true,relayOutputEnabled:status.relayOutputEnabled===true,
-    amplifierPower:status.amplifierPower||'UNKNOWN',
-    bootNonce:typeof status.bootNonce==='string'?status.bootNonce.slice(0,32):null,
-    relayOnTransitions:Number.isSafeInteger(status.relayOnTransitions)?status.relayOnTransitions:null,
-    relayOffTransitions:Number.isSafeInteger(status.relayOffTransitions)?status.relayOffTransitions:null,
-    lastRelayTransitionMs:Number.isSafeInteger(status.lastRelayTransitionMs)?status.lastRelayTransitionMs:null,
-    lastRelayOffReason:typeof status.lastRelayOffReason==='string'?status.lastRelayOffReason.slice(0,64):null,
-    lastRelayOnReason:typeof status.lastRelayOnReason==='string'?status.lastRelayOnReason.slice(0,64):null,
-    reporterId:req.radioDevice.id};
+    snapshots[device.id]=buildEsp32ReportSnapshot(status,{
+      observedAt,reporterId:req.radioDevice.id,
+      agentPowerEvidence:req.body?.agentPowerEvidence
+    });
 
     await tx.setting.upsert({where:{key:ESP32_STATUS_KEY},
       create:{key:ESP32_STATUS_KEY,value:JSON.stringify(snapshots)},
