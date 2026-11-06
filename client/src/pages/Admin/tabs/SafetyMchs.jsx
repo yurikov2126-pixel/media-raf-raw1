@@ -87,8 +87,25 @@ export default function SafetyMchs({token}){
    <MchsEventJournal token={token} events={journal?.events||[]} total={journal?.eventCount||0}/>
   </section>}
   {pane==='delivery'&&<div className="space-y-4">
-   <MchsDeliveryReliability token={token} onOpen={navigate}/>
-   <MchsQueueMonitor token={token} view={params.has('incident')?'incidents':'delivery'}/>
+   <nav aria-label="Диагностика доставки" className="flex gap-2 overflow-x-auto">
+    {[
+     ['delivery','Состояние доставки'],
+     ['incidents','Неисправности'],
+     ['queue','Очередь анализа']
+    ].map(([id,label])=><button key={id} type="button" onClick={()=>navigate(id)}
+     aria-pressed={(params.has('incident')?'incidents':requested||'delivery')===id}
+     className={`shrink-0 rounded-xl border px-3 py-2 text-sm ${(params.has('incident')?'incidents':requested||'delivery')===id?
+      'bg-violet-600 border-violet-600 text-white':
+      'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-white/10'}`}>
+      {label}
+     </button>)}
+   </nav>
+   {!(params.has('incident')||requested==='incidents'||requested==='queue')&&
+    <MchsDeliveryReliability token={token} onOpen={navigate}/>}
+   {(params.has('incident')||requested==='incidents')&&
+    <MchsQueueMonitor token={token} view="incidents"/>}
+   {requested==='queue'&&!params.has('incident')&&
+    <MchsQueueMonitor token={token} view="queue"/>}
   </div>}
  </div>;
 }
