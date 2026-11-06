@@ -30,7 +30,7 @@ export async function processMchsPushOutbox({
   if(claimed.count!==1)continue;
   handled++;
   if(tooOld)continue;
-  const payload=buildMchsPushPayload(row);
+  const payload=buildMchsPushPayload({type:row.eventType,eventId:row.eventId,body:row.body});
   // Web Push and Android FCM use the existing delivery infrastructure.
   // Avoid any retry if one channel succeeded but the other channel failed.
   const [web,mobile]=await Promise.allSettled([
