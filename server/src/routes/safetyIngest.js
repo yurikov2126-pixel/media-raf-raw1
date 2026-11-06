@@ -77,7 +77,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
         title, body, channelId: channelId || null, region: region || null,
         eventType: classifyMchsObservation(title, body), verified: bridgeVerified },
       update: {},
-      select: { id: true, receivedAt: true, verified: true }
+      select: { id: true, receivedAt: true, verified: true, eventType: true }
       });
       const queue = await tx.safetyMchsQueueItem.upsert({
         where: { eventId: event.id },
