@@ -44,7 +44,7 @@ export async function processMchsPushOutbox({
   const error=web.status==='rejected'||mobile.status==='rejected'?'CHANNEL_SEND_ERROR':null;
   await db.safetyMchsPushDelivery.updateMany({
    where:{eventId:row.eventId,status:'SENDING'},
-   data:{status:webSent+mobileSent>0?'SENT':error?'FAILED':'NO_SUBSCRIBERS',
+   data:{status:webSent+mobileSent>0?'SENT':error?'FAILED':'NO_DELIVERY_CONFIRMED',
     webSent,mobileSent,failed,completedAt:new Date(),error}
   });
   console.info('MCHS_PUSH_DELIVERY',JSON.stringify({
