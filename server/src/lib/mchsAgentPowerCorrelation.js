@@ -2,6 +2,7 @@
 const KINDS=new Set(['INTENT_RESPONSE','INTENT_ERROR','POWER_COMMAND','POWER_ERROR','RELAY_TRANSITION']);
 const CODE=/^[A-Z][A-Z0-9_]{0,63}$/;
 const HEX=/^[a-f0-9]{24}$/;
+const MCHS_EVENT_ID=/^[A-Za-z0-9_-]{1,128}$/;
 const MAX_EVENTS=150;
 export function mergeAgentPowerEvidence(raw,{deviceId,reporterId,observations,nowMs=Date.now()}={}){
  const base=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
@@ -16,6 +17,8 @@ export function mergeAgentPowerEvidence(raw,{deviceId,reporterId,observations,no
   const atMs=Date.parse(event.at);
   if(!Number.isFinite(atMs)||atMs>nowMs+60000||nowMs-atMs>600000)continue;
   if(event.permit!==undefined&&typeof event.permit!=='boolean')continue;
+  if(event.eventId!==undefined&&
+     (typeof event.eventId!=='string'||!MCHS_EVENT_ID.test(event.eventId)))continue;
   if(event.httpStatus!==undefined&&(!Number.isInteger(event.httpStatus)||
      event.httpStatus<100||event.httpStatus>599))continue;
   const codes={};let bad=false;
@@ -29,7 +32,8 @@ export function mergeAgentPowerEvidence(raw,{deviceId,reporterId,observations,no
   const entry={id:event.id,deviceId,reporterId,at:new Date(atMs).toISOString(),
    kind:'AGENT_POWER_'+event.kind,detail:codes.reason||codes.transition||codes.errorType||event.kind,
    ...(typeof event.permit==='boolean'?{permit:event.permit}:{}),
-   ...(event.httpStatus!==undefined?{httpStatus:event.httpStatus}:{}),...codes};
+   ...(event.httpStatus!==undefined?{httpStatus:event.httpStatus}:{}),
+   ...(event.eventId!==undefined?{eventId:event.eventId}:{}),...codes};
   added.push(entry);
   seen.add(event.id);
  }
