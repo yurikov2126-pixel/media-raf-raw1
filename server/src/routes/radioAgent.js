@@ -47,6 +47,7 @@ async function deviceAuth(req,res,next) {
 const ESP32_REGISTRY_KEY='radio_esp32_registry_v1';
 const ESP32_STATUS_KEY='radio_esp32_status_v1';
 import {MCHS_ESP32_TRANSITIONS_KEY,recordEsp32Transition} from '../lib/mchsEsp32TransitionEvidence.js';
+import {mergeAgentPowerEvidence} from '../lib/mchsAgentPowerCorrelation.js';
 async function readEsp32Registry(){
   const row=await prisma.setting.findUnique({where:{key:ESP32_REGISTRY_KEY}});
   try{
@@ -108,11 +109,13 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
     let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
     const outcome=recordEsp32Transition(saved,{deviceId:device.id,
      reporterId:req.radioDevice.id,observedAt:last[device.id].observedAt,status});
-    if(!outcome.reason)await tx.setting.upsert({where:{key:MCHS_ESP32_TRANSITIONS_KEY},
-     create:{key:MCHS_ESP32_TRANSITIONS_KEY,value:JSON.stringify(outcome.state)},
-     update:{value:JSON.stringify(outcome.state)}});
-    if(outcome.added.length)console.info('MCHS_ESP32_TRANSITION',JSON.stringify({
-     deviceId:device.id,kinds:outcome.added.map(x=>x.kind)}));
+    const agent=mergeAgentPowerEvidence(outcome.state,{deviceId:device.id,
+     reporterId:req.radioDevice.id,observations:req.body?.agentPowerEvidence||[]});
+    if(!outcome.reason||agent.added.length)await tx.setting.upsert({where:{key:MCHS_ESP32_TRANSITIONS_KEY},
+     create:{key:MCHS_ESP32_TRANSITIONS_KEY,value:JSON.stringify(agent.state)},
+     update:{value:JSON.stringify(agent.state)}});
+    if(outcome.added.length||agent.added.length)console.info('MCHS_ESP32_TRANSITION',JSON.stringify({
+     deviceId:device.id,kinds:[...outcome.added,...agent.added].map(x=>x.kind)}));
    });
   }catch(error){console.warn('MCHS_ESP32_TRANSITION_RECORD_FAILED',error?.message||'UNKNOWN');}
   res.json({ok:true});
