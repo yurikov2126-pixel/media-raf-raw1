@@ -72,6 +72,6 @@ test('no registered receivers is not misreported as successful delivery',async()
  await processMchsPushOutbox({db,nowMs,
   webSender:async()=>({sent:0,failed:0}),
   mobileSender:async()=>({sent:0,failed:0,skipped:true})});
- assert.equal(db.rows[0].status,'NO_SUBSCRIBERS');
+ assert.equal(db.rows[0].status,'NO_DELIVERY_CONFIRMED');
  assert.equal(db.rows[0].webSent,0);
 });
