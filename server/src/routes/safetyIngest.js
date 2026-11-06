@@ -7,6 +7,7 @@ import {assessMissileProvenance} from '../lib/mchsMissileProvenance.js';
 import {admitAuthenticatedAndroidObservation} from '../lib/mchsAndroidBridgeAdmission.js';
 import {wakeAndroidMonitor} from '../lib/mchsAndroidMonitorWake.js';
 import {assessMchsPushCandidate} from '../lib/mchsPushEligibility.js';
+import {shouldStageMchsPushDelivery} from '../lib/mchsPushStaging.js';
 import {wakeMchsPushOutbox} from '../lib/mchsPushOutbox.js';
 
 // Dedicated machine-to-machine route. Never accepts user JWT or triggers any playback.
@@ -77,7 +78,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
         title, body, channelId: channelId || null, region: region || null,
         eventType: classifyMchsObservation(title, body), verified: bridgeVerified },
       update: {},
-      select: { id: true, receivedAt: true, verified: true }
+      select: { id: true, receivedAt: true, verified: true, eventType: true }
       });
       const queue = await tx.safetyMchsQueueItem.upsert({
         where: { eventId: event.id },
@@ -90,8 +91,9 @@ router.post('/event', signedRequest, async (req, res, next) => {
         create: { queueId: queue.id, status: 'OBSERVED', reason: 'INITIAL_INGEST' },
         update: {},
       });
-      if(pushCandidate.eligible&&!alreadySaved&&
-        event.verified===bridgeVerified&&event.eventType===pushCandidate.type){
+      if(shouldStageMchsPushDelivery({
+        candidate:pushCandidate,storedEvent:event,alreadySaved:Boolean(alreadySaved)
+      })){
         await tx.safetyMchsPushDelivery.create({data:{
           eventId:event.id,eventType:event.eventType,occurredAt:eventTime,
           body:body.slice(0,4000)
