@@ -56,6 +56,7 @@ import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {assessMchsMainStationReadiness} from '../lib/mchsMainStationReadiness.js';
+import {registerAndroidMonitorWake} from '../lib/mchsAndroidMonitorWake.js';
 import {resolveMchsProductionAgentBinding,selectMchsBoundEsp32Evidence,MCHS_MAIN_STATION_AGENT_BINDING_KEY} from '../lib/mchsProductionAgentBinding.js';
 import {MCHS_ESP32_TRANSITIONS_KEY,assessEsp32TransitionEvidence} from '../lib/mchsEsp32TransitionEvidence.js';
 import {selectNextMchsStationIntent,settleMchsStationAttempt} from '../lib/mchsStationSequentialQueue.js';
@@ -212,6 +213,7 @@ async function tickMchsAndroidMonitor(){
  }catch(error){console.error('MCHS_ANDROID_MONITOR_FAILED',JSON.stringify({reason:error.message}));}
  finally{mchsMonitorRunning=false;}
 }
+registerAndroidMonitorWake(tickMchsAndroidMonitor);
 const mchsMonitorTimer=setInterval(()=>{void tickMchsAndroidMonitor();},15000);
 mchsMonitorTimer.unref?.();
 setImmediate(()=>{void tickMchsAndroidMonitor();});
