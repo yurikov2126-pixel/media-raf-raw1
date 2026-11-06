@@ -14,7 +14,7 @@ const status = (delivery,incidents,queue) => {
    {name:'Очередь анализа',value:queue?.pending==null?'Нет данных':String(queue.pending),detail:'Ожидают анализа на сервере',view:'queue'},
    {name:'Android VM',value:fresh?'Heartbeat получен':delivery?.connection==='HEARTBEAT_STALE'?'Heartbeat устарел':'Нет подтверждения',detail:'Последний контакт: '+fmt(delivery?.lastHeartbeatAt),view:'delivery'},
    {name:'Локальные отправки',value:tele?.telemetryFresh&&tele?.queuedLocal!=null?String(tele.queuedLocal):'Нет свежих данных',detail:tele?.telemetryFresh?'Ожидают подтверждения на VM':'Состояние локальной очереди неизвестно',view:'delivery'},
-   {name:'Требуют внимания',value:attention===null?'Нет данных':String(attention),detail:'Открытые технические неисправности (не все сообщения)',view:'incidents'}
+   {name:'Последний Android heartbeat',value:delivery?.connection==='HEARTBEAT_RECENT'?'Получен':'Нет подтверждения',detail:'Проверка доступности моста',view:'delivery'}
   ]
  };
 };
@@ -77,6 +77,6 @@ export default function MchsOperationalOverview({token,onOpen}) {
     <p className="text-sm text-slate-600 dark:text-slate-300">Обычные сообщения не требуют ручного подтверждения. Ответственный контролирует технические сбои и проблемы доставки.</p>
     {attention===null?<p className="text-sm">Загрузка диагностики…</p>:attention===0?<p className="text-sm">В загруженном журнале нет открытых технических неисправностей.</p>:<p className="text-sm font-semibold">Открыто технических неисправностей: {attention}</p>}
   </div>
-  <p className="text-xs text-slate-600 dark:text-slate-300">Обновлено: {fmt(state.updated)} · Автообновление раз в 30 секунд при открытой вкладке. Heartbeat не гарантирует получение push; отсутствие записей не означает отсутствие тревог. Автоматический запуск эфира отключён.</p>
+  <p className="text-xs text-slate-600 dark:text-slate-300">Обновлено: {fmt(state.updated)} · Автообновление раз в 30 секунд при открытой вкладке. Heartbeat не гарантирует получение push; отсутствие записей не означает отсутствие тревог. Готовность автоматического эфира смотрите в разделе «Обзор и эфир».</p>
  </section>;
 }
