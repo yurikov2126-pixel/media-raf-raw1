@@ -70,3 +70,46 @@ export async function sendMobilePushToUser(userId, payload) {
     }));
     return { sent, failed };
 }
+
+/** Broadcast to already registered Android FCM installations.
+ * Uses the same Firebase client and token storage as individual mobile push.
+ */
+export async function sendMobilePushToAll(payload) {
+    const client = messaging();
+    if (!client) return { sent: 0, failed: 0, skipped: true };
+    const devices = await prisma.mobilePushToken.findMany({
+        select: { id: true, token: true },
+    });
+    let sent = 0, failed = 0;
+    for (let i = 0; i < devices.length; i += 500) {
+        const batch = devices.slice(i, i + 500);
+        const response = await client.sendEachForMulticast({
+            tokens: batch.map(device => device.token),
+            notification: {
+                title: String(payload.title || 'MEDIA·RAF·RAW'),
+                body: String(payload.body || ''),
+            },
+            data: { url: safePath(payload.url), tag: String(payload.tag || '') },
+            android: { priority: 'high', ttl: 120000 },
+        });
+        sent += response.successCount;
+        failed += response.failureCount;
+        await Promise.all(response.responses.map(async (result, index) => {
+            const device = batch[index];
+            if (result.success) {
+                await prisma.mobilePushToken.update({
+                    where: { id: device.id },
+                    data: { lastUsed: new Date() },
+                }).catch(() => {});
+                return;
+            }
+            if (['messaging/registration-token-not-registered',
+                'messaging/invalid-registration-token'].includes(result.error?.code)) {
+                await prisma.mobilePushToken.deleteMany({
+                    where: { id: device.id, token: device.token },
+                }).catch(() => {});
+            }
+        }));
+    }
+    return { sent, failed, skipped: false };
+}
