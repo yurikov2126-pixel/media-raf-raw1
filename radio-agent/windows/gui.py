@@ -35,7 +35,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.19'
+AGENT_VERSION = '0.5.20'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
