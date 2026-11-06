@@ -68,6 +68,38 @@ test('non-silent program return before deadline is still a genuine COMPLETE',()=
  assert.equal(terminals[0].phase,'COMPLETE');
 });
 
+test('event-bound PCM clock provides bounded GPIO13 pre-roll without consuming alert bytes',()=>{
+ const events=[],closed=[],exec=createMchsStationPcmExecutor({
+   preRollMs:200,onPreRoll:entry=>events.push(entry)
+ });
+ const clear={...event,eventId:'power_preroll',eventType:'MISSILE_ALL_CLEAR',repeats:1};
+ assert.equal(exec.prepare({...clear,pcm:pcm(frame(8),closed)}).ok,true);
+ assert.equal(exec.snapshot().phase,'PREEMPTING');
+ assert.equal(exec.snapshot().preRollActive,true);
+ assert.equal(exec.snapshot().preRollRemainingMs,200);
+ const program=Buffer.alloc(3840,2);
+ for(let n=0;n<10;n++){
+   assert.deepEqual(exec.replace(program),program);
+ }
+ assert.equal(exec.snapshot().preRollActive,false);
+ assert.equal(exec.snapshot().phase,'PREEMPTING');
+ assert.equal(events.length,2);
+ assert.equal(events[0].eventId,'power_preroll');
+ assert.equal(events[1].ended,true);
+ assert.equal(events[1].powerAcknowledged,false);
+ assert.deepEqual(exec.replace(frame(1)),frame(8));
+ assert.equal(exec.snapshot().phase,'RESUMING');
+});
+
+test('pre-roll is disabled by default and input is validated',()=>{
+ assert.throws(()=>createMchsStationPcmExecutor({preRollMs:-1}),/INVALID_PRE_ROLL_MS/);
+ assert.throws(()=>createMchsStationPcmExecutor({preRollMs:7000}),/INVALID_PRE_ROLL_MS/);
+ const exec=createMchsStationPcmExecutor();
+ exec.prepare({...event,pcm:pcm(frame(7),[])});
+ assert.equal(exec.snapshot().preRollActive,false);
+ assert.deepEqual(exec.replace(frame(1)),frame(7));
+});
+
 test('single-frame all clear completes normally without skipped preempt acknowledgment',()=>{
  const exec=createMchsStationPcmExecutor();
  const clear={...event,eventId:'clear_001',eventType:'MISSILE_ALL_CLEAR',repeats:1};

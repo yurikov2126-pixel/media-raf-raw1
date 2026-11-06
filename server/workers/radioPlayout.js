@@ -347,7 +347,16 @@ const mchsWorkerPcmEvidence=createMchsWorkerPcmEvidence();
 // no live Android or HTTP caller can invoke prepare(), and no GPIO access.
 const mchsStationTerminalJournal=createMchsStationTerminalJournal(
   process.env.RADIO_MCHS_TERMINAL_JOURNAL_PATH || undefined);
-const mchsStationPcmExecutor=createMchsStationPcmExecutor({onTerminal:entry=>{
+// Nonzero pre-roll requires an explicit production rollout decision. No
+// silent change to the alert-onset latency on merge.
+const mchsPowerPreRollMs=(()=>{
+ const n=Number(process.env.RADIO_MCHS_POWER_PREROLL_MS||0);
+ return Number.isInteger(n)&&n>=0&&n<=6000?n:0;
+})();
+const mchsStationPcmExecutor=createMchsStationPcmExecutor({
+ preRollMs:mchsPowerPreRollMs,
+ onPreRoll:e=>console.info('MCHS_STATION_POWER_PREROLL',JSON.stringify(e)),
+ onTerminal:entry=>{
  const result=mchsStationTerminalJournal.append(entry);
  if(!result.ok)console.error('MCHS_STATION_JOURNAL_FAILURE',JSON.stringify({reason:result.reason,eventId:entry.eventId}));
 }});
