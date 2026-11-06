@@ -20,6 +20,14 @@ const kinds={
  FIRMWARE_RELAY_ON:'ESP32: GPIO13 включён',
  FIRMWARE_REBOOT:'ESP32 перезагрузилась',
  FIRMWARE_COUNTER_RESET:'Счётчик ESP32 сброшен',
+ AGENT_POWER_INTENT_RESPONSE:'Windows Agent: ответ сервера',
+ AGENT_POWER_INTENT_ERROR:'Windows Agent: ошибка получения разрешения',
+ AGENT_POWER_POWER_COMMAND:'Windows Agent: команда питания подтверждена',
+ AGENT_POWER_POWER_ERROR:'Windows Agent: ошибка команды питания',
+ AGENT_POWER_RELAY_TRANSITION:'Windows Agent: подтверждён переход',
+ FIRMWARE_GPIO_OFF:'ESP32: GPIO13 OFF',
+ FIRMWARE_GPIO_ON:'ESP32: GPIO13 ON',
+ FIRMWARE_HISTORY_OVERFLOW:'ESP32: история переполнена',
  COMMANDED_POWER_CHANGED:'Изменилось командное состояние усилителя',
  LEASE_CHANGED:'Изменилось разрешение реле',
  HEARTBEAT_CHANGED:'Изменился heartbeat',
@@ -131,7 +139,11 @@ export default function MchsTransportStatus({token}){
      <strong>{kinds[event.kind]||event.kind}</strong>
      <span className="ml-2 text-slate-600 dark:text-slate-300">{new Date(event.at).toLocaleString('ru-RU')}</span>
      <span className="block mt-1 break-words">{event.kind==='FIRMWARE_RELAY_OFF'?
-      reasonNames[String(event.detail||'').split(':').slice(1).join(':')]||event.detail:event.detail}</span>
+      reasonNames[String(event.detail||'').split(':').slice(1).join(':')]||event.detail:
+      event.kind==='FIRMWARE_GPIO_OFF'||event.kind==='FIRMWARE_GPIO_ON'?
+       (reasonNames[event.detail]||event.detail)+' · #'+event.seq+' · '+event.uptimeMs+' мс':
+       event.detail}</span>
+     {event.kind?.startsWith('AGENT_POWER_')&&<span className="block mt-1 text-slate-600 dark:text-slate-300">Разрешение: {event.permit===true?'Да':event.permit===false?'Нет':'Неизвестно'}{event.httpStatus?' · HTTP '+event.httpStatus:''} · Windows Agent</span>}
     </div>)}
    </div>:<p className="text-xs text-slate-600 dark:text-slate-300">За последние 10 минут изменений не зарегистрировано. Это не является доказательством отсутствия физических отключений.</p>}
   </section>
