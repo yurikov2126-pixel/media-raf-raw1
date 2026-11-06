@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""MEDIA RAF RAW — Windows Radio Agent, manually started headphones pilot.
+"""MEDIA RAF RAW — Windows Radio Agent production broadcast and PA controller.
 
-The GUI never saves the device token, enables a relay or starts at Windows login.
-Hardware/ESP32 switching is intentionally unavailable in this build.
+Production MCHS alert reception uses the authenticated station stream. PA GPIO13
+remains gated by hardware arming, server policy and registered ESP32 identity.
 """
 import json
 import logging
@@ -15,12 +15,10 @@ import webbrowser
 import tkinter as tk
 from pathlib import Path
 from urllib.error import HTTPError
-from tkinter import filedialog, messagebox, simpledialog, ttk
-from mchs_gui_isolated_session import prepare_isolated_gui_session
-from mchs_synthetic_relay_pilot import decide_synthetic_relay_pilot
+from tkinter import filedialog, messagebox, ttk
 from mchs_relay_transition_evidence import describe_power_transition
 
-from central_playout import STOP, run, PLAYBACK_STATE, MCHS_AUDIO_START, MCHS_AUDIO_STOP, MCHS_AUDIO_ARMED, MCHS_LAB_ONE_SHOT, MCHS_LAB_ONE_SHOT_EXPIRES, MCHS_LAB_ONE_SHOT_LOCK, MCHS_LAB_OBSERVED
+from central_playout import STOP, run, PLAYBACK_STATE
 from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat, restart_esp32, upload_firmware
 from esp32_heartbeat_ownership import gui_owns_esp32_heartbeat
@@ -35,7 +33,7 @@ from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
 from credentials import load_credentials, save_credentials, clear_credentials
 
-AGENT_VERSION = '0.5.20'
+AGENT_VERSION = '0.5.21'
 
 def power_diagnostic_logger():
     path=Path(default_data_dir()) / "logs"
@@ -120,7 +118,6 @@ class RadioAgentApp(tk.Tk):
         self.mchs_relay_trial_armed = False
         self.mchs_relay_trial_deadline = 0.0
         self.mchs_manual_pulse_until = 0.0
-        self.mchs_relay_trial_requested = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Остановлен · оборудование не управляется")
         self.server = tk.StringVar(value="https://mediarafraw.ru")
         self.vlc = tk.StringVar(value=find_vlc())
@@ -147,10 +144,6 @@ class RadioAgentApp(tk.Tk):
         self.last_power_was_auto = False
         self.power_busy = False
         self.last_esp32_relay_ack = None
-        self.agreed = tk.BooleanVar(value=False)
-        self.isolated_session_enabled = tk.BooleanVar(value=False)
-        self.mchs_danger_wav = tk.StringVar(value=prefs.get('mchs_danger_wav','C:/MchsTest/alarm_missile_start_pcm16.wav'))
-        self.mchs_all_clear_wav = tk.StringVar(value=prefs.get('mchs_all_clear_wav','C:/MchsTest/alarm_missile_end_pcm16.wav'))
         self.pending_update = None
         self.update_running = False
 
@@ -195,53 +188,14 @@ class RadioAgentApp(tk.Tk):
         for var in (self.broadcast_status,self.audio_status,self.api_status,self.power_status):
             ttk.Label(dashboard,textvariable=var,style="Status.TLabel").pack(anchor="w",pady=3)
         ttk.Label(air, textvariable=self.status, style="Main.TLabel").pack(anchor="w", pady=(0, 9))
-        ttk.Checkbutton(air, text="Тест в наушниках · усилитель не включается",
-                        variable=self.agreed).pack(anchor="w", pady=(0, 9))
-        isolated_box=ttk.LabelFrame(air,text="  АВТОМАТИЧЕСКОЕ ОПОВЕЩЕНИЕ МЧС · ТОЛЬКО НАУШНИКИ  ",
-                                    style="Status.TLabelframe",padding=12)
-        isolated_box.pack(fill="x",pady=(0,12))
-        ttk.Checkbutton(isolated_box,
-                        text="Принимать Android-события изолированно (не PA / не публичный эфир)",
-                        variable=self.isolated_session_enabled).pack(anchor="w",pady=(0,6))
-        ttk.Checkbutton(isolated_box,
-                        text="Отдельное аппаратное испытание GPIO13 только с синтетическим WAV · до 10 минут",
-                        variable=self.mchs_relay_trial_requested).pack(anchor="w",pady=(0,6))
-        ttk.Label(isolated_box,
-                  text="Реле питает усилитель 220 В. Нужны проверенная электропроводка, отключённая линия PA и разрешение питания в админке. Настоящие Android-события реле не включают.",
-                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(4,8))
-        manual_row=ttk.Frame(isolated_box,style="Main.TFrame")
-        manual_row.pack(fill="x",pady=(0,8))
-        ttk.Button(manual_row,text="Проверить реле: ON до 8 секунд",
-                   command=self.manual_mchs_relay_on).pack(side="left",padx=(0,8))
-        ttk.Button(manual_row,text="Реле OFF",
-                   command=self.manual_mchs_relay_off).pack(side="left")
-        ttk.Label(isolated_box,text="Ручной аппаратный тест доступен только после запуска изолированного Agent, с серверным permit:true. Не является режимом реального оповещения.",
-                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(0,8))
-        ttk.Label(isolated_box,text="WAV «Ракетная опасность»",
-                  style="Status.TLabel").pack(anchor="w")
-        self.wav_path_row(isolated_box,self.mchs_danger_wav)
-        ttk.Label(isolated_box,text="WAV «Отбой ракетной опасности»",
-                  style="Status.TLabel").pack(anchor="w",pady=(8,0))
-        self.wav_path_row(isolated_box,self.mchs_all_clear_wav)
-        ttk.Label(isolated_box,text="Перед запуском требуется ввести ISOLATED. AA-300 и все линии PA должны быть физически отключены. Используются сохранённый токен и центральный поток.",
-                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(9,0))
-
+        ttk.Label(air, text="Основной эфир · оповещения МЧС поступают автоматически через Radio Worker. Усилитель управляется только при разрешении сервера и локальном аппаратном допуске.",
+                  style="Status.TLabel",wraplength=650).pack(anchor="w",pady=(0,12))
         bar = ttk.Frame(air, style="Main.TFrame")
         bar.pack(fill="x", pady=(0, 10))
         self.start_btn = ttk.Button(bar, text="▶ Запустить агент", command=self.start,style="Live.TButton")
         self.start_btn.pack(side="left")
         self.stop_btn = ttk.Button(bar, text="■ Остановить эфир", command=self.stop, state="disabled",style="Stop.TButton")
         self.stop_btn.pack(side="left", padx=10)
-        trial_bar=ttk.Frame(air,style="Main.TFrame")
-        trial_bar.pack(fill="x",pady=(0,9))
-        ttk.Button(trial_bar,text="Учебный звук МЧС (кабель PA отключён)",
-                   command=self.start_mchs_audio_trial).pack(side="left")
-        ttk.Button(trial_bar,text="СТОП МЧС / вернуть радио",
-                   command=self.stop_mchs_audio_trial).pack(side="left",padx=8)
-        ttk.Button(air,text="Разрешить ОДНО учебное событие МЧС (60 секунд)",
-                   command=self.arm_mchs_lab_one_shot).pack(anchor="w",pady=(0,7))
-        ttk.Label(air,text="Только с физически отключённым кабелем к AA-300. Макс. 30 секунд.",
-                  style="Main.TLabel").pack(anchor="w",pady=(0,7))
         ttk.Label(air, text="Журнал событий", style="Main.TLabel").pack(anchor="w")
         self.log = tk.Text(air, height=13, bg="#182443", fg="#f1f5f9",
                            insertbackground="white", relief="flat", state="disabled",
@@ -355,17 +309,6 @@ class RadioAgentApp(tk.Tk):
                     variable.set(result)
             ttk.Button(line, text="Выбрать", command=choose).pack(side="left", padx=(8, 0))
 
-    def wav_path_row(self, parent, variable):
-        line=ttk.Frame(parent,style="Main.TFrame")
-        line.pack(fill="x")
-        ttk.Entry(line,textvariable=variable).pack(side="left",fill="x",expand=True)
-        def browse_wav():
-            result=filedialog.askopenfilename(title="Выбрать учебный PCM WAV",
-                                              filetypes=[("PCM WAV","*.wav")])
-            if result:
-                variable.set(result)
-        ttk.Button(line,text="Выбрать WAV",command=browse_wav).pack(side="left",padx=(8,0))
-
     def start(self):
         if self.worker and self.worker.is_alive():
             return
@@ -377,66 +320,22 @@ class RadioAgentApp(tk.Tk):
         if not vlc.is_file() or vlc.name.lower() != "vlc.exe":
             messagebox.showerror("VLC", "Укажите установленный vlc.exe")
             return
-        if not self.agreed.get():
-            messagebox.showwarning("Безопасность", "Подтвердите тест только в наушниках")
-            return
-        isolated = self.isolated_session_enabled.get()
-        if isolated:
-            # Never let the local headphones rehearsal inherit the GUI's
-            # amplifier power credentials, even if the operator has ESP32 paired.
-            relay_requested=self.mchs_relay_trial_requested.get()
-            if self.power_arm.get() and not relay_requested:
-                messagebox.showerror("Усилитель","Отключите управление реле либо выберите отдельное аппаратное испытание.")
-                return
-            if relay_requested and not self.power_arm.get():
-                messagebox.showerror("Усилитель","Для аппаратного испытания сначала разрешите управление реле в Настройках.")
-                return
-            if relay_requested and (not self.esp32_ip.get().strip() or
-                                    len(self.esp32_secret.get().strip())<32):
-                messagebox.showerror("ESP32","Укажите IP и сохранённый ключ ESP32 в Подключениях.")
-                return
-            relay_confirmation=''
-            if relay_requested:
-                relay_confirmation=simpledialog.askstring(
-                    "GPIO13 · аппаратный тест 220 В",
-                    "Подтвердите проверенный силовой узел и физически отсоединённый кабель PA.\nНа время синтетического ALARM может включиться питание усилителя.\nВведите ISOLATED RELAY для ограниченного аппаратного теста.",
-                    parent=self)
-            confirmation=simpledialog.askstring(
-                "Изолированное испытание",
-                "AA-300 и ВСЕ линии громкоговорителей физически отключены?\nВведите ISOLATED для запуска изолированного Agent.",
-                parent=self)
-            try:
-                options=prepare_isolated_gui_session(
-                    server=url,token=token,vlc=str(vlc),
-                    danger_wav=self.mchs_danger_wav.get().strip(),
-                    all_clear_wav=self.mchs_all_clear_wav.get().strip(),
-                    power_armed=self.power_arm.get(),
-                    operator_confirmation=confirmation,
-                    relay_pilot=relay_requested,
-                    relay_confirmation=relay_confirmation)
-            except (OSError,ValueError,PermissionError) as error:
-                messagebox.showerror("МЧС — запуск отклонён",str(error))
-                return
-        else:
-            options={}
-            relay_requested=False
+        # Production-only GUI: no isolated Android event mode, synthetic relay
+        # pilot, local WAV override, or headphones-only acknowledgement.
         self.save_preferences(silent=True)
         args = Config(url, self.data_dir.get().strip(), str(vlc),
-                      esp32_host='' if isolated else self.esp32_ip.get().strip(),
-                      esp32_secret='' if isolated else self.esp32_secret.get().strip())
-        for key,value in options.items():
-            setattr(args,key,value)
-        args.isolated_relay_trial=bool(isolated and relay_requested)
+                      esp32_host=self.esp32_ip.get().strip(),
+                      esp32_secret=self.esp32_secret.get().strip())
         STOP.clear()
-        self.active_isolated_mode = isolated
-        self.mchs_relay_trial_armed=bool(isolated and relay_requested)
-        self.mchs_relay_trial_deadline=(time.monotonic()+600 if self.mchs_relay_trial_armed else 0.0)
-        self.mchs_manual_pulse_until=0.0
+        self.active_isolated_mode = False
+        self.mchs_relay_trial_armed = False
+        self.mchs_relay_trial_deadline = 0.0
+        self.mchs_manual_pulse_until = 0.0
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.status.set("Подключение к центральному эфиру…")
         self.broadcast_status.set("● Эфир запускается")
-        self.messages.put(("log", ("MCHS_SYNTHETIC_RELAY_PILOT_ARMED · до 10 минут, разрешение сервера обязательно" if self.mchs_relay_trial_armed else "MCHS_EVENT_BOUND_HEADPHONES_ONLY · GUI, ESP32 не задействован") if isolated else "Агент запущен вручную."))
+        self.messages.put(("log", "Агент запущен в основном эфире."))
         # Never log tokens or put them in subprocess arguments.
         def task():
             saved = sys.stdout
@@ -454,9 +353,9 @@ class RadioAgentApp(tk.Tk):
     def save_preferences(self,silent=False):
         try:
             save_settings(default_data_dir(),{"server":self.server.get().strip(),
-                "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip(),"power_arm":self.power_arm.get(),
-                "mchs_danger_wav":self.mchs_danger_wav.get().strip(),
-                "mchs_all_clear_wav":self.mchs_all_clear_wav.get().strip()})
+                "vlc":self.vlc.get().strip(),
+                "esp32_ip":self.esp32_ip.get().strip(),
+                "power_arm":self.power_arm.get()})
             if self.remember_credentials.get():
                 save_credentials(default_data_dir(),self.token.get().strip(),self.esp32_secret.get().strip())
             else:
@@ -524,41 +423,7 @@ class RadioAgentApp(tk.Tk):
                 threading.Thread(target=work,daemon=True).start()
         self.after(6500,self.report_esp32_status)
 
-    def manual_mchs_relay_on(self):
-        if not (self.worker and self.worker.is_alive() and
-                self.active_isolated_mode and self.mchs_relay_trial_armed and
-                self.power_arm.get() and
-                time.monotonic()<self.mchs_relay_trial_deadline):
-            messagebox.showwarning("GPIO13","Сначала запустите ограниченный аппаратный МЧС-пилот. Серверное разрешение питания обязательно.")
-            return
-        if (PLAYBACK_STATE.get("mchsIsolatedEventId") is not None or
-                PLAYBACK_STATE.get("mchsRelayPrepareEventId") is not None):
-            messagebox.showwarning("GPIO13","Во время оповещения ручное ON запрещено.")
-            return
-        if not messagebox.askyesno("Реле GPIO13 · 220 В",
-                "Подтвердите проверенную электросхему и отсоединённую аудиолинию PA. Подать запрос ON не более чем на 8 секунд при разрешении сервера?"):
-            return
-        self.mchs_manual_pulse_until=time.monotonic()+8
-        self.power_status.set("GPIO13 · ручной ON запрошен; ожидается разрешение сервера")
-        record_power_event("MANUAL_ON_REQUESTED",manualPending=True,
-                           phase=PLAYBACK_STATE.get("mode"),armed=True)
-        self.messages.put(("log","MCHS_RELAY_MANUAL_PULSE_REQUESTED · до 8 с; требуется server permit:true"))
-        if not self.power_busy:
-            self.power_tick(schedule_next=False)
-
-    def manual_mchs_relay_off(self):
-        self.mchs_manual_pulse_until=0.0
-        self.power_status.set("GPIO13 · ручной OFF запрошен; ожидается подтверждение ESP32")
-        record_power_event("MANUAL_OFF_REQUESTED",phase=PLAYBACK_STATE.get("mode"))
-        self.messages.put(("log","MCHS_RELAY_MANUAL_OFF_REQUESTED"))
-        if not self.power_busy:
-            self.power_tick(schedule_next=False)
-
     def set_power_arm(self):
-        if self.active_isolated_mode and self.worker and self.worker.is_alive() and self.power_arm.get():
-            self.power_arm.set(False)
-            messagebox.showwarning("Безопасность", "Повторное включение GPIO13 во время изолированного пилота запрещено. Остановите Agent для нового допуска.")
-            return
         if not self.power_arm.get():
             self.mchs_relay_trial_armed=False
             self.mchs_manual_pulse_until=0.0
@@ -860,62 +725,7 @@ class RadioAgentApp(tk.Tk):
         os.startfile(str(self.pending_update))
         self.destroy()
 
-    def arm_mchs_lab_one_shot(self):
-        if not (self.worker and self.worker.is_alive()):
-            messagebox.showwarning("МЧС", "Сначала запустите Windows Agent.")
-            return
-        if MCHS_AUDIO_ARMED.is_set():
-            messagebox.showwarning("МЧС", "Учебный звук уже активирован.")
-            return
-        with MCHS_LAB_ONE_SHOT_LOCK:
-            observed=dict(MCHS_LAB_OBSERVED)
-        if (not observed['ready'] or observed['phase']!='PROGRAM'
-                or time.monotonic()-observed['at']>6):
-            messagebox.showwarning(
-                "МЧС: нет подтверждённого PROGRAM",
-                "Агент пока не получил свежее состояние PROGRAM от Worker. "
-                "В админке нажмите START и дождитесь опроса Agent (3–6 секунд). "
-                "Проверьте лабораторные флаги API и токен Studio. "
-                "Текущее состояние: "+str(observed['phase']))
-            return
-        approved=messagebox.askyesno(
-            "Разрешить одно учебное событие",
-            "Физически отсоединён кабель к AA-300, нет иных путей в PA, "
-            "оператор присутствует. Разрешить только ОДИН переход PROGRAM → ALERT "
-            "в течение 60 секунд? Повторные и реальные тревоги не активируются.",
-            icon="warning")
-        if approved:
-            with MCHS_LAB_ONE_SHOT_LOCK:
-                MCHS_LAB_ONE_SHOT_EXPIRES['at']=time.monotonic()+60
-                MCHS_LAB_ONE_SHOT.set()
-            self.messages.put(("log","MCHS_LAB_ONE_SHOT_ARMED_60_SECONDS baseline_revision="+str(observed['revision'])))
-
-    def start_mchs_audio_trial(self):
-        if not (self.worker and self.worker.is_alive()):
-            messagebox.showwarning("МЧС", "Сначала запустите штатный Windows Agent.")
-            return
-        if MCHS_AUDIO_ARMED.is_set():
-            return
-        confirmed=messagebox.askyesno(
-            "Учебный аудиотест МЧС",
-            "Подтвердите: кабель от радиокомпьютера к AA-300 ФИЗИЧЕСКИ ОТСОЕДИНЁН, "
-            "альтернативные подключения к PA исключены, ответственное лицо присутствует. "
-            "На срок до 30 секунд штатный звук будет заменён учебным. Продолжить?",
-            icon="warning")
-        if confirmed:
-            MCHS_AUDIO_STOP.clear()
-            MCHS_AUDIO_ARMED.set()
-            MCHS_AUDIO_START.set()
-            self.messages.put(("log","MCHS_AUDIO_TRIAL_REQUESTED_BY_LOCAL_OPERATOR"))
-
-    def stop_mchs_audio_trial(self):
-        MCHS_LAB_ONE_SHOT.clear()
-        MCHS_AUDIO_ARMED.clear()
-        MCHS_AUDIO_STOP.set()
-        self.messages.put(("log","MCHS_AUDIO_TRIAL_STOP_REQUESTED"))
-
     def stop(self):
-        self.stop_mchs_audio_trial()
         STOP.set()
         self.status.set("Остановка…")
         self.broadcast_status.set("● Эфир останавливается")
