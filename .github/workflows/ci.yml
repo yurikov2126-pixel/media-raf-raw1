@@ -157,6 +157,10 @@ jobs:
         working-directory: radio-agent/windows
         run: python -m unittest -v test_mchs_headphones_trial test_mchs_local_handover test_mchs_vlc_handover_pilot test_mchs_central_return_monitor test_mchs_lab_end_evidence test_mchs_two_stage_headphones_pilot test_mchs_integrated_headphones_cycle test_mchs_event_admission test_mchs_event_audio_controller test_mchs_event_observation
 
+      - name: Manual amplifier policy and explicit authenticated server intent
+        working-directory: radio-agent/windows
+        run: python -m unittest -v test_power_policy test_manual_amplifier_intent
+
       - name: Windows Agent power log sanitization and no-secret forwarding
         working-directory: radio-agent/windows
         run: python -m unittest -v test_mchs_power_evidence
