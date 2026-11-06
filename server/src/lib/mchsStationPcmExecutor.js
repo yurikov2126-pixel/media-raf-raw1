@@ -4,9 +4,12 @@ import {createMchsStationPrioritySession} from './mchsStationPrioritySession.js'
 // It does not fetch Android data, issue commands, or control GPIO. A verified
 // coordinator will be added in a separate stage. No public start route exists.
 export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
+ // 48kHz 16-bit stereo = 192000 bytes/sec. Fail stale RESUMING without
+ // falsely reporting that regular non-silent program has returned.
+ const MAX_SILENT_RESUME_BYTES=192000*5;
  const lifecycle=createMchsStationPrioritySession();
  let source=null,position=0,completedRepeats=0,bound=null;
- let pcmFrames=0,programFrames=0;
+ let pcmFrames=0,programFrames=0,silentResumeBytes=0;
  const validSource=s=>s&&Number.isSafeInteger(s.size)&&s.size>0&&s.size%4===0&&
    typeof s.read==='function'&&typeof s.close==='function';
  const release=()=>{
@@ -29,7 +32,7 @@ export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
   const admitted=lifecycle.enter({eventId,eventType,assetId,repeats});
   if(!admitted.accepted)return {ok:false,reason:admitted.reason};
   source=pcm;bound={eventId,repeats};position=0;completedRepeats=0;
-  pcmFrames=0;programFrames=0;
+  pcmFrames=0;programFrames=0;silentResumeBytes=0;
   return {ok:true,...snap()};
  }
  function replace(frame){
@@ -68,11 +71,22 @@ export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
  }
  function observeProgram(frame){
   const state=lifecycle.snapshot();
-  if(state.phase==='RESUMING'&&Buffer.isBuffer(frame)&&frame.length>0&&
-      frame.some(byte=>byte!==0)){
+  if(state.phase!=='RESUMING'||!Buffer.isBuffer(frame)||frame.length===0||
+      frame.length%4!==0)return snap();
+  if(frame.some(byte=>byte!==0)){
    programFrames++;
    lifecycle.restored({eventId:state.session.eventId,programAudioConfirmed:true});
    try{onTerminal({...lifecycle.snapshot().session,phase:'COMPLETE'});}catch{}
+  }else{
+   // The alert finished, but no actual non-silent program return is proven.
+   // A timed-out idle source must not hold subsequent ALL-CLEAR for hours.
+   silentResumeBytes+=frame.length;
+   if(silentResumeBytes>=MAX_SILENT_RESUME_BYTES){
+    const failed=lifecycle.abort('SILENT_PROGRAM_RETURN_TIMEOUT');
+    if(failed.accepted)try{
+     onTerminal({...lifecycle.snapshot().session,phase:'FAILED'});
+    }catch{}
+   }
   }
   return snap();
  }

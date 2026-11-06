@@ -2,6 +2,8 @@ import {validateMchsStationCommand} from './mchsStationCommandContract.js';
 
 const RETRYABLE=new Set(['STATION_SOURCE_BUSY','STATION_PREPARING']);
 export const MCHS_QUEUE_CLAIM_TTL_MS=30000;
+// Don't air a delayed stale warning just because a previous PCM session unblocked.
+export const MCHS_LIVE_START_MAX_AGE_MS=10*60*1000;
 
 /** Pure persistent ledger selection: one earliest fresh command at a time.
  * A previous uncertain DISPATCHING may not be retried without Worker evidence.
@@ -13,6 +15,13 @@ export function selectNextMchsStationIntent(raw,{nowMs=Date.now(),workerStatus}=
  for(const item of updated){
   if(!['STAGED','QUEUED'].includes(item.status))continue;
   const occurredAt=item.occurredAt||item.createdAt;
+  const sourceTime=Date.parse(occurredAt);
+  if(Number.isFinite(sourceTime)&&nowMs-sourceTime>MCHS_LIVE_START_MAX_AGE_MS){
+   item.status='EXPIRED';
+   item.lastError='EVENT_TOO_OLD_FOR_LIVE_BROADCAST';
+   changed=true;
+   continue;
+  }
   const valid=validateMchsStationCommand({action:'START',eventId:item.eventId,
    eventType:item.eventType,assetId:item.assetId,repeats:item.repetitions,
    occurredAt,admittedAt:item.createdAt},{nowMs});
