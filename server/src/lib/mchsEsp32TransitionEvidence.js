@@ -1,3 +1,4 @@
+import {correlateEsp32OffEvents} from './mchsEsp32OffCorrelation.js';
 import {summarizeEsp32Dropouts} from './mchsEsp32DropoutSummary.js';
 import {compareEsp32FirmwareHistory} from './mchsEsp32FirmwareHistory.js';
 /** Server-side observations of command/lease changes, not physical voltage. */
@@ -75,5 +76,6 @@ export function assessEsp32TransitionEvidence(raw,{deviceId,nowMs=Date.now(),win
  const visible=entries.slice(-70);
  return {readOnly:true,windowMs,events:visible,suspectCount:suspect.length,
   dropoutSummary:summarizeEsp32Dropouts(visible),
+  offCorrelations:correlateEsp32OffEvents(visible),
   stabilityConfirmed:false,actualMainsPowerVerified:false};
 }
