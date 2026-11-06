@@ -104,6 +104,7 @@ export default function MchsTransportStatus({token}){
  const worker=station?.worker,agent=station?.agent,esp=station?.esp32;
  const events=station?.esp32Transitions?.events||[];
  const dropout=station?.esp32Transitions?.dropoutSummary;
+ const correlations=station?.esp32Transitions?.offCorrelations?.items||[];
  const items=intents?.ledger?.items||[];
  const records=receipts?.ledger?.items||[];
  const counts={
@@ -182,6 +183,18 @@ export default function MchsTransportStatus({token}){
     <strong className="text-sm">История управления усилителем</strong>
     <p className="text-xs text-slate-600 dark:text-slate-300">Счётчики ESP32 выявляют даже короткое OFF→ON между опросами. Все времена событий — время наблюдения сервером, не измерение на силовой линии.</p>
    </div>
+   {!!correlations.length&&<div className="rounded-lg border border-slate-200 dark:border-white/15 p-3 space-y-2 text-xs" aria-label="Сопоставление команд Agent и GPIO13">
+    <strong className="block">Сопоставление OFF с решениями Windows Agent</strong>
+    <p className="text-slate-600 dark:text-slate-300">Времена приблизительные: ESP32 сообщает момент обнаружения сервером, а не точное время физического переключения.</p>
+    <div className="max-h-48 overflow-auto space-y-2">{[...correlations].reverse().map((item,i)=><div key={String(item.seq)+'-'+i} className="rounded-lg bg-slate-50 dark:bg-white/5 px-3 py-2">
+     <strong>GPIO13 OFF #{item.seq??'—'} · {reasonNames[item.reason]||item.reason}</strong>
+     <p>Рядом с OFF: {item.agentOffAcknowledgedNearby?'Agent подтвердил команду OFF':
+      item.agentIntentDeniedNearby?'Сервер отказал Agent в питании':
+      item.agentErrorNearby?'Agent сообщил об ошибке':'Подходящего подтверждения Agent нет'}
+      {item.approximateGapMs!==null?' · интервал наблюдений ~'+Math.round(item.approximateGapMs/1000)+' с':''}</p>
+     <p className="text-slate-600 dark:text-slate-300">Код прошивки: {item.firmwareHint} · Причинная связь и физическое питание не подтверждены</p>
+    </div>)}</div>
+   </div>}
    {dropout&&<div className="rounded-lg border border-slate-200 dark:border-white/15 p-3 space-y-2 text-xs">
     <strong className="block">За последние 10 минут: наблюдения GPIO13</strong>
     <p>Командных OFF в доступной истории: <strong>{dropout.gpioOffObserved}</strong> · Пропусков данных / перезагрузок: <strong>{dropout.dataGapsObserved}</strong></p>

@@ -49,6 +49,9 @@ jobs:
       - name: MCHS atomic ESP32 telemetry and firmware-agent evidence compatibility
         run: node --test tests/mchsEsp32ReportSnapshot.test.js tests/mchsEsp32FirmwareHistory.test.js tests/mchsMainStationReadiness.test.js
 
+      - name: Correlate ESP32 GPIO13 OFF commands with Windows Agent decisions
+        run: node --test tests/mchsEsp32OffCorrelation.test.js tests/mchsEsp32HistoryIntegrity.test.js tests/mchsAgentPowerCorrelation.test.js
+
       - name: ESP32 firmware history upgrade integrity and dropout summary
         run: node --test tests/mchsEsp32HistoryIntegrity.test.js tests/mchsEsp32FirmwareHistory.test.js
 
