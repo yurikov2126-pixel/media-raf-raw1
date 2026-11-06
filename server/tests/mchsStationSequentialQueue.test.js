@@ -50,6 +50,25 @@ test('a correctly admitted all-clear waits beyond 120 seconds for long ALARM',()
  ]},{nowMs:now,workerStatus:status()});
  assert.equal(after.candidate.eventId,'clear');
 });
+test('a stale staged all-clear cannot play much later when silent Worker recovers',()=>{
+ const clear=intent('delayed-clear','MISSILE_ALL_CLEAR');
+ const out=selectNextMchsStationIntent({items:[clear]},{
+  nowMs:Date.parse(occurredAt)+11*60000,
+  workerStatus:status('FAILED',false)
+ });
+ assert.equal(out.candidate,null);
+ assert.equal(out.items[0].status,'EXPIRED');
+ assert.equal(out.items[0].lastError,'EVENT_TOO_OLD_FOR_LIVE_BROADCAST');
+});
+test('fresh all-clear remains eligible immediately after failed silent program return',()=>{
+ const clear=intent('fresh-clear','MISSILE_ALL_CLEAR');
+ const out=selectNextMchsStationIntent({items:[clear]},{
+  nowMs:Date.parse(occurredAt)+60000,
+  workerStatus:status('FAILED',false)
+ });
+ assert.equal(out.candidate.eventId,'fresh-clear');
+});
+
 test('admission window expiry prevents arbitrarily old queued commands',()=>{
  const row={items:[intent('old')]};
  const out=selectNextMchsStationIntent(row,{
