@@ -25,6 +25,7 @@ from updater import check_latest, stage_update, UpdateCheckError
 from esp32_local import send_heartbeat, restart_esp32, upload_firmware
 from esp32_heartbeat_ownership import gui_owns_esp32_heartbeat
 from esp32_telemetry import report_status
+from mchs_power_evidence import read_power_evidence
 from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
 import time
@@ -511,7 +512,8 @@ class RadioAgentApp(tk.Tk):
             else:
                 def work():
                     try:
-                        report_status(server,token,host)
+                        path=Path(default_data_dir())/"logs"/"power-diagnostics.log"
+                        report_status(server,token,host,power_evidence=read_power_evidence(path))
                         self.messages.put(("esp32_report_ok",None))
                     except Exception as error:
                         code=getattr(error,"code",None)
