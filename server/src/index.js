@@ -21,6 +21,7 @@ import {scheduleRadioAutoPlaylists} from './lib/radioAutoPlaylistCron.js';
 import { scheduleStorageAudit } from './lib/storageAuditCron.js';
 import { startMchsObservationAnalyzer } from './lib/mchsObservationAnalyzer.js';
 import { startMchsTechnicalIncidentMonitor } from './lib/mchsTechnicalIncidents.js';
+import {startMchsPushOutbox} from './lib/mchsPushOutbox.js';
 
 
 /* ─────────── HTTP-сервер + Socket.IO ─────────── */
@@ -56,6 +57,7 @@ if (process.env.PREVIEW_MODE !== 'true') {
     scheduleRadioAutoPlaylists();
     startMchsObservationAnalyzer();
     startMchsTechnicalIncidentMonitor();
+    startMchsPushOutbox();
 } else {
     console.log('[PREVIEW] Background jobs disabled');
 }

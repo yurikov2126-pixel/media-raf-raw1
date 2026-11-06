@@ -1448,6 +1448,25 @@ model SafetyMchsEvent {
   @@index([receivedAt])
 }
 
+// Durable outbox for four Android-origin emergency push notifications.
+ // Dispatch is independent of radio/PA and is claimed once per stored event.
+model SafetyMchsPushDelivery {
+  eventId      String   @id
+  eventType    String
+  occurredAt   DateTime
+  body         String
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  claimedAt    DateTime?
+  completedAt  DateTime?
+  webSent      Int      @default(0)
+  mobileSent   Int      @default(0)
+  failed       Int      @default(0)
+  error        String?
+
+  @@index([status, createdAt])
+}
+
 model SafetyMchsHealth {
   id           String   @id
   lastSeenAt   DateTime?

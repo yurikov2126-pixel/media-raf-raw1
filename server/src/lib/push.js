@@ -62,7 +62,7 @@ export async function removeSubscription(endpoint) {
  *
  * Возвращает { ok, status } или { ok: false, gone: true } — если подписка мертва.
  */
-async function sendToSub(sub, payload) {
+async function sendToSub(sub, payload, { ttl = 60 * 60 * 24 } = {}) {
     if (process.env.PREVIEW_MODE === 'true') return { ok: false, preview: true };
     try {
         await webpush.sendNotification(
@@ -71,7 +71,7 @@ async function sendToSub(sub, payload) {
                 keys: { p256dh: sub.p256dh, auth: sub.auth },
             },
             JSON.stringify(payload),
-            { TTL: 60 * 60 * 24 } // 24 часа
+            { TTL: ttl }
         );
 
         // Подписка жива — обновляем отметку активности.
@@ -146,7 +146,7 @@ export async function sendPushToUsers(userIds, payload) {
 /**
  * Отправка всем подписанным (broadcast).
  */
-export async function sendPushToAll(payload) {
+export async function sendPushToAll(payload, { ttl = 60 * 60 * 24 } = {}) {
     if (!init()) return { sent: 0, failed: 0, gone: 0 };
 
     const subs = await prisma.pushSubscription.findMany();
@@ -157,7 +157,7 @@ export async function sendPushToAll(payload) {
         const batch = subs.slice(i, i + 100);
         await Promise.all(
             batch.map(async (sub) => {
-                const r = await sendToSub(sub, payload);
+                const r = await sendToSub(sub, payload, { ttl });
                 if (r.ok) sent++;
                 else if (r.gone) gone++;
                 else failed++;

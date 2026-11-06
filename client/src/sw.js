@@ -64,7 +64,7 @@ self.addEventListener('push', (event) => {
         tag: payload.tag || `mrr-${Date.now()}`,
         data: { url: payload.url || '/app' },
         vibrate: [80, 40, 80],
-        requireInteraction: false,
+        requireInteraction: payload.requireInteraction === true,
         renotify: true,
     };
 

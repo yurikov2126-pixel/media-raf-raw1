@@ -6,6 +6,8 @@ import { classifyMchsObservation } from '../lib/mchsClassification.js';
 import {assessMissileProvenance} from '../lib/mchsMissileProvenance.js';
 import {admitAuthenticatedAndroidObservation} from '../lib/mchsAndroidBridgeAdmission.js';
 import {wakeAndroidMonitor} from '../lib/mchsAndroidMonitorWake.js';
+import {assessMchsPushCandidate} from '../lib/mchsPushEligibility.js';
+import {wakeMchsPushOutbox} from '../lib/mchsPushOutbox.js';
 
 // Dedicated machine-to-machine route. Never accepts user JWT or triggers any playback.
 // Disabled by default, even after deployment.
@@ -54,7 +56,21 @@ router.post('/event', signedRequest, async (req, res, next) => {
     // configured Android channel / Tula / type / freshness constraints.
     // Existing duplicate rows are immutable; retries cannot change admission.
     const bridgeVerified=admitAuthenticatedAndroidObservation(provenance);
+    // Independent push path: all FOUR known Android events, but existing
+    // Radio Worker audio remains restricted to the two missile events.
+    const pushCandidate=assessMchsPushCandidate(input,{
+      allowedChannels:(process.env.MCHS_MISSILE_TRUSTED_CHANNEL_IDS||'')
+        .split(',').map(x=>x.trim()).filter(Boolean)
+    });
     const result = await prisma.$transaction(async tx => {
+      // Serialise same-event registration: a repeated Android POST must never
+      // turn an existing journal entry into a new PUSH.
+      if(pushCandidate.eligible)
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581480)`;
+      const alreadySaved=pushCandidate.eligible?await tx.safetyMchsEvent.findUnique({
+        where:{source_sourceEventId:{source:'MCHS_ANDROID',sourceEventId:eventId}},
+        select:{id:true}
+      }):null;
       const event = await tx.safetyMchsEvent.upsert({
       where: { source_sourceEventId: { source: 'MCHS_ANDROID', sourceEventId: eventId } },
       create: { source: 'MCHS_ANDROID', sourceEventId: eventId, occurredAt: eventTime,
@@ -74,9 +90,17 @@ router.post('/event', signedRequest, async (req, res, next) => {
         create: { queueId: queue.id, status: 'OBSERVED', reason: 'INITIAL_INGEST' },
         update: {},
       });
+      if(pushCandidate.eligible&&!alreadySaved&&
+        event.verified===bridgeVerified&&event.eventType===pushCandidate.type){
+        await tx.safetyMchsPushDelivery.create({data:{
+          eventId:event.id,eventType:event.eventType,occurredAt:eventTime,
+          body:body.slice(0,4000)
+        }});
+      }
       return event;
     });
     if(bridgeVerified && result.verified)wakeAndroidMonitor();
+    if(pushCandidate.eligible)wakeMchsPushOutbox();
     console.info('MCHS_MISSILE_SOURCE_PROVENANCE',JSON.stringify({eventId,eventType:provenance.eventType,acceptable:provenance.acceptable,reason:provenance.reason,officiallyVerified:false}));
     res.status(200).json({ accepted: true, eventId, id: result.id,
       receivedAt: result.receivedAt, verified: result.verified,
