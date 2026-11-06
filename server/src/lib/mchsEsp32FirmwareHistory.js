@@ -4,7 +4,7 @@
 const REASONS=new Set(['SIGNED_POWER_PERMIT','SIGNED_PERMIT_FALSE',
  'POWER_INTERLOCK_REJECTED','WIFI_RECONNECT','WIFI_LOST',
  'HEARTBEAT_TIMEOUT','POWER_LEASE_EXPIRED','SIGNED_MAINTENANCE_RESTART',
- 'SIGNED_FIRMWARE_UPDATE','FIRMWARE_UPDATE_COMPLETED','SCHEDULED_REBOOT']);
+ 'SIGNED_FIRMWARE_UPDATE','FIRMWARE_UPDATE_COMPLETED','SCHEDULED_REBOOT','UNSPECIFIED_OFF']);
 const validNonce=v=>typeof v==='string'&&/^[a-f0-9]{16}$/.test(v);
 const validEntry=e=>e&&Number.isSafeInteger(e.seq)&&e.seq>=1&&
  Number.isSafeInteger(e.uptimeMs)&&e.uptimeMs>=0&&e.uptimeMs<=4294967295&&
@@ -25,8 +25,13 @@ export function compareEsp32FirmwareHistory(previous,current){
  const sameBoot=previous?.bootNonce===boot;
  const previousSequence=sameBoot&&Number.isSafeInteger(previous?.relayTransitionSequence)?
   previous.relayTransitionSequence:0;
- // First-ever report is baseline, not a claim of having observed these events live.
- if(!previous?.bootNonce)return {available:true,events:[],reason:'BASELINE'};
+ // First-ever report or first report with an upgraded firmware history
+ // is baseline. Legacy firmware snapshots have a bootNonce but no ring cursor;
+ // treating seq=0 as previous here would falsely attribute old transitions
+ // to the current observation interval.
+ if(!previous?.bootNonce || (sameBoot&&
+    !Number.isSafeInteger(previous?.relayTransitionSequence)))
+  return {available:true,events:[],reason:'BASELINE'};
  if(!sameBoot)return {available:true,events:[],reason:'REBOOT_NEW_EPOCH'};
  if(current.relayTransitionSequence<previousSequence)
   return {available:false,events:[],reason:'FIRMWARE_SEQUENCE_REGRESSION'};
