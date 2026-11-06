@@ -732,8 +732,16 @@ router.put('/event-type-rules/:type', requireRole('ADMIN'), async (req, res, nex
       await tx.setting.upsert({ where: { key: TYPE_RULE_KEY },
         create: { key: TYPE_RULE_KEY, value: JSON.stringify(stored) },
         update: { value: JSON.stringify(stored) } });
+      // The production Android queue still reads this historical key.
+      // Update it atomically with the visible danger rule, so the
+      // operator's repeat selection matches real Worker execution.
+      if (req.params.type === 'MISSILE_DANGER') {
+        await tx.setting.upsert({ where: { key: MCHS_ALARM_REPEATS_KEY },
+          create: { key: MCHS_ALARM_REPEATS_KEY, value: String(repeats) },
+          update: { value: String(repeats) } });
+      }
     });
-    res.json({ saved: true, rule: entry, liveDispatchEnabled: false });
+    res.json({ saved: true, rule: entry });
   } catch (error) { next(error); }
 });
 
