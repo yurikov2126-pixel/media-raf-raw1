@@ -44,3 +44,25 @@ test('stale, future, and unbound device evidence never proves active link',()=>{
  assert.equal(selectMchsBoundEsp32Evidence(raw,{deviceId:'main-device',nowMs}).deviceId,null);
  assert.equal(selectMchsBoundEsp32Evidence(raw,{deviceId:null,nowMs}).deviceId,null);
 });
+
+test('registered Agent configured in admin is used when environment is not locked',()=>{
+ const binding=resolveMchsProductionAgentBinding({
+  MCHS_AGENT_LAB_DEVICE_ID:'old-lab'
+ },{deviceId:'radio-computer-1'});
+ assert.deepEqual(binding,{deviceId:'radio-computer-1',source:'ADMIN_BOUND',
+  legacy:false,configured:true});
+});
+test('explicit environment binding cannot be overwritten by stored admin selection',()=>{
+ const binding=resolveMchsProductionAgentBinding({
+  MCHS_MAIN_STATION_AGENT_DEVICE_ID:'protected-device',
+  MCHS_AGENT_LAB_DEVICE_ID:'old-lab'
+ },{deviceId:'radio-computer-1'});
+ assert.equal(binding.deviceId,'protected-device');
+ assert.equal(binding.source,'PRODUCTION_EXPLICIT');
+});
+test('empty or malformed stored selection falls back without auto-choosing devices',()=>{
+ assert.equal(resolveMchsProductionAgentBinding({},{}).deviceId,null);
+ assert.equal(resolveMchsProductionAgentBinding({},null).source,'UNCONFIGURED');
+ assert.equal(resolveMchsProductionAgentBinding({MCHS_AGENT_LAB_DEVICE_ID:'legacy'},
+  {deviceId:''}).source,'LEGACY_LAB_FALLBACK');
+});

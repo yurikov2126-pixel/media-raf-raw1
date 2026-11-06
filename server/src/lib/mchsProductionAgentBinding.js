@@ -2,10 +2,13 @@
  * Never infer an Agent from the most recently connected device.
  * A legacy lab binding may remain visible during migration, but is labelled.
  */
-export function resolveMchsProductionAgentBinding(env={}){
- const production=(env.MCHS_MAIN_STATION_AGENT_DEVICE_ID||'').trim();
+export const MCHS_MAIN_STATION_AGENT_BINDING_KEY='mchs_main_station_agent_binding_v1';
+export function resolveMchsProductionAgentBinding(env={},saved=null){
+ const production=typeof env.MCHS_MAIN_STATION_AGENT_DEVICE_ID==='string'?env.MCHS_MAIN_STATION_AGENT_DEVICE_ID.trim():'';
  const legacy=(env.MCHS_AGENT_LAB_DEVICE_ID||'').trim();
+ const configured=saved&&typeof saved.deviceId==='string'&&saved.deviceId.trim()?saved.deviceId.trim():null;
  if(production)return {deviceId:production,source:'PRODUCTION_EXPLICIT',legacy:false,configured:true};
+ if(configured)return {deviceId:configured,source:'ADMIN_BOUND',legacy:false,configured:true};
  if(legacy)return {deviceId:legacy,source:'LEGACY_LAB_FALLBACK',legacy:true,configured:false};
  return {deviceId:null,source:'UNCONFIGURED',legacy:false,configured:false};
 }
