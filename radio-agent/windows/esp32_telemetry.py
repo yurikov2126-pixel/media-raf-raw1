@@ -13,7 +13,8 @@ def report_status(server, token, ip, timeout=3, power_evidence=None):
         status=json.load(response)
     if status.get("device")!="MEDIA_RAF_RAW_ESP32" or status.get("mode") not in ("SAFE_PILOT","POWER_CONTROL_V1") or not isinstance(status.get("relayOutputEnabled"),bool):
         raise ValueError("Unexpected ESP32 firmware or physical output mode")
-    payload=json.dumps({"ip":str(address),"status":status,\n                        "agentPowerEvidence":power_evidence if isinstance(power_evidence,list) else []}).encode("utf-8")
+    payload=json.dumps({"ip":str(address),"status":status,
+                        "agentPowerEvidence":power_evidence if isinstance(power_evidence,list) else []}).encode("utf-8")
     req=Request(server.rstrip("/")+"/api/radio-agent/agent/esp32-status",
         data=payload,headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"},
         method="POST")
