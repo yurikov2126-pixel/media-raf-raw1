@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { classifyMchsObservation } from '../lib/mchsClassification.js';
 import {assessMissileProvenance} from '../lib/mchsMissileProvenance.js';
 import {admitAuthenticatedAndroidObservation} from '../lib/mchsAndroidBridgeAdmission.js';
+import {wakeAndroidMonitor} from '../lib/mchsAndroidMonitorWake.js';
 
 // Dedicated machine-to-machine route. Never accepts user JWT or triggers any playback.
 // Disabled by default, even after deployment.
@@ -75,6 +76,7 @@ router.post('/event', signedRequest, async (req, res, next) => {
       });
       return event;
     });
+    if(bridgeVerified && result.verified)wakeAndroidMonitor();
     console.info('MCHS_MISSILE_SOURCE_PROVENANCE',JSON.stringify({eventId,eventType:provenance.eventType,acceptable:provenance.acceptable,reason:provenance.reason,officiallyVerified:false}));
     res.status(200).json({ accepted: true, eventId, id: result.id,
       receivedAt: result.receivedAt, verified: result.verified,
