@@ -152,7 +152,7 @@ export default function MchsDeliveryReliability({ token, compact = false, onOpen
         <p className="text-sm mt-1">{item.detail}</p>
         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">Начало признаков: {formatDate(item.since)} · {item.code}</p>
       </div>)}
-      <p className="text-xs text-slate-600 dark:text-slate-300">Оценка обновляется раз в 30 секунд на открытой странице. Это текущие диагностические признаки, а не журнал подтверждённых тревог МЧС. Автоматический эфир не активируется.</p>
+      <p className="text-xs text-slate-600 dark:text-slate-300">Оценка обновляется раз в 30 секунд на открытой странице. Это текущие диагностические признаки, а не журнал подтверждённых тревог МЧС. Эта панель не отправляет команды в эфир.</p>
     </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
       {[
@@ -200,6 +200,6 @@ export default function MchsDeliveryReliability({ token, compact = false, onOpen
       </details>
     </div>}
     {onOpen && <button type="button" onClick={() => onOpen('incidents')} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm">Открыть журнал технических неисправностей</button>}
-    <p className="text-xs text-slate-600 dark:text-slate-300">Данные Android VM — последний переданный снимок, а не исторический журнал телеметрии. Задержка последнего события основана на временных метках, которые могут различаться между устройствами. Полученные сообщения нельзя считать доказательством полноты push-доставки. Автозапуск вещания отключён. Обновлено: {formatDate(state.updated)}.</p>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Данные Android VM — последний переданный снимок, а не исторический журнал телеметрии. Задержка последнего события основана на временных метках, которые могут различаться между устройствами. Полученные сообщения нельзя считать доказательством полноты push-доставки. Этот экран только отображает данные доставки. Обновлено: {formatDate(state.updated)}.</p>
   </section>;
 }
