@@ -55,7 +55,12 @@ export function assessMchsMainStationReadiness({
    lastRelayOffReason:typeof esp?.lastRelayOffReason==='string'?esp.lastRelayOffReason:null,
    lastRelayTransitionMs:Number.isSafeInteger(esp?.lastRelayTransitionMs)?esp.lastRelayTransitionMs:null,
    firmwareEvidencePresent:!!esp&&Number.isSafeInteger(esp.relayOnTransitions)&&
-    Number.isSafeInteger(esp.relayOffTransitions)},
+    Number.isSafeInteger(esp.relayOffTransitions),
+   firmwareHistoryReported:esp?.firmwareHistoryReported===true,
+   agentPowerEvidenceReported:esp?.agentPowerEvidenceReported===true,
+   lastReportAt:esp?.observedAt||null,
+   relayTransitionSequence:Number.isSafeInteger(esp?.relayTransitionSequence)?
+    esp.relayTransitionSequence:null},
   stationReceipt:{confirmedCount:confirmed.length,lastEventId:latest?.eventId||null},
   checks,holds:checks.filter(c=>!c.ok).map(c=>c.reason)};
 }
