@@ -8,7 +8,7 @@ export function registerAndroidMonitorWake(callback){
 }
 export function wakeAndroidMonitor(){
  if(!handler)return false;
- queueMicrotask(()=>{
+ Promise.resolve().then(()=>{
   try{Promise.resolve(handler()).catch(error=>console.error(
    'MCHS_ANDROID_WAKE_FAILED',error?.message||'UNKNOWN'));}
   catch(error){console.error('MCHS_ANDROID_WAKE_FAILED',error?.message||'UNKNOWN');}
