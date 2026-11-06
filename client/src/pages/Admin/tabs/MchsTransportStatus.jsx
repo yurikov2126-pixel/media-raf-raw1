@@ -42,6 +42,10 @@ const stateText=v=>v||'Нет данных';
 
 export default function MchsTransportStatus({token}){
  const [station,setStation]=useState(null);
+ const [bindingSettings,setBindingSettings]=useState(null);
+ const [selectedAgentId,setSelectedAgentId]=useState('');
+ const [savingBinding,setSavingBinding]=useState(false);
+ const [bindingMessage,setBindingMessage]=useState('');
  const [preflight,setPreflight]=useState(null);
  const [intents,setIntents]=useState(null);
  const [receipts,setReceipts]=useState(null);
@@ -49,19 +53,21 @@ export default function MchsTransportStatus({token}){
  const [updated,setUpdated]=useState(null);
  const [loading,setLoading]=useState(false);
  const load=useCallback(async()=>{
-  const [s,p,i,r]=await Promise.all([
+  const [s,p,i,r,b]=await Promise.all([
    api('/safety/missile-main-station-readiness',{token}),
    api('/safety/missile-live-trial-preflight',{token}),
    api('/safety/missile-android-execution-intents',{token}),
-   api('/safety/missile-station-execution-receipts',{token})
+   api('/safety/missile-station-execution-receipts',{token}),
+   api('/safety/missile-main-station-agent-binding',{token})
   ]);
-  return {s,p,i,r};
+  return {s,p,i,r,b};
  },[token]);
  const refresh=useCallback(async()=>{
   setLoading(true);
   try{
-   const {s,p,i,r}=await load();
-   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);
+   const {s,p,i,r,b}=await load();
+   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);
+   setSelectedAgentId(b.binding?.deviceId||'');
    setError('');setUpdated(new Date());
   }catch(e){setError(e.message||'Ошибка получения состояния');}
   finally{setLoading(false);}
@@ -70,8 +76,9 @@ export default function MchsTransportStatus({token}){
   let alive=true;
   const tick=async()=>{
    try{
-    const {s,p,i,r}=await load();
-    if(alive){setStation(s);setPreflight(p);setIntents(i);setReceipts(r);
+    const {s,p,i,r,b}=await load();
+    if(alive){setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);
+     setSelectedAgentId(current=>current||b.binding?.deviceId||'');
      setError('');setUpdated(new Date());}
    }catch(e){if(alive)setError(e.message||'Сервер диагностики недоступен');}
   };
@@ -79,6 +86,21 @@ export default function MchsTransportStatus({token}){
   const timer=setInterval(()=>{void tick();},15000);
   return ()=>{alive=false;clearInterval(timer);};
  },[load]);
+ const saveBinding=useCallback(async()=>{
+  if(!selectedAgentId||savingBinding)return;
+  setSavingBinding(true);setBindingMessage('');
+  try{
+   await api('/safety/missile-main-station-agent-binding',{
+    token,method:'PUT',body:{deviceId:selectedAgentId}
+   });
+   const {s,p,i,r,b}=await load();
+   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);
+   setSelectedAgentId(b.binding?.deviceId||'');
+   setBindingMessage('Рабочий радиокомпьютер сохранён для диагностики.');
+   setUpdated(new Date());
+  }catch(e){setBindingMessage(e.message||'Не удалось сохранить привязку');}
+  finally{setSavingBinding(false);}
+ },[token,selectedAgentId,savingBinding,load]);
  const worker=station?.worker,agent=station?.agent,esp=station?.esp32;
  const events=station?.esp32Transitions?.events||[];
  const items=intents?.ledger?.items||[];
@@ -103,11 +125,33 @@ export default function MchsTransportStatus({token}){
    <button type="button" onClick={refresh} disabled={loading} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">{loading?'Проверяем…':'Обновить'}</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">Не удалось обновить диагностику: {error}</p>}
-  {station?.agentBinding?.source!=='PRODUCTION_EXPLICIT'&&<div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 text-sm space-y-1">
+  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Привязка рабочего радиокомпьютера">
+   <div><strong className="block text-sm">Рабочий Windows Radio Agent</strong>
+    <p className="text-xs text-slate-600 dark:text-slate-300">Выбор компьютера для отображения диагностики ESP32 и радио. Не меняет режим вещания, состояние реле или права на оповещение.</p></div>
+   <div className="flex flex-wrap items-end gap-2">
+    <label className="flex-1 min-w-[200px] text-xs space-y-1">
+     <span className="block">Зарегистрированный радиокомпьютер</span>
+     <select value={selectedAgentId} onChange={e=>{setSelectedAgentId(e.target.value);setBindingMessage('');}}
+      disabled={!bindingSettings||bindingSettings.envLocked||savingBinding}
+      className="w-full rounded-lg border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900 p-2 text-sm">
+      <option value="">Выберите устройство</option>
+      {(bindingSettings?.devices||[]).map(d=><option key={d.id} value={d.id}>{d.name||d.id} · {d.id}</option>)}
+     </select>
+    </label>
+    <button type="button" onClick={saveBinding}
+     disabled={savingBinding||bindingSettings?.envLocked||!selectedAgentId||selectedAgentId===station?.agentBinding?.deviceId}
+     className="rounded-lg border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">
+     {savingBinding?'Сохраняем…':'Сохранить'}
+    </button>
+   </div>
+   {bindingSettings?.envLocked&&<p className="text-xs text-slate-600 dark:text-slate-300">Привязка закреплена переменной окружения сервера; изменение через админку недоступно.</p>}
+   {bindingMessage&&<p role="status" className="text-xs">{bindingMessage}</p>}
+  </section>
+  {station?.agentBinding&& !['PRODUCTION_EXPLICIT','ADMIN_BOUND'].includes(station.agentBinding.source)&&<div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 text-sm space-y-1">
    <strong className="block">Радиокомпьютер не привязан к production-диагностике</strong>
    <p className="text-xs text-slate-600 dark:text-slate-300">{station?.agentBinding?.source==='LEGACY_LAB_FALLBACK'?
-    'Отображается временная привязка из прежней лабораторной конфигурации. Укажите MCHS_MAIN_STATION_AGENT_DEVICE_ID в окружении API для постоянной привязки.' :
-    'Укажите MCHS_MAIN_STATION_AGENT_DEVICE_ID — ID зарегистрированного Windows Radio Agent. Система не выбирает произвольный подключённый компьютер.'}</p>
+    'Отображается временная лабораторная привязка. Выберите рабочий Windows Agent в настройке выше.' :
+    'Выберите зарегистрированный Windows Agent в настройке выше. Система не выбирает произвольный компьютер.'}</p>
   </div>}
   {station?.esp32EvidenceBinding?.reason&&<p className="text-xs text-amber-700 dark:text-amber-300">Журнал ESP32 не выбран: {station.esp32EvidenceBinding.reason==='AMBIGUOUS_FRESH_ESP32'?
    'несколько свежих контроллеров сообщают об одном Agent' :
