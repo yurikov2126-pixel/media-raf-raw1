@@ -103,6 +103,15 @@ export default function MchsTransportStatus({token}){
    <button type="button" onClick={refresh} disabled={loading} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-50">{loading?'Проверяем…':'Обновить'}</button>
   </div>
   {error&&<p role="alert" className="text-sm text-red-700 dark:text-red-300">Не удалось обновить диагностику: {error}</p>}
+  {station?.agentBinding?.source!=='PRODUCTION_EXPLICIT'&&<div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 text-sm space-y-1">
+   <strong className="block">Радиокомпьютер не привязан к production-диагностике</strong>
+   <p className="text-xs text-slate-600 dark:text-slate-300">{station?.agentBinding?.source==='LEGACY_LAB_FALLBACK'?
+    'Отображается временная привязка из прежней лабораторной конфигурации. Укажите MCHS_MAIN_STATION_AGENT_DEVICE_ID в окружении API для постоянной привязки.' :
+    'Укажите MCHS_MAIN_STATION_AGENT_DEVICE_ID — ID зарегистрированного Windows Radio Agent. Система не выбирает произвольный подключённый компьютер.'}</p>
+  </div>}
+  {station?.esp32EvidenceBinding?.reason&&<p className="text-xs text-amber-700 dark:text-amber-300">Журнал ESP32 не выбран: {station.esp32EvidenceBinding.reason==='AMBIGUOUS_FRESH_ESP32'?
+   'несколько свежих контроллеров сообщают об одном Agent' :
+   'нет однозначного свежего контроллера, привязанного к этому Agent'}. Журнал другого устройства не подставляется.</p>}
   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
    {cards.map(card=><div key={card.name} className="rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-white/5 p-3 min-w-0">
     <div className="text-xs text-slate-600 dark:text-slate-300">{card.name}</div>
