@@ -28,6 +28,7 @@ from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
 from manual_amplifier_intent import authorized_manual_power
 from mchs_station_power import authorized_mchs_station_power
+from mchs_power_ack import require_power_command_ack
 import time
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
@@ -588,7 +589,7 @@ class RadioAgentApp(tk.Tk):
                         decision="OPERATOR_HARDWARE_DISARMED"
                     current_event=(intent.get("mchsEventId") if "intent" in locals() and locals().get("mchs_authorized", False) else None) or preparing_event or state.get("mchsIsolatedEventId")
                     result=signed_power(host,secret,permit,8000 if permit else 0)
-                    acknowledged=result.get("amplifierPower")
+                    acknowledged=require_power_command_ack(result,permit)
                     if acknowledged in ("ON_COMMANDED","OFF_COMMANDED"):
                         observed=acknowledged=="ON_COMMANDED"
                         transition=describe_power_transition(
@@ -614,7 +615,7 @@ class RadioAgentApp(tk.Tk):
                             self.messages.put(("log","MCHS_RELAY_ON_ACK "+preparing_event))
                         else:
                             state.update(mchsRelayAckEventId=None,mchsRelayFirstAckAt=None,mchsRelayLastAckAt=None)
-                    record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0)
+                    record_power_event("POWER_COMMAND",result="ACK",durationMs=round((time.monotonic()-started)*1000),permit=permit,reason=decision,mode=PLAYBACK_STATE["mode"],leaseMs=8000 if permit else 0,eventId=current_event,phase="MCHS_PCM" if current_event and locals().get("mchs_authorized",False) else "NORMAL")
                     if (self.active_isolated_mode and self.mchs_manual_pulse_until>time.monotonic()
                             and not permit and local_reason=='SERVER_POWER_NOT_AUTHORIZED'):
                         server_reason=(intent.get("reason") if 'intent' in locals() else "нет ответа сервера")
@@ -632,7 +633,7 @@ class RadioAgentApp(tk.Tk):
                         PLAYBACK_STATE.update(mchsRelayAckEventId=None,
                                               mchsRelayFirstAckAt=None,
                                               mchsRelayLastAckAt=None)
-                    record_power_event("POWER_ERROR",result="ERROR",eventId=PLAYBACK_STATE.get("mchsIsolatedEventId") or PLAYBACK_STATE.get("mchsRelayPrepareEventId"),durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
+                    record_power_event("POWER_ERROR",result="ERROR",eventId=locals().get("current_event") or PLAYBACK_STATE.get("mchsIsolatedEventId") or PLAYBACK_STATE.get("mchsRelayPrepareEventId"),durationMs=round((time.monotonic()-started)*1000),errorType=type(error).__name__,httpStatus=getattr(error,"code",None),phase=phase,mode=PLAYBACK_STATE["mode"],permit=permit)
                     self.last_esp32_relay_ack=None
                     self.messages.put(("power_status","GPIO13 · нет подтверждения: "+type(error).__name__))
                 finally:
