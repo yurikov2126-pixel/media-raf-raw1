@@ -1,3 +1,4 @@
+import {compareEsp32FirmwareHistory} from './mchsEsp32FirmwareHistory.js';
 /** Read-only snapshot of one authenticated Windows Agent / ESP32 health report.
  * These facts do NOT prove physical mains power or PA audibility.
  */
@@ -5,8 +6,7 @@ export function buildEsp32ReportSnapshot(status,{observedAt,reporterId,agentPowe
  const report=status&&typeof status==='object'?status:{};
  const validU32=n=>Number.isSafeInteger(n)&&n>=0&&n<=4294967295;
  const safeText=(s,max=64)=>typeof s==='string'?s.slice(0,max):null;
- const ring=Array.isArray(report.relayTransitionHistory)?
-  report.relayTransitionHistory:null;
+ const ringStatus=compareEsp32FirmwareHistory(null,report);
  return {
   observedAt,reporterId,agentMode:report.agentMode,
   heartbeatFresh:report.heartbeatFresh===true,
@@ -21,9 +21,7 @@ export function buildEsp32ReportSnapshot(status,{observedAt,reporterId,agentPowe
   lastRelayOffReason:safeText(report.lastRelayOffReason),
   lastRelayOnReason:safeText(report.lastRelayOnReason),
   relayTransitionSequence:validU32(report.relayTransitionSequence)?report.relayTransitionSequence:null,
-  firmwareHistoryReported:!!(ring&&ring.length<=12&&
-   /^[a-f0-9]{16}$/.test(report.bootNonce||'')&&
-   validU32(report.relayTransitionSequence)),
-  agentPowerEvidenceReported:Array.isArray(agentPowerEvidence)
+  firmwareHistoryReported:ringStatus.available===true,
+  agentPowerEvidenceReported:Array.isArray(agentPowerEvidence)&&agentPowerEvidence.length<=16
  };
 }
