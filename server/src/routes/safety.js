@@ -56,7 +56,7 @@ import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {assessMchsMainStationReadiness} from '../lib/mchsMainStationReadiness.js';
-import {resolveMchsProductionAgentBinding,selectMchsBoundEsp32Evidence} from '../lib/mchsProductionAgentBinding.js';
+import {resolveMchsProductionAgentBinding,selectMchsBoundEsp32Evidence,MCHS_MAIN_STATION_AGENT_BINDING_KEY} from '../lib/mchsProductionAgentBinding.js';
 import {MCHS_ESP32_TRANSITIONS_KEY,assessEsp32TransitionEvidence} from '../lib/mchsEsp32TransitionEvidence.js';
 import {selectNextMchsStationIntent,settleMchsStationAttempt} from '../lib/mchsStationSequentialQueue.js';
 import {reconcileMchsStationClaims} from '../lib/mchsStationClaimRecovery.js';
@@ -1641,12 +1641,56 @@ router.get('/missile-dispatch-readiness',requireRole('ADMIN'),async (_req,res,ne
    agentTelemetry:telemetry,trialStopConfirmation,transportChain});
  }catch(error){next(error);}
 });
+/** Dedicated, admin-only binding for read-only station diagnostics.
+ * This setting cannot authorize PA operation or change any relay policy.
+ */
+router.get('/missile-main-station-agent-binding',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [savedRow,devices]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MCHS_MAIN_STATION_AGENT_BINDING_KEY}}),
+   prisma.radioDevice.findMany({where:{revokedAt:null},
+    select:{id:true,name:true,lastSeenAt:true,playbackAllowed:true},
+    orderBy:{createdAt:'desc'},take:100})
+  ]);
+  let saved;try{saved=JSON.parse(savedRow?.value||'null');}catch{}
+  const binding=resolveMchsProductionAgentBinding(process.env,saved);
+  const envLocked=!!process.env.MCHS_MAIN_STATION_AGENT_DEVICE_ID?.trim();
+  res.set('Cache-Control','no-store').json({
+   readOnlyControl:true,envLocked,binding,
+   devices:devices.map(d=>({
+    id:d.id,name:d.name,lastSeenAt:d.lastSeenAt,
+    playbackAllowed:d.playbackAllowed===true
+   }))
+  });
+ }catch(error){next(error);}
+});
+router.put('/missile-main-station-agent-binding',requireRole('ADMIN'),async(req,res,next)=>{
+ try{
+  if(process.env.MCHS_MAIN_STATION_AGENT_DEVICE_ID?.trim())
+   return res.status(409).json({error:'Привязка задана переменной окружения. Измените её на сервере.'});
+  const deviceId=req.body?.deviceId;
+  if(typeof deviceId!=='string'||!deviceId||deviceId.length>128||
+   !/^[a-zA-Z0-9_-]+$/.test(deviceId))
+   return res.status(400).json({error:'Некорректный идентификатор Windows Agent'});
+  const device=await prisma.radioDevice.findUnique({where:{id:deviceId},
+   select:{id:true,revokedAt:true}});
+  if(!device||device.revokedAt)
+   return res.status(404).json({error:'Выберите зарегистрированный и неотключённый Windows Agent'});
+  await prisma.setting.upsert({where:{key:MCHS_MAIN_STATION_AGENT_BINDING_KEY},
+   create:{key:MCHS_MAIN_STATION_AGENT_BINDING_KEY,value:JSON.stringify({deviceId})},
+   update:{value:JSON.stringify({deviceId})}});
+  res.set('Cache-Control','no-store').json({ok:true,binding:{
+   deviceId,source:'ADMIN_BOUND',configured:true,legacy:false}});
+ }catch(error){next(error);}
+});
 /** Main radio + Windows Agent + ESP32 readiness is observation only.
  * Does not issue START, relay power requests or write to any setting.
  */
 router.get('/missile-main-station-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
  try{
-  const binding=resolveMchsProductionAgentBinding(process.env);
+  const bindingRow=await prisma.setting.findUnique({where:{key:MCHS_MAIN_STATION_AGENT_BINDING_KEY}});
+  let configuredBinding;try{configuredBinding=JSON.parse(bindingRow?.value||'null');}catch{}
+  const binding=resolveMchsProductionAgentBinding(process.env,configuredBinding);
   const deviceId=binding.deviceId;
   const [worker,device,espRow,receiptRow,transitionRow]=await Promise.all([
    requestMchsStationSession({action:'STATUS'}).catch(error=>({
