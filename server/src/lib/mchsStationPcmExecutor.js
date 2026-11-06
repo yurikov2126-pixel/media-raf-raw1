@@ -3,13 +3,16 @@ import {createMchsStationPrioritySession} from './mchsStationPrioritySession.js'
 // Pure event-bound PCM source for the shared 48kHz stereo PCM16 encoder.
 // It does not fetch Android data, issue commands, or control GPIO. A verified
 // coordinator will be added in a separate stage. No public start route exists.
-export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
+export function createMchsStationPcmExecutor({onTerminal=()=>{},preRollMs=0,onPreRoll=()=>{}}={}){
+ if(!Number.isInteger(preRollMs)||preRollMs<0||preRollMs>6000)
+  throw new RangeError('INVALID_PRE_ROLL_MS');
  // 48kHz 16-bit stereo = 192000 bytes/sec. Fail stale RESUMING without
  // falsely reporting that regular non-silent program has returned.
  const MAX_SILENT_RESUME_BYTES=192000*5;
  const lifecycle=createMchsStationPrioritySession();
  let source=null,position=0,completedRepeats=0,bound=null;
  let pcmFrames=0,programFrames=0,silentResumeBytes=0;
+ let preRollBytes=0,preRollInitialBytes=0,preRollEventId=null;
  const validSource=s=>s&&Number.isSafeInteger(s.size)&&s.size>0&&s.size%4===0&&
    typeof s.read==='function'&&typeof s.close==='function';
  const release=()=>{
@@ -20,6 +23,8 @@ export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
   ...lifecycle.snapshot(),
   active:source!==null,
   pcmFrames,programFrames,
+  preRollActive:source!==null&&preRollBytes>0,
+  preRollRemainingMs:source!==null?Math.ceil(preRollBytes/192):0,
   acceptsAndroidEvents:false,
   hasLiveStartRoute:false,
   gpioControlEnabled:false
@@ -33,12 +38,27 @@ export function createMchsStationPcmExecutor({onTerminal=()=>{}}={}){
   if(!admitted.accepted)return {ok:false,reason:admitted.reason};
   source=pcm;bound={eventId,repeats};position=0;completedRepeats=0;
   pcmFrames=0;programFrames=0;silentResumeBytes=0;
+  preRollBytes=preRollMs*192;preRollInitialBytes=preRollBytes;
+  preRollEventId=eventId;
+  if(preRollBytes>0)try{onPreRoll({eventId,eventType,remainingMs:preRollMs});}catch{}
   return {ok:true,...snap()};
  }
  function replace(frame){
   if(!Buffer.isBuffer(frame)||frame.length%4!==0)
    throw new TypeError('INVALID_ENCODER_PCM_FRAME');
   if(!source)return frame;
+  if(preRollBytes>0){
+   // Keep the current program (or silence) flowing until the bounded
+   // power-intent lead time expires. Worker STATUS already exposes the real
+   // PREEMPTING event so the Agent may request GPIO13 in the meantime.
+   const consumed=Math.min(frame.length,preRollBytes);
+   preRollBytes-=consumed;
+   if(preRollBytes===0)try{
+    onPreRoll({eventId:preRollEventId,elapsedMs:preRollInitialBytes/192,
+               ended:true,powerAcknowledged:false});
+   }catch{}
+   return frame;
+  }
   const output=Buffer.alloc(frame.length);
   let cursor=0;
   try{
