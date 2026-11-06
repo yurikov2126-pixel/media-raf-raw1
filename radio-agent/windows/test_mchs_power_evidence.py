@@ -8,7 +8,7 @@ from mchs_power_evidence import read_power_evidence
 
 class TestPowerEvidence(unittest.TestCase):
     def test_only_sanitized_events_and_no_secrets(self):
-        now=datetime(2026,11,6,8,0,0,tzinfo=timezone.utc)
+        now=datetime(2026,11,6,8,0,0).astimezone().astimezone(timezone.utc)
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"power-diagnostics.log"
             records=[
@@ -32,7 +32,7 @@ class TestPowerEvidence(unittest.TestCase):
             self.assertNotIn("BAD TOKEN",serialized)
 
     def test_missing_file_and_old_events(self):
-        now=datetime(2026,11,6,8,0,0,tzinfo=timezone.utc)
+        now=datetime(2026,11,6,8,0,0).astimezone().astimezone(timezone.utc)
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"power-diagnostics.log"
             self.assertEqual(read_power_evidence(path,now=now),[])
@@ -40,7 +40,7 @@ class TestPowerEvidence(unittest.TestCase):
             self.assertEqual(read_power_evidence(path,now=now),[])
 
     def test_deduplication_identifier_is_stable(self):
-        now=datetime(2026,11,6,8,0,0,tzinfo=timezone.utc)
+        now=datetime(2026,11,6,8,0,0).astimezone().astimezone(timezone.utc)
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"power-diagnostics.log"
             path.write_text('2026-11-06 07:59:58,000 RELAY_TRANSITION {"transition":"OFF_SERVER_DENIED"}\n')
