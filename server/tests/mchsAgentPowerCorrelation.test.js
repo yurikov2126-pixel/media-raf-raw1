@@ -21,16 +21,16 @@ test('repeat telemetry poll does not duplicate event',()=>{
  assert.equal(second.added.length,0);
  assert.equal(second.state.events.length,1);
 });
-test('refuse embedded sensitive data by stripping unknown fields',()=>{
+test('strip unknown sensitive fields from otherwise valid diagnostic events',()=>{
  const row=e('b'.repeat(24),'POWER_ERROR',{
   token:'rr_secret',headers:{authorization:'Bearer hidden'},
-  url:'https://secret.invalid',errorType:'TimeoutError'});
+  url:'https://secret.invalid',errorType:'TIMEOUT_ERROR'});
  const out=mergeAgentPowerEvidence(null,{...options,observations:[row]});
  assert.equal(out.added.length,1);
  assert.equal(out.added[0].url,undefined);
  assert.equal(out.added[0].token,undefined);
  assert.equal(out.added[0].headers,undefined);
- assert.equal(out.added[0].errorType,undefined);
+ assert.equal(out.added[0].errorType,'TIMEOUT_ERROR');
 });
 test('reject stale, future, invalid event kind and invalid reason codes',()=>{
  const entries=[
@@ -38,7 +38,8 @@ test('reject stale, future, invalid event kind and invalid reason codes',()=>{
   e('2'.repeat(24),'POWER_COMMAND',{at:new Date(nowMs+80000).toISOString()}),
   e('3'.repeat(24),'UNKNOWN_KIND'),
   e('4'.repeat(24),'POWER_COMMAND',{reason:'Bearer token=bad'}),
-  e('5'.repeat(24),'POWER_COMMAND',{permit:'true'})
+  e('5'.repeat(24),'POWER_COMMAND',{permit:'true'}),
+  e('6'.repeat(24),'POWER_ERROR',{errorType:'TimeoutError'})
  ];
  const out=mergeAgentPowerEvidence(null,{...options,observations:entries});
  assert.equal(out.added.length,0);
