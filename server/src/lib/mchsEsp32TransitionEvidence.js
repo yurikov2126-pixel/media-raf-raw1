@@ -1,3 +1,4 @@
+import {compareEsp32FirmwareHistory} from './mchsEsp32FirmwareHistory.js';
 /** Server-side observations of command/lease changes, not physical voltage. */
 export const MCHS_ESP32_TRANSITIONS_KEY='mchs_esp32_transition_evidence_v1';
 const MAX_EVENTS=150;
@@ -18,13 +19,22 @@ export function recordEsp32Transition(raw,{deviceId,reporterId,observedAt,status
   relayOnTransitions:Number.isSafeInteger(status.relayOnTransitions)?status.relayOnTransitions:null,
   relayOffTransitions:Number.isSafeInteger(status.relayOffTransitions)?status.relayOffTransitions:null,
   lastRelayTransitionMs:Number.isSafeInteger(status.lastRelayTransitionMs)?status.lastRelayTransitionMs:null,
-  lastRelayOffReason:typeof status.lastRelayOffReason==='string'?status.lastRelayOffReason:null};
+  lastRelayOffReason:typeof status.lastRelayOffReason==='string'?status.lastRelayOffReason:null,
+  relayTransitionSequence:Number.isSafeInteger(status.relayTransitionSequence)?status.relayTransitionSequence:null};
  const prev=devices[deviceId];
  const prevTime=Date.parse(prev?.observedAt||'');
  if(prev&&(!Number.isFinite(prevTime)||t<=prevTime))
   return {state:{devices,events},added:[],reason:'OLD_OR_DUPLICATE_OBSERVATION'};
  const changes=[];
- const add=(kind,detail)=>changes.push({deviceId,reporterId,at:next.observedAt,kind,detail});
+ const add=(kind,detail,extra={})=>changes.push({deviceId,reporterId,at:next.observedAt,kind,detail,...extra});
+ const history=compareEsp32FirmwareHistory(prev,status);
+ if(history.available){
+  for(const entry of history.events){
+   add(entry.kind,entry.reason,{seq:entry.seq,uptimeMs:entry.uptimeMs});
+  }
+  if(history.reason==='FIRMWARE_EVENT_HISTORY_OVERFLOW')
+   add('FIRMWARE_HISTORY_OVERFLOW','INTERMEDIATE_GPIO_EVENTS_LOST');
+ }
  if(prev&&prev.reporterId!==reporterId)add('REPORTER_CHANGED','OBSERVATION_SOURCE_CHANGED');
  if(prev&&t-prevTime>12000)add('TELEMETRY_GAP',String(t-prevTime));
  if(prev&&prev.power!==next.power)add('COMMANDED_POWER_CHANGED',prev.power+'_TO_'+next.power);
@@ -59,7 +69,8 @@ export function assessEsp32TransitionEvidence(raw,{deviceId,nowMs=Date.now(),win
   Number.isFinite(Date.parse(e.at))&&nowMs-Date.parse(e.at)>=0&&nowMs-Date.parse(e.at)<=windowMs):[];
  const suspect=entries.filter(e=>['COMMANDED_POWER_CHANGED','LEASE_CHANGED','TELEMETRY_GAP',
   'HEARTBEAT_CHANGED','HEARTBEAT_COUNTER_RESET','REPORTER_CHANGED',
-  'FIRMWARE_RELAY_OFF','FIRMWARE_COUNTER_RESET','FIRMWARE_REBOOT'].includes(e.kind));
+  'FIRMWARE_RELAY_OFF','FIRMWARE_COUNTER_RESET','FIRMWARE_REBOOT',
+  'FIRMWARE_GPIO_OFF','FIRMWARE_HISTORY_OVERFLOW'].includes(e.kind));
  return {readOnly:true,windowMs,events:entries.slice(-70),suspectCount:suspect.length,
   stabilityConfirmed:false,actualMainsPowerVerified:false};
 }
