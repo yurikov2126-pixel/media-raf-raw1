@@ -56,6 +56,7 @@ import {planMchsAndroidAlarmEvent} from '../lib/mchsAndroidAlarmPlanner.js';
 import {dispatchNewAndroidStationBindings} from '../lib/mchsAndroidStationBridge.js';
 import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
 import {assessMchsMainStationReadiness} from '../lib/mchsMainStationReadiness.js';
+import {assessMchsProductionAutoReadiness} from '../lib/mchsProductionAutoReadiness.js';
 import {registerAndroidMonitorWake} from '../lib/mchsAndroidMonitorWake.js';
 import {resolveMchsProductionAgentBinding,selectMchsBoundEsp32Evidence,MCHS_MAIN_STATION_AGENT_BINDING_KEY} from '../lib/mchsProductionAgentBinding.js';
 import {MCHS_ESP32_TRANSITIONS_KEY,assessEsp32TransitionEvidence} from '../lib/mchsEsp32TransitionEvidence.js';
@@ -1683,6 +1684,45 @@ router.put('/missile-main-station-agent-binding',requireRole('ADMIN'),async(req,
    update:{value:JSON.stringify({deviceId})}});
   res.set('Cache-Control','no-store').json({ok:true,binding:{
    deviceId,source:'ADMIN_BOUND',configured:true,legacy:false}});
+ }catch(error){next(error);}
+});
+/** Production automatic alert configuration and transport status only.
+ * GET never starts Worker PCM, changes relay power or mutates environment.
+ */
+router.get('/missile-production-auto-readiness',requireRole('ADMIN'),async (_req,res,next)=>{
+ try{
+  const [bindingRow,ruleSet,assets,worker,androidHealth,espRow]=await Promise.all([
+   prisma.setting.findUnique({where:{key:MCHS_MAIN_STATION_AGENT_BINDING_KEY}}),
+   getTypeRules(),
+   prisma.radioAsset.findMany({where:{category:'ALARM',mimeType:{startsWith:'audio/'}},
+    select:{id:true,name:true,category:true,mimeType:true,durationMs:true}}),
+   requestMchsStationSession({action:'STATUS'}).catch(()=>({ok:false})),
+   prisma.safetyMchsHealth.findUnique({where:{id:'mchs-android'},
+    select:{lastSeenAt:true,listener:true,push:true}}),
+   prisma.setting.findUnique({where:{key:'radio_esp32_status_v1'}})
+  ]);
+  let savedBinding;try{savedBinding=JSON.parse(bindingRow?.value||'null');}catch{}
+  const binding=resolveMchsProductionAgentBinding(process.env,savedBinding);
+  const device=binding.deviceId?await prisma.radioDevice.findUnique({where:{id:binding.deviceId},
+   select:{id:true,lastSeenAt:true,revokedAt:true,playbackAllowed:true}}):null;
+  let snapshots;try{snapshots=JSON.parse(espRow?.value||'{}');}catch{}
+  const candidates=Object.values(snapshots&&typeof snapshots==='object'?snapshots:{})
+   .filter(v=>v?.reporterId===binding.deviceId&&
+    Number.isFinite(Date.parse(v.observedAt||''))&&
+    Date.now()>=Date.parse(v.observedAt)&&
+    Date.now()-Date.parse(v.observedAt)<=12000);
+  const esp=candidates.length===1?{...candidates[0],fresh:true}:null;
+  const channels=(process.env.MCHS_MISSILE_TRUSTED_CHANNEL_IDS||'')
+   .split(',').map(s=>s.trim()).filter(Boolean);
+  const report=assessMchsProductionAutoReadiness({
+   flags:{ingest:process.env.MCHS_INGEST_ENABLED==='true',
+    hmacConfigured:(process.env.MCHS_INGEST_HMAC_KEY||'').length>=32,
+    dispatch:process.env.MCHS_ANDROID_MAIN_STATION_DISPATCH_ENABLED==='true',
+    coordinator:process.env.MCHS_MAIN_STATION_COORDINATOR_ENABLED==='true'},
+   allowedChannels:channels,rules:ruleSet,assets,worker,agent:device,
+   deviceBinding:binding,androidHealth,esp32:esp
+  });
+  res.set('Cache-Control','no-store').json(report);
  }catch(error){next(error);}
 });
 /** Main radio + Windows Agent + ESP32 readiness is observation only.
