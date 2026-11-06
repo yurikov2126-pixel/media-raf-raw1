@@ -103,6 +103,7 @@ export default function MchsTransportStatus({token}){
  },[token,selectedAgentId,savingBinding,load]);
  const worker=station?.worker,agent=station?.agent,esp=station?.esp32;
  const events=station?.esp32Transitions?.events||[];
+ const dropout=station?.esp32Transitions?.dropoutSummary;
  const items=intents?.ledger?.items||[];
  const records=receipts?.ledger?.items||[];
  const counts={
@@ -181,6 +182,13 @@ export default function MchsTransportStatus({token}){
     <strong className="text-sm">История управления усилителем</strong>
     <p className="text-xs text-slate-600 dark:text-slate-300">Счётчики ESP32 выявляют даже короткое OFF→ON между опросами. Все времена событий — время наблюдения сервером, не измерение на силовой линии.</p>
    </div>
+   {dropout&&<div className="rounded-lg border border-slate-200 dark:border-white/15 p-3 space-y-2 text-xs">
+    <strong className="block">За последние 10 минут: наблюдения GPIO13</strong>
+    <p>Командных OFF в доступной истории: <strong>{dropout.gpioOffObserved}</strong> · Пропусков данных / перезагрузок: <strong>{dropout.dataGapsObserved}</strong></p>
+    {dropout.lastOff&&<p>Последнее командное выключение: <strong>{reasonNames[dropout.lastOff.reason]||dropout.lastOff.reason}</strong> · {new Date(dropout.lastOff.at).toLocaleString('ru-RU')} · событие #{dropout.lastOff.seq}</p>}
+    {!!Object.keys(dropout.reasons||{}).length&&<div className="flex flex-wrap gap-2">{Object.entries(dropout.reasons).map(([reason,count])=><span key={reason} className="rounded-lg bg-slate-100 dark:bg-white/10 px-2 py-1">{reasonNames[reason]||reason}: {count}</span>)}</div>}
+    <p className="text-slate-600 dark:text-slate-300">Это журнал команд прошивки, а не измерение питания AA-300. Пропуски данных могут скрывать переходы.</p>
+   </div>}
    <div className="grid gap-2 sm:grid-cols-3 text-sm">
     <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Включений GPIO13: <strong>{esp?.relayOnTransitions??'—'}</strong></div>
     <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Выключений GPIO13: <strong>{esp?.relayOffTransitions??'—'}</strong></div>
