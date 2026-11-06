@@ -122,6 +122,21 @@ def ingest_snapshot(db):
     return len(rows)
 
 
+def valid_event_ack(reply, event_id):
+    """ACK means the HMAC-authenticated server stored this exact event.
+    verified is a separate *missile-audio* admission flag, not delivery ACK.
+    """
+    return (
+        isinstance(reply, dict)
+        and reply.get("accepted") is True
+        and reply.get("eventId") == event_id
+        and isinstance(reply.get("id"), str)
+        and bool(reply["id"])
+        and reply.get("bridgeAuthenticated") is True
+        and type(reply.get("verified")) is bool
+    )
+
+
 def drain(db, key, ip, max_send=20):
     now = int(time.time())
     todo = db.execute("""SELECT event_id,payload_json,attempt FROM queue
@@ -130,8 +145,7 @@ def drain(db, key, ip, max_send=20):
     for eid, raw, attempt in todo:
         try:
             reply = post("event", json.loads(raw), key, ip)
-            if (reply.get("accepted") is not True or reply.get("eventId") != eid or
-                reply.get("verified") is not False or not reply.get("id")):
+            if not valid_event_ack(reply, eid):
                 raise RuntimeError("Invalid/mismatched event ACK")
             db.execute("""UPDATE queue SET ack_id=?,ack_at=?,last_error=NULL
                           WHERE event_id=? AND ack_at IS NULL""",

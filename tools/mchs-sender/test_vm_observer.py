@@ -54,7 +54,7 @@ class TelemetryTests(unittest.TestCase):
             db.close()
             db = module.state_db(path)
             try:
-                with patch.object(module, "post", return_value={"accepted":True,"eventId":"test-event","verified":False,"id":"server-1"}) as sent, patch.object(module.time, "time", return_value=1016):
+                with patch.object(module, "post", return_value={"accepted":True,"eventId":"test-event","verified":False,"bridgeAuthenticated":True,"id":"server-1"}) as sent, patch.object(module.time, "time", return_value=1016):
                     module.drain(db,"dummy","127.0.0.1")
                 sent.assert_called_once()
                 self.assertEqual(db.execute("SELECT ack_id,ack_at FROM queue").fetchone(), ("server-1",1016))
@@ -64,13 +64,51 @@ class TelemetryTests(unittest.TestCase):
             finally:
                 db.close()
 
+    def test_verified_true_missile_ack_clears_retry_backlog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = module.state_db(Path(directory) / "queue.db")
+            try:
+                db.execute(
+                    "INSERT INTO queue(event_id,payload_json,attempt,next_retry) VALUES (?,?,?,?)",
+                    ("missile-event", "{}", 7, 0))
+                db.commit()
+                ack = {"accepted": True, "eventId": "missile-event",
+                       "bridgeAuthenticated": True, "verified": True,
+                       "id": "server-missile-1"}
+                with patch.object(module, "post", return_value=ack), patch.object(
+                    module.time, "time", return_value=2000):
+                    module.drain(db, "dummy", "127.0.0.1")
+                self.assertEqual(
+                    db.execute("SELECT ack_id,ack_at FROM queue").fetchone(),
+                    ("server-missile-1", 2000))
+                self.assertEqual(module.queue_telemetry(db)["queuedLocal"], 0)
+                self.assertEqual(module.queue_telemetry(db)["retryPending"], 0)
+            finally:
+                db.close()
+
+    def test_ack_requires_matching_identity_and_authenticated_server_response(self):
+        valid = {"accepted": True, "eventId": "abc",
+                 "bridgeAuthenticated": True, "verified": True, "id": "stored-1"}
+        self.assertTrue(module.valid_event_ack(valid, "abc"))
+        self.assertTrue(module.valid_event_ack({**valid, "verified": False}, "abc"))
+        for broken in (
+            {"eventId": "different"},
+            {"bridgeAuthenticated": False},
+            {"bridgeAuthenticated": None},
+            {"verified": "true"},
+            {"verified": None},
+            {"accepted": False},
+            {"id": ""},
+        ):
+            self.assertFalse(module.valid_event_ack({**valid, **broken}, "abc"))
+
     def test_invalid_ack_keeps_pending_row(self):
         with tempfile.TemporaryDirectory() as directory:
             db = module.state_db(Path(directory) / "queue.db")
             try:
                 db.execute("INSERT INTO queue(event_id,payload_json) VALUES (?,?)",("test-event","{}"))
                 db.commit()
-                with patch.object(module, "post", return_value={"accepted":True,"eventId":"wrong","verified":False,"id":"server-1"}), patch.object(module.time, "time", return_value=1000):
+                with patch.object(module, "post", return_value={"accepted":True,"eventId":"wrong","verified":False,"bridgeAuthenticated":True,"id":"server-1"}), patch.object(module.time, "time", return_value=1000):
                     module.drain(db,"dummy","127.0.0.1")
                 self.assertEqual(db.execute("SELECT attempt,ack_at FROM queue").fetchone(),(1,None))
             finally:
