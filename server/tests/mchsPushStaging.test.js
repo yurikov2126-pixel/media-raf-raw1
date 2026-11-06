@@ -31,10 +31,9 @@ test('duplicate Android event is never staged again',()=>{
  }),false);
 });
 
-test('missing eventType or unverified source fails closed',()=>{
+test('missing or mismatched eventType fails closed; verified is audio-only',()=>{
  for(const event of [
   {id:'a',verified:true},
-  {id:'a',verified:false,eventType:'MISSILE_DANGER'},
   {id:'a',verified:true,eventType:'UAV_DANGER'}
  ]){
   assert.equal(shouldStageMchsPushDelivery({
@@ -50,7 +49,7 @@ test('UAV PUSH is staged without being eligible for missile audio',()=>{
  },{allowedChannels:['tula'],nowMs});
  assert.equal(uav.eligible,true);
  assert.equal(shouldStageMchsPushDelivery({candidate:uav,alreadySaved:false,
-  storedEvent:{id:'event-uav',verified:false,eventType:'UAV_DANGER'}}),false);
+  storedEvent:{id:'event-uav',verified:false,eventType:'UAV_DANGER'}}),true);
  assert.equal(shouldStageMchsPushDelivery({candidate:uav,alreadySaved:false,
   storedEvent:{id:'event-uav',verified:true,eventType:'UAV_DANGER'}}),true);
 });
