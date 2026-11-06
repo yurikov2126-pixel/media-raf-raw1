@@ -14,7 +14,7 @@ class ProductionGuiContractTests(unittest.TestCase):
 
     def test_gui_version(self):
         from release_version import app_version
-        self.assertEqual(app_version(GUI), "0.5.21")
+        self.assertEqual(app_version(GUI), "0.5.22")
 
     def test_no_obsolete_mchs_test_widgets(self):
         for label in (
