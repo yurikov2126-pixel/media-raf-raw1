@@ -1,3 +1,4 @@
+import {summarizeEsp32Dropouts} from './mchsEsp32DropoutSummary.js';
 import {compareEsp32FirmwareHistory} from './mchsEsp32FirmwareHistory.js';
 /** Server-side observations of command/lease changes, not physical voltage. */
 export const MCHS_ESP32_TRANSITIONS_KEY='mchs_esp32_transition_evidence_v1';
@@ -71,6 +72,8 @@ export function assessEsp32TransitionEvidence(raw,{deviceId,nowMs=Date.now(),win
   'HEARTBEAT_CHANGED','HEARTBEAT_COUNTER_RESET','REPORTER_CHANGED',
   'FIRMWARE_RELAY_OFF','FIRMWARE_COUNTER_RESET','FIRMWARE_REBOOT',
   'FIRMWARE_GPIO_OFF','FIRMWARE_HISTORY_OVERFLOW'].includes(e.kind));
- return {readOnly:true,windowMs,events:entries.slice(-70),suspectCount:suspect.length,
+ const visible=entries.slice(-70);
+ return {readOnly:true,windowMs,events:visible,suspectCount:suspect.length,
+  dropoutSummary:summarizeEsp32Dropouts(visible),
   stabilityConfirmed:false,actualMainsPowerVerified:false};
 }
