@@ -328,10 +328,10 @@ class RadioAgentApp(tk.Tk):
                       esp32_host=self.esp32_ip.get().strip(),
                       esp32_secret=self.esp32_secret.get().strip())
         STOP.clear()
-        self.active_isolated_mode = isolated
-        self.mchs_relay_trial_armed=bool(isolated and relay_requested)
-        self.mchs_relay_trial_deadline=(time.monotonic()+600 if self.mchs_relay_trial_armed else 0.0)
-        self.mchs_manual_pulse_until=0.0
+        self.active_isolated_mode = False
+        self.mchs_relay_trial_armed = False
+        self.mchs_relay_trial_deadline = 0.0
+        self.mchs_manual_pulse_until = 0.0
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.status.set("Подключение к центральному эфиру…")
