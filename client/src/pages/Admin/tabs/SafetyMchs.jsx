@@ -1,143 +1,111 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Link } from 'react-router-dom';
-import MchsEventJournal from '../../../components/MchsEventJournal.jsx';
-import MchsAgentExecutionObservations from './MchsAgentExecutionObservations.jsx';
-import MchsEventTypeRules from './MchsEventTypeRules.jsx';
-import MchsDispatchPreview from './MchsDispatchPreview.jsx';
-import MchsQueueMonitor from './MchsQueueMonitor.jsx';
-import MchsOperationalOverview from './MchsOperationalOverview.jsx';
+import {useEffect,useState} from 'react';
+import {useSearchParams,Link} from 'react-router-dom';
+import {api} from '../../../api/client.js';
+import {useTheme} from '../../../store/theme.jsx';
 import MchsTransportStatus from './MchsTransportStatus.jsx';
-import MchsConnectionRecoveryTrial from './MchsConnectionRecoveryTrial.jsx';
-import MchsEmergencySimulation from './MchsEmergencySimulation.jsx';
-import MchsLocalNotificationAudioTrial from './MchsLocalNotificationAudioTrial.jsx';
+import MchsOperationalOverview from './MchsOperationalOverview.jsx';
+import MchsEventTypeRules from './MchsEventTypeRules.jsx';
+import MchsEventJournal from '../../../components/MchsEventJournal.jsx';
 import MchsDeliveryReliability from './MchsDeliveryReliability.jsx';
-import { api } from '../../../api/client.js';
-import { useTheme } from '../../../store/theme.jsx';
+import MchsQueueMonitor from './MchsQueueMonitor.jsx';
 import './mchsWorkspace.css';
 
-export default function SafetyMchs({ token }) {
-  const { resolved } = useTheme();
-  const [data, setData] = useState(null);
-  const [draft, setDraft] = useState(null);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [rulesView, setRulesView] = useState('templates');
-  const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => { if (searchParams.get('mchsView') === 'rules' && searchParams.has('mchsEvent')) setRulesView('preview'); }, [searchParams]);
+const PANES=[
+ ['overview','Обзор и эфир'],
+ ['rules','Оповещения'],
+ ['events','Журнал событий'],
+ ['delivery','Доставка и неисправности']
+];
+const ALIASES={
+ simulation:'overview',settings:'rules',reliability:'delivery',queue:'delivery',
+ incidents:'delivery',analytics:'overview'
+};
 
-  const panes = [
-    ['overview', 'Обзор'],
-    ['events', 'Уведомления'],
-    ['delivery', 'Доставка и неисправности'],
-    ['simulation', 'Управление эфиром'],
-    ['rules', 'Правила ALARM'],
-    ['settings', 'Настройки'],
-  ];
-  const legacyPaneMap={reliability:'delivery',queue:'delivery',incidents:'delivery',analytics:'overview'};
-  const selectedPane = searchParams.get('mchsView');
-  const requestedPane=legacyPaneMap[selectedPane]||selectedPane;
-  const pane = searchParams.has('incident') ? 'delivery' : panes.some(([id]) => id === requestedPane) ? requestedPane : 'overview';
-  const switchPane = (next,incidentId) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('tab', 'safety-mchs');
-    params.set('mchsView', next);
-    if(incidentId)params.set('incident',incidentId);
-    else params.delete('incident');
-    if (next !== 'events' && next !== 'rules') params.delete('mchsEvent');
-    setSearchParams(params, { replace: true });
-  };
-  const load = () => api('/safety/dashboard', { token }).then((result) => {
-    setData(result); setDraft(result.config); setError('');
-  }).catch((e) => setError(e.message));
-  useEffect(() => { load(); }, [token]);
-  const save = async () => {
-    setSaving(true); setError(''); setNotice('');
-    try {
-      const result = await api('/safety/config', { method: 'PUT', token, body: draft });
-      setDraft(result.config); setNotice('Тестовые настройки сохранены. Оповещение не активировано.');
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
-  };
-  return <div data-mchs-theme={resolved} className="mchs-admin-workspace space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-slate-500 dark:text-white/60">МЧС России · Политех-FM · управление и диагностика</p>
-      <button type="button" onClick={load} className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-white/10">Обновить состояние</button>
+/** Production-only MCHS workspace. Historical lab components remain in the
+ * repository for compatibility but are not loaded into the real operations UI.
+ */
+export default function SafetyMchs({token}){
+ const {resolved}=useTheme();
+ const [params,setParams]=useSearchParams();
+ const [journal,setJournal]=useState(null);
+ const [journalError,setJournalError]=useState('');
+ const [lastUpdated,setLastUpdated]=useState(null);
+ const requested=params.get('mchsView');
+ const pane=params.has('incident')?'delivery':
+  PANES.some(([id])=>id===(ALIASES[requested]||requested))?
+   (ALIASES[requested]||requested):'overview';
+ const navigate=(next,incidentId)=>{
+  const p=new URLSearchParams(params);
+  p.set('tab','safety-mchs');p.set('mchsView',next);
+  if(incidentId)p.set('incident',incidentId);
+  else p.delete('incident');
+  if(next!=='events'&&next!=='rules')p.delete('mchsEvent');
+  setParams(p,{replace:true});
+ };
+ useEffect(()=>{
+  if(pane!=='events')return;
+  let alive=true;
+  const load=()=>api('/safety/dashboard',{token}).then(data=>{
+   if(!alive)return;
+   setJournal(data);setJournalError('');setLastUpdated(new Date());
+  }).catch(e=>{if(alive)setJournalError(e.message||'Не удалось получить журнал');});
+  void load();
+  const timer=setInterval(()=>{if(!document.hidden)void load();},30000);
+  return()=>{alive=false;clearInterval(timer);};
+ },[token,pane]);
+ return <div data-mchs-theme={resolved} className="mchs-admin-workspace space-y-4">
+  <header className="rounded-2xl border border-slate-200 dark:border-white/15 bg-white/80 dark:bg-white/5 p-4 sm:p-5 space-y-2">
+   <div className="flex flex-wrap items-center justify-between gap-3">
+    <div>
+     <h2 className="text-xl font-semibold">Экстренное оповещение</h2>
+     <p className="text-sm text-slate-600 dark:text-slate-300">Политех-FM · Android → Radio Worker → Windows Agent → усилитель</p>
     </div>
-    <div role="status" className="mchs-safety-banner rounded-2xl border border-amber-400/40 bg-amber-100/60 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100 p-4">
-      <strong>Тестовый режим. Реальное оповещение заблокировано.</strong>
-      <p className="text-sm mt-1">Уведомления из Android сохраняются в журнале для наблюдения. Heartbeat не гарантирует получение всех push; отсутствующие записи не доказывают отсутствие предупреждений.</p>
-    </div>
-    {error && <p role="alert" className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-300 p-3">{error}</p>}
-    {notice && <p role="status" className="rounded-xl bg-emerald-500/10 p-3">{notice}</p>}
-    <nav aria-label="Разделы управления МЧС" className="mchs-section-tabs flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
-      {panes.map(([id,label]) => <button key={id} type="button" onClick={() => switchPane(id)}
-        aria-current={pane === id ? 'page' : undefined}
-        className={`shrink-0 snap-start rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${pane === id ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200 dark:border-white/20 bg-white/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
-    </nav>
-    <div className="flex items-center justify-between gap-2">
-      <h2 className="text-xl font-semibold">{panes.find(([id])=>id===pane)?.[1]}</h2>
-      <span className="text-xs text-slate-500 dark:text-white/50">Учебный ALARM доступен · автоматический эфир выключен</span>
-    </div>
-    {pane === "settings" && <section className="mchs-panel rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-4">
-      <h3 className="text-lg font-semibold">Параметры будущей интеграции</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-1">
-          <h4 className="font-semibold">Автоматическая диагностика</h4>
-          <p className="text-sm">Сообщения сохраняются и анализируются без обязательного подтверждения ответственного. Приоритет — контроль связи, очереди и технических сбоев.</p>
-          <p className="text-xs text-slate-600 dark:text-slate-300">Не является автоматическим разрешением на эфир.</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-1">
-          <h4 className="font-semibold">Ручное управление</h4>
-          <p className="text-sm">Ответственный сохраняет доступ к отдельному пульту безопасности для разрешённых ручных действий.</p>
-          <p className="text-xs text-slate-600 dark:text-slate-300">Автоматическое экстренное вещание пока заблокировано сервером.</p>
-        </div>
-      </div>
-      {!draft ? <p>Загрузка…</p> : <>
-        <label className="block text-sm">Регион
-          <input className="mt-1 w-full rounded-xl border border-slate-300 dark:border-white/20 bg-transparent p-3" value={draft.region} maxLength={120} onChange={e => setDraft({ ...draft, region: e.target.value })} />
-        </label>
-        <p className="text-sm text-slate-500 dark:text-white/60">Планируемые направления (пока не активируются):</p>
-        <div className="flex flex-wrap gap-5 text-sm">
-          {[['radio', 'Онлайн-радио'], ['speakers', 'Громкоговорители колледжа']].map(([key, label]) =>
-            <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={draft.destinations[key]} onChange={e => setDraft({ ...draft, destinations: { ...draft.destinations, [key]: e.target.checked } })}/>{label}</label>)}
-        </div>
-        <label className="block text-sm">Примечание
-          <textarea rows={3} maxLength={500} className="mt-1 w-full rounded-xl border border-slate-300 dark:border-white/20 bg-transparent p-3" value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} />
-        </label>
-        <button type="button" disabled={saving} onClick={save} className="rounded-xl bg-violet-600 px-5 py-2.5 text-white font-semibold disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить настройки'}</button>
-      </>}
-    </section>}
-    {pane === 'overview' && <div className="space-y-4"><MchsTransportStatus token={token}/><MchsConnectionRecoveryTrial token={token}/><MchsOperationalOverview token={token} onOpen={switchPane}/></div>}
-    
-    {pane === 'simulation' && <div className="space-y-4"><MchsLocalNotificationAudioTrial token={token}/><MchsEmergencySimulation token={token} /></div>}
-    
-    {pane === 'delivery' && <div className="space-y-4"><MchsDeliveryReliability token={token} onOpen={switchPane}/><MchsQueueMonitor token={token} view={searchParams.has('incident')?'incidents':'delivery'}/><MchsQueueMonitor token={token} view="queue"/></div>}
-
-    {pane === "events" && <div className="space-y-4">
-      <MchsAgentExecutionObservations token={token} />
-      <MchsEventJournal token={token} events={data?.events || []} total={data?.eventCount || 0} />
-    </div>}
-    {pane === "rules" && data && <div className="space-y-4">
-      <nav aria-label="Разделы правил МЧС" className="mchs-subtabs flex flex-wrap gap-2">
-        {[
-          ['templates','Шаблоны сообщений'],
-          ['preview','Диагностика решений']
-        ].map(([id,label])=><button key={id} type="button" aria-pressed={rulesView===id} onClick={()=>setRulesView(id)}
-          className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${rulesView===id?'bg-violet-600 border-violet-600 text-white':'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
-      </nav>
-      <p className="text-sm text-slate-500 dark:text-white/60">Это инструменты диагностики. Шаблоны и автоматический диагностический анализ не подтверждают официальную тревогу и не разрешают эфир.</p>
-      {rulesView==='templates' && <MchsEventTypeRules token={token} />}
-      {rulesView==='preview' && <MchsDispatchPreview token={token} />}
-    </div>}
-    {pane === "settings" && <details className="rounded-2xl border border-sky-400/40 p-4 sm:p-5 space-y-3">
-        <summary className="cursor-pointer font-semibold">Диагностические события — только TEST ONLY</summary>
-        <p className="text-sm opacity-70">Изолированный журнал. Приём: {data?.diagnosticIngestEnabled ? 'включён' : 'выключен'}. Записей: {data?.diagnosticCount ?? 0}. Эти записи не являются предупреждениями МЧС и не запускают радио.</p>
-        {data?.diagnosticEvents?.map(item => <div key={item.id} className="rounded-xl border border-slate-200 dark:border-white/10 p-3 text-sm">
-          <strong>ТЕСТ: диагностика приёмника</strong>
-          <p className="opacity-70 break-all">{item.eventId} · {new Date(item.receivedAt).toLocaleString('ru-RU')}</p>
-        </div>)}
-      </details>}
-    <Link to="/app/safety" className="text-violet-600 dark:text-violet-300 underline">Открыть пульт ответственного за безопасность</Link>
-  </div>;
+    <Link to="/app/safety" className="rounded-xl border border-slate-300 dark:border-white/20 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-white/10">Пульт безопасности</Link>
+   </div>
+   <p className="text-xs text-slate-500 dark:text-slate-400">Настройки готовности и фактическое исполнение — разные показатели. При неисправности радио сохраняйте штатные способы оповещения.</p>
+  </header>
+  <nav aria-label="Разделы экстренного оповещения" className="mchs-section-tabs flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
+   {PANES.map(([id,label])=><button key={id} type="button"
+    aria-current={pane===id?'page':undefined}
+    onClick={()=>navigate(id)}
+    className={`shrink-0 snap-start rounded-xl border px-3.5 py-2.5 text-sm font-medium transition-colors ${pane===id?
+     'bg-violet-600 border-violet-600 text-white':
+     'border-slate-200 dark:border-white/20 bg-white/70 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10'}`}>{label}</button>)}
+  </nav>
+  {pane==='overview'&&<div className="space-y-4">
+   <MchsTransportStatus token={token}/>
+   <MchsOperationalOverview token={token} onOpen={navigate}/>
+  </div>}
+  {pane==='rules'&&<MchsEventTypeRules token={token}/>}
+  {pane==='events'&&<section className="rounded-2xl border border-slate-200 dark:border-white/15 bg-white/70 dark:bg-white/5 p-4 sm:p-5 space-y-3">
+   <div className="flex flex-wrap justify-between items-center gap-2">
+    <div><h3 className="text-lg font-semibold">Журнал уведомлений</h3>
+     <p className="text-xs text-slate-600 dark:text-slate-300">Полученные сообщения Android и история обработки. Показ в журнале не означает, что звук уже прозвучал.</p></div>
+    {lastUpdated&&<span className="text-xs text-slate-500">Обновлено {lastUpdated.toLocaleTimeString('ru-RU')}</span>}
+   </div>
+   {journalError&&<p role="alert" className="text-sm text-red-600 dark:text-red-300">{journalError}</p>}
+   <MchsEventJournal token={token} events={journal?.events||[]} total={journal?.eventCount||0}/>
+  </section>}
+  {pane==='delivery'&&<div className="space-y-4">
+   <nav aria-label="Диагностика доставки" className="flex gap-2 overflow-x-auto">
+    {[
+     ['delivery','Состояние доставки'],
+     ['incidents','Неисправности'],
+     ['queue','Очередь анализа']
+    ].map(([id,label])=><button key={id} type="button" onClick={()=>navigate(id)}
+     aria-pressed={(params.has('incident')?'incidents':requested||'delivery')===id}
+     className={`shrink-0 rounded-xl border px-3 py-2 text-sm ${(params.has('incident')?'incidents':requested||'delivery')===id?
+      'bg-violet-600 border-violet-600 text-white':
+      'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-white/10'}`}>
+      {label}
+     </button>)}
+   </nav>
+   {!(params.has('incident')||requested==='incidents'||requested==='queue')&&
+    <MchsDeliveryReliability token={token} onOpen={navigate}/>}
+   {(params.has('incident')||requested==='incidents')&&
+    <MchsQueueMonitor token={token} view="incidents"/>}
+   {requested==='queue'&&!params.has('incident')&&
+    <MchsQueueMonitor token={token} view="queue"/>}
+  </div>}
+ </div>;
 }

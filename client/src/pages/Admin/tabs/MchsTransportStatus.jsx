@@ -46,7 +46,6 @@ export default function MchsTransportStatus({token}){
  const [selectedAgentId,setSelectedAgentId]=useState('');
  const [savingBinding,setSavingBinding]=useState(false);
  const [bindingMessage,setBindingMessage]=useState('');
- const [preflight,setPreflight]=useState(null);
  const [production,setProduction]=useState(null);
  const [intents,setIntents]=useState(null);
  const [receipts,setReceipts]=useState(null);
@@ -54,21 +53,20 @@ export default function MchsTransportStatus({token}){
  const [updated,setUpdated]=useState(null);
  const [loading,setLoading]=useState(false);
  const load=useCallback(async()=>{
-  const [s,p,i,r,b,a]=await Promise.all([
+  const [s,i,r,b,a]=await Promise.all([
    api('/safety/missile-main-station-readiness',{token}),
-   api('/safety/missile-live-trial-preflight',{token}),
    api('/safety/missile-android-execution-intents',{token}),
    api('/safety/missile-station-execution-receipts',{token}),
    api('/safety/missile-main-station-agent-binding',{token}),
    api('/safety/missile-production-auto-readiness',{token})
   ]);
-  return {s,p,i,r,b,a};
+  return {s,i,r,b,a};
  },[token]);
  const refresh=useCallback(async()=>{
   setLoading(true);
   try{
-   const {s,p,i,r,b,a}=await load();
-   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
+   const {s,i,r,b,a}=await load();
+   setStation(s);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
    setSelectedAgentId(b.binding?.deviceId||'');
    setError('');setUpdated(new Date());
   }catch(e){setError(e.message||'Ошибка получения состояния');}
@@ -78,8 +76,8 @@ export default function MchsTransportStatus({token}){
   let alive=true;
   const tick=async()=>{
    try{
-    const {s,p,i,r,b,a}=await load();
-    if(alive){setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
+    const {s,i,r,b,a}=await load();
+    if(alive){setStation(s);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
      setSelectedAgentId(current=>current||b.binding?.deviceId||'');
      setError('');setUpdated(new Date());}
    }catch(e){if(alive)setError(e.message||'Сервер диагностики недоступен');}
@@ -95,8 +93,8 @@ export default function MchsTransportStatus({token}){
    await api('/safety/missile-main-station-agent-binding',{
     token,method:'PUT',body:{deviceId:selectedAgentId}
    });
-   const {s,p,i,r,b,a}=await load();
-   setStation(s);setPreflight(p);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
+   const {s,i,r,b,a}=await load();
+   setStation(s);setIntents(i);setReceipts(r);setBindingSettings(b);setProduction(a);
    setSelectedAgentId(b.binding?.deviceId||'');
    setBindingMessage('Рабочий радиокомпьютер сохранён для диагностики.');
    setUpdated(new Date());
@@ -136,7 +134,9 @@ export default function MchsTransportStatus({token}){
    </div>
    <p className="text-sm font-semibold">{!production?'Получаем результаты проверок…':production.configurationReady?'Настройки и соединения подтверждены':'Требуется проверка конфигурации'}</p>
    {production&&production.holds?.length>0&&<p className="text-xs text-amber-700 dark:text-amber-300">Непройденных пунктов: {production.holds.length}. Откройте соответствующие настройки или проверьте службы.</p>}
-   <div className="grid gap-2 sm:grid-cols-2">
+   <details className="rounded-xl bg-slate-50 dark:bg-white/5 p-3" open={!production?.configurationReady}>
+    <summary className="cursor-pointer text-xs font-semibold">Проверки: {(production?.checks||[]).filter(x=>x.ok).length} из {production?.checks?.length??13}</summary>
+    <div className="grid gap-2 sm:grid-cols-2 mt-3">
     {(production?.checks||[]).map(x=><div key={x.id} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 dark:bg-white/5 p-2 text-xs">
       <span>{({
        ANDROID_INGEST:'Приём Android с HMAC',
@@ -156,10 +156,13 @@ export default function MchsTransportStatus({token}){
       <strong className={x.ok?'text-emerald-700 dark:text-emerald-300':'text-amber-700 dark:text-amber-300'}>{x.ok?'Да':'Нет'}</strong>
      </div>)}
    </div>
+   </details>
    {(production?.audio||[]).map(x=><p key={x.type} className="text-xs">{eventLabels[x.type]||x.type}: {x.assetName||'Файл не выбран'} · повторений: {x.repeats??'—'}</p>)}
    <p className="text-xs text-slate-600 dark:text-slate-300">Разрешённых Android-каналов: {production?.channelAllowlistCount??'—'}. Никаких команд воспроизведения и GPIO этот экран не посылает.</p>
   </section>
-  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Привязка рабочего радиокомпьютера">
+  <details className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" open={station?.agentBinding&&!['PRODUCTION_EXPLICIT','ADMIN_BOUND'].includes(station.agentBinding.source)}>
+   <summary className="cursor-pointer text-sm font-semibold">Привязка рабочего радиокомпьютера</summary>
+   <section className="mt-3 space-y-3" aria-label="Привязка рабочего радиокомпьютера">
    <div><strong className="block text-sm">Рабочий Windows Radio Agent</strong>
     <p className="text-xs text-slate-600 dark:text-slate-300">Выбор компьютера для отображения диагностики ESP32 и радио. Не меняет режим вещания, состояние реле или права на оповещение.</p></div>
    <div className="flex flex-wrap items-end gap-2">
@@ -182,7 +185,8 @@ export default function MchsTransportStatus({token}){
    </div>
    {bindingSettings?.envLocked&&<p className="text-xs text-slate-600 dark:text-slate-300">Привязка закреплена переменной окружения сервера; изменение через админку недоступно.</p>}
    {bindingMessage&&<p role="status" className="text-xs">{bindingMessage}</p>}
-  </section>
+   </section>
+  </details>
   {station?.agentBinding&& !['PRODUCTION_EXPLICIT','ADMIN_BOUND'].includes(station.agentBinding.source)&&<div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 text-sm space-y-1">
    <strong className="block">Радиокомпьютер не привязан к production-диагностике</strong>
    <p className="text-xs text-slate-600 dark:text-slate-300">{station?.agentBinding?.source==='LEGACY_LAB_FALLBACK'?
@@ -199,8 +203,8 @@ export default function MchsTransportStatus({token}){
     <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{card.detail}</p>
    </div>)}
   </div>
-  <div className="rounded-xl border border-amber-300/60 dark:border-amber-400/30 p-3 space-y-2">
-   <strong className="block text-sm">Готовность физического оповещения: не подтверждена</strong>
+  <div className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
+   <strong className="block text-sm">Фактический звук в громкоговорителях ещё не подтверждён</strong>
    <p className="text-xs text-slate-600 dark:text-slate-300">PCM на сервере, heartbeat Agent и команда ON не доказывают наличие звука в коридорах. Отчёт не разрешает включение реле.</p>
    <div className="grid sm:grid-cols-3 gap-2 text-xs">
     <span>Android → Worker: {boolText(station?.flags?.androidDispatch&&station?.flags?.coordinator&&station?.flags?.workerCommands)}</span>
@@ -212,7 +216,9 @@ export default function MchsTransportStatus({token}){
     <ul className="mt-2 list-disc pl-5 space-y-1">{station.holds.map((x,i)=><li key={x+i}>{x}</li>)}</ul>
    </details>}
   </div>
-  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Причины выключения GPIO13">
+  <details className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3">
+   <summary className="cursor-pointer text-sm font-semibold">Дополнительная диагностика ESP32 и GPIO13</summary>
+   <section className="mt-3 space-y-3" aria-label="Причины выключения GPIO13">
    <div>
     <strong className="text-sm">История управления усилителем</strong>
     <p className="text-xs text-slate-600 dark:text-slate-300">Счётчики ESP32 выявляют даже короткое OFF→ON между опросами. Все времена событий — время наблюдения сервером, не измерение на силовой линии.</p>
@@ -260,7 +266,8 @@ export default function MchsTransportStatus({token}){
      {event.kind?.startsWith('AGENT_POWER_')&&<span className="block mt-1 text-slate-600 dark:text-slate-300">Разрешение: {event.permit===true?'Да':event.permit===false?'Нет':'Неизвестно'}{event.httpStatus?' · HTTP '+event.httpStatus:''} · Windows Agent</span>}
     </div>)}
    </div>:<p className="text-xs text-slate-600 dark:text-slate-300">За последние 10 минут изменений не зарегистрировано. Это не является доказательством отсутствия физических отключений.</p>}
-  </section>
+   </section>
+  </details>
   <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-3" aria-label="Очередь автоматических событий">
    <strong className="text-sm">Очередь ALARM и отбоя</strong>
    <p className="text-xs text-slate-600 dark:text-slate-300">Ожидают: {counts.waiting} · В обработке: {counts.processing} · Неопределённый результат: {counts.uncertain}</p>
@@ -278,16 +285,6 @@ export default function MchsTransportStatus({token}){
      <strong>{x.state}</strong>
     </div>)}
     {!records.length&&<p>Подтверждённых событий пока нет.</p>}
-   </div>
-  </section>
-  <section className="rounded-xl border border-slate-200 dark:border-white/15 p-3 space-y-2">
-   <strong className="text-sm">Настройки двух уведомлений Тульской области</strong>
-   <div className="grid sm:grid-cols-2 gap-2">
-    {(preflight?.types||[]).map(x=><div key={x.type} className="rounded-lg bg-slate-50 dark:bg-white/5 p-3 text-xs">
-     <strong>{eventLabels[x.type]||x.type}</strong>
-     <p className="mt-1 break-all">ALARM: {x.audioAssetId||'Не выбран'} · Повторы: {x.repeats??'—'}</p>
-     <p>{x.configured?'Файл назначен':'Требуется настройка'}</p>
-    </div>)}
    </div>
   </section>
   <p className="text-xs text-slate-600 dark:text-slate-300">Последнее обновление: {updated?updated.toLocaleString('ru-RU'):'Нет данных'} · Автоматическая проверка каждые 15 секунд.</p>
