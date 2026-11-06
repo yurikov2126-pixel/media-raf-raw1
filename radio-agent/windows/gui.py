@@ -15,7 +15,7 @@ import webbrowser
 import tkinter as tk
 from pathlib import Path
 from urllib.error import HTTPError
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from mchs_relay_transition_evidence import describe_power_transition
 
 from central_playout import STOP, run, PLAYBACK_STATE
@@ -118,7 +118,6 @@ class RadioAgentApp(tk.Tk):
         self.mchs_relay_trial_armed = False
         self.mchs_relay_trial_deadline = 0.0
         self.mchs_manual_pulse_until = 0.0
-        self.mchs_relay_trial_requested = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Остановлен · оборудование не управляется")
         self.server = tk.StringVar(value="https://mediarafraw.ru")
         self.vlc = tk.StringVar(value=find_vlc())
@@ -354,8 +353,9 @@ class RadioAgentApp(tk.Tk):
     def save_preferences(self,silent=False):
         try:
             save_settings(default_data_dir(),{"server":self.server.get().strip(),
-                "vlc":self.vlc.get().strip(),"esp32_ip":self.esp32_ip.get().strip(),"power_arm":self.power_arm.get(),
-})
+                "vlc":self.vlc.get().strip(),
+                "esp32_ip":self.esp32_ip.get().strip(),
+                "power_arm":self.power_arm.get()})
             if self.remember_credentials.get():
                 save_credentials(default_data_dir(),self.token.get().strip(),self.esp32_secret.get().strip())
             else:
@@ -424,10 +424,6 @@ class RadioAgentApp(tk.Tk):
         self.after(6500,self.report_esp32_status)
 
     def set_power_arm(self):
-        if self.active_isolated_mode and self.worker and self.worker.is_alive() and self.power_arm.get():
-            self.power_arm.set(False)
-            messagebox.showwarning("Безопасность", "Повторное включение GPIO13 во время изолированного пилота запрещено. Остановите Agent для нового допуска.")
-            return
         if not self.power_arm.get():
             self.mchs_relay_trial_armed=False
             self.mchs_manual_pulse_until=0.0
