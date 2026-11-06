@@ -74,7 +74,7 @@ test('admission window expiry prevents arbitrarily old queued commands',()=>{
  const out=selectNextMchsStationIntent(row,{
   nowMs:Date.parse(occurredAt)+4*3600*1000+1000,workerStatus:status()});
  assert.equal(out.items[0].status,'EXPIRED');
- assert.equal(out.items[0].lastError,'QUEUE_ADMISSION_NOT_FRESH');
+ assert.equal(out.items[0].lastError,'EVENT_TOO_OLD_FOR_LIVE_BROADCAST');
 });
 test('unavailable or unhealthy Worker cannot admit even one queued event',()=>{
  const rows={items:[intent('danger')]};
