@@ -46,6 +46,9 @@ jobs:
       - name: MCHS ESP32 firmware relay counters and boot epoch evidence
         run: node --test tests/mchsEsp32TransitionEvidence.test.js tests/mchsMainStationReadiness.test.js
 
+      - name: Agent power decision correlation and allowlist security
+        run: node --test tests/mchsAgentPowerCorrelation.test.js tests/mchsEsp32TransitionEvidence.test.js
+
       - name: MCHS ESP32 relay intent and watchdog transition evidence
         run: node --test tests/mchsEsp32TransitionEvidence.test.js tests/mchsMainStationReadiness.test.js
 
@@ -138,6 +141,10 @@ jobs:
       - name: Headphones natural completion and fault recovery
         working-directory: radio-agent/windows
         run: python -m unittest -v test_mchs_headphones_trial test_mchs_local_handover test_mchs_vlc_handover_pilot test_mchs_central_return_monitor test_mchs_lab_end_evidence test_mchs_two_stage_headphones_pilot test_mchs_integrated_headphones_cycle test_mchs_event_admission test_mchs_event_audio_controller test_mchs_event_observation
+
+      - name: Windows Agent power log sanitization and no-secret forwarding
+        working-directory: radio-agent/windows
+        run: python -m unittest -v test_mchs_power_evidence
 
       - name: Isolated Android auto START Windows admission regression
         working-directory: radio-agent/windows
