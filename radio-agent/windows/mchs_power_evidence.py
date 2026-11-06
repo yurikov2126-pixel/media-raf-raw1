@@ -12,7 +12,7 @@ from pathlib import Path
 KINDS=frozenset(("INTENT_RESPONSE","INTENT_ERROR","POWER_COMMAND",
                  "POWER_ERROR","RELAY_TRANSITION"))
 SAFE_CODE=re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
-LINE=re.compile(r"^(\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d{3}) ([A-Z_]+) (\\{.*\\})$")
+LINE=re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3}) ([A-Z_]+) (\{.*\})$")
 MAX_EVENTS=16
 MAX_TAIL_BYTES=65536
 
@@ -27,7 +27,7 @@ def read_power_evidence(logfile,now=None):
             stream.seek(max(0,length-MAX_TAIL_BYTES))
             raw=stream.read(MAX_TAIL_BYTES)
         if length>MAX_TAIL_BYTES:
-            raw=raw.split(b"\\n",1)[-1]
+            raw=raw.split(b"\n",1)[-1]
     except (OSError,ValueError):
         return results
     for line in raw.decode("utf-8",errors="replace").splitlines()[-150:]:
