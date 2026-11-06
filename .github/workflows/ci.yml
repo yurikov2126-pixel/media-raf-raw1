@@ -52,6 +52,9 @@ jobs:
       - name: Production automatic missile ALARM configuration readiness
         run: node --test tests/mchsProductionAutoReadiness.test.js tests/mchsAndroidBridgeAdmission.test.js
 
+      - name: Main-station missile PA demand (server and Agent)
+        run: node --test tests/mchsAmplifierDemand.test.js tests/radioAmplifierWindow.test.js
+
       - name: Four-event Android MCHS Web Push and FCM outbox regressions
         run: node --test tests/mchsFourEventPushEligibility.test.js tests/mchsPushOutbox.test.js
 
@@ -165,6 +168,10 @@ jobs:
       - name: Headphones natural completion and fault recovery
         working-directory: radio-agent/windows
         run: python -m unittest -v test_mchs_headphones_trial test_mchs_local_handover test_mchs_vlc_handover_pilot test_mchs_central_return_monitor test_mchs_lab_end_evidence test_mchs_two_stage_headphones_pilot test_mchs_integrated_headphones_cycle test_mchs_event_admission test_mchs_event_audio_controller test_mchs_event_observation
+
+      - name: Real missile station amplifier authorization
+        working-directory: radio-agent/windows
+        run: python -m unittest -v test_mchs_station_power test_power_policy
 
       - name: Manual amplifier policy and explicit authenticated server intent
         working-directory: radio-agent/windows

@@ -26,6 +26,8 @@ import { auth, requireRole } from '../middleware/auth.js';
 
 import {MCHS_DISPATCH_PROTOCOL_KEY,normalizeMchsDispatchProtocol} from '../lib/mchsDispatchProtocol.js';
 import {validateMchsTrialStopEvidence} from '../lib/mchsTrialStopEvidence.js';
+import {requestMchsStationSession} from '../lib/mchsStationWorkerTransport.js';
+import {assessMchsAmplifierDemand} from '../lib/mchsAmplifierDemand.js';
 const router = Router();
 const assetsRoot = path.resolve(process.env.RADIO_ASSET_DIR || 'private/radio-audio');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -141,20 +143,27 @@ async function ampDecision(){
   const now=Date.now();
   // Query a superset of the configurable window; then apply one consistent
   // [start - pre, end + post) predicate to avoid ON→OFF→ON at slot start.
-  const [esp32,devices,autoDj,slots]=await Promise.all([
+  const [esp32,devices,autoDj,slots,station]=await Promise.all([
     readEsp32Status(),readEsp32Registry(),readAutoDjSettings(),
     prisma.radioScheduleSlot.findMany({where:{
       endAt:{gt:new Date(now-policy.postSeconds*1000)},
       startAt:{lte:new Date(now+policy.preSeconds*1000)},
       playlist:{status:'APPROVED'}},
-      orderBy:{startAt:'asc'},select:{id:true,startAt:true,endAt:true},take:20})
+      orderBy:{startAt:'asc'},select:{id:true,startAt:true,endAt:true},take:20}),
+    requestMchsStationSession({action:'STATUS'},{timeoutMs:900})
+      .catch(()=>({ok:false,reason:'WORKER_UNREACHABLE'}))
   ]);
   const nextSlot=amplifierScheduleWindow(slots,now,policy.preSeconds,policy.postSeconds);
   const device=devices[0]||null,telemetry=device?esp32[device.id]:null;
   const fresh=telemetry&&Date.now()-Date.parse(telemetry.observedAt)<12000&&Date.now()>=Date.parse(telemetry.observedAt);
   const connected=!!fresh&&telemetry.heartbeatFresh===true;
-  const requested=policy.emergencyOff?false:policy.mode==='MANUAL'?policy.manualOn:Boolean(nextSlot||autoDj.enabled);
-  return {policy,requested,reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':nextSlot?'Окно расписания (подготовка / эфир / задержка отключения)':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
+  const alert=assessMchsAmplifierDemand(station);
+  const alertPower=policy.mode==='AUTO'&&alert.active;
+  const requested=policy.emergencyOff?false:policy.mode==='MANUAL'?policy.manualOn:
+    Boolean(alertPower||nextSlot||autoDj.enabled);
+  return {policy,requested,mchsPcmActive:alert.active,mchsPowerEventId:alertPower?alert.eventId:null,
+    reason:policy.emergencyOff?'Аварийное отключение':policy.mode==='MANUAL'?'Ручной режим':alertPower?
+    'Основное оповещение МЧС':nextSlot?'Окно расписания (подготовка / эфир / задержка отключения)':autoDj.enabled?'Auto-DJ включён':'Нет активной трансляции',
     connection:connected?'ONLINE':'OFFLINE',agentMode:fresh?telemetry.agentMode:null,
     leaseValid:connected&&telemetry.leaseValid===true,physicalRelay:fresh?telemetry.amplifierPower||'UNKNOWN':'UNKNOWN',gpio:13,
     nextSlotStart:nextSlot?.startAt||null,hardwareReady:connected&&telemetry.relayOutputEnabled===true};
@@ -168,7 +177,8 @@ router.get('/agent/amplifier-intent',deviceAuth,safe(async(req,res)=>{
   const permit=!!req.radioDevice.playbackAllowed&&!!result.requested&&
     !result.policy.emergencyOff&&devices.length===1;
   res.json({permit,leaseMs:permit?8000:0,esp32Ip:devices.length===1?devices[0].ip:null,
-    reason:result.reason,policyMode:result.policy.mode,
+    reason:result.reason,policyMode:result.mchsPowerEventId?'MCHS':result.policy.mode,
+    mchsEventId:permit?result.mchsPowerEventId:null,
     emergencyOff:result.policy.emergencyOff===true,hardwareExpected:'POWER_CONTROL_V1',
     evaluatedAt:new Date().toISOString()});
 }));
