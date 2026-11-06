@@ -28,6 +28,7 @@ from esp32_telemetry import report_status
 from mchs_power_evidence import read_power_evidence
 from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
+from manual_amplifier_intent import authorized_manual_power
 import time
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
@@ -680,13 +681,10 @@ class RadioAgentApp(tk.Tk):
                         # depend on the Start/Stop playback button or the audio
                         # gap timer. A fresh server permit, matching ESP32 and
                         # local hardware arming are still mandatory.
-                        manual_authorized=(armed and 'intent' in locals() and
-                            intent.get("policyMode")=="MANUAL" and
-                            intent.get("reason")=="Ручной режим" and
-                            intent.get("emergencyOff") is False and
-                            intent.get("permit") is True and
-                            intent.get("hardwareExpected")=="POWER_CONTROL_V1" and
-                            intent.get("esp32Ip")==host)
+                        manual_authorized=authorized_manual_power(
+                            intent if 'intent' in locals() else None,
+                            esp32_ip=host,hardware_armed=armed,
+                            isolated=self.active_isolated_mode)
                         permit,local_reason=allowed_power(
                             permit,local_running,STOP.is_set(),
                             state["streamLastSeen"],now,
