@@ -86,8 +86,27 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
     status.relayGpio!==13||typeof status.heartbeatFresh!=='boolean'||
     !['CENTRAL','LOCAL_RESERVE','STOPPED','DISCONNECTED'].includes(status.agentMode))
     return res.status(400).json({error:'Ожидается безопасная телеметрия SAFE_PILOT'});
-  const last=await readEsp32Status();
-  last[device.id]={observedAt:new Date().toISOString(),agentMode:status.agentMode,
+  // A single database transaction guarantees that the last ESP32 snapshot,
+  // firmware transition ring and sanitized Agent decisions refer to one report.
+  // Before this change, an overlapping report could overwrite a newer snapshot
+  // after the journal transaction had already committed.
+  await prisma.$transaction(async tx=>{
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581454)`;
+    const [snapRow,historyRow]=await Promise.all([
+      tx.setting.findUnique({where:{key:ESP32_STATUS_KEY}}),
+      tx.setting.findUnique({where:{key:MCHS_ESP32_TRANSITIONS_KEY}})
+    ]);
+    let snapshots;try{snapshots=JSON.parse(snapRow?.value||'{}');}catch{}
+    if(!snapshots||typeof snapshots!=='object'||Array.isArray(snapshots))snapshots={};
+    let saved;try{saved=JSON.parse(historyRow?.value||'null');}catch{}
+    const observedAt=new Date().toISOString();
+    const outcome=recordEsp32Transition(saved,{deviceId:device.id,
+      reporterId:req.radioDevice.id,observedAt,status});
+    if(outcome.reason==='OLD_OR_DUPLICATE_OBSERVATION')
+      return; // No stale snapshot and no duplicate transition history.
+    const agent=mergeAgentPowerEvidence(outcome.state,{deviceId:device.id,
+      reporterId:req.radioDevice.id,observations:req.body?.agentPowerEvidence||[]});
+  snapshots[device.id]={observedAt,agentMode:status.agentMode,
     heartbeatFresh:status.heartbeatFresh,heartbeatCount:Number(status.heartbeatCount)||0,
     leaseValid:status.leaseValid===true,relayOutputEnabled:status.relayOutputEnabled===true,
     amplifierPower:status.amplifierPower||'UNKNOWN',
@@ -98,26 +117,17 @@ router.post('/agent/esp32-status',deviceAuth,safe(async(req,res)=>{
     lastRelayOffReason:typeof status.lastRelayOffReason==='string'?status.lastRelayOffReason.slice(0,64):null,
     lastRelayOnReason:typeof status.lastRelayOnReason==='string'?status.lastRelayOnReason.slice(0,64):null,
     reporterId:req.radioDevice.id};
-  await prisma.setting.upsert({where:{key:ESP32_STATUS_KEY},
-    create:{key:ESP32_STATUS_KEY,value:JSON.stringify(last)},
-    update:{value:JSON.stringify(last)}});
-  // Command-state observations only: never sends a power command to the ESP32.
-  try{
-   await prisma.$transaction(async tx=>{
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(741581454)`;
-    const row=await tx.setting.findUnique({where:{key:MCHS_ESP32_TRANSITIONS_KEY}});
-    let saved;try{saved=JSON.parse(row?.value||'null');}catch{}
-    const outcome=recordEsp32Transition(saved,{deviceId:device.id,
-     reporterId:req.radioDevice.id,observedAt:last[device.id].observedAt,status});
-    const agent=mergeAgentPowerEvidence(outcome.state,{deviceId:device.id,
-     reporterId:req.radioDevice.id,observations:req.body?.agentPowerEvidence||[]});
-    if(!outcome.reason||agent.added.length)await tx.setting.upsert({where:{key:MCHS_ESP32_TRANSITIONS_KEY},
-     create:{key:MCHS_ESP32_TRANSITIONS_KEY,value:JSON.stringify(agent.state)},
-     update:{value:JSON.stringify(agent.state)}});
-    if(outcome.added.length||agent.added.length)console.info('MCHS_ESP32_TRANSITION',JSON.stringify({
-     deviceId:device.id,kinds:[...outcome.added,...agent.added].map(x=>x.kind)}));
-   });
-  }catch(error){console.warn('MCHS_ESP32_TRANSITION_RECORD_FAILED',error?.message||'UNKNOWN');}
+
+    await tx.setting.upsert({where:{key:ESP32_STATUS_KEY},
+      create:{key:ESP32_STATUS_KEY,value:JSON.stringify(snapshots)},
+      update:{value:JSON.stringify(snapshots)}});
+    await tx.setting.upsert({where:{key:MCHS_ESP32_TRANSITIONS_KEY},
+      create:{key:MCHS_ESP32_TRANSITIONS_KEY,value:JSON.stringify(agent.state)},
+      update:{value:JSON.stringify(agent.state)}});
+    if(outcome.added.length||agent.added.length)
+      console.info('MCHS_ESP32_TRANSITION',JSON.stringify({
+        deviceId:device.id,kinds:[...outcome.added,...agent.added].map(x=>x.kind)}));
+  });
   res.json({ok:true});
 }));
 // Logical amplifier control plane; SAFE_PILOT does not actuate mains GPIO.
