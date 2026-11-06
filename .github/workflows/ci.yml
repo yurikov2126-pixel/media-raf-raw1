@@ -138,6 +138,17 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:unused@localhost:5432/unused
 
+  mchs-vm-observer:
+    name: MCHS Android VM observer ACK and retry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate VM observer ACK on missile and UAV events
+        run: python -m unittest discover -s tools/mchs-sender -p 'test_vm_observer.py' -v
+
   esp32-firmware:
     name: ESP32 — compile GPIO13 controller (no flashing)
     runs-on: ubuntu-latest
