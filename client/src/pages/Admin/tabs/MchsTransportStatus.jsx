@@ -133,7 +133,13 @@ export default function MchsTransportStatus({token}){
     <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Выключений GPIO13: <strong>{esp?.relayOffTransitions??'—'}</strong></div>
     <div className="rounded-lg bg-slate-50 dark:bg-white/5 p-3">Последняя причина OFF: <strong className="break-words">{reasonNames[esp?.lastRelayOffReason]||esp?.lastRelayOffReason||'Нет данных'}</strong></div>
    </div>
-   {!esp?.firmwareEvidencePresent&&<p className="text-xs text-amber-700 dark:text-amber-300">Новая телеметрия прошивки ESP32 пока не получена. Требуется обновление прошивки и подключённый Windows Agent.</p>}
+   <div className="grid gap-2 sm:grid-cols-2 text-xs">
+    <div className="rounded-lg border border-slate-200 dark:border-white/15 p-2">История GPIO13 из прошивки: <strong>{esp?.firmwareHistoryReported?'Получена':'Не подтверждена'}</strong></div>
+    <div className="rounded-lg border border-slate-200 dark:border-white/15 p-2">Диагностика команд Windows Agent: <strong>{esp?.agentPowerEvidenceReported?'Получена':'Не подтверждена'}</strong></div>
+   </div>
+   {!esp?.firmwareHistoryReported&&<p className="text-xs text-amber-700 dark:text-amber-300">Журнал переключений с новой прошивки пока не получен. Проверьте версию прошивки и подключение Windows Agent; сами счётчики старой прошивки не подтверждают доставку журнала.</p>}
+   {!esp?.agentPowerEvidenceReported&&<p className="text-xs text-amber-700 dark:text-amber-300">Нет подтверждения передачи решений питания из Windows Agent. Необходимо обновить исполняемый файл Agent и проверить его авторизованную связь с сервером.</p>}
+   <p className="text-xs text-slate-600 dark:text-slate-300">Наличие диагностического канала не доказывает, что реле физически включено. Отсутствие событий может означать отсутствие переключений, а не неисправность.</p>
    {events.length?<div className="max-h-72 overflow-auto space-y-2" aria-label="Журнал переходов ESP32">
     {[...events].reverse().map((event,i)=><div key={event.at+event.kind+i} className="rounded-lg bg-slate-50 dark:bg-white/5 px-3 py-2 text-xs">
      <strong>{kinds[event.kind]||event.kind}</strong>
