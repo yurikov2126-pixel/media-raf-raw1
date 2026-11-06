@@ -15,6 +15,21 @@ test('accept only minimal valid diagnostic event tied to authenticated reporter'
  assert.equal(r.added[0].reason,'OFF_SERVER_DENIED');
  assert.equal(r.rejected,false);
 });
+test('real MCHS power intent and relay transitions are tied to event ID',()=>{
+ const eventId='cmw5ip1fo0024jxavw0528uus';
+ const out=mergeAgentPowerEvidence(null,{...options,observations:[
+  e('a'.repeat(24),'INTENT_RESPONSE',{permit:true,reason:'INTENT_ALLOWED',eventId,phase:'MCHS_PCM'}),
+  e('b'.repeat(24),'POWER_COMMAND',{permit:true,reason:'INTENT_ALLOWED',eventId,phase:'MCHS_PCM'})
+ ]});
+ assert.deepEqual(out.added.map(x=>x.eventId),[eventId,eventId]);
+ assert.ok(out.added.every(x=>x.deviceId==='esp-a'&&x.reporterId==='radio-agent-1'));
+ const bad=mergeAgentPowerEvidence(null,{...options,observations:[
+  e('c'.repeat(24),'POWER_COMMAND',{eventId:'payload with spaces'}),
+  e('d'.repeat(24),'POWER_COMMAND',{eventId:'a'.repeat(129)})
+ ]});
+ assert.equal(bad.added.length,0);
+});
+
 test('repeat telemetry poll does not duplicate event',()=>{
  const first=mergeAgentPowerEvidence(null,{...options,observations:[e()]});
  const second=mergeAgentPowerEvidence(first.state,{...options,observations:[e()]});
