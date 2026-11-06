@@ -29,6 +29,45 @@ test('dedicated source replaces encoder input, repeats exact PCM and awaits actu
  assert.equal(exec.snapshot().session.programRestored,true);
 });
 
+test('silent program after completed ALARM becomes FAILED rather than blocking ALL-CLEAR forever',()=>{
+ const closed=[],terminals=[],exec=createMchsStationPcmExecutor({
+  onTerminal:result=>terminals.push(result)
+ });
+ assert.equal(exec.prepare({...event,pcm:pcm(frame(7),closed)}).ok,true);
+ exec.replace(frame(2));
+ exec.replace(frame(2));
+ assert.equal(exec.snapshot().phase,'RESUMING');
+ // 48kHz stereo PCM16: 5 seconds of ordinary-program silence.
+ for(let i=0;i<24;i++)exec.observeProgram(Buffer.alloc(38400));
+ assert.equal(exec.snapshot().phase,'RESUMING');
+ exec.observeProgram(Buffer.alloc(38400));
+ assert.equal(exec.snapshot().phase,'FAILED');
+ assert.equal(exec.snapshot().session.naturalCompletion,true);
+ assert.equal(exec.snapshot().session.programRestored,false);
+ assert.equal(exec.snapshot().session.failure,'SILENT_PROGRAM_RETURN_TIMEOUT');
+ assert.equal(terminals.length,1);
+ assert.equal(terminals[0].phase,'FAILED');
+ const clear={...event,eventId:'clear_after_silence',
+  eventType:'MISSILE_ALL_CLEAR',repeats:1};
+ assert.equal(exec.prepare({...clear,pcm:pcm(frame(8),[])}).ok,true);
+ assert.equal(exec.snapshot().phase,'PREEMPTING');
+});
+
+test('non-silent program return before deadline is still a genuine COMPLETE',()=>{
+ const terminals=[],exec=createMchsStationPcmExecutor({
+  onTerminal:result=>terminals.push(result)
+ });
+ exec.prepare({...event,pcm:pcm(frame(7),[])});
+ exec.replace(frame(2));
+ exec.replace(frame(2));
+ for(let i=0;i<24;i++)exec.observeProgram(Buffer.alloc(38400));
+ assert.equal(exec.snapshot().phase,'RESUMING');
+ exec.observeProgram(Buffer.alloc(38400,1));
+ assert.equal(exec.snapshot().phase,'COMPLETE');
+ assert.equal(exec.snapshot().session.programRestored,true);
+ assert.equal(terminals[0].phase,'COMPLETE');
+});
+
 test('single-frame all clear completes normally without skipped preempt acknowledgment',()=>{
  const exec=createMchsStationPcmExecutor();
  const clear={...event,eventId:'clear_001',eventType:'MISSILE_ALL_CLEAR',repeats:1};
