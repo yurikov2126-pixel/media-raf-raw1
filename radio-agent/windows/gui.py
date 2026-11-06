@@ -28,6 +28,7 @@ from esp32_telemetry import report_status
 from mchs_power_evidence import read_power_evidence
 from esp32_power import signed_power,fetch_intent
 from power_policy import allowed_power
+from manual_amplifier_intent import authorized_manual_power
 import time
 from local_settings import load_settings, save_settings
 from startup import startup_enabled, set_startup
@@ -675,8 +676,19 @@ class RadioAgentApp(tk.Tk):
                         if not permit:
                             decision=local_reason
                     else:
-                        permit,local_reason=allowed_power(permit,local_running,STOP.is_set(),
-                            state["streamLastSeen"],now)
+                        # MANUAL is an explicit administrator policy, not a
+                        # broadcast-audio authorization. Do not make manual ON
+                        # depend on the Start/Stop playback button or the audio
+                        # gap timer. A fresh server permit, matching ESP32 and
+                        # local hardware arming are still mandatory.
+                        manual_authorized=authorized_manual_power(
+                            intent if 'intent' in locals() else None,
+                            esp32_ip=host,hardware_armed=armed,
+                            isolated=self.active_isolated_mode)
+                        permit,local_reason=allowed_power(
+                            permit,local_running,STOP.is_set(),
+                            state["streamLastSeen"],now,
+                            manual_override=manual_authorized)
                     audio_recent=(state["streamLastSeen"]>0 and now-state["streamLastSeen"]<30)
                     if not permit and local_reason!="SERVER_OR_NETWORK_OFF":
                         decision=local_reason
@@ -696,6 +708,12 @@ class RadioAgentApp(tk.Tk):
                             permit=False
                         if local_reason=='SYNTHETIC_LOCAL_WAV_POWER_TRIAL' and not state.get("mchsIsolatedEventId"):
                             permit=False
+                    # Arming can be changed while the network request runs.
+                    # OFF can always be sent; never issue a fresh ON after
+                    # the operator has disabled hardware power.
+                    if not self.power_arm.get():
+                        permit=False
+                        decision="OPERATOR_HARDWARE_DISARMED"
                     current_event=preparing_event or state.get("mchsIsolatedEventId")
                     result=signed_power(host,secret,permit,8000 if permit else 0)
                     acknowledged=result.get("amplifierPower")
