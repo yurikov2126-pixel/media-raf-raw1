@@ -31,6 +31,28 @@ class TestPowerEvidence(unittest.TestCase):
             self.assertNotIn("Authorization",serialized)
             self.assertNotIn("BAD TOKEN",serialized)
 
+    def test_event_bound_alarm_power_evidence_forwards_only_safe_ids(self):
+        now=datetime(2026,11,6,8,0,0).astimezone().astimezone(timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"power-diagnostics.log"
+            path.write_text("\n".join([
+                '2026-11-06 07:59:59,000 INTENT_RESPONSE '+json.dumps({
+                    "permit":True,"eventId":"cmw5ip1fo0024jxavw0528uus",
+                    "phase":"MCHS_PCM","token":"rr_private"}),
+                '2026-11-06 07:59:59,100 POWER_COMMAND '+json.dumps({
+                    "permit":True,"eventId":"cmw5ip1fo0024jxavw0528uus",
+                    "phase":"MCHS_PCM"}),
+                '2026-11-06 07:59:59,200 POWER_ERROR '+json.dumps({
+                    "permit":True,"eventId":"bad id with spaces",
+                    "headers":{"Authorization":"secret"}}),
+            ])+"\n",encoding="utf-8")
+            rows=read_power_evidence(path,now=now)
+            self.assertEqual([r.get("eventId") for r in rows],
+                             ["cmw5ip1fo0024jxavw0528uus",
+                              "cmw5ip1fo0024jxavw0528uus",None])
+            self.assertNotIn("rr_private",json.dumps(rows))
+            self.assertNotIn("Authorization",json.dumps(rows))
+
     def test_missing_file_and_old_events(self):
         now=datetime(2026,11,6,8,0,0).astimezone().astimezone(timezone.utc)
         with tempfile.TemporaryDirectory() as directory:

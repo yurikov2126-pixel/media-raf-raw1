@@ -12,6 +12,7 @@ from pathlib import Path
 KINDS=frozenset(("INTENT_RESPONSE","INTENT_ERROR","POWER_COMMAND",
                  "POWER_ERROR","RELAY_TRANSITION"))
 SAFE_CODE=re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+SAFE_EVENT_ID=re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 LINE=re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3}) ([A-Z_]+) (\{.*\})$")
 MAX_EVENTS=16
 MAX_TAIL_BYTES=65536
@@ -50,6 +51,11 @@ def read_power_evidence(logfile,now=None):
             value=data.get(field)
             if isinstance(value,str) and SAFE_CODE.fullmatch(value):
                 result[field]=value
+        # Real station IDs can be safely sent without revealing notification text,
+        # credentials or the Android bridge payload.
+        event_id=data.get("eventId")
+        if isinstance(event_id,str) and SAFE_EVENT_ID.fullmatch(event_id):
+            result["eventId"]=event_id
         code=data.get("httpStatus")
         if type(code) is int and 100<=code<=599:
             result["httpStatus"]=code
