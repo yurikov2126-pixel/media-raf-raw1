@@ -16,11 +16,3 @@ export function assessMchsAmplifierDemand(worker){
  // status there is no proof that the prepared work is an actual MCHS alert.
  return {active:false,reason:'NO_ACTIVE_MCHS_PCM'};
 }
-export function mchsAgentPowerAuthorized(intent,{armed=false,isolated=false,expectedIp}={}){
- return armed===true&&!isolated&&!!intent&&
-  intent.permit===true&&intent.policyMode==='MCHS'&&
-  intent.reason==='Основное оповещение МЧС'&&
-  intent.emergencyOff===false&&
-  intent.hardwareExpected==='POWER_CONTROL_V1'&&
-  typeof expectedIp==='string'&&intent.esp32Ip===expectedIp;
-}
