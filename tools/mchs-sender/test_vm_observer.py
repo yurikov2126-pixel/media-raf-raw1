@@ -16,7 +16,7 @@ spec.loader.exec_module(module)
 class AdbRecoveryTests(unittest.TestCase):
     def test_connected_device_does_not_reconnect(self):
         from subprocess import CompletedProcess
-        with patch.object(module.subprocess, "run", return_value=CompletedProcess([], 0, "device\\n", "")) as run:
+        with patch.object(module.subprocess, "run", return_value=CompletedProcess([], 0, "device", "")) as run:
             self.assertTrue(module.ensure_adb_connected())
             self.assertEqual(run.call_count, 1)
 
@@ -25,7 +25,7 @@ class AdbRecoveryTests(unittest.TestCase):
         responses = [
             CompletedProcess([], 1, "", "device not found"),
             CompletedProcess([], 0, "connected to 127.0.0.1:5557", ""),
-            CompletedProcess([], 0, "device\\n", ""),
+            CompletedProcess([], 0, "device", ""),
         ]
         with patch.object(module.subprocess, "run", side_effect=responses) as run:
             self.assertTrue(module.ensure_adb_connected())
