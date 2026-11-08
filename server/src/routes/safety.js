@@ -1,4 +1,5 @@
 import {assessMchsDispatchQueue} from '../lib/mchsDispatchQueueReadiness.js';
+import {assessAndroidReceiverReadiness} from '../lib/mchsAndroidReceiverReadiness.js';
 import {assessMchsTrialStopConfirmation} from '../lib/mchsTrialStopConfirmation.js';
 import {assessMchsLiveAcceptance} from '../lib/mchsLiveAcceptanceGate.js';
 import {assessMchsIntegrationProbe} from '../lib/mchsIntegrationProbe.js';
@@ -2014,12 +2015,23 @@ router.get('/telemetry-alerts', canView, async (req,res,next) => {
         where:{receivedAt:{gte:windowStart}},
         orderBy:{receivedAt:'desc'},take:200,
         select:{receivedAt:true,queuedLocal:true,retryPending:true,failedSends:true,
-          telemetryPresent:true,snapshotOk:true}
+          telemetryPresent:true,snapshotOk:true,listener:true}
       }),
       prisma.safetyMchsHealth.findUnique({where:{id:'mchs-android'},
         select:{lastSeenAt:true,telemetryAt:true}})
     ]);
     const alerts=[];
+    const receiver=assessAndroidReceiverReadiness({
+      samples,lastSeenAt:health?.lastSeenAt,nowMs:now
+    });
+    if(receiver.code==='ANDROID_LISTENER_DISCONNECTED')
+      alerts.push({code:receiver.code,severity:'attention',
+        title:'Android NotificationListener не работает',detail:receiver.detail,
+        since:samples[2]?.receivedAt||null});
+    if(receiver.code==='ANDROID_SNAPSHOT_UNAVAILABLE')
+      alerts.push({code:receiver.code,severity:'attention',
+        title:'Android VM доступна, но SQLite не читается',detail:receiver.detail,
+        since:samples[2]?.receivedAt||null});
     const latest=samples[0];
     const age=health?.lastSeenAt?now-new Date(health.lastSeenAt).getTime():null;
     if(age===null || age>5*60000)alerts.push({
@@ -2044,7 +2056,7 @@ router.get('/telemetry-alerts', canView, async (req,res,next) => {
       alerts.push({code:'TELEMETRY_STALE',severity:'unknown',title:'Heartbeat есть, но телеметрия устарела',
         detail:'Новые сведения об очереди не поступали более 10 минут',since:health?.telemetryAt||null});
     res.set('Cache-Control','no-store');
-    res.json({alerts,checkedAt:new Date(),sampleCount:samples.length,
+    res.json({alerts,receiver,checkedAt:new Date(),sampleCount:samples.length,
       status:alerts.some(x=>x.severity==='attention')?'ATTENTION':alerts.length?'UNKNOWN':'NO_DETECTED_ANOMALIES',
       limitations:'Checks operate on recent stored snapshots. A clean result is not proof of delivery.',
       playbackEnabled:false,officialVerified:false});
