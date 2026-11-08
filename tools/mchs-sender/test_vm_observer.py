@@ -13,6 +13,32 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 
+class AdbRecoveryTests(unittest.TestCase):
+    def test_connected_device_does_not_reconnect(self):
+        from subprocess import CompletedProcess
+        with patch.object(module.subprocess, "run", return_value=CompletedProcess([], 0, "device", "")) as run:
+            self.assertTrue(module.ensure_adb_connected())
+            self.assertEqual(run.call_count, 1)
+
+    def test_reconnect_after_adb_restart(self):
+        from subprocess import CompletedProcess
+        responses = [
+            CompletedProcess([], 1, "", "device not found"),
+            CompletedProcess([], 0, "connected to 127.0.0.1:5557", ""),
+            CompletedProcess([], 0, "device", ""),
+        ]
+        with patch.object(module.subprocess, "run", side_effect=responses) as run:
+            self.assertTrue(module.ensure_adb_connected())
+            self.assertEqual(run.call_args_list[1].args[0],
+                             ["adb", "connect", "127.0.0.1:5557"])
+
+    def test_unavailable_container_is_not_reported_ready(self):
+        from subprocess import CompletedProcess
+        bad = CompletedProcess([], 1, "", "connection refused")
+        with patch.object(module.subprocess, "run", return_value=bad):
+            self.assertFalse(module.ensure_adb_connected())
+
+
 class TelemetryTests(unittest.TestCase):
     def test_empty_queue(self):
         with tempfile.TemporaryDirectory() as directory:
