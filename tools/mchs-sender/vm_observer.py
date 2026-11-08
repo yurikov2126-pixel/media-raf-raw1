@@ -24,6 +24,30 @@ ADB = ("adb", "-s", "127.0.0.1:5557")
 MAX_BACKOFF = 3600
 
 
+def ensure_adb_connected():
+    """Restore localhost redroid connection after VM/Docker/ADB restart.
+
+    Called once per poll, never restarts Android, never writes to Android's
+    SQLite or clears the host queue. Timeouts stay below the polling interval.
+    """
+    try:
+        current = subprocess.run([*ADB, "get-state"], capture_output=True,
+                                 text=True, timeout=5)
+        if current.returncode == 0 and current.stdout.strip() == "device":
+            return True
+        retry = subprocess.run(["adb", "connect", "127.0.0.1:5557"],
+                               capture_output=True, text=True, timeout=8)
+        verified = subprocess.run([*ADB, "get-state"], capture_output=True,
+                                  text=True, timeout=5)
+        connected = verified.returncode == 0 and verified.stdout.strip() == "device"
+        print("ADB_RECONNECTED" if connected else "ADB_UNAVAILABLE",
+              "android-ready" if connected else "waiting-for-redroid", flush=True)
+        return connected
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print("ADB_UNAVAILABLE", type(error).__name__, flush=True)
+        return False
+
+
 def adb_bytes(path):
     p = subprocess.run([*ADB, "exec-out", "run-as", PACKAGE, "cat",
                         "databases/" + path], stdout=subprocess.PIPE,
@@ -225,7 +249,10 @@ def main():
     while True:
         try:
             snapshot_ok = False
+            adb_ready = ensure_adb_connected()
             try:
+                if not adb_ready:
+                    raise RuntimeError("ADB_NOT_CONNECTED")
                 count = ingest_snapshot(db)
                 snapshot_ok = True
                 last_snapshot_at = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
