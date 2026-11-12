@@ -485,7 +485,13 @@ function startEncoder() {
     if(!priorityWasActive){
       mchsWorkerPcmEvidence.observe({before,after,frame,output});
       if(!before.active&&!after.active)
-        mchsStationPcmExecutor.observeProgram(output);
+        mchsStationPcmExecutor.observeProgram(output,{
+          // Only the no-asset branch of run() sets SILENCE. This is
+          // stronger than merely detecting a zero-valued PCM frame:
+          // the radio selector has confirmed there is no program to resume.
+          stationIdleConfirmed:state.mode==='SILENCE'&&state.trackId===null&&
+            !publicLive.onAir
+        });
     }
     return originalWrite(output,...args);
   };
