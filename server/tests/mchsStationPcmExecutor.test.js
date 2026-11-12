@@ -29,6 +29,37 @@ test('dedicated source replaces encoder input, repeats exact PCM and awaits actu
  assert.equal(exec.snapshot().session.programRestored,true);
 });
 
+test('completed alarm returns to verified idle without claiming program audio',()=>{
+ const terminals=[],exec=createMchsStationPcmExecutor({onTerminal:entry=>terminals.push(entry)});
+ exec.prepare({...event,pcm:pcm(frame(7),[])});
+ exec.replace(frame(2));
+ exec.replace(frame(2));
+ assert.equal(exec.snapshot().phase,'RESUMING');
+ exec.observeProgram(frame(0),{stationIdleConfirmed:true});
+ assert.equal(exec.snapshot().phase,'COMPLETE');
+ assert.equal(exec.snapshot().session.naturalCompletion,true);
+ assert.equal(exec.snapshot().session.programRestored,false);
+ assert.equal(exec.snapshot().session.idleAfterAlert,true);
+ assert.equal(exec.snapshot().session.failure,null);
+ assert.equal(terminals.length,1);
+ assert.equal(terminals[0].phase,'COMPLETE');
+ const clear={...event,eventId:'all_clear_after_idle',eventType:'MISSILE_ALL_CLEAR',repeats:1};
+ assert.equal(exec.prepare({...clear,pcm:pcm(frame(8),[])}).ok,true);
+});
+
+test('unverified idle or non-silent program cannot masquerade as idle completion',()=>{
+ const exec=createMchsStationPcmExecutor();
+ exec.prepare({...event,pcm:pcm(frame(7),[])});
+ exec.replace(frame(2));
+ exec.replace(frame(2));
+ exec.observeProgram(frame(0));
+ assert.equal(exec.snapshot().phase,'RESUMING');
+ exec.observeProgram(frame(3),{stationIdleConfirmed:true});
+ assert.equal(exec.snapshot().phase,'COMPLETE');
+ assert.equal(exec.snapshot().session.programRestored,true);
+ assert.equal(exec.snapshot().session.idleAfterAlert,false);
+});
+
 test('silent program after completed ALARM becomes FAILED rather than blocking ALL-CLEAR forever',()=>{
  const closed=[],terminals=[],exec=createMchsStationPcmExecutor({
   onTerminal:result=>terminals.push(result)
