@@ -22,6 +22,15 @@ test('confirmed PCM and natural completion require all evidence',()=>{
  assert.equal(done.ledger.items[0].state,'COMPLETE');
  assert.ok(done.ledger.items[0].finishedAt);
 });
+test('verified idle air after ALARM is successful but not program restored',()=>{
+ const done=reconcileStationReceipts(start,snapshot('COMPLETE',{
+  preemptAcknowledged:true,naturalCompletion:true,completedRepeats:3,
+  programRestored:false,idleAfterAlert:true}));
+ assert.equal(done.ledger.items[0].state,'COMPLETE');
+ assert.equal(done.ledger.items[0].programRestored,false);
+ assert.equal(done.ledger.items[0].idleAfterAlert,true);
+ assert.ok(done.ledger.items[0].finishedAt);
+});
 test('completion without program recovery cannot be marked successful',()=>{
  const result=reconcileStationReceipts(start,snapshot('COMPLETE',{
   preemptAcknowledged:true,naturalCompletion:true,completedRepeats:3}));

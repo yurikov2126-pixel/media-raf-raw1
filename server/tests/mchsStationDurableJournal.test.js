@@ -42,6 +42,29 @@ test('PCM executor persists natural completion and FAILED, without STOP',()=>{
   assert.equal(journal.history()[1].phase,'FAILED');
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+test('durable journal accepts successful ALARM to confirmed idle without fake program return',()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'mchs-idle-'));
+ try{
+  const file=path.join(dir,'audit.jsonl');
+  const journal=createMchsStationTerminalJournal(file);
+  const executor=createMchsStationPcmExecutor({onTerminal:r=>journal.append(r)});
+  const pcm={size:4,read:()=>Buffer.from([1,0,1,0]),close:()=>{}};
+  assert.equal(executor.prepare({eventId:'idle1',eventType:'MISSILE_DANGER',assetId:'a1',
+   repeats:1,pcm}).ok,true);
+  executor.replace(Buffer.alloc(4));
+  executor.observeProgram(Buffer.alloc(4),{stationIdleConfirmed:true});
+  assert.equal(journal.status().healthy,true);
+  const row=journal.history()[0];
+  assert.equal(row.phase,'COMPLETE');
+  assert.equal(row.naturalCompletion,true);
+  assert.equal(row.programRestored,false);
+  assert.equal(row.idleAfterAlert,true);
+  const reopened=createMchsStationTerminalJournal(file);
+  assert.equal(reopened.status().healthy,true);
+  assert.equal(reopened.history()[0].idleAfterAlert,true);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
 test('corrupt or torn log refuses fresh START auditing, never fabricates success',()=>{
  const dir=mkdtempSync(path.join(tmpdir(),'mchs-corrupt-'));
  try{

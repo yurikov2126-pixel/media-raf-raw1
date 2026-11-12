@@ -89,10 +89,15 @@ export function createMchsStationPcmExecutor({onTerminal=()=>{},preRollMs=0,onPr
    return Buffer.alloc(frame.length);
   }
  }
- function observeProgram(frame){
+ function observeProgram(frame,{stationIdleConfirmed=false}={}){
   const state=lifecycle.snapshot();
   if(state.phase!=='RESUMING'||!Buffer.isBuffer(frame)||frame.length===0||
       frame.length%4!==0)return snap();
+  if(stationIdleConfirmed===true && !frame.some(byte=>byte!==0)){
+   lifecycle.idleRestored({eventId:state.session.eventId,stationIdleConfirmed:true});
+   try{onTerminal({...lifecycle.snapshot().session,phase:'COMPLETE'});}catch{}
+   return snap();
+  }
   if(frame.some(byte=>byte!==0)){
    programFrames++;
    lifecycle.restored({eventId:state.session.eventId,programAudioConfirmed:true});

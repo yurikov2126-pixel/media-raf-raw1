@@ -6,7 +6,7 @@ const valid=r=>r&&['COMPLETE','FAILED'].includes(r.phase)&&ID.test(r.eventId||''
  Number.isInteger(r.repeats)&&r.repeats>=1&&r.repeats<=5&&
  Number.isInteger(r.completedRepeats)&&r.completedRepeats>=0&&r.completedRepeats<=r.repeats&&
  (r.phase!=='COMPLETE'||(r.preemptAcknowledged===true&&r.naturalCompletion===true&&
- r.programRestored===true&&r.completedRepeats===r.repeats));
+ (r.programRestored===true||r.idleAfterAlert===true)&&r.completedRepeats===r.repeats));
 /** Persistent append-only, fsynced terminal receipt ledger. */
 export function createMchsStationTerminalJournal(file=path.resolve('private/mchs-station-terminal.jsonl')){
  let fd,error=null,records=[],seen=new Set();

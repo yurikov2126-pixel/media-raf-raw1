@@ -17,7 +17,7 @@ export function registerStationDispatch(raw,results,{at=new Date().toISOString()
    state:accepted?'START_ACCEPTED':'START_REJECTED',
    phase:accepted?'PREEMPTING':null,
    startedAt:at,lastObservedAt:at,finishedAt:accepted?null:at,
-   preemptAcknowledged:false,naturalCompletion:false,programRestored:false,
+   preemptAcknowledged:false,naturalCompletion:false,programRestored:false,idleAfterAlert:false,
    completedRepeats:0,repeats:null,
    reason:accepted?null:r.reason||'WORKER_NOT_CONFIRMED'});
  }
@@ -39,7 +39,8 @@ export function reconcileStationReceipts(raw,status,{at=new Date().toISOString()
   const rank={PREEMPTING:0,PLAYING:1,RESUMING:2,COMPLETE:3,FAILED:3};
   if(last&&rank[snap.phase]<rank[last])return row;
   const natural=snap.phase==='COMPLETE'&&
-    session.naturalCompletion===true&&session.programRestored===true&&
+    session.naturalCompletion===true&&
+    (session.programRestored===true||session.idleAfterAlert===true)&&
     session.preemptAcknowledged===true&&session.completedRepeats===session.repeats;
   const state=snap.phase==='COMPLETE'?
     (natural?'COMPLETE':'INCOMPLETE_EVIDENCE'):snap.phase;
@@ -47,6 +48,7 @@ export function reconcileStationReceipts(raw,status,{at=new Date().toISOString()
    preemptAcknowledged:session.preemptAcknowledged===true,
    naturalCompletion:session.naturalCompletion===true,
    programRestored:session.programRestored===true,
+   idleAfterAlert:session.idleAfterAlert===true,
    completedRepeats:Number.isInteger(session.completedRepeats)?session.completedRepeats:0,
    repeats:Number.isInteger(session.repeats)?session.repeats:null,
    finishedAt:['COMPLETE','FAILED'].includes(snap.phase)?at:null,

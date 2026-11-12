@@ -37,7 +37,7 @@ export function createMchsStationPrioritySession({historyLimit=128}={}){
   current={eventId:event.eventId,eventType:event.eventType,
     assetId:event.assetId,repeats:event.repeats,
     completedRepeats:0,preemptAcknowledged:false,
-    naturalCompletion:false,programRestored:false,failure:null};
+    naturalCompletion:false,programRestored:false,idleAfterAlert:false,failure:null};
   phase='PREEMPTING';
   return succeed('WAIT_STATION_PREEMPT_ACK');
  }
@@ -71,6 +71,18 @@ export function createMchsStationPrioritySession({historyLimit=128}={}){
   if(completed.length>historyLimit)completed.shift();
   return succeed('NATURAL_COMPLETION_AND_PROGRAM_RETURN');
  }
+ function idleRestored({eventId,stationIdleConfirmed}={}){
+  if(phase!=='RESUMING'||eventId!==current?.eventId)
+   return deny('UNEXPECTED_STATION_IDLE_ACK');
+  if(stationIdleConfirmed!==true)
+   return deny('STATION_IDLE_NOT_CONFIRMED');
+  // A confirmed idle station requires silence, NOT a false programRestored.
+  current.idleAfterAlert=true;
+  phase='COMPLETE';
+  completed.push({...current,phase:'COMPLETE'});
+  if(completed.length>historyLimit)completed.shift();
+  return succeed('NATURAL_COMPLETION_AND_IDLE_RETURN');
+ }
  function abort(reason='ABORTED'){
   if(!current||!['PREEMPTING','PLAYING','RESUMING'].includes(phase))
    return deny('NO_ACTIVE_SESSION');
@@ -81,7 +93,7 @@ export function createMchsStationPrioritySession({historyLimit=128}={}){
   return succeed('SESSION_FAILED_REQUIRES_RECOVERY');
  }
  return {
-  enter,preempted,frameCompleted,restored,abort,
+  enter,preempted,frameCompleted,restored,idleRestored,abort,
   snapshot:publicSnapshot,
   history:()=>completed.map(clone),
   // A proposed next stage must start with a different eventId.
